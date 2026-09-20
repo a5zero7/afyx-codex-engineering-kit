@@ -41,7 +41,7 @@ Installer tidak pernah memodifikasi `config.toml`, `auth.json`, konfigurasi MCP,
 
 ## Pembaruan
 
-`./update.ps1` atau `./update.sh` memperbarui Prompt Master dengan `git pull --ff-only` dan mengganti Efficient Coding setelah mencadangkannya. Bila upstream tidak dapat di-fast-forward atau koneksi gagal, perintah berhenti tanpa reset paksa.
+`./update.ps1` atau `./update.sh` memperbarui Prompt Master dengan `git pull --ff-only` dan mengganti Efficient Coding serta Odoo Engineering setelah mencadangkannya. Bila upstream tidak dapat di-fast-forward atau koneksi gagal, perintah berhenti tanpa reset paksa.
 
 ## Penghapusan
 
