@@ -42,9 +42,14 @@ if (-not (Test-SkillManifest -SkillDirectory $bundledEfficientCoding)) {
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
     throw 'Git is required to install Prompt Master from its upstream repository.'
 }
-if (-not (Get-Command codex -ErrorAction SilentlyContinue)) {
-    throw 'Codex CLI was not found on PATH. Install Codex before installing its skills.'
+$codexCliDetected = [bool](Get-Command codex -ErrorAction SilentlyContinue)
+$vscodeExtensionDetected = [bool](Get-ChildItem -Path (Join-Path $env:USERPROFILE '.vscode\extensions\openai.chatgpt-*') -Directory -ErrorAction SilentlyContinue | Select-Object -First 1)
+if (-not $codexCliDetected -and -not $vscodeExtensionDetected) {
+    throw 'Neither Codex CLI nor the ChatGPT/Codex VS Code extension was detected. Install one of them before installing skills.'
 }
+if ($codexCliDetected -and $vscodeExtensionDetected) { Write-Host 'Environment: Codex CLI and VS Code extension detected' }
+elseif ($codexCliDetected) { Write-Host 'Environment: Codex CLI detected' }
+else { Write-Host 'Environment: VS Code extension detected' }
 
 if ($ValidateOnly) {
     [pscustomobject]@{
@@ -53,6 +58,8 @@ if ($ValidateOnly) {
         InstalledPromptMaster = Test-SkillManifest -SkillDirectory $promptTarget
         HeadroomAvailable = [bool](Get-Command headroom -ErrorAction SilentlyContinue)
         CodeGraphAvailable = [bool](Get-Command codegraph -ErrorAction SilentlyContinue)
+        CodexCliDetected = $codexCliDetected
+        VsCodeExtensionDetected = $vscodeExtensionDetected
     } | Format-List
     exit 0
 }

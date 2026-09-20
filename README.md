@@ -8,7 +8,7 @@ Paket ini memasang `efficient-coding`, mengambil `prompt-master` dari upstream r
 
 | Komponen | Sumber | Perilaku installer |
 |---|---|---|
-| Efficient Coding | Dibundel di repositori ini | Dipasang ke skill root yang dipilih |
+| Efficient Coding | Salinan utuh dari `~/.agents/skills/efficient-coding`, termasuk `references/` | Dipasang ke skill root yang dipilih tanpa mengubah isinya |
 | Prompt Master | [nidhinjs/prompt-master](https://github.com/nidhinjs/prompt-master) | Clone baru atau `git pull --ff-only` |
 | Headroom | [headroomlabs-ai/headroom](https://github.com/headroomlabs-ai/headroom) | Hanya dideteksi; tidak diinstal/dikonfigurasi otomatis |
 
@@ -38,6 +38,8 @@ chmod +x install.sh update.sh uninstall.sh
 ```
 
 Secara default skill dipasang ke `%USERPROFILE%\.agents\skills`, yaitu lokasi skill personal yang digunakan setup ini.
+
+Installer mendeteksi Codex CLI, ekstensi ChatGPT/Codex VS Code, atau keduanya. Ketiganya memakai skill root personal yang sama secara default; gunakan `-SkillsRoot` / `--skills-root` hanya untuk lingkungan terisolasi yang memang Anda kelola sendiri.
 
 Setelah selesai, buka sesi Codex baru. Skill akan aktif hanya pada task yang sesuai: Efficient Coding untuk pekerjaan engineering dan Prompt Master saat Anda secara eksplisit meminta pembuatan/perbaikan prompt.
 

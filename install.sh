@@ -59,7 +59,23 @@ while (($#)); do
 done
 
 command -v git >/dev/null || { printf 'Git is required for Prompt Master.\n' >&2; exit 1; }
-command -v codex >/dev/null || { printf 'Codex CLI was not found on PATH.\n' >&2; exit 1; }
+codex_cli_detected=false
+command -v codex >/dev/null && codex_cli_detected=true
+vscode_extension_detected=false
+for extension in "$HOME"/.vscode/extensions/openai.chatgpt-*; do
+  [[ -d "$extension" ]] && { vscode_extension_detected=true; break; }
+done
+if ! "$codex_cli_detected" && ! "$vscode_extension_detected"; then
+  printf 'Neither Codex CLI nor the ChatGPT/Codex VS Code extension was detected.\n' >&2
+  exit 1
+fi
+if "$codex_cli_detected" && "$vscode_extension_detected"; then
+  printf 'Environment: Codex CLI and VS Code extension detected\n'
+elif "$codex_cli_detected"; then
+  printf 'Environment: Codex CLI detected\n'
+else
+  printf 'Environment: VS Code extension detected\n'
+fi
 valid_manifest "$BUNDLED_EFFICIENT" || { printf 'Bundled Efficient Coding is invalid.\n' >&2; exit 1; }
 
 efficient_target="$skills_root/efficient-coding"
@@ -71,6 +87,8 @@ if "$validate_only"; then
   printf 'Installed Prompt Master: %s\n' "$(valid_manifest "$prompt_target" && echo yes || echo no)"
   printf 'Headroom available: %s\n' "$(command -v headroom >/dev/null && echo yes || echo no)"
   printf 'CodeGraph available: %s\n' "$(command -v codegraph >/dev/null && echo yes || echo no)"
+  printf 'Codex CLI detected: %s\n' "$codex_cli_detected"
+  printf 'VS Code extension detected: %s\n' "$vscode_extension_detected"
   exit 0
 fi
 
