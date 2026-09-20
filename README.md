@@ -1,6 +1,6 @@
 # Afyx Codex Engineering Kit
 
-Installer PowerShell untuk workflow Codex yang rapi dan aman di Windows.
+Installer PowerShell dan Bash untuk workflow Codex yang rapi dan aman di Windows, Linux, dan macOS.
 
 Paket ini memasang `efficient-coding`, mengambil `prompt-master` dari upstream resminya, dan memeriksa ketersediaan Headroom. Ia sengaja **tidak** mengubah model, provider, kredensial, atau MCP Codex yang sudah ada.
 
@@ -18,6 +18,15 @@ Paket ini memasang `efficient-coding`, mengambil `prompt-master` dari upstream r
 git clone https://github.com/a5zero7/afyx-codex-engineering-kit.git
 Set-Location afyx-codex-engineering-kit
 .\install.ps1
+```
+
+### Linux dan macOS
+
+```bash
+git clone https://github.com/a5zero7/afyx-codex-engineering-kit.git
+cd afyx-codex-engineering-kit
+chmod +x install.sh update.sh uninstall.sh
+./install.sh
 ```
 
 Secara default skill dipasang ke `%USERPROFILE%\.agents\skills`, yaitu lokasi skill personal yang digunakan setup ini.
@@ -45,6 +54,17 @@ Jika `efficient-coding` sudah ada, instalasi berhenti dengan pesan jelas. Jika `
 .\update.ps1
 .\uninstall.ps1
 .\uninstall.ps1 -RemovePromptMaster
+```
+
+Linux/macOS memakai opsi yang setara:
+
+```bash
+./install.sh --validate-only
+./install.sh --dry-run
+./install.sh --skills-root "$HOME/.agents/skills"
+./install.sh --force
+./update.sh
+./uninstall.sh --remove-prompt-master
 ```
 
 Backup dibuat di folder `backups\` di clone lokal dan tidak diunggah ke Git.

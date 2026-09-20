@@ -2,7 +2,7 @@
 
 ## Prasyarat
 
-- Windows PowerShell 5.1 atau PowerShell 7.
+- Windows PowerShell 5.1 atau PowerShell 7, atau Bash di Linux/macOS.
 - Git tersedia pada `PATH`.
 - Codex telah terpasang.
 
@@ -10,9 +10,9 @@ Headroom tidak diperlukan untuk memasang skill. Jika digunakan, pasang terlebih 
 
 ## Alur aman
 
-1. Jalankan `./install.ps1 -ValidateOnly` untuk melihat status tanpa membuat perubahan.
-2. Jalankan `./install.ps1 -WhatIf` untuk melihat perubahan yang direncanakan.
-3. Jalankan `./install.ps1` untuk memasang jika target belum ada.
+1. Jalankan `./install.ps1 -ValidateOnly` atau `./install.sh --validate-only` untuk melihat status tanpa membuat perubahan.
+2. Jalankan `./install.ps1 -WhatIf` atau `./install.sh --dry-run` untuk melihat perubahan yang direncanakan.
+3. Jalankan installer platform Anda untuk memasang jika target belum ada.
 4. Mulai sesi Codex baru.
 
 Default installer tidak menghapus, mengganti, atau memperbarui folder skill yang ada secara paksa.
@@ -31,11 +31,11 @@ Installer tidak pernah memodifikasi `config.toml`, `auth.json`, konfigurasi MCP,
 
 ## Pembaruan
 
-`./update.ps1` memperbarui Prompt Master dengan `git pull --ff-only` dan mengganti Efficient Coding setelah mencadangkannya. Bila upstream tidak dapat di-fast-forward atau koneksi gagal, perintah berhenti tanpa reset paksa.
+`./update.ps1` atau `./update.sh` memperbarui Prompt Master dengan `git pull --ff-only` dan mengganti Efficient Coding setelah mencadangkannya. Bila upstream tidak dapat di-fast-forward atau koneksi gagal, perintah berhenti tanpa reset paksa.
 
 ## Penghapusan
 
-`./uninstall.ps1` hanya menghapus Efficient Coding. Prompt Master hanya dihapus saat `-RemovePromptMaster` disebut secara eksplisit. Headroom dan konfigurasi Codex tidak pernah dihapus.
+`./uninstall.ps1` atau `./uninstall.sh` hanya menghapus Efficient Coding. Prompt Master hanya dihapus saat opsi `-RemovePromptMaster` atau `--remove-prompt-master` disebut secara eksplisit. Headroom dan konfigurasi Codex tidak pernah dihapus.
 
 ## Pemulihan
 

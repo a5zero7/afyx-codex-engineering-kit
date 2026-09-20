@@ -63,7 +63,7 @@ if ($PSCmdlet.ShouldProcess($SkillsRoot, 'Create skill root')) {
 
 if (Test-Path -LiteralPath $efficientTarget) {
     if (-not $Force) { throw "Efficient Coding already exists: $efficientTarget. Re-run with -Force to replace it after backup." }
-    Backup-Directory -Path $efficientTarget
+    if (-not $WhatIfPreference) { Backup-Directory -Path $efficientTarget }
     if ($PSCmdlet.ShouldProcess($efficientTarget, 'Replace Efficient Coding skill')) {
         Remove-Item -LiteralPath $efficientTarget -Recurse -Force
     }
@@ -79,7 +79,7 @@ if (Test-Path -LiteralPath $promptTarget) {
             if ($LASTEXITCODE -ne 0) { throw 'Prompt Master update failed.' }
         }
     } elseif ($Force) {
-        Backup-Directory -Path $promptTarget
+        if (-not $WhatIfPreference) { Backup-Directory -Path $promptTarget }
         if ($PSCmdlet.ShouldProcess($promptTarget, 'Replace non-Git Prompt Master directory')) {
             Remove-Item -LiteralPath $promptTarget -Recurse -Force
             & git clone --depth 1 $PromptMasterRepository $promptTarget
@@ -91,6 +91,11 @@ if (Test-Path -LiteralPath $promptTarget) {
 } elseif ($PSCmdlet.ShouldProcess($promptTarget, 'Clone Prompt Master upstream')) {
     & git clone --depth 1 $PromptMasterRepository $promptTarget
     if ($LASTEXITCODE -ne 0) { throw 'Prompt Master clone failed.' }
+}
+
+if ($WhatIfPreference) {
+    Write-Host 'WhatIf completed; no files or configuration were changed.'
+    return
 }
 
 if (-not (Test-SkillManifest -SkillDirectory $efficientTarget)) { throw 'Installed Efficient Coding manifest failed validation.' }
