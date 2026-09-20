@@ -5,6 +5,8 @@ skills_root="${CODEX_SKILLS_ROOT:-$HOME/.agents/skills}"
 remove_prompt_master=false
 dry_run=false
 
+printf 'Afyx Codex Engineering Kit — Linux/macOS uninstaller (Bash)\n'
+
 usage() {
   printf '%s\n' 'Usage: ./uninstall.sh [--skills-root PATH] [--remove-prompt-master] [--dry-run]'
 }

@@ -7,6 +7,8 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+Write-Host 'Afyx Codex Engineering Kit — Windows uninstaller (PowerShell)'
+
 $targets = @(Join-Path $SkillsRoot 'efficient-coding')
 if ($RemovePromptMaster) { $targets += Join-Path $SkillsRoot 'prompt-master' }
 

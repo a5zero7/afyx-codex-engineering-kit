@@ -6,6 +6,8 @@ readonly BUNDLED_EFFICIENT="$PACKAGE_ROOT/skills/efficient-coding"
 readonly DEFAULT_SKILLS_ROOT="${CODEX_SKILLS_ROOT:-$HOME/.agents/skills}"
 readonly PROMPT_MASTER_REPOSITORY="https://github.com/nidhinjs/prompt-master.git"
 
+printf 'Afyx Codex Engineering Kit — Linux/macOS installer (Bash)\n'
+
 skills_root="$DEFAULT_SKILLS_ROOT"
 force=false
 validate_only=false

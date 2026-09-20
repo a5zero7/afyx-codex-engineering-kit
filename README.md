@@ -12,7 +12,15 @@ Paket ini memasang `efficient-coding`, mengambil `prompt-master` dari upstream r
 | Prompt Master | [nidhinjs/prompt-master](https://github.com/nidhinjs/prompt-master) | Clone baru atau `git pull --ff-only` |
 | Headroom | [headroomlabs-ai/headroom](https://github.com/headroomlabs-ai/headroom) | Hanya dideteksi; tidak diinstal/dikonfigurasi otomatis |
 
-## Instalasi cepat
+## Pilih installer sesuai sistem operasi
+
+| Sistem operasi | Installer | Shell |
+|---|---|---|
+| Windows 10/11 | `install.ps1` | Windows PowerShell 5.1 atau PowerShell 7 |
+| Linux | `install.sh` | Bash |
+| macOS | `install.sh` | Bash |
+
+## Instalasi Windows
 
 ```powershell
 git clone https://github.com/a5zero7/afyx-codex-engineering-kit.git
@@ -20,7 +28,7 @@ Set-Location afyx-codex-engineering-kit
 .\install.ps1
 ```
 
-### Linux dan macOS
+## Instalasi Linux dan macOS
 
 ```bash
 git clone https://github.com/a5zero7/afyx-codex-engineering-kit.git

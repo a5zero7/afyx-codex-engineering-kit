@@ -9,7 +9,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-Write-Host 'Afyx Codex Engineering Kit'
+Write-Host 'Afyx Codex Engineering Kit — Windows installer (PowerShell)'
 
 $packageRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $bundledEfficientCoding = Join-Path $packageRoot 'skills\efficient-coding'
