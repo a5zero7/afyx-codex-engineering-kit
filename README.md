@@ -9,6 +9,7 @@ Paket ini memasang `efficient-coding`, mengambil `prompt-master` dari upstream r
 | Komponen | Sumber | Perilaku installer |
 |---|---|---|
 | Efficient Coding | Salinan utuh dari `~/.agents/skills/efficient-coding`, termasuk `references/` | Dipasang ke skill root yang dipilih tanpa mengubah isinya |
+| Odoo Engineering | Dibundel di repositori ini | Routing aman untuk Odoo 10–20 |
 | Prompt Master | [nidhinjs/prompt-master](https://github.com/nidhinjs/prompt-master) | Clone baru atau `git pull --ff-only` |
 | Headroom | [headroomlabs-ai/headroom](https://github.com/headroomlabs-ai/headroom) | Hanya dideteksi; tidak diinstal/dikonfigurasi otomatis |
 
@@ -43,6 +44,8 @@ Installer mendeteksi Codex CLI, ekstensi ChatGPT/Codex VS Code, atau keduanya. K
 
 Setelah selesai, buka sesi Codex baru. Skill akan aktif hanya pada task yang sesuai: Efficient Coding untuk pekerjaan engineering dan Prompt Master saat Anda secara eksplisit meminta pembuatan/perbaikan prompt.
 
+`odoo-engineering` hanya aktif untuk pekerjaan Odoo. Ia menentukan versi repository terlebih dahulu dan merujuk panduan terpisah untuk setiap versi 10 sampai 20, tanpa memaksakan pola versi terbaru ke codebase lama.
+
 ## Tidak bentrok dengan Codex
 
 Installer tidak pernah menulis atau mengganti:
@@ -64,6 +67,7 @@ Jika `efficient-coding` sudah ada, instalasi berhenti dengan pesan jelas. Jika `
 .\update.ps1
 .\uninstall.ps1
 .\uninstall.ps1 -RemovePromptMaster
+.\verify.ps1
 ```
 
 Linux/macOS memakai opsi yang setara:
@@ -75,6 +79,7 @@ Linux/macOS memakai opsi yang setara:
 ./install.sh --force
 ./update.sh
 ./uninstall.sh --remove-prompt-master
+./verify.sh
 ```
 
 Backup dibuat di folder `backups\` di clone lokal dan tidak diunggah ke Git.

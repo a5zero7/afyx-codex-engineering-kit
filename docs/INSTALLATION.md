@@ -19,6 +19,14 @@ Headroom tidak diperlukan untuk memasang skill. Jika digunakan, pasang terlebih 
 
 Default installer tidak menghapus, mengganti, atau memperbarui folder skill yang ada secara paksa.
 
+## Verifikasi
+
+Jalankan `./verify.ps1` pada Windows atau `./verify.sh` pada Linux/macOS. Verifier memeriksa CLI, tiga skill, executable CodeGraph/Headroom, dan apakah dua MCP tercantum dalam `config.toml`. Verifier hanya membaca state; tidak mengubah konfigurasi.
+
+## Odoo Engineering 10–20
+
+Skill Odoo dipasang bersama Efficient Coding. Saat task Odoo dimulai, ia harus menentukan versi dari evidence repository, lalu memuat satu reference yang sesuai dari Odoo 10 sampai Odoo 20. Ini mencegah penerapan API lintas-versi tanpa verifikasi.
+
 ## Saat skill sudah ada
 
 | Kondisi | Perilaku default | Opsi aman |

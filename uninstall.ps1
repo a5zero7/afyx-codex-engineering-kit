@@ -9,7 +9,7 @@ $ErrorActionPreference = 'Stop'
 
 Write-Host 'Afyx Codex Engineering Kit — Windows uninstaller (PowerShell)'
 
-$targets = @(Join-Path $SkillsRoot 'efficient-coding')
+$targets = @(Join-Path $SkillsRoot 'efficient-coding'), (Join-Path $SkillsRoot 'odoo-engineering')
 if ($RemovePromptMaster) { $targets += Join-Path $SkillsRoot 'prompt-master' }
 
 foreach ($target in $targets) {

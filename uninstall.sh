@@ -33,6 +33,7 @@ remove_target() {
 }
 
 remove_target "$skills_root/efficient-coding"
+remove_target "$skills_root/odoo-engineering"
 if "$remove_prompt_master"; then
   remove_target "$skills_root/prompt-master"
 fi

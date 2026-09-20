@@ -13,7 +13,9 @@ Write-Host 'Afyx Codex Engineering Kit — Windows installer (PowerShell)'
 
 $packageRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $bundledEfficientCoding = Join-Path $packageRoot 'skills\efficient-coding'
+$bundledOdooEngineering = Join-Path $packageRoot 'skills\odoo-engineering'
 $efficientTarget = Join-Path $SkillsRoot 'efficient-coding'
+$odooTarget = Join-Path $SkillsRoot 'odoo-engineering'
 $promptTarget = Join-Path $SkillsRoot 'prompt-master'
 $backupRoot = Join-Path $packageRoot 'backups'
 
@@ -38,6 +40,9 @@ function Backup-Directory {
 if (-not (Test-SkillManifest -SkillDirectory $bundledEfficientCoding)) {
     throw 'Bundled efficient-coding skill is invalid or missing.'
 }
+if (-not (Test-SkillManifest -SkillDirectory $bundledOdooEngineering)) {
+    throw 'Bundled odoo-engineering skill is invalid or missing.'
+}
 
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
     throw 'Git is required to install Prompt Master from its upstream repository.'
@@ -54,7 +59,9 @@ else { Write-Host 'Environment: VS Code extension detected' }
 if ($ValidateOnly) {
     [pscustomobject]@{
         BundledEfficientCoding = Test-SkillManifest -SkillDirectory $bundledEfficientCoding
+        BundledOdooEngineering = Test-SkillManifest -SkillDirectory $bundledOdooEngineering
         InstalledEfficientCoding = Test-SkillManifest -SkillDirectory $efficientTarget
+        InstalledOdooEngineering = Test-SkillManifest -SkillDirectory $odooTarget
         InstalledPromptMaster = Test-SkillManifest -SkillDirectory $promptTarget
         HeadroomAvailable = [bool](Get-Command headroom -ErrorAction SilentlyContinue)
         CodeGraphAvailable = [bool](Get-Command codegraph -ErrorAction SilentlyContinue)
@@ -77,6 +84,17 @@ if (Test-Path -LiteralPath $efficientTarget) {
 }
 if ($PSCmdlet.ShouldProcess($efficientTarget, 'Install Efficient Coding skill')) {
     Copy-Item -LiteralPath $bundledEfficientCoding -Destination $efficientTarget -Recurse -Force
+}
+
+if (Test-Path -LiteralPath $odooTarget) {
+    if (-not $Force) { throw "Odoo Engineering already exists: $odooTarget. Re-run with -Force to replace it after backup." }
+    if (-not $WhatIfPreference) { Backup-Directory -Path $odooTarget }
+    if ($PSCmdlet.ShouldProcess($odooTarget, 'Replace Odoo Engineering skill')) {
+        Remove-Item -LiteralPath $odooTarget -Recurse -Force
+    }
+}
+if ($PSCmdlet.ShouldProcess($odooTarget, 'Install Odoo Engineering skill')) {
+    Copy-Item -LiteralPath $bundledOdooEngineering -Destination $odooTarget -Recurse -Force
 }
 
 if (Test-Path -LiteralPath $promptTarget) {
@@ -106,9 +124,11 @@ if ($WhatIfPreference) {
 }
 
 if (-not (Test-SkillManifest -SkillDirectory $efficientTarget)) { throw 'Installed Efficient Coding manifest failed validation.' }
+if (-not (Test-SkillManifest -SkillDirectory $odooTarget)) { throw 'Installed Odoo Engineering manifest failed validation.' }
 if (-not (Test-SkillManifest -SkillDirectory $promptTarget)) { throw 'Installed Prompt Master manifest failed validation.' }
 
 Write-Host 'Efficient Coding: installed'
+Write-Host 'Odoo Engineering (10–20): installed'
 Write-Host 'Prompt Master: installed'
 if (Get-Command headroom -ErrorAction SilentlyContinue) { Write-Host 'Headroom: detected (configuration unchanged)' } else { Write-Warning 'Headroom was not found. See https://github.com/headroomlabs-ai/headroom' }
 Write-Host 'Start a new Codex session to load the skills.'

@@ -3,6 +3,7 @@ set -euo pipefail
 
 readonly PACKAGE_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 readonly BUNDLED_EFFICIENT="$PACKAGE_ROOT/skills/efficient-coding"
+readonly BUNDLED_ODOO="$PACKAGE_ROOT/skills/odoo-engineering"
 readonly DEFAULT_SKILLS_ROOT="${CODEX_SKILLS_ROOT:-$HOME/.agents/skills}"
 readonly PROMPT_MASTER_REPOSITORY="https://github.com/nidhinjs/prompt-master.git"
 
@@ -77,13 +78,17 @@ else
   printf 'Environment: VS Code extension detected\n'
 fi
 valid_manifest "$BUNDLED_EFFICIENT" || { printf 'Bundled Efficient Coding is invalid.\n' >&2; exit 1; }
+valid_manifest "$BUNDLED_ODOO" || { printf 'Bundled Odoo Engineering is invalid.\n' >&2; exit 1; }
 
 efficient_target="$skills_root/efficient-coding"
+odoo_target="$skills_root/odoo-engineering"
 prompt_target="$skills_root/prompt-master"
 
 if "$validate_only"; then
   printf 'Bundled Efficient Coding: %s\n' "$(valid_manifest "$BUNDLED_EFFICIENT" && echo yes || echo no)"
+  printf 'Bundled Odoo Engineering: %s\n' "$(valid_manifest "$BUNDLED_ODOO" && echo yes || echo no)"
   printf 'Installed Efficient Coding: %s\n' "$(valid_manifest "$efficient_target" && echo yes || echo no)"
+  printf 'Installed Odoo Engineering: %s\n' "$(valid_manifest "$odoo_target" && echo yes || echo no)"
   printf 'Installed Prompt Master: %s\n' "$(valid_manifest "$prompt_target" && echo yes || echo no)"
   printf 'Headroom available: %s\n' "$(command -v headroom >/dev/null && echo yes || echo no)"
   printf 'CodeGraph available: %s\n' "$(command -v codegraph >/dev/null && echo yes || echo no)"
@@ -102,6 +107,14 @@ fi
 run mkdir -p "$efficient_target"
 run cp -a "$BUNDLED_EFFICIENT/." "$efficient_target/"
 
+if [[ -e "$odoo_target" ]]; then
+  "$force" || { printf 'Odoo Engineering already exists: %s. Re-run with --force to back it up and replace it.\n' "$odoo_target" >&2; exit 1; }
+  backup_directory "$odoo_target"
+  run rm -rf -- "$odoo_target"
+fi
+run mkdir -p "$odoo_target"
+run cp -a "$BUNDLED_ODOO/." "$odoo_target/"
+
 if [[ -e "$prompt_target" ]]; then
   if [[ -d "$prompt_target/.git" ]]; then
     run git -C "$prompt_target" pull --ff-only
@@ -119,10 +132,11 @@ fi
 
 if ! "$dry_run"; then
   valid_manifest "$efficient_target" || { printf 'Installed Efficient Coding validation failed.\n' >&2; exit 1; }
+  valid_manifest "$odoo_target" || { printf 'Installed Odoo Engineering validation failed.\n' >&2; exit 1; }
   valid_manifest "$prompt_target" || { printf 'Installed Prompt Master validation failed.\n' >&2; exit 1; }
 fi
 
-printf 'Efficient Coding: installed\nPrompt Master: installed\n'
+printf 'Efficient Coding: installed\nOdoo Engineering (10-20): installed\nPrompt Master: installed\n'
 if command -v headroom >/dev/null; then
   printf 'Headroom: detected (configuration unchanged)\n'
 else
