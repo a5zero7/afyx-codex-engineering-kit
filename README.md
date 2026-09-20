@@ -2,7 +2,7 @@
 
 Installer PowerShell dan Bash untuk workflow Codex yang rapi dan aman di Windows, Linux, dan macOS.
 
-Paket ini memasang `efficient-coding`, mengambil `prompt-master` dari upstream resminya, dan memeriksa ketersediaan Headroom. Ia sengaja **tidak** mengubah model, provider, kredensial, atau MCP Codex yang sudah ada.
+Paket ini memasang `efficient-coding` dan `odoo-engineering`, serta mengambil `prompt-master` dari upstream resminya. Ia sengaja **tidak** mengubah model, provider, kredensial, atau MCP Codex yang sudah ada.
 
 ## Komponen
 
@@ -32,16 +32,6 @@ Set-Location afyx-codex-engineering-kit
 .\install.ps1
 ```
 
-Instalasi optional yang tetap konservatif:
-
-```powershell
-.\install.ps1 -WithCodeGraph
-.\install.ps1 -WithHeadroom -HeadroomProxyUrl 'http://127.0.0.1:8787'
-.\install.ps1 -Full -HeadroomProxyUrl 'http://127.0.0.1:8787'
-```
-
-Mode optional tidak menginstal executable pihak ketiga secara otomatis. CodeGraph hanya ditambahkan bila executable tersedia. Headroom memerlukan URL proxy eksplisit; installer tidak pernah mengasumsikan URL atau menimpa blok MCP yang telah ada.
-
 ## Instalasi Linux dan macOS
 
 ```bash
@@ -51,7 +41,7 @@ chmod +x install.sh update.sh uninstall.sh
 ./install.sh
 ```
 
-Secara default skill dipasang ke `%USERPROFILE%\.agents\skills`, yaitu lokasi skill personal yang digunakan setup ini.
+Secara default skill dipasang ke `~/.agents/skills`, yaitu lokasi skill personal yang digunakan setup ini.
 
 Installer mendeteksi Codex CLI, ekstensi ChatGPT/Codex VS Code, atau keduanya. Ketiganya memakai skill root personal yang sama secara default; gunakan `-SkillsRoot` / `--skills-root` hanya untuk lingkungan terisolasi yang memang Anda kelola sendiri.
 
@@ -81,7 +71,6 @@ Jika `efficient-coding` sudah ada, instalasi berhenti dengan pesan jelas. Jika `
 .\uninstall.ps1
 .\uninstall.ps1 -RemovePromptMaster
 .\verify.ps1
-.\verify.ps1 -Full
 ```
 
 Linux/macOS memakai opsi yang setara:
@@ -106,7 +95,7 @@ Jika Headroom sudah ada, installer hanya menampilkan statusnya. Ini mencegah kon
 
 ## Verifikasi
 
-`verify.ps1` membedakan `OK`, `WARN`, dan `FAIL`. Tanpa `-Full`, enhancement optional yang belum siap hanya menghasilkan peringatan; kegagalan core menghasilkan exit code non-zero. Dengan `-Full`, CodeGraph dan Headroom juga harus siap.
+`verify.ps1` dan `verify.sh` membedakan `OK`, `WARN`, dan `FAIL`. Kegagalan core menghasilkan exit code non-zero; CodeGraph dan Headroom yang tidak tersedia atau belum dikonfigurasi hanya menghasilkan peringatan.
 
 ## Dokumentasi
 

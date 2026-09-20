@@ -21,7 +21,7 @@ Default installer tidak menghapus, mengganti, atau memperbarui folder skill yang
 
 ## Verifikasi
 
-Jalankan `./verify.ps1` pada Windows atau `./verify.sh` pada Linux/macOS. Verifier memeriksa CLI, tiga skill, executable CodeGraph/Headroom, dan konfigurasi MCP. Verifier hanya membaca state; tidak mengubah konfigurasi. Pada Windows, `verify.ps1 -Full` menjadikan enhancement optional sebagai syarat readiness.
+Jalankan `./verify.ps1` pada Windows atau `./verify.sh` pada Linux/macOS. Verifier memeriksa CLI dan tiga skill sebagai core, lalu executable dan entri MCP CodeGraph/Headroom sebagai enhancement optional. Verifier hanya membaca state; tidak mengubah konfigurasi. Absennya enhancement optional menghasilkan `WARN`, bukan kegagalan atau exit code non-zero.
 
 ## Odoo Engineering 10–20
 
@@ -37,7 +37,7 @@ Skill Odoo dipasang bersama Efficient Coding. Saat task Odoo dimulai, ia harus m
 
 ## Konfigurasi Codex yang sengaja tidak diubah
 
-Instalasi default tidak pernah memodifikasi `config.toml`, `auth.json`, konfigurasi MCP, plugin, sandbox, model, atau provider. Bila `-WithCodeGraph` atau `-WithHeadroom -HeadroomProxyUrl ...` diminta pada Windows, installer hanya menambahkan blok MCP yang hilang, mencadangkan config sebelum perubahan, dan mempertahankan blok yang telah ada tanpa overwrite.
+Installer tidak pernah memodifikasi `config.toml`, `auth.json`, konfigurasi MCP, Headroom, CodeGraph, plugin, sandbox, model, atau provider. CodeGraph dan Headroom adalah enhancement eksternal yang dikonfigurasi sendiri mengikuti dokumentasi upstream masing-masing.
 
 ## Pembaruan
 

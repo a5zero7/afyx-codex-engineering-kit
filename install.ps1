@@ -3,11 +3,7 @@ param(
     [string]$SkillsRoot = (Join-Path $env:USERPROFILE '.agents\skills'),
     [string]$PromptMasterRepository = 'https://github.com/nidhinjs/prompt-master.git',
     [switch]$Force,
-    [switch]$ValidateOnly,
-    [switch]$WithCodeGraph,
-    [switch]$WithHeadroom,
-    [switch]$Full,
-    [string]$HeadroomProxyUrl
+    [switch]$ValidateOnly
 )
 
 Set-StrictMode -Version Latest
@@ -22,9 +18,6 @@ $efficientTarget = Join-Path $SkillsRoot 'efficient-coding'
 $odooTarget = Join-Path $SkillsRoot 'odoo-engineering'
 $promptTarget = Join-Path $SkillsRoot 'prompt-master'
 $backupRoot = Join-Path $packageRoot 'backups'
-$configPath = Join-Path $env:USERPROFILE '.codex\config.toml'
-$configBackedUp = $false
-if ($Full) { $WithCodeGraph = $true; $WithHeadroom = $true }
 
 function Test-SkillManifest {
     param([Parameter(Mandatory)][string]$SkillDirectory)
@@ -42,34 +35,6 @@ function Backup-Directory {
     $destination = Join-Path $backupRoot "$(Split-Path -Leaf $Path)-$stamp"
     Copy-Item -LiteralPath $Path -Destination $destination -Recurse -Force
     Write-Host "Backup created: $destination"
-}
-
-function Backup-ConfigOnce {
-    if ($configBackedUp -or -not (Test-Path -LiteralPath $configPath)) { return }
-    $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-    $backup = "$configPath.afyx-backup-$stamp"
-    Copy-Item -LiteralPath $configPath -Destination $backup -Force
-    $script:configBackedUp = $true
-    Write-Host "Codex config backup created: $backup"
-}
-
-function Add-McpServer {
-    param([Parameter(Mandatory)][string]$Name, [Parameter(Mandatory)][string[]]$Lines)
-    $header = "[mcp_servers.$Name]"
-    if (Test-Path -LiteralPath $configPath) {
-        $content = Get-Content -Raw -LiteralPath $configPath
-        if ($content -match [regex]::Escape($header)) {
-            Write-Host "MCP ${Name}: existing configuration preserved"
-            return
-        }
-    }
-    if ($PSCmdlet.ShouldProcess($configPath, "Add MCP server $Name")) {
-        $directory = Split-Path -Parent $configPath
-        New-Item -ItemType Directory -Force -Path $directory | Out-Null
-        Backup-ConfigOnce
-        Add-Content -LiteralPath $configPath -Encoding utf8 -Value ("`n" + ($Lines -join "`n") + "`n")
-        Write-Host "MCP ${Name}: added"
-    }
 }
 
 if (-not (Test-SkillManifest -SkillDirectory $bundledEfficientCoding)) {
@@ -158,17 +123,6 @@ if ($WhatIfPreference) {
     return
 }
 
-if ($WithCodeGraph) {
-    if (Get-Command codegraph -ErrorAction SilentlyContinue) {
-        Add-McpServer -Name 'codegraph' -Lines @('[mcp_servers.codegraph]', 'command = "codegraph"', 'args = ["serve", "--mcp"]')
-    } else { Write-Warning 'CodeGraph was requested but is not installed; core skills remain usable.' }
-}
-if ($WithHeadroom) {
-    if (-not (Get-Command headroom -ErrorAction SilentlyContinue)) { Write-Warning 'Headroom was requested but is not installed; core skills remain usable.' }
-    elseif ([string]::IsNullOrWhiteSpace($HeadroomProxyUrl)) { Write-Warning 'Headroom was detected. Supply -HeadroomProxyUrl to add its MCP block; no proxy URL was assumed.' }
-    elseif ($HeadroomProxyUrl -match '["\r\n]') { throw 'HeadroomProxyUrl contains an unsafe character.' }
-    else { Add-McpServer -Name 'headroom' -Lines @('[mcp_servers.headroom]', 'command = "headroom"', ('args = ["mcp", "serve", "--proxy-url", "' + $HeadroomProxyUrl + '"]')) }
-}
 
 if (-not (Test-SkillManifest -SkillDirectory $efficientTarget)) { throw 'Installed Efficient Coding manifest failed validation.' }
 if (-not (Test-SkillManifest -SkillDirectory $odooTarget)) { throw 'Installed Odoo Engineering manifest failed validation.' }

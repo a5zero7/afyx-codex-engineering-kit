@@ -1,152 +1,17 @@
-# Context and Token Efficiency
+# Large-context guidance
 
+Use this reference only when repository exploration or tool output is large enough to create avoidable context overhead.
 
+## Exploration strategy
 
-Use these rules when repository exploration or tool output becomes large.
+For a known target, begin with that definition or failing path, then inspect only the relationships and behavior needed to establish impact. For an unknown target, search to identify candidates, compare the relevant ones, then narrow before reading implementations in depth. A repository-wide search is appropriate only when the question itself is repository-wide.
 
+Do not repeat an unchanged search, reread unchanged material, or request a full file when the relevant symbol or section is sufficient. Preserve a compact record of established facts rather than recreating the same investigation.
 
+## Tool boundaries
 
-The goal is to remove waste without reducing evidence required for
+Use CodeGraph when resolving relationships is the efficient way to answer a structural question. Prefer direct search or focused reads for known locations and simple textual facts.
 
-correctness.
+Use Headroom for genuinely large logs, test output, search results, JSON, API responses, database output, or generated tool output when compression preserves the needed meaning. Do not compress small results by default. Retrieve the original output before relying on an exact line, value, order, or detail that compression could omit.
 
-
-
-## Efficient Exploration
-
-
-
-Prefer targeted progression:
-
-
-
-known target
-
-→ definition
-
-→ relevant relationships
-
-→ relevant implementation
-
-→ affected behavior
-
-→ edit
-
-→ validation
-
-
-
-For unknown targets:
-
-
-
-search
-
-→ identify candidates
-
-→ inspect relationships
-
-→ narrow scope
-
-→ investigate sufficiently
-
-→ edit
-
-
-
-Repository-wide exploration is acceptable when the task genuinely
-
-requires repository-wide understanding.
-
-
-
-## CodeGraph
-
-
-
-Use CodeGraph when structural relationships can improve correctness.
-
-
-
-Good cases:
-
-
-
-\- finding references
-
-\- inheritance analysis
-
-\- call relationships
-
-\- dependency analysis
-
-\- locating implementations across modules
-
-
-
-Direct file/search tools may be cheaper when the exact target is already
-
-known.
-
-
-
-## Headroom
-
-
-
-Use Headroom compression for genuinely large:
-
-
-
-\- logs
-
-\- test output
-
-\- search results
-
-\- JSON
-
-\- API responses
-
-\- database output
-
-\- generated tool output
-
-
-
-Do not compress small context solely for token reduction.
-
-
-
-Retrieve the original when exact lines, values, ordering, or details
-
-become necessary.
-
-
-
-## Avoid Waste
-
-
-
-Avoid unnecessary:
-
-
-
-\- duplicate searches
-
-\- repeated unchanged file reads
-
-\- repeated tool calls with identical inputs
-
-\- unrelated documentation
-
-\- verbose progress narration
-
-\- repeated architecture summaries
-
-
-
-Never remove investigation, evidence, or validation that materially
-
-affects correctness.
-
+Efficiency applies to wasted context only: retain every piece of evidence needed to make and validate a correct change.
