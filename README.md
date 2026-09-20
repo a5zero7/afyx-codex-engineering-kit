@@ -11,7 +11,10 @@ Paket ini memasang `efficient-coding`, mengambil `prompt-master` dari upstream r
 | Efficient Coding | Salinan utuh dari `~/.agents/skills/efficient-coding`, termasuk `references/` | Dipasang ke skill root yang dipilih tanpa mengubah isinya |
 | Odoo Engineering | Dibundel di repositori ini | Routing aman untuk Odoo 10–20 |
 | Prompt Master | [nidhinjs/prompt-master](https://github.com/nidhinjs/prompt-master) | Clone baru atau `git pull --ff-only` |
-| Headroom | [headroomlabs-ai/headroom](https://github.com/headroomlabs-ai/headroom) | Hanya dideteksi; tidak diinstal/dikonfigurasi otomatis |
+| CodeGraph | Optional enhancement | Structural intelligence: references, callers/callees, inheritance, dependencies, dan hubungan lintas modul |
+| Headroom | [headroomlabs-ai/headroom](https://github.com/headroomlabs-ai/headroom) | Optional context/token optimization untuk output tool besar |
+
+**Core:** Efficient Coding, Odoo Engineering, dan Prompt Master. **Optional:** CodeGraph dan Headroom. Core skill tetap berfungsi saat enhancement optional tidak tersedia.
 
 ## Pilih installer sesuai sistem operasi
 
@@ -28,6 +31,16 @@ git clone https://github.com/a5zero7/afyx-codex-engineering-kit.git
 Set-Location afyx-codex-engineering-kit
 .\install.ps1
 ```
+
+Instalasi optional yang tetap konservatif:
+
+```powershell
+.\install.ps1 -WithCodeGraph
+.\install.ps1 -WithHeadroom -HeadroomProxyUrl 'http://127.0.0.1:8787'
+.\install.ps1 -Full -HeadroomProxyUrl 'http://127.0.0.1:8787'
+```
+
+Mode optional tidak menginstal executable pihak ketiga secara otomatis. CodeGraph hanya ditambahkan bila executable tersedia. Headroom memerlukan URL proxy eksplisit; installer tidak pernah mengasumsikan URL atau menimpa blok MCP yang telah ada.
 
 ## Instalasi Linux dan macOS
 
@@ -68,6 +81,7 @@ Jika `efficient-coding` sudah ada, instalasi berhenti dengan pesan jelas. Jika `
 .\uninstall.ps1
 .\uninstall.ps1 -RemovePromptMaster
 .\verify.ps1
+.\verify.ps1 -Full
 ```
 
 Linux/macOS memakai opsi yang setara:
@@ -89,6 +103,10 @@ Backup dibuat di folder `backups\` di clone lokal dan tidak diunggah ke Git.
 Headroom bersifat opsional. Instal dan konfigurasikan mengikuti dokumentasi upstream: <https://github.com/headroomlabs-ai/headroom>.
 
 Jika Headroom sudah ada, installer hanya menampilkan statusnya. Ini mencegah konflik dengan provider, proxy, port, atau metode login Codex yang sudah Anda gunakan.
+
+## Verifikasi
+
+`verify.ps1` membedakan `OK`, `WARN`, dan `FAIL`. Tanpa `-Full`, enhancement optional yang belum siap hanya menghasilkan peringatan; kegagalan core menghasilkan exit code non-zero. Dengan `-Full`, CodeGraph dan Headroom juga harus siap.
 
 ## Dokumentasi
 

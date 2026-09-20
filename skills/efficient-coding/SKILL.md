@@ -322,12 +322,6 @@ Never assume an API from a newer version exists in an older project.
 
 
 
-For Odoo repositories, read `references/odoo.md` when Odoo-specific
-
-framework behavior matters.
-
-
-
 For unusually large repository/tool context, read
 
 `references/token-efficiency.md` when additional context optimization
@@ -361,4 +355,3 @@ Report:
 Provide deeper explanation when requested or when it is necessary to
 
 understand risk or implementation decisions.
-

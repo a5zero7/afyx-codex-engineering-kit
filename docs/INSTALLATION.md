@@ -21,7 +21,7 @@ Default installer tidak menghapus, mengganti, atau memperbarui folder skill yang
 
 ## Verifikasi
 
-Jalankan `./verify.ps1` pada Windows atau `./verify.sh` pada Linux/macOS. Verifier memeriksa CLI, tiga skill, executable CodeGraph/Headroom, dan apakah dua MCP tercantum dalam `config.toml`. Verifier hanya membaca state; tidak mengubah konfigurasi.
+Jalankan `./verify.ps1` pada Windows atau `./verify.sh` pada Linux/macOS. Verifier memeriksa CLI, tiga skill, executable CodeGraph/Headroom, dan konfigurasi MCP. Verifier hanya membaca state; tidak mengubah konfigurasi. Pada Windows, `verify.ps1 -Full` menjadikan enhancement optional sebagai syarat readiness.
 
 ## Odoo Engineering 10–20
 
@@ -37,7 +37,7 @@ Skill Odoo dipasang bersama Efficient Coding. Saat task Odoo dimulai, ia harus m
 
 ## Konfigurasi Codex yang sengaja tidak diubah
 
-Installer tidak pernah memodifikasi `config.toml`, `auth.json`, konfigurasi MCP, plugin, sandbox, model, atau provider. Ini berarti Headroom dan CodeGraph yang sudah aktif tetap tidak tersentuh.
+Instalasi default tidak pernah memodifikasi `config.toml`, `auth.json`, konfigurasi MCP, plugin, sandbox, model, atau provider. Bila `-WithCodeGraph` atau `-WithHeadroom -HeadroomProxyUrl ...` diminta pada Windows, installer hanya menambahkan blok MCP yang hilang, mencadangkan config sebelum perubahan, dan mempertahankan blok yang telah ada tanpa overwrite.
 
 ## Pembaruan
 
@@ -45,7 +45,7 @@ Installer tidak pernah memodifikasi `config.toml`, `auth.json`, konfigurasi MCP,
 
 ## Penghapusan
 
-`./uninstall.ps1` atau `./uninstall.sh` hanya menghapus Efficient Coding. Prompt Master hanya dihapus saat opsi `-RemovePromptMaster` atau `--remove-prompt-master` disebut secara eksplisit. Headroom dan konfigurasi Codex tidak pernah dihapus.
+`./uninstall.ps1` atau `./uninstall.sh` menghapus Efficient Coding dan Odoo Engineering. Prompt Master hanya dihapus saat opsi `-RemovePromptMaster` atau `--remove-prompt-master` disebut secara eksplisit. Headroom dan konfigurasi Codex tidak pernah dihapus.
 
 ## Pemulihan
 
