@@ -33,6 +33,9 @@ if (-not $SkipSelfUpdate) {
 } else { Write-Host 'Self-update skipped by -SkipSelfUpdate; using current local source intentionally.' }
 
 & $installer -SkillsRoot $SkillsRoot -Force -Confirm:$false
-$installerExitCode = $LASTEXITCODE
+$installerSucceeded = $?
+$installerExitCode = 0
+if (Test-Path -LiteralPath variable:LASTEXITCODE) { $installerExitCode = [int]$LASTEXITCODE }
+if (-not $installerSucceeded -and $installerExitCode -eq 0) { $installerExitCode = 1 }
 if ($installerExitCode -ne 0) { exit $installerExitCode }
 exit 0
