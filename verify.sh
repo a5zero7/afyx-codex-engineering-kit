@@ -72,8 +72,8 @@ for component in codegraph; do
 done
 headroom_cli=false; command -v headroom >/dev/null 2>&1 && headroom_cli=true
 headroom_provider=false; headroom_proxy=false
-if [[ -f "$config" ]] && grep -Eiq '(model_provider|provider|base_url|endpoint).*(headroom|localhost:[0-9]{2,5}|127\.0\.0\.1:[0-9]{2,5})' "$config"; then headroom_provider=true; fi
-if [[ -f "$config" ]] && grep -Eiq '(headroom|localhost:[0-9]{2,5}|127\.0\.0\.1:[0-9]{2,5})' "$config"; then headroom_proxy=true; fi
+if [[ -f "$config" ]] && grep -Eiq "^[[:space:]]*model_provider[[:space:]]*=[[:space:]]*['\"]headroom['\"][[:space:]]*$|^[[:space:]]*\[model_providers\.headroom\][[:space:]]*$" "$config"; then headroom_provider=true; fi
+if "$headroom_provider" || { [[ -f "$config" ]] && grep -Eiq '^[[:space:]]*headroom_(endpoint|base_url|proxy_url)[[:space:]]*=' "$config"; }; then headroom_proxy=true; fi
 if "$headroom_cli"; then result OK 'Headroom CLI' 'detected'; else result INFO 'Headroom CLI' 'not found'; fi
 if "$headroom_proxy"; then [[ "$headroom_provider" == true ]] && result OK 'Headroom proxy/provider' 'provider routing configured' || result OK 'Headroom proxy/provider' 'endpoint configured'; else result INFO 'Headroom proxy/provider' 'not configured'; fi
 if mcp_configured headroom; then result OK 'Headroom MCP' 'configured (optional)'; else result INFO 'Headroom MCP' 'not configured; optional for proxy mode'; fi

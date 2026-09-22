@@ -70,8 +70,10 @@ foreach ($component in @(@{ Label = 'CodeGraph'; Command = 'codegraph' })) {
 }
 $headroom = [bool](Get-Command headroom -ErrorAction SilentlyContinue)
 $configText = if (Test-Path -LiteralPath $configPath -PathType Leaf) { Get-Content -Raw -LiteralPath $configPath -Encoding utf8 } else { '' }
-$headroomProvider = $configText -match '(?im)(model_provider|provider|base_url|endpoint).*(headroom|localhost:\d{2,5}|127\.0\.0\.1:\d{2,5})'
-$headroomProxy = $configText -match '(?im)(headroom|localhost:\d{2,5}|127\.0\.0\.1:\d{2,5})'
+$headroomProvider = $configText -match '(?im)^\s*model_provider\s*=\s*["'']headroom["'']\s*$' -or
+    $configText -match '(?im)^\s*\[model_providers\.headroom\]\s*$'
+$headroomProxy = $headroomProvider -or
+    $configText -match '(?im)^\s*headroom_(endpoint|base_url|proxy_url)\s*='
 if ($headroom) { Write-Result 'OK' 'Headroom CLI' 'detected' } else { Write-Result 'INFO' 'Headroom CLI' 'not found' }
 if ($headroomProxy) { Write-Result 'OK' 'Headroom proxy/provider' ($(if ($headroomProvider) { 'provider routing configured' } else { 'endpoint configured' })) } else { Write-Result 'INFO' 'Headroom proxy/provider' 'not configured' }
 if (Test-McpEntry 'headroom') { Write-Result 'OK' 'Headroom MCP' 'configured (optional)' } else { Write-Result 'INFO' 'Headroom MCP' 'not configured; optional for proxy mode' }
