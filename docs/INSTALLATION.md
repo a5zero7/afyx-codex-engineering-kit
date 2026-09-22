@@ -41,7 +41,7 @@ Installer tidak pernah memodifikasi `config.toml`, `auth.json`, konfigurasi MCP,
 
 ## Pembaruan
 
-`./update.ps1` atau `./update.sh` terlebih dahulu mencoba memperbarui checkout kit sendiri dengan `git pull --ff-only`, lalu menjalankan installer untuk memperbarui Prompt Master dan skill. Worktree dirty tidak disentuh dan self-update dilewati dengan pesan jelas. Gunakan `-SkipSelfUpdate` atau `--skip-self-update` untuk melewati langkah ini. Bila source bukan checkout Git, installer tetap berjalan dari source saat ini.
+`./update.ps1` atau `./update.sh` terlebih dahulu mencoba memperbarui checkout kit sendiri dengan `git pull --ff-only`, lalu menjalankan installer untuk memperbarui Prompt Master dan skill. Worktree dirty menghentikan updater sebelum installer dijalankan; gunakan `git status` untuk menangani perubahan atau `-SkipSelfUpdate` / `--skip-self-update` untuk secara sengaja memasang current checkout. Git yang tidak tersedia menghasilkan error tersendiri. Bila Git tersedia tetapi source bukan checkout Git, self-update dilaporkan unavailable dan installer tetap berjalan dari source saat ini.
 
 ## Penghapusan
 

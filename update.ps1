@@ -4,24 +4,35 @@ param(
     [switch]$SkipSelfUpdate
 )
 
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
 $installer = Join-Path $PSScriptRoot 'install.ps1'
-Write-Host 'Afyx Codex Engineering Kit — Windows updater (PowerShell)'
 $root = $PSScriptRoot
+
+Write-Host 'Afyx Codex Engineering Kit — Windows updater (PowerShell)'
+
 if (-not $SkipSelfUpdate) {
     $git = Get-Command git -ErrorAction SilentlyContinue
-    $inside = $false
-    if ($git) { & git -C $root rev-parse --is-inside-work-tree 2>$null; $inside = ($LASTEXITCODE -eq 0) }
-    if (-not $inside) {
-        Write-Warning 'Self-update unavailable: source is not a Git repository. Continuing with current source.'
-    } else {
-        $status = (& git -C $root status --porcelain)
-        if ($status) { Write-Warning 'Self-update skipped: repository has local changes.' }
-        else {
-            Write-Host 'Updating repository (fast-forward only)...'
-            & git -C $root pull --ff-only
-            if ($LASTEXITCODE -ne 0) { throw 'Self-update failed; no installer changes were run.' }
-        }
+    if (-not $git) {
+        Write-Error 'Git executable not found. Self-update cannot be performed. Re-run with -SkipSelfUpdate only if using the current checkout intentionally.'
+        exit 1
     }
-} else { Write-Host 'Self-update skipped by -SkipSelfUpdate.' }
+    & git -C $root rev-parse --is-inside-work-tree *> $null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning 'Self-update unavailable: source directory is not a Git repository. Continuing with current source.'
+    } else {
+        $status = & git -C $root status --porcelain
+        if ($LASTEXITCODE -ne 0) { Write-Error 'Unable to inspect Git worktree status; updater aborted.'; exit 1 }
+        if ($status) {
+            Write-Error 'Local changes detected. Self-update and installation aborted. Run git status to handle local changes, or intentionally use .\update.ps1 -SkipSelfUpdate.'
+            exit 1
+        }
+        & git -C $root pull --ff-only
+        if ($LASTEXITCODE -ne 0) { Write-Error 'Self-update failed; installer was not run.'; exit 1 }
+    }
+} else { Write-Host 'Self-update skipped by -SkipSelfUpdate; using current local source intentionally.' }
+
 & $installer -SkillsRoot $SkillsRoot -Force -Confirm:$false
-exit $LASTEXITCODE
+$installerExitCode = $LASTEXITCODE
+if ($installerExitCode -ne 0) { exit $installerExitCode }
+exit 0

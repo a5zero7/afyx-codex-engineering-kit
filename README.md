@@ -85,7 +85,7 @@ Linux/macOS memakai opsi yang setara:
 ./verify.sh
 ```
 
-Updater melakukan self-update kit dengan `git pull --ff-only` hanya pada checkout bersih. Perubahan lokal tidak disentuh; gunakan `-SkipSelfUpdate` (PowerShell) atau `--skip-self-update` (Bash) untuk melewati self-update.
+Updater melakukan self-update kit dengan `git pull --ff-only` hanya pada checkout bersih. Jika worktree memiliki perubahan lokal, updater berhenti sebelum installer dijalankan; gunakan `git status` untuk menanganinya atau `-SkipSelfUpdate` (PowerShell) / `--skip-self-update` (Bash) sebagai opt-in untuk memasang current checkout. Git yang tidak tersedia adalah error terpisah; source non-Git dengan Git tersedia dilaporkan sebagai self-update unavailable dan dapat melanjutkan dengan source saat ini.
 
 Backup dibuat di folder `backups\` di clone lokal dan tidak diunggah ke Git.
 
