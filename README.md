@@ -9,7 +9,7 @@ Paket ini memasang `efficient-coding` dan `odoo-engineering`, serta mengambil `p
 | Komponen | Sumber | Perilaku installer |
 |---|---|---|
 | Efficient Coding | Salinan utuh dari `~/.agents/skills/efficient-coding`, termasuk `references/` | Dipasang ke skill root yang dipilih tanpa mengubah isinya |
-| Odoo Engineering | Dibundel di repositori ini | Routing aman untuk Odoo 10–20 |
+| Odoo Engineering | Dibundel di repositori ini | Stable Odoo 10–19; Odoo 20 preview |
 | Prompt Master | [nidhinjs/prompt-master](https://github.com/nidhinjs/prompt-master) | Clone baru atau `git pull --ff-only` |
 | CodeGraph | Optional enhancement | Structural intelligence: references, callers/callees, inheritance, dependencies, dan hubungan lintas modul |
 | Headroom | [headroomlabs-ai/headroom](https://github.com/headroomlabs-ai/headroom) | Optional context/token optimization untuk output tool besar |
@@ -47,7 +47,7 @@ Installer mendeteksi Codex CLI, ekstensi ChatGPT/Codex VS Code, atau keduanya. K
 
 Setelah selesai, buka sesi Codex baru. Skill akan aktif hanya pada task yang sesuai: Efficient Coding untuk pekerjaan engineering dan Prompt Master saat Anda secara eksplisit meminta pembuatan/perbaikan prompt.
 
-`odoo-engineering` hanya aktif untuk pekerjaan Odoo. Ia menentukan versi repository terlebih dahulu dan merujuk panduan terpisah untuk setiap versi 10 sampai 20, tanpa memaksakan pola versi terbaru ke codebase lama.
+`odoo-engineering` hanya aktif untuk pekerjaan Odoo. Referensi Odoo 10–19 berstatus stable; Odoo 20 adalah preview/emerging dan harus diverifikasi terhadap evidence repository sebelum digunakan.
 
 ## Tidak bentrok dengan Codex
 
@@ -85,11 +85,13 @@ Linux/macOS memakai opsi yang setara:
 ./verify.sh
 ```
 
+Updater melakukan self-update kit dengan `git pull --ff-only` hanya pada checkout bersih. Perubahan lokal tidak disentuh; gunakan `-SkipSelfUpdate` (PowerShell) atau `--skip-self-update` (Bash) untuk melewati self-update.
+
 Backup dibuat di folder `backups\` di clone lokal dan tidak diunggah ke Git.
 
 ## Headroom
 
-Headroom bersifat opsional. Instal dan konfigurasikan mengikuti dokumentasi upstream: <https://github.com/headroomlabs-ai/headroom>.
+Headroom bersifat opsional. CLI, proxy/provider routing, dan MCP adalah capability terpisah; MCP tidak diperlukan untuk mode proxy. Instal dan konfigurasikan mengikuti dokumentasi upstream: <https://github.com/headroomlabs-ai/headroom>.
 
 Jika Headroom sudah ada, installer hanya menampilkan statusnya. Ini mencegah konflik dengan provider, proxy, port, atau metode login Codex yang sudah Anda gunakan.
 

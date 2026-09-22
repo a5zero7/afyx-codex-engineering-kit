@@ -129,7 +129,7 @@ if (-not (Test-SkillManifest -SkillDirectory $odooTarget)) { throw 'Installed Od
 if (-not (Test-SkillManifest -SkillDirectory $promptTarget)) { throw 'Installed Prompt Master manifest failed validation.' }
 
 Write-Host 'Efficient Coding: installed'
-Write-Host 'Odoo Engineering (10–20): installed'
+Write-Host 'Odoo Engineering: installed (stable refs 10–19; Odoo 20 preview)'
 Write-Host 'Prompt Master: installed'
 if (Get-Command headroom -ErrorAction SilentlyContinue) { Write-Host 'Headroom: detected (configuration unchanged)' } else { Write-Warning 'Headroom was not found. See https://github.com/headroomlabs-ai/headroom' }
 Write-Host 'Start a new Codex session to load the skills.'

@@ -41,7 +41,7 @@ Installer tidak pernah memodifikasi `config.toml`, `auth.json`, konfigurasi MCP,
 
 ## Pembaruan
 
-`./update.ps1` atau `./update.sh` memperbarui Prompt Master dengan `git pull --ff-only` dan mengganti Efficient Coding serta Odoo Engineering setelah mencadangkannya. Bila upstream tidak dapat di-fast-forward atau koneksi gagal, perintah berhenti tanpa reset paksa.
+`./update.ps1` atau `./update.sh` terlebih dahulu mencoba memperbarui checkout kit sendiri dengan `git pull --ff-only`, lalu menjalankan installer untuk memperbarui Prompt Master dan skill. Worktree dirty tidak disentuh dan self-update dilewati dengan pesan jelas. Gunakan `-SkipSelfUpdate` atau `--skip-self-update` untuk melewati langkah ini. Bila source bukan checkout Git, installer tetap berjalan dari source saat ini.
 
 ## Penghapusan
 

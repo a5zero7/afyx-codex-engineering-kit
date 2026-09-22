@@ -136,7 +136,7 @@ if ! "$dry_run"; then
   valid_manifest "$prompt_target" || { printf 'Installed Prompt Master validation failed.\n' >&2; exit 1; }
 fi
 
-printf 'Efficient Coding: installed\nOdoo Engineering (10-20): installed\nPrompt Master: installed\n'
+printf 'Efficient Coding: installed\nOdoo Engineering: installed (stable refs 10-19; Odoo 20 preview)\nPrompt Master: installed\n'
 if command -v headroom >/dev/null; then
   printf 'Headroom: detected (configuration unchanged)\n'
 else
