@@ -27,8 +27,12 @@ if (-not $SkipSelfUpdate) {
             Write-Error 'Local changes detected. Self-update and installation aborted. Run git status to handle local changes, or intentionally use .\update.ps1 -SkipSelfUpdate.'
             exit 1
         }
-        & git -C $root pull --ff-only
-        if ($LASTEXITCODE -ne 0) { Write-Error 'Self-update failed; installer was not run.'; exit 1 }
+        if ($WhatIfPreference) {
+            Write-Host 'WhatIf: skipping git pull --ff-only; repository will not be modified.'
+        } else {
+            & git -C $root pull --ff-only
+            if ($LASTEXITCODE -ne 0) { Write-Error 'Self-update failed; installer was not run.'; exit 1 }
+        }
     }
 } else { Write-Host 'Self-update skipped by -SkipSelfUpdate; using current local source intentionally.' }
 

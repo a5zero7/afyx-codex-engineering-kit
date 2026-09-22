@@ -4,10 +4,12 @@ set -euo pipefail
 root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 printf 'Afyx Codex Engineering Kit — Linux/macOS updater (Bash)\n'
 skip_self_update=false
+dry_run=false
 args=()
 while (($#)); do
   case "$1" in
     --skip-self-update) skip_self_update=true; shift ;;
+    --dry-run) dry_run=true; args+=("--dry-run"); shift ;;
     *) args+=("$1"); shift ;;
   esac
 done
@@ -30,9 +32,13 @@ else
       printf '[ERROR] Local changes detected. Self-update and installation aborted. Run git status to handle local changes, or intentionally use ./update.sh --skip-self-update.\n' >&2
       exit 1
     fi
-    if ! git -C "$root" pull --ff-only; then
-      printf '[ERROR] Self-update failed; installer was not run.\n' >&2
-      exit 1
+    if "$dry_run"; then
+      printf 'Dry-run: skipping git pull --ff-only; repository will not be modified.\n'
+    else
+      if ! git -C "$root" pull --ff-only; then
+        printf '[ERROR] Self-update failed; installer was not run.\n' >&2
+        exit 1
+      fi
     fi
   fi
 fi
