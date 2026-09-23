@@ -22,6 +22,12 @@ Validate only the frozen inputs without constructing runs or calling a model:
 python evals/harness/run.py --mode smoke --preflight-only
 ```
 
+Validate the manifest, fixture references, configuration references, and Odoo reference dates without network or model calls:
+
+```text
+python evals/harness/validate.py
+```
+
 ## Genuine skill isolation
 
 Codex officially supports per-skill enablement through `skills.config`. Every invocation:
