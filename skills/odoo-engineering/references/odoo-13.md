@@ -20,3 +20,11 @@ Prefer targeted Python/module, XML, report, and affected web checks under the ta
 
 - Official source: `https://github.com/odoo/odoo/blob/13.0/setup.py`
 - Official source: `https://github.com/odoo/odoo/blob/13.0/addons/web/__manifest__.py`
+
+## ORM / Python
+
+Exact `13.0/odoo/api.py` defines `model_create_multi()` but no longer defines `multi()` or `one()`. Do not generate those Odoo 12-era decorators for Odoo 13+; preserve recordset semantics rather than assuming every method is singleton.
+
+## Evidence
+
+- Official source: `https://github.com/odoo/odoo/blob/13.0/odoo/api.py`

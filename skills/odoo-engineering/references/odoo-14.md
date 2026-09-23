@@ -20,3 +20,15 @@ Validate the affected module, inherited XML, and relevant frontend/report loadin
 
 - Official source: `https://github.com/odoo/odoo/blob/14.0/setup.py`
 - Official source: `https://github.com/odoo/odoo/blob/14.0/addons/web/__manifest__.py`
+
+## ORM / Python
+
+An exact source search of `14.0/odoo/fields.py` found no `class Command`. Do not generate `fields.Command.create/update/set` for Odoo 14 unless the target repository provides its own compatibility abstraction; inspect the existing tuple-command pattern and RPC boundary.
+
+## Migration trap: 14 → 15
+
+The absence claim is source-based, not documentation-silence-based. Verify custom abstractions before changing working relational commands.
+
+## Evidence
+
+- Official source: `https://github.com/odoo/odoo/blob/14.0/odoo/fields.py`

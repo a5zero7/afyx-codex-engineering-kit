@@ -20,3 +20,18 @@ Validate the affected module, XML, asset bundle, and integration surface under O
 
 - Official source: `https://github.com/odoo/odoo/blob/15.0/setup.py`
 - Official source: `https://github.com/odoo/odoo/blob/15.0/addons/web/__manifest__.py`
+
+## ORM / Python
+
+Exact `15.0/odoo/fields.py` defines `class Command` with helpers including `create`, `update`, `delete`, `unlink`, `link`, `clear`, and `set`. Use it only when the target version supports it.
+
+Python helpers do not change the RPC representation automatically; inspect integrations that require literal three-element relational command tuples.
+
+## Frontend / JavaScript
+
+Odoo 15 official JavaScript documentation describes `@odoo-module` as the opt-in marker for native-module conversion while legacy `odoo.define` and external/plain JavaScript remain compatibility concerns. Inspect local module style before changing it.
+
+## Evidence
+
+- Official source: `https://github.com/odoo/odoo/blob/15.0/odoo/fields.py`
+- Official documentation: `https://www.odoo.com/documentation/15.0/developer/reference/frontend/javascript_modules.html`

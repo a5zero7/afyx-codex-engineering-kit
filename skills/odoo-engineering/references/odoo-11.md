@@ -20,3 +20,7 @@ Use targeted module import/update, XML loading, and affected web/report checks u
 
 - Official source: `https://github.com/odoo/odoo/blob/11.0/setup.py`
 - Official source: `https://github.com/odoo/odoo/blob/11.0/addons/web/__manifest__.py`
+
+## ORM / Python
+
+Exact `11.0/odoo/api.py` still defines `multi()` and `one()`. Preserve recordset/decorator semantics during maintenance and inspect the 12→13 boundary before migration.

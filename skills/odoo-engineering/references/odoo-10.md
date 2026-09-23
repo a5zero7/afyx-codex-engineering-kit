@@ -22,3 +22,11 @@ Prefer targeted Python/module import, XML loading, and affected report/web asset
 - Official source: `https://github.com/odoo/odoo/blob/10.0/odoo/release.py`
 - Official source: `https://github.com/odoo/odoo/blob/10.0/setup.py`
 - Official source: `https://github.com/odoo/odoo/blob/10.0/addons/web/__manifest__.py`
+
+## ORM / Python
+
+Exact `10.0/odoo/api.py` defines `multi()` and `one()`. Odoo 10 code can therefore contain legacy/new-API coexistence; do not mechanically replace working decorators or imports during maintenance.
+
+## Frontend / JavaScript
+
+Treat the legacy web module and import generation as a compatibility boundary. Do not introduce OWL or modern module/asset patterns without target-repository evidence.

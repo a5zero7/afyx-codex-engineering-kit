@@ -20,3 +20,15 @@ Validate the affected module, XML inheritance, report path, and web assets with 
 
 - Official source: `https://github.com/odoo/odoo/blob/12.0/setup.py`
 - Official source: `https://github.com/odoo/odoo/blob/12.0/addons/web/__manifest__.py`
+
+## ORM / Python
+
+Exact `12.0/odoo/api.py` defines `multi()`, `one()`, and `model_create_multi()`. Do not collapse Odoo 12 recordset behavior into post-13 assumptions; inspect method semantics and callers when migrating.
+
+## Migration trap: 12 → 13
+
+The decorator boundary must be handled semantically, not by a mechanical `ensure_one()` rewrite.
+
+## Evidence
+
+- Official source: `https://github.com/odoo/odoo/blob/12.0/odoo/api.py`
