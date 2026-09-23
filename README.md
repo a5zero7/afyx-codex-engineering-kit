@@ -106,6 +106,7 @@ Sebagai pemeriksaan manual opsional, jalankan `python scripts/check-reference-st
 ## Dokumentasi
 
 Panduan lengkap, perilaku konflik, dan pemulihan ada di [docs/INSTALLATION.md](docs/INSTALLATION.md).
+Metodologi dan hasil campaign benchmark tersedia di [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
 
 ## Lisensi dan atribusi
 
