@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "random_seed": 3102026,
+  "environment": "environment.json",
+  "configurations": {
+    "N": [],
+    "E": ["efficient-coding"],
+    "O": ["odoo-engineering"],
+    "P": ["prompt-master"],
+    "EO": ["efficient-coding", "odoo-engineering"],
+    "PO": ["prompt-master", "odoo-engineering"],
+    "CORE": ["efficient-coding", "odoo-engineering", "prompt-master"]
+  },
+  "scenarios": [
+    {
+      "scenario_id": "smoke-python-001",
+      "category": "direct/non-odoo",
+      "fixture": "fixtures/smoke-python",
+      "user_prompt": "Fix the add function in calculator.py so the existing tests pass. Keep the change scoped and run the tests.",
+      "configurations": ["E"],
+      "expected_assertions": [{"type": "validation_exit", "value": 0}],
+      "forbidden_patterns": ["eval(", "exec("],
+      "validation_command": ["python", "-m", "unittest", "-q"],
+      "allowed_file_scope": ["calculator.py"],
+      "expected_file_scope": ["calculator.py"],
+      "output_kind": "coding"
+    },
+    {
+      "scenario_id": "smoke-odoo-001",
+      "category": "direct/odoo",
+      "fixture": "fixtures/smoke-odoo",
+      "user_prompt": "Fix the compatibility bug in module/models.py for the Odoo version evidenced by this repository. Preserve behavior and run the available test.",
+      "configurations": ["O"],
+      "expected_assertions": [{"type": "validation_exit", "value": 0}],
+      "forbidden_patterns": ["fields.Command", "Command.set"],
+      "validation_command": ["python", "test_compat.py"],
+      "allowed_file_scope": ["module/models.py"],
+      "expected_file_scope": ["module/models.py"],
+      "output_kind": "coding"
+    },
+    {
+      "scenario_id": "smoke-prompt-001",
+      "category": "prompt/authoring",
+      "fixture": "fixtures/smoke-prompt",
+      "user_prompt": "Write a production-ready prompt for Codex to update the greeting function described in context.md. Return the prompt, not an implementation.",
+      "configurations": ["P"],
+      "expected_assertions": [
+        {"type": "output_contains", "value": "greeting.py"},
+        {"type": "output_contains", "value": "test"}
+      ],
+      "forbidden_patterns": [],
+      "validation_command": null,
+      "allowed_file_scope": [],
+      "expected_file_scope": [],
+      "output_kind": "generated_prompt"
+    }
+  ]
+}
