@@ -32,9 +32,11 @@ Before constructing any run or making a model call, the harness recomputes those
 
 ### Adaptive run strategy
 
-Campaign A will begin with a balanced minimum of three repetitions for every declared scenario/configuration cell. Cells are interleaved in deterministic, seed-recorded order so one configuration is not systematically favored by execution order.
+Round 1 (discovery) executes exactly one repetition for every declared scenario/configuration cell. Cells are interleaved in deterministic, seed-recorded order so one configuration is not systematically favored by execution order.
 
-After each complete balanced batch, additional repetitions may be assigned only under a campaign rule declared before interpreting comparative results—for example, inconsistent correctness outcomes or excessive run-to-run dispersion. Any extension applies equally to every compared configuration for the affected scenario, uses a recorded seed, and preserves fresh sessions and fixtures. The campaign log must record the trigger, added repetitions, exclusions, failures, and stopping decision. Runs must not stop early merely because an interim result favors a configuration.
+Round 2 (confirmation) adds repetitions only for cells whose Round 1 result is ambiguous: either efficiency metrics are a near-tie between configurations, or a failure needs confirmation before it can trigger a skill-content change. Unambiguous cells are retained as directional evidence with `n=1` and are not re-run.
+
+The combined total for Round 1 and Round 2 must not exceed 27 runs. The campaign log records which cells entered confirmation, the ambiguity trigger, added repetitions, exclusions, failures, and the stopping decision. Additional runs retain recorded seeds, fresh sessions, and fresh fixtures.
 
 This adaptive policy controls evidence collection; it does not change assertions after results are observed, combine records from different frozen environments, or turn unavailable metrics into estimates.
 
