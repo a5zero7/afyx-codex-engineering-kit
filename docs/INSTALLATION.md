@@ -23,9 +23,9 @@ Default installer tidak menghapus, mengganti, atau memperbarui folder skill yang
 
 Jalankan `./verify.ps1` pada Windows atau `./verify.sh` pada Linux/macOS. Core environment valid jika tersedia Codex CLI, ekstensi ChatGPT/Codex VS Code, atau keduanya. Verifier juga memeriksa tiga skill core serta melaporkan Headroom CLI, proxy/provider routing, dan MCP sebagai capability optional yang terpisah. Semua pemeriksaan bersifat read-only; absennya capability optional tidak menyebabkan core readiness gagal.
 
-## Odoo Engineering 10–19 stable, Odoo 20 preview
+## Odoo Engineering 10–20 stable
 
-Skill Odoo dipasang bersama Efficient Coding. Referensi Odoo 10–19 berstatus stable, sedangkan Odoo 20 berstatus preview/emerging dan memerlukan evidence repository sebelum perilakunya diasumsikan. Saat task Odoo dimulai, skill menentukan versi dari repository lalu memuat reference yang sesuai untuk mencegah penerapan API lintas-versi tanpa verifikasi.
+Skill Odoo dipasang bersama Efficient Coding. Referensi Odoo 10–20 berstatus stable, tetapi Odoo 20 tetap memerlukan evidence exact 20.0 sebelum perilaku spesifik versi digunakan. Saat task Odoo dimulai, skill menentukan versi dari repository lalu memuat reference yang sesuai untuk mencegah penerapan API lintas-versi tanpa verifikasi.
 
 Kedua skill memakai frontmatter Agent Skills dengan `name`, `description`, dan `metadata.version`. Entrypoint tetap ringkas; detail kondisional dimuat dari `references/` hanya saat routing task membutuhkannya.
 

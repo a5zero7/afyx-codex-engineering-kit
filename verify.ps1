@@ -53,7 +53,7 @@ if (-not $codex -and -not $extension) { $coreFailure = $true }
 $odooReferences = @('references/common.md') + (10..20 | ForEach-Object { "references/odoo-$_.md" })
 $checks = @(
     @{ Name = 'efficient-coding'; Label = 'Efficient Coding'; Refs = @('references/investigation.md', 'references/tool-routing.md', 'references/token-efficiency.md'); Versioned = $true },
-    @{ Name = 'odoo-engineering'; Label = 'Odoo Engineering (stable refs 10–19; Odoo 20 preview)'; Refs = @('references/common.md', 'references/version-detection.md') + (10..20 | ForEach-Object { "references/odoo-$_.md" }); Versioned = $true },
+ @{ Name = 'odoo-engineering'; Label = 'Odoo Engineering (stable refs 10–20)'; Refs = @('references/common.md', 'references/version-detection.md', 'references/reference-schema.md') + (10..20 | ForEach-Object { "references/odoo-$_.md" }); Versioned = $true },
     @{ Name = 'prompt-master'; Label = 'Prompt Master'; Refs = @(); Versioned = $false }
 )
 foreach ($check in $checks) {

@@ -60,7 +60,7 @@ if skill_ok efficient-coding true && refs_ok efficient-coding references/investi
 
 odoo_refs=(references/common.md references/version-detection.md)
 for version in {10..20}; do odoo_refs+=("references/odoo-$version.md"); done
-if skill_ok odoo-engineering true && refs_ok odoo-engineering "${odoo_refs[@]}"; then result OK 'Odoo Engineering' 'frontmatter metadata and stable refs 10-19; Odoo 20 preview reference valid'; else result FAIL 'Odoo Engineering' 'SKILL.md metadata or required reference invalid'; core_failure=true; fi
+if skill_ok odoo-engineering true && refs_ok odoo-engineering "${odoo_refs[@]}" references/reference-schema.md; then result OK 'Odoo Engineering' 'frontmatter metadata and stable refs 10-20 valid'; else result FAIL 'Odoo Engineering' 'SKILL.md metadata or required reference invalid'; core_failure=true; fi
 
 if skill_ok prompt-master; then result OK 'Prompt Master' 'frontmatter valid'; else result FAIL 'Prompt Master' 'SKILL.md invalid or missing'; core_failure=true; fi
 

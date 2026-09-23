@@ -1,3 +1,22 @@
 # Odoo 14
 
-Treat Odoo 14 as its own compatibility boundary. Inspect local framework and asset conventions; do not assume a pattern documented for a newer release is valid here.
+Status: stable
+Last verified: 2026-09-23
+
+## Runtime baseline
+
+- Official `14.0/setup.py` declares `python_requires >=3.6`.
+- Official `14.0/addons/web/__manifest__.py` does not use the later manifest `assets` key.
+
+## High-risk version traps
+
+Treat Odoo 14 as its own compatibility boundary. Inspect exact framework, ORM, view, and asset conventions before importing a newer pattern.
+
+## Validation
+
+Validate the affected module, inherited XML, and relevant frontend/report loading under the target Odoo 14 runtime.
+
+## Evidence
+
+- Official source: `https://github.com/odoo/odoo/blob/14.0/setup.py`
+- Official source: `https://github.com/odoo/odoo/blob/14.0/addons/web/__manifest__.py`

@@ -1,6 +1,6 @@
 ---
 name: odoo-engineering
-description: Version-aware Odoo engineering for Odoo repositories, modules, ORM, views, reports, security, migrations, and debugging. Odoo 10–19 references are stable; Odoo 20 is preview/emerging and requires repository evidence.
+description: Version-aware Odoo engineering for Odoo repositories, modules, ORM, views, reports, security, migrations, and debugging. Stable references cover Odoo 10–20; select one target version from repository evidence.
 metadata:
   version: "1.1.0"
 ---

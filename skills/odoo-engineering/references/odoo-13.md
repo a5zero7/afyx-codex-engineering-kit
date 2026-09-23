@@ -1,3 +1,22 @@
 # Odoo 13
 
-Use Odoo 13 implementation patterns already present in the repository. Verify manifest, ORM, view, report, and JavaScript conventions against the target before importing newer examples.
+Status: stable
+Last verified: 2026-09-23
+
+## Runtime baseline
+
+- Official `13.0/setup.py` declares `python_requires >=3.6`; inspect the actual deployment/runtime as well.
+- Official `13.0/addons/web/__manifest__.py` does not use the later manifest `assets` key.
+
+## High-risk version traps
+
+Verify Odoo 13 manifest, ORM, view, report, and JavaScript conventions against exact source before importing newer examples.
+
+## Validation
+
+Prefer targeted Python/module, XML, report, and affected web checks under the target Odoo 13 runtime.
+
+## Evidence
+
+- Official source: `https://github.com/odoo/odoo/blob/13.0/setup.py`
+- Official source: `https://github.com/odoo/odoo/blob/13.0/addons/web/__manifest__.py`

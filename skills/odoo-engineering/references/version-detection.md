@@ -8,6 +8,6 @@ Use the strongest available repository or runtime evidence first:
 
 Do not choose a version from a weak signal when stronger evidence is available. If evidence conflicts, do not guess: report the conflict, prioritize executable/source/runtime evidence, and use only the version it proves. Never mix APIs from conflicting versions.
 
-Odoo 10–19 references are stable. Odoo 20 is preview/emerging; repository evidence is mandatory and final behavior must not be assumed.
+Odoo 10–20 references are stable for this project. Odoo 20 requires exact 20.0 source/documentation evidence; do not carry Odoo 19 assumptions forward.
 
 For migrations, identify source and target versions separately. Load both references only when the migration task requires both.
