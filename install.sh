@@ -67,10 +67,12 @@ for extension in "$HOME"/.vscode/extensions/openai.chatgpt-*; do
   [[ -d "$extension" ]] && { vscode_extension_detected=true; break; }
 done
 if ! "$codex_cli_detected" && ! "$vscode_extension_detected"; then
-  printf 'Neither Codex CLI nor the ChatGPT/Codex VS Code extension was detected.\n' >&2
-  exit 1
-fi
-if "$codex_cli_detected" && "$vscode_extension_detected"; then
+  if ! "$validate_only"; then
+    printf 'Neither Codex CLI nor the ChatGPT/Codex VS Code extension was detected.\n' >&2
+    exit 1
+  fi
+  printf 'Environment: Codex CLI and VS Code extension not detected (validation-only)\n'
+elif "$codex_cli_detected" && "$vscode_extension_detected"; then
   printf 'Environment: Codex CLI and VS Code extension detected\n'
 elif "$codex_cli_detected"; then
   printf 'Environment: Codex CLI detected\n'

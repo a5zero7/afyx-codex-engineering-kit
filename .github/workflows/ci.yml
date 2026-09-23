@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  bash-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Bash syntax
+        run: bash -n install.sh update.sh uninstall.sh verify.sh
+      - name: Validate installer assets
+        run: ./install.sh --validate-only
+      - name: Verify repository remains clean
+        run: |
+          if [[ -n "$(git status --porcelain)" ]]; then
+            git status --short
+            exit 1
+          fi
+
+  powershell-syntax:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check PowerShell syntax
+        shell: pwsh
+        run: |
+          $failed = $false
+          foreach ($file in @('install.ps1', 'update.ps1', 'uninstall.ps1', 'verify.ps1')) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $file),
+              [ref] $tokens,
+              [ref] $errors
+            ) | Out-Null
+
+            foreach ($parseError in $errors) {
+              Write-Error "$file`: $($parseError.Message)"
+            }
+            if ($errors.Count -gt 0) {
+              $failed = $true
+            }
+          }
+          if ($failed) {
+            exit 1
+          }
+      - name: Verify repository remains clean
+        shell: pwsh
+        run: |
+          $changes = git status --porcelain
+          if ($changes) {
+            $changes
+            exit 1
+          }
+
+  static-evals:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile evaluation harness
+        run: python -m py_compile evals/harness/*.py
+      - name: Validate evaluation assets
+        run: python evals/harness/validate.py
+      - name: Verify repository remains clean
+        run: |
+          if [[ -n "$(git status --porcelain)" ]]; then
+            git status --short
+            exit 1
+          fi
