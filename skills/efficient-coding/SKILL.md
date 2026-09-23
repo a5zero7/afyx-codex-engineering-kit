@@ -1,33 +1,26 @@
 ---
 name: efficient-coding
-version: 1.0.0
-description: Quality-first workflow for software implementation, debugging, refactoring, and code investigation. Uses sufficient evidence, scoped changes, appropriate validation, CodeGraph when relationships matter, and Headroom for genuinely large context.
+description: Quality-first workflow for software implementation, debugging, refactoring, and code investigation. Applies to coding work, not general conversation, prompt writing, or document-only tasks.
+metadata:
+  version: "1.1.0"
 ---
 
 # Efficient Coding
 
-Apply to software engineering work; not prompt engineering, general conversation, or document writing.
+Prioritize **correctness → evidence → scoped change → validation → efficiency**. The target repository is authoritative; establish material framework, runtime, dependency, and behavior facts before editing.
 
-## Core contract
+## Route the task
 
-Prioritize: **correctness → sufficient evidence → scoped change → validation → efficiency**. Token efficiency never justifies omitting material investigation or validation.
+- Known target: open the named symbol/file/failure path, inspect only material relationships, edit, then validate narrowly.
+- Unknown target: identify the failure signal, search and narrow candidates, inspect the implementation and relevant relationships, then edit and validate.
+- Cross-cutting or architectural: identify the source of truth, trace dependency/inheritance/caller impact, define the boundary, then implement with expanded validation.
 
-Use: **SEARCH → UNDERSTAND → TARGET → EDIT → VALIDATE**.
+Read `references/investigation.md` when the target or impact boundary is not already clear. Read `references/tool-routing.md` when tool choice or stopping criteria materially affect the investigation. For genuinely large/noisy context, read `references/token-efficiency.md`.
 
-## Investigation and tools
+## Change contract
 
-Identify the concrete target or failure, locate its authoritative implementation, and understand the relevant execution path before editing. Inspect callers, dependencies, inheritance, configuration, tests, and framework behavior when they can materially affect correctness. Establish the applicable framework, runtime, and dependency versions from repository evidence before relying on version-specific behavior.
+Make the smallest change that resolves the evidenced problem while preserving relevant architecture, compatibility, conventions, and public behavior. Do not add dependencies, perform destructive actions, change schema, or expand scope without authorization.
 
-Use CodeGraph when structural relationships such as references, callers, inheritance, dependencies, or cross-file/module paths matter. When the target is already known, use direct search or focused reads instead. Do not use a tool only because it is available.
+Stop exploring once material uncertainty is resolved. Start with targeted validation and expand only for shared behavior, dependencies, inheritance, configuration, failures, or material regression risk.
 
-For unusually large repository exploration or tool output, read `references/token-efficiency.md`. Use Headroom only when large context materially benefits from compression; retrieve the original evidence when exact details matter.
-
-## Editing and validation
-
-Make the smallest change that fully resolves the evidenced problem while preserving relevant architecture, conventions, compatibility, and public behavior. Avoid unrelated refactors, speculative abstractions, dependencies, and formatting changes. Seek authorization before destructive actions, dependency installation, schema changes, or material scope expansion unless already authorized.
-
-Start validation with the most relevant targeted check. Expand it when shared behavior, dependencies, inheritance, configuration, failed checks, or regression risk warrant it. State clearly what remains unverified.
-
-## Output contract
-
-Report concisely: what changed, important reasoning or root cause, validation performed, and remaining uncertainty.
+Report the root cause or key reasoning, changed files, executed validation, and remaining uncertainty.

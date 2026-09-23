@@ -1,21 +1,26 @@
 ---
 name: odoo-engineering
-version: 1.0.0
-description: Version-aware Odoo engineering with stable references for Odoo 10 through 19 and preview reference support for Odoo 20. Activates only for Odoo repositories, modules, ORM, views, reports, security, migrations, or Odoo debugging.
+description: Version-aware Odoo engineering for Odoo repositories, modules, ORM, views, reports, security, migrations, and debugging. Odoo 10–19 references are stable; Odoo 20 is preview/emerging and requires repository evidence.
+metadata:
+  version: "1.1.0"
 ---
 
 # Odoo Engineering
 
-Apply this skill only to Odoo work. Determine the actual Odoo major version from repository evidence before applying version-specific behavior. Preferred evidence is the server version metadata, `odoo/release.py`, `odoo-bin --version`, manifest conventions, dependency files, and established code patterns.
+Apply only to Odoo work. Determine the actual major version from repository/runtime evidence before using version-specific behavior. Prefer `odoo/release.py`, release metadata, `odoo-bin --version`, explicit branch/tag, server runtime, manifest conventions, dependency files, and established code patterns.
 
-Never import an API, JavaScript framework, Python feature, view syntax, or migration convention from another Odoo release without evidence it is supported by the target repository.
+Never import Python/runtime features, ORM APIs, view/XML syntax, JavaScript/OWL modules, asset declarations, security behavior, report patterns, or migration conventions from another release based on familiarity. Repository evidence is authoritative.
 
 ## Routing
 
 1. Read `references/common.md` for all Odoo tasks.
-2. Identify one target version from 10 through 20; treat Odoo 10–19 as stable and Odoo 20 as preview/emerging requiring repository evidence.
-3. Read exactly `references/odoo-<version>.md` before relying on version-specific behavior.
+2. Determine one target version from repository/runtime evidence. Read `references/version-detection.md` when evidence is missing or conflicting.
+3. Read exactly one `references/odoo-<version>.md` for a normal task. For a migration, read only the source and target references that are actually required.
 4. Inspect the actual module inheritance, manifest dependencies, model/view references, and local patterns needed for the task.
+
+If evidence conflicts, do not guess: report the conflict, prioritize executable/source/runtime evidence, and use only the version it proves. Never mix APIs from conflicting versions. For upgrades, treat source and target versions separately.
+
+`references/reference-schema.md` defines the compact evidence-backed shape for future version-reference expansion; it is not a reason to load every version reference for one task.
 
 For an Odoo upgrade spanning versions, treat each source and target version separately. Do not convert an existing module merely because a newer pattern exists.
 

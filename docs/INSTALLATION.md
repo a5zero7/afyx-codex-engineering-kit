@@ -27,6 +27,8 @@ Jalankan `./verify.ps1` pada Windows atau `./verify.sh` pada Linux/macOS. Core e
 
 Skill Odoo dipasang bersama Efficient Coding. Referensi Odoo 10–19 berstatus stable, sedangkan Odoo 20 berstatus preview/emerging dan memerlukan evidence repository sebelum perilakunya diasumsikan. Saat task Odoo dimulai, skill menentukan versi dari repository lalu memuat reference yang sesuai untuk mencegah penerapan API lintas-versi tanpa verifikasi.
 
+Kedua skill memakai frontmatter Agent Skills dengan `name`, `description`, dan `metadata.version`. Entrypoint tetap ringkas; detail kondisional dimuat dari `references/` hanya saat routing task membutuhkannya.
+
 ## Saat skill sudah ada
 
 | Kondisi | Perilaku default | Opsi aman |

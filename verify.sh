@@ -29,6 +29,10 @@ skill_ok() {
   [[ "$(head -n 1 "$manifest")" == '---' ]] || return 1
   grep -Eq '^name:[[:space:]]*[a-z0-9-]+[[:space:]]*$' "$manifest" || return 1
   grep -Eq '^description:[[:space:]]*[^[:space:]].*$' "$manifest" || return 1
+  if [[ "${2:-false}" == true ]]; then
+    grep -Eq '^metadata:[[:space:]]*$' "$manifest" || return 1
+    grep -Eq '^[[:space:]]+version:[[:space:]]*[^[:space:]].*$' "$manifest" || return 1
+  fi
 }
 
 refs_ok() {
@@ -52,11 +56,11 @@ for extension in "$HOME"/.vscode/extensions/openai.chatgpt-*; do [[ -d "$extensi
 if "$extension_detected"; then result OK 'VS Code extension' 'detected'; else result INFO 'VS Code extension' 'not detected'; fi
 if ! "$codex_detected" && ! "$extension_detected"; then core_failure=true; fi
 
-if skill_ok efficient-coding && refs_ok efficient-coding references/token-efficiency.md; then result OK 'Efficient Coding' 'frontmatter and required references valid'; else result FAIL 'Efficient Coding' 'SKILL.md or required reference invalid'; core_failure=true; fi
+if skill_ok efficient-coding true && refs_ok efficient-coding references/investigation.md references/tool-routing.md references/token-efficiency.md; then result OK 'Efficient Coding' 'frontmatter metadata and required references valid'; else result FAIL 'Efficient Coding' 'SKILL.md metadata or required reference invalid'; core_failure=true; fi
 
-odoo_refs=(references/common.md)
+odoo_refs=(references/common.md references/version-detection.md)
 for version in {10..20}; do odoo_refs+=("references/odoo-$version.md"); done
-if skill_ok odoo-engineering && refs_ok odoo-engineering "${odoo_refs[@]}"; then result OK 'Odoo Engineering' 'stable refs 10-19; Odoo 20 preview reference available'; else result FAIL 'Odoo Engineering' 'SKILL.md or required reference invalid'; core_failure=true; fi
+if skill_ok odoo-engineering true && refs_ok odoo-engineering "${odoo_refs[@]}"; then result OK 'Odoo Engineering' 'frontmatter metadata and stable refs 10-19; Odoo 20 preview reference valid'; else result FAIL 'Odoo Engineering' 'SKILL.md metadata or required reference invalid'; core_failure=true; fi
 
 if skill_ok prompt-master; then result OK 'Prompt Master' 'frontmatter valid'; else result FAIL 'Prompt Master' 'SKILL.md invalid or missing'; core_failure=true; fi
 

@@ -49,6 +49,8 @@ Setelah selesai, buka sesi Codex baru. Skill akan aktif hanya pada task yang ses
 
 `odoo-engineering` hanya aktif untuk pekerjaan Odoo. Referensi Odoo 10–19 berstatus stable; Odoo 20 adalah preview/emerging dan harus diverifikasi terhadap evidence repository sebelum digunakan.
 
+Skill menggunakan progressive disclosure: entrypoint berisi routing dan batasan, sedangkan guidance investigasi/tool dan deteksi versi berada di `references/`. Efficient Coding membedakan target yang sudah diketahui, target yang perlu ditemukan, dan perubahan cross-cutting. Odoo memuat `common.md`, lalu satu reference versi yang dibuktikan; migration dapat memerlukan source dan target secara terpisah.
+
 ## Tidak bentrok dengan Codex
 
 Installer tidak pernah menulis atau mengganti:
