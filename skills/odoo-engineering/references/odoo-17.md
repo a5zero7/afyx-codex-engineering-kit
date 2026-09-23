@@ -20,6 +20,9 @@ Use targeted Python/module, XML view, and asset/client checks under the target O
 
 - Official source: `https://github.com/odoo/odoo/blob/17.0/setup.py`
 - Official source: `https://github.com/odoo/odoo/blob/17.0/addons/web/__manifest__.py`
+- Official source: `https://github.com/odoo/odoo/blob/17.0/odoo/tools/sql.py`
+- Official documentation: `https://www.odoo.com/documentation/17.0/developer/reference/frontend/javascript_modules.html`
+- Official documentation: `https://www.odoo.com/documentation/17.0/developer/reference/user_interface/view_architectures.html`
 
 ## ORM / Python
 
@@ -32,9 +35,3 @@ Odoo 17 view documentation describes direct Python-expression modifiers such as 
 ## Frontend / JavaScript
 
 Odoo 17 JavaScript documentation uses `@odoo-module` as the native-module conversion marker. Inspect local module style before adding or removing the marker.
-
-### Additional evidence
-
-- Official source: `https://github.com/odoo/odoo/blob/17.0/odoo/tools/sql.py`
-- Official documentation: `https://www.odoo.com/documentation/17.0/developer/reference/frontend/javascript_modules.html`
-- Official documentation: `https://www.odoo.com/documentation/17.0/developer/reference/user_interface/view_architectures.html`

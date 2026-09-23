@@ -12,20 +12,6 @@ Last verified: 2026-09-23
 
 - Exact `20.0/addons/web/__manifest__.py` declares the manifest `assets` key. Inspect exact bundle declarations and source before changing frontend loading.
 
-### Additional high-risk traps
-
-Odoo 20 is a stable target for this project, but exact 20.0 source and documentation remain authoritative. Do not carry Odoo 19 assumptions forward without checking the target branch, especially for runtime, ORM, views, frontend/assets, reports, and upgrades.
-
-### Additional validation
-
-Validate Python/runtime prerequisites, affected module loading, inherited XML, and relevant frontend/assets under the target Odoo 20 environment.
-
-### Additional evidence
-
-- Official source: `https://github.com/odoo/odoo/blob/20.0/odoo/release.py`
-- Official source: `https://github.com/odoo/odoo/blob/20.0/addons/web/__manifest__.py`
-- Official documentation: `https://www.odoo.com/documentation/20.0/administration/on_premise/source.html`
-
 ## ORM / Python
 
 - Exact 19.0 `odoo/orm/models.py` contains `_table_query`; an exact source search of 20.0 `odoo/orm/models.py` found no `_table_query` symbol. Treat this as a removal boundary for SQL-backed/report models, not as a reason to invent a replacement: inspect the exact 20.0 source and model design.
@@ -33,7 +19,7 @@ Validate Python/runtime prerequisites, affected module loading, inherited XML, a
 
 ## High-risk version traps
 
-Distinguish removed from deprecated. Do not carry Odoo 19 `_table_query` assumptions into Odoo 20, and do not infer replacement APIs without exact 20.0 evidence.
+Odoo 20 is a stable target, but exact 20.0 source and documentation remain authoritative. Distinguish removed from deprecated; do not carry Odoo 19 `_table_query` assumptions forward or infer replacement APIs without exact 20.0 evidence.
 
 ## Validation
 
@@ -44,6 +30,9 @@ Validate Python/PostgreSQL prerequisites, SQL-backed/report models, affected ORM
 - Official source: `https://github.com/odoo/odoo/blob/19.0/odoo/orm/models.py`
 - Official source: `https://github.com/odoo/odoo/blob/20.0/odoo/orm/models.py`
 - Official documentation: `https://www.odoo.com/documentation/20.0/developer/reference/backend/orm.html`
+- Official source: `https://github.com/odoo/odoo/blob/20.0/odoo/release.py`
+- Official source: `https://github.com/odoo/odoo/blob/20.0/addons/web/__manifest__.py`
+- Official documentation: `https://www.odoo.com/documentation/20.0/administration/on_premise/source.html`
 
 ## Delta from previous major
 

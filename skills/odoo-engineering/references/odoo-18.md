@@ -20,6 +20,10 @@ Validate affected ORM, inherited XML, and relevant frontend/asset paths under Od
 
 - Official source: `https://github.com/odoo/odoo/blob/18.0/setup.py`
 - Official source: `https://github.com/odoo/odoo/blob/18.0/addons/web/__manifest__.py`
+- Official documentation: `https://www.odoo.com/documentation/18.0/developer/reference/backend/orm.html` — `_search_display_name`, access helpers, Environment translations
+- Official documentation: `https://www.odoo.com/documentation/18.0/developer/reference/frontend/javascript_modules.html`
+- Official documentation: `https://www.odoo.com/documentation/18.0/developer/reference/user_interface/view_architectures.html` — `<list>` root and `<tree>` previous name
+- Official Odoo ORM changelog — `aggregator` rename in Online 17.2 (inherited by stable 18)
 
 ## Delta from previous major
 
@@ -42,14 +46,3 @@ The official 18.0 view architecture names the root element of list views `list` 
 ## Frontend / JavaScript
 
 Odoo 18 documentation describes files under `/static/src` and `/static/tests` as automatically transpiled into Odoo modules. Do not blindly add or remove `@odoo-module`; inspect local source and aliases first.
-
-### Additional evidence
-
-- Official documentation: `https://www.odoo.com/documentation/18.0/developer/reference/backend/orm.html` — `_search_display_name`, access helpers, Environment translations
-- Official documentation: `https://www.odoo.com/documentation/18.0/developer/reference/frontend/javascript_modules.html`
-- Official documentation: `https://www.odoo.com/documentation/18.0/developer/reference/user_interface/view_architectures.html` — `<list>` root and `<tree>` previous name
-- Official Odoo ORM changelog — `aggregator` rename in Online 17.2 (inherited by stable 18)
-
-## Corrected provenance
-
-The 18.0 deltas are `_search_display_name`, `check_access`/`has_access`/`_filtered_access`, and translations from `Environment`. JSONB translation storage belongs to Odoo 16, while `group_operator` → `aggregator` belongs to Online 17.2; neither is an 18.0 introduction.
