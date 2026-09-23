@@ -17,6 +17,8 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+from freeze import REPOSITORY_SKILLS, directory_content_sha256, prompt_master_git_sha
+
 
 EVAL_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = EVAL_ROOT.parent
@@ -27,6 +29,42 @@ AFYX_SKILLS = ("efficient-coding", "odoo-engineering", "prompt-master")
 
 def load_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def verify_frozen_environment(environment: dict) -> None:
+    """Abort before any model call when frozen benchmark inputs drift."""
+    failures = []
+    for name in REPOSITORY_SKILLS:
+        expected = environment["skills"].get(name, {}).get("content_sha256")
+        if not expected:
+            failures.append(f"{name}: frozen content_sha256 is missing")
+            continue
+        actual = directory_content_sha256(REPO_ROOT / "skills" / name)
+        if actual != expected:
+            failures.append(
+                f"{name}: content SHA256 mismatch (expected {expected}, actual {actual})"
+            )
+
+    prompt_entry = environment["skills"].get("prompt-master", {})
+    expected_prompt_sha = prompt_entry.get("git_sha")
+    prompt_checkout = Path.home() / ".agents" / "skills" / "prompt-master"
+    if not expected_prompt_sha:
+        failures.append("prompt-master: frozen git_sha is missing")
+    else:
+        try:
+            actual_prompt_sha = prompt_master_git_sha(prompt_checkout)
+        except (FileNotFoundError, RuntimeError) as error:
+            failures.append(f"prompt-master: {error}")
+        else:
+            if actual_prompt_sha != expected_prompt_sha:
+                failures.append(
+                    "prompt-master: Git SHA mismatch "
+                    f"(expected {expected_prompt_sha}, actual {actual_prompt_sha})"
+                )
+
+    if failures:
+        details = "\n  - ".join(failures)
+        raise RuntimeError(f"frozen environment preflight failed:\n  - {details}")
 
 
 def ignored_path(rel: Path) -> bool:
@@ -323,8 +361,21 @@ def main() -> int:
     parser.add_argument("--seed", type=int)
     parser.add_argument("--timeout", type=int, default=300)
     parser.add_argument("--scenario", action="append")
+    parser.add_argument(
+        "--preflight-only", action="store_true",
+        help="verify frozen inputs and exit without constructing runs or calling a model",
+    )
     args = parser.parse_args()
     manifest = load_json(MANIFEST_PATH)
+    environment = load_json(EVAL_ROOT / manifest["environment"])
+    try:
+        verify_frozen_environment(environment)
+    except (KeyError, FileNotFoundError, RuntimeError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 2
+    if args.preflight_only:
+        print("Frozen environment preflight passed.")
+        return 0
     repetitions = args.repetitions or (1 if args.mode == "smoke" else 3)
     if args.mode == "benchmark" and repetitions < 3:
         parser.error("benchmark mode requires at least 3 repetitions")

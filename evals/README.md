@@ -8,6 +8,20 @@ This directory contains the deterministic Phase 3 benchmark foundation. Phase 3A
 
 Before a benchmark series, compare installed component versions with the fingerprint. Do not update a skill or tool during the series. If a mismatch is found, stop and create a new fingerprint rather than mixing results.
 
+Freeze repository skill content before the first run:
+
+```text
+python evals/harness/freeze.py
+```
+
+The freezer hashes the sorted POSIX-relative file list and full bytes of every file under Efficient Coding and Odoo Engineering. Every runner invocation recomputes both hashes and verifies the installed Prompt Master checkout SHA before constructing a run or calling a model. Any mismatch aborts with exit code 2.
+
+Validate only the frozen inputs without constructing runs or calling a model:
+
+```text
+python evals/harness/run.py --mode smoke --preflight-only
+```
+
 ## Genuine skill isolation
 
 Codex officially supports per-skill enablement through `skills.config`. Every invocation:
