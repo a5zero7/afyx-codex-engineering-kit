@@ -101,6 +101,8 @@ Jika Headroom sudah ada, installer hanya menampilkan statusnya. Ini mencegah kon
 
 `verify.ps1` dan `verify.sh` membedakan `OK`, `WARN`, dan `FAIL`. Kegagalan core menghasilkan exit code non-zero; CodeGraph dan Headroom yang tidak tersedia atau belum dikonfigurasi hanya menghasilkan peringatan.
 
+Sebagai pemeriksaan manual opsional, jalankan `python scripts/check-reference-staleness.py` untuk menampilkan `WARN` bila header `Last verified` pada reference Odoo lebih lama dari enam bulan. Pemeriksaan ini selalu exit `0`, tidak dijalankan oleh installer, verifier, atau CI, dan bukan klaim bahwa isi reference valid atau tidak valid.
+
 ## Dokumentasi
 
 Panduan lengkap, perilaku konflik, dan pemulihan ada di [docs/INSTALLATION.md](docs/INSTALLATION.md).
