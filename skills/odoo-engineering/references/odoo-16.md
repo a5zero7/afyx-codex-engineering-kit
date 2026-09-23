@@ -20,15 +20,18 @@ Validate the affected Python/module path, inherited views, and relevant asset/cl
 
 - Official source: `https://github.com/odoo/odoo/blob/16.0/setup.py`
 - Official source: `https://github.com/odoo/odoo/blob/16.0/addons/web/__manifest__.py`
+- Official Odoo 16 ORM changelog — translated fields stored as JSONB; `search_count(limit)` behavior
+- Official documentation: `https://www.odoo.com/documentation/16.0/developer/reference/backend/orm.html` — `attrs` / `states` dynamic-view era
+
+## Delta from previous major
+
+- Translated fields are stored as `JSONB` in Odoo 16; migration, reporting, and custom SQL must not assume pre-16 translation storage.
+- `search_count()` takes `limit` into account. Recheck partial/existence-like counts and performance-sensitive code ported from older versions.
 
 ## ORM / Python
 
-Official Odoo 16 ORM documentation retains `search_count` and documents the 16.0 ORM contract. Keep query/count behavior tied to the exact target version; do not import later ORM changelog assumptions without checking the repository.
+Use the exact Odoo 16 count and translation semantics above; method availability alone is not an introduction-version claim.
 
 ## Views / XML
 
 Odoo 16 documentation remains the reference for the `attrs`/`states`-era dynamic-view patterns. When migrating to 17+, inspect the target architecture rather than mechanically carrying those attributes forward.
-
-## Evidence
-
-- Official documentation: `https://www.odoo.com/documentation/16.0/developer/reference/backend/orm.html`

@@ -16,11 +16,6 @@ Confirm Odoo 15 backend/frontend conventions before changing established module 
 
 Validate the affected module, XML, asset bundle, and integration surface under Odoo 15.
 
-## Evidence
-
-- Official source: `https://github.com/odoo/odoo/blob/15.0/setup.py`
-- Official source: `https://github.com/odoo/odoo/blob/15.0/addons/web/__manifest__.py`
-
 ## ORM / Python
 
 Exact `15.0/odoo/fields.py` defines `class Command` with helpers including `create`, `update`, `delete`, `unlink`, `link`, `clear`, and `set`. Use it only when the target version supports it.
@@ -33,5 +28,7 @@ Odoo 15 official JavaScript documentation describes `@odoo-module` as the opt-in
 
 ## Evidence
 
+- Official source: `https://github.com/odoo/odoo/blob/15.0/setup.py`
+- Official source: `https://github.com/odoo/odoo/blob/15.0/addons/web/__manifest__.py`
 - Official source: `https://github.com/odoo/odoo/blob/15.0/odoo/fields.py`
 - Official documentation: `https://www.odoo.com/documentation/15.0/developer/reference/frontend/javascript_modules.html`

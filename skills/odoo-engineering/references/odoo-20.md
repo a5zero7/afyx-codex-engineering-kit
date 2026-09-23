@@ -12,15 +12,15 @@ Last verified: 2026-09-23
 
 - Exact `20.0/addons/web/__manifest__.py` declares the manifest `assets` key. Inspect exact bundle declarations and source before changing frontend loading.
 
-## High-risk version traps
+### Additional high-risk traps
 
 Odoo 20 is a stable target for this project, but exact 20.0 source and documentation remain authoritative. Do not carry Odoo 19 assumptions forward without checking the target branch, especially for runtime, ORM, views, frontend/assets, reports, and upgrades.
 
-## Validation
+### Additional validation
 
 Validate Python/runtime prerequisites, affected module loading, inherited XML, and relevant frontend/assets under the target Odoo 20 environment.
 
-## Evidence
+### Additional evidence
 
 - Official source: `https://github.com/odoo/odoo/blob/20.0/odoo/release.py`
 - Official source: `https://github.com/odoo/odoo/blob/20.0/addons/web/__manifest__.py`
@@ -44,3 +44,7 @@ Validate Python/PostgreSQL prerequisites, SQL-backed/report models, affected ORM
 - Official source: `https://github.com/odoo/odoo/blob/19.0/odoo/orm/models.py`
 - Official source: `https://github.com/odoo/odoo/blob/20.0/odoo/orm/models.py`
 - Official documentation: `https://www.odoo.com/documentation/20.0/developer/reference/backend/orm.html`
+
+## Delta from previous major
+
+Odoo 19 source contains `Model._table_query`; exact 20.0 source does not, and the official 20.0 ORM changelog states that `Model._table_query` was removed. This is a true removal, not a deprecation. For SQL-backed/report models, inspect the exact 20.0 architecture and do not invent a replacement API.

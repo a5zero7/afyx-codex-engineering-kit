@@ -2,14 +2,14 @@
 
 Version references should remain concise, delta-first, and evidence-backed. When applicable, organize additions under:
 
-- Status and runtime baseline
+- Status / runtime baseline
 - Delta from previous major
-- ORM/Python and models
-- Views/XML and security
-- Frontend/JavaScript and assets
-- Reports/QWeb
-- Manifest/loading and version-specific traps
-- Validation
+- ORM / Python / models
+- Views / XML / security
+- Frontend / JavaScript / assets
+- Reports / QWeb
+- Manifest / loading
+- High-risk version traps
 - Validation
 - Evidence with exact branch, file/symbol, or documentation section
 

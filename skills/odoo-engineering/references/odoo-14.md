@@ -16,11 +16,6 @@ Treat Odoo 14 as its own compatibility boundary. Inspect exact framework, ORM, v
 
 Validate the affected module, inherited XML, and relevant frontend/report loading under the target Odoo 14 runtime.
 
-## Evidence
-
-- Official source: `https://github.com/odoo/odoo/blob/14.0/setup.py`
-- Official source: `https://github.com/odoo/odoo/blob/14.0/addons/web/__manifest__.py`
-
 ## ORM / Python
 
 An exact source search of `14.0/odoo/fields.py` found no `class Command`. Do not generate `fields.Command.create/update/set` for Odoo 14 unless the target repository provides its own compatibility abstraction; inspect the existing tuple-command pattern and RPC boundary.
@@ -31,4 +26,6 @@ The absence claim is source-based, not documentation-silence-based. Verify custo
 
 ## Evidence
 
+- Official source: `https://github.com/odoo/odoo/blob/14.0/setup.py`
+- Official source: `https://github.com/odoo/odoo/blob/14.0/addons/web/__manifest__.py`
 - Official source: `https://github.com/odoo/odoo/blob/14.0/odoo/fields.py`

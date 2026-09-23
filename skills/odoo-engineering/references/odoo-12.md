@@ -16,11 +16,6 @@ Keep Odoo 12 model, view, report, and web asset conventions tied to repository e
 
 Validate the affected module, XML inheritance, report path, and web assets with the target Odoo 12 runtime.
 
-## Evidence
-
-- Official source: `https://github.com/odoo/odoo/blob/12.0/setup.py`
-- Official source: `https://github.com/odoo/odoo/blob/12.0/addons/web/__manifest__.py`
-
 ## ORM / Python
 
 Exact `12.0/odoo/api.py` defines `multi()`, `one()`, and `model_create_multi()`. Do not collapse Odoo 12 recordset behavior into post-13 assumptions; inspect method semantics and callers when migrating.
@@ -31,4 +26,6 @@ The decorator boundary must be handled semantically, not by a mechanical `ensure
 
 ## Evidence
 
+- Official source: `https://github.com/odoo/odoo/blob/12.0/setup.py`
+- Official source: `https://github.com/odoo/odoo/blob/12.0/addons/web/__manifest__.py`
 - Official source: `https://github.com/odoo/odoo/blob/12.0/odoo/api.py`
