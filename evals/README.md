@@ -26,7 +26,9 @@ This supports `N`, `E`, `O`, `P`, `EO`, `PO`, and `CORE`. It neither renames/del
 Each scenario defines:
 
 - `scenario_id`, category, fixture, user prompt, and configurations;
+- explicit required and forbidden skill reads for activation assertions;
 - binary expected assertions and forbidden patterns;
+- optional XML-specific forbidden patterns for typed contamination counts;
 - a validation command or `null`;
 - allowed and expected file scope;
 - coding or generated-prompt output type.
@@ -63,7 +65,7 @@ python evals/harness/analyze.py
 
 Each `result.json` follows a stable machine-readable shape. Provider-reported tokens are captured when present. Wall time, tool/search/read calls observable in Codex JSON events, modified files, validation commands, failed tools, critical assertions, and version-contamination counters are recorded.
 
-Unavailable fields are `null`; the harness never estimates tokens or file-read counts. Character or word counts are not substitutes for tokens. Correctness assertions gate PASS before efficiency can be considered.
+Unavailable fields are `null`; the harness never estimates tokens or file-read counts. Provider `total_tokens` remains untouched and nullable. `derived_input_output_tokens` and `derived_uncached_input_tokens` are separately labeled arithmetic diagnostics, never substitutes for provider totals. Character or word counts are not substitutes for tokens. Correctness assertions gate PASS before efficiency can be considered.
 
 Raw run directories are ignored. `latest-summary.json` is a sanitized, bounded summary intended for reproducibility checks, not a final benchmark conclusion.
 

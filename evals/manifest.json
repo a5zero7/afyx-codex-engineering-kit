@@ -18,6 +18,8 @@
       "fixture": "fixtures/smoke-python",
       "user_prompt": "Fix the add function in calculator.py so the existing tests pass. Keep the change scoped and run the tests.",
       "configurations": ["E"],
+      "required_skill_reads": ["efficient-coding"],
+      "forbidden_skill_reads": [],
       "expected_assertions": [{"type": "validation_exit", "value": 0}],
       "forbidden_patterns": ["eval(", "exec("],
       "validation_command": ["python", "-m", "unittest", "-q"],
@@ -31,6 +33,8 @@
       "fixture": "fixtures/smoke-odoo",
       "user_prompt": "Fix the compatibility bug in module/models.py for the Odoo version evidenced by this repository. Preserve behavior and run the available test.",
       "configurations": ["O"],
+      "required_skill_reads": ["odoo-engineering"],
+      "forbidden_skill_reads": [],
       "expected_assertions": [{"type": "validation_exit", "value": 0}],
       "forbidden_patterns": ["fields.Command", "Command.set"],
       "validation_command": ["python", "test_compat.py"],
@@ -44,6 +48,8 @@
       "fixture": "fixtures/smoke-prompt",
       "user_prompt": "Write a production-ready prompt for Codex to update the greeting function described in context.md. Return the prompt, not an implementation.",
       "configurations": ["P"],
+      "required_skill_reads": ["prompt-master"],
+      "forbidden_skill_reads": [],
       "expected_assertions": [
         {"type": "output_contains", "value": "greeting.py"},
         {"type": "output_contains", "value": "test"}

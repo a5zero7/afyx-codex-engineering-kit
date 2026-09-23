@@ -4,17 +4,17 @@
   "random_seed": 3102026,
   "repetitions": 1,
   "run_order": [
-    "smoke-python-001-E-r1-ccea1431",
-    "smoke-prompt-001-P-r1-41a4232c",
-    "smoke-odoo-001-O-r1-053cd6cb"
+    "smoke-python-001-E-r1-bb9ed821",
+    "smoke-prompt-001-P-r1-92d270fe",
+    "smoke-odoo-001-O-r1-e0ec52e7"
   ],
   "pass_count": 3,
   "total_count": 3,
   "results": [
     {
       "schema_version": 1,
-      "run_id": "smoke-python-001-E-r1-ccea1431",
-      "timestamp": "2026-09-23T04:18:31.765434+00:00",
+      "run_id": "smoke-python-001-E-r1-bb9ed821",
+      "timestamp": "2026-09-23T05:26:25.791675+00:00",
       "scenario_id": "smoke-python-001",
       "configuration": "E",
       "isolated_skills": [
@@ -68,7 +68,25 @@
           "passed": true
         },
         {
-          "type": "skill_isolation",
+          "type": "required_skill_reads",
+          "expected": [
+            "efficient-coding"
+          ],
+          "observed": [
+            "efficient-coding"
+          ],
+          "passed": true
+        },
+        {
+          "type": "forbidden_skill_reads",
+          "expected": [],
+          "observed": [
+            "efficient-coding"
+          ],
+          "passed": true
+        },
+        {
+          "type": "available_skill_reads",
           "expected": [
             "efficient-coding"
           ],
@@ -92,13 +110,15 @@
       ],
       "first_pass_success": true,
       "correction_turns": 0,
-      "input_tokens": 123270,
-      "cached_input_tokens": 115456,
-      "output_tokens": 835,
-      "reasoning_tokens": 104,
+      "input_tokens": 105276,
+      "cached_input_tokens": 91520,
+      "output_tokens": 754,
+      "reasoning_tokens": 87,
       "total_tokens": null,
-      "wall_time": 74.02437770000006,
-      "tool_calls": 6,
+      "derived_input_output_tokens": 106030,
+      "derived_uncached_input_tokens": 13756,
+      "wall_time": 62.48294619999979,
+      "tool_calls": 5,
       "search_calls": 1,
       "read_calls": 2,
       "files_opened": null,
@@ -115,9 +135,9 @@
           "-q"
         ]
       ],
-      "failed_tools": 0,
+      "failed_tools": 1,
       "wrong_version_api_count": 0,
-      "wrong_version_xml_count": 0,
+      "wrong_version_xml_count": null,
       "unsupported_assumption_count": null,
       "canonical_fixture_unchanged": true,
       "validation_exit": 0,
@@ -127,8 +147,8 @@
     },
     {
       "schema_version": 1,
-      "run_id": "smoke-prompt-001-P-r1-41a4232c",
-      "timestamp": "2026-09-23T04:19:21.319713+00:00",
+      "run_id": "smoke-prompt-001-P-r1-92d270fe",
+      "timestamp": "2026-09-23T05:27:17.171230+00:00",
       "scenario_id": "smoke-prompt-001",
       "configuration": "P",
       "isolated_skills": [
@@ -177,7 +197,25 @@
           "passed": true
         },
         {
-          "type": "skill_isolation",
+          "type": "required_skill_reads",
+          "expected": [
+            "prompt-master"
+          ],
+          "observed": [
+            "prompt-master"
+          ],
+          "passed": true
+        },
+        {
+          "type": "forbidden_skill_reads",
+          "expected": [],
+          "observed": [
+            "prompt-master"
+          ],
+          "passed": true
+        },
+        {
+          "type": "available_skill_reads",
           "expected": [
             "prompt-master"
           ],
@@ -201,12 +239,14 @@
       ],
       "first_pass_success": true,
       "correction_turns": 0,
-      "input_tokens": 68699,
-      "cached_input_tokens": 51712,
-      "output_tokens": 884,
-      "reasoning_tokens": 236,
+      "input_tokens": 68330,
+      "cached_input_tokens": 51456,
+      "output_tokens": 945,
+      "reasoning_tokens": 291,
       "total_tokens": null,
-      "wall_time": 49.43589419999989,
+      "derived_input_output_tokens": 69275,
+      "derived_uncached_input_tokens": 16874,
+      "wall_time": 51.31994519999989,
       "tool_calls": 2,
       "search_calls": 0,
       "read_calls": 2,
@@ -217,7 +257,7 @@
       "validation_commands": [],
       "failed_tools": 0,
       "wrong_version_api_count": 0,
-      "wrong_version_xml_count": 0,
+      "wrong_version_xml_count": null,
       "unsupported_assumption_count": null,
       "canonical_fixture_unchanged": true,
       "validation_exit": null,
@@ -227,8 +267,8 @@
     },
     {
       "schema_version": 1,
-      "run_id": "smoke-odoo-001-O-r1-053cd6cb",
-      "timestamp": "2026-09-23T04:20:59.000847+00:00",
+      "run_id": "smoke-odoo-001-O-r1-e0ec52e7",
+      "timestamp": "2026-09-23T05:28:57.602255+00:00",
       "scenario_id": "smoke-odoo-001",
       "configuration": "O",
       "isolated_skills": [
@@ -282,7 +322,25 @@
           "passed": true
         },
         {
-          "type": "skill_isolation",
+          "type": "required_skill_reads",
+          "expected": [
+            "odoo-engineering"
+          ],
+          "observed": [
+            "odoo-engineering"
+          ],
+          "passed": true
+        },
+        {
+          "type": "forbidden_skill_reads",
+          "expected": [],
+          "observed": [
+            "odoo-engineering"
+          ],
+          "passed": true
+        },
+        {
+          "type": "available_skill_reads",
           "expected": [
             "odoo-engineering"
           ],
@@ -306,15 +364,17 @@
       ],
       "first_pass_success": true,
       "correction_turns": 0,
-      "input_tokens": 167252,
-      "cached_input_tokens": 157440,
-      "output_tokens": 1332,
-      "reasoning_tokens": 136,
+      "input_tokens": 148029,
+      "cached_input_tokens": 130688,
+      "output_tokens": 1314,
+      "reasoning_tokens": 213,
       "total_tokens": null,
-      "wall_time": 97.58339229999956,
-      "tool_calls": 8,
+      "derived_input_output_tokens": 149343,
+      "derived_uncached_input_tokens": 17341,
+      "wall_time": 100.33211990000018,
+      "tool_calls": 7,
       "search_calls": 1,
-      "read_calls": 6,
+      "read_calls": 5,
       "files_opened": null,
       "unique_files_opened": null,
       "duplicate_reads": null,
@@ -329,7 +389,7 @@
       ],
       "failed_tools": 0,
       "wrong_version_api_count": 0,
-      "wrong_version_xml_count": 0,
+      "wrong_version_xml_count": null,
       "unsupported_assumption_count": null,
       "canonical_fixture_unchanged": true,
       "validation_exit": 0,

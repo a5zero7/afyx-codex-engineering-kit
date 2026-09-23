@@ -165,6 +165,11 @@ def check_assertions(
             "type": "forbidden_pattern", "expected": pattern,
             "passed": pattern not in corpus,
         })
+    for pattern in scenario.get("xml_forbidden_patterns", []):
+        checks.append({
+            "type": "xml_forbidden_pattern", "expected": pattern,
+            "passed": pattern not in corpus,
+        })
     return checks
 
 
@@ -211,12 +216,29 @@ def run_cell(manifest: dict, scenario: dict, config: str, repetition: int, timeo
         if re.search(rf"{re.escape(name)}[\\/]+SKILL\.md", command_text, re.I)
     )
     active_skills = manifest["configurations"][config]
-    assertions.append({
-        "type": "skill_isolation",
-        "expected": active_skills,
-        "observed": observed_skill_reads,
-        "passed": set(observed_skill_reads) == set(active_skills),
-    })
+    required_skill_reads = scenario["required_skill_reads"]
+    forbidden_skill_reads = scenario["forbidden_skill_reads"]
+    observed_set = set(observed_skill_reads)
+    assertions.extend([
+        {
+            "type": "required_skill_reads",
+            "expected": required_skill_reads,
+            "observed": observed_skill_reads,
+            "passed": set(required_skill_reads) <= observed_set,
+        },
+        {
+            "type": "forbidden_skill_reads",
+            "expected": forbidden_skill_reads,
+            "observed": observed_skill_reads,
+            "passed": not (observed_set & set(forbidden_skill_reads)),
+        },
+        {
+            "type": "available_skill_reads",
+            "expected": active_skills,
+            "observed": observed_skill_reads,
+            "passed": observed_set <= set(active_skills),
+        },
+    ])
     allowed = set(scenario["allowed_file_scope"])
     scope_ok = all(path in allowed for path in modified)
     expected_scope_ok = all(path in modified for path in scenario["expected_file_scope"])
@@ -227,6 +249,18 @@ def run_cell(manifest: dict, scenario: dict, config: str, repetition: int, timeo
     ])
     passed = process.returncode == 0 and all(item["passed"] for item in assertions)
     usage = parsed["usage"]
+    input_tokens = usage.get("input_tokens")
+    cached_input_tokens = usage.get("cached_input_tokens")
+    output_tokens = usage.get("output_tokens")
+    derived_input_output_tokens = (
+        input_tokens + output_tokens
+        if input_tokens is not None and output_tokens is not None else None
+    )
+    derived_uncached_input_tokens = (
+        input_tokens - cached_input_tokens
+        if input_tokens is not None and cached_input_tokens is not None else None
+    )
+    xml_forbidden_patterns = scenario.get("xml_forbidden_patterns")
     record = {
         "schema_version": 1,
         "run_id": run_id,
@@ -243,11 +277,13 @@ def run_cell(manifest: dict, scenario: dict, config: str, repetition: int, timeo
         "assertions": assertions,
         "first_pass_success": passed,
         "correction_turns": 0,
-        "input_tokens": usage.get("input_tokens"),
-        "cached_input_tokens": usage.get("cached_input_tokens"),
-        "output_tokens": usage.get("output_tokens"),
+        "input_tokens": input_tokens,
+        "cached_input_tokens": cached_input_tokens,
+        "output_tokens": output_tokens,
         "reasoning_tokens": usage.get("reasoning_output_tokens"),
         "total_tokens": usage.get("total_tokens"),
+        "derived_input_output_tokens": derived_input_output_tokens,
+        "derived_uncached_input_tokens": derived_uncached_input_tokens,
         "wall_time": elapsed,
         "tool_calls": parsed["tool_calls"],
         "search_calls": parsed["search_calls"],
@@ -262,7 +298,13 @@ def run_cell(manifest: dict, scenario: dict, config: str, repetition: int, timeo
             1 for item in assertions
             if item["type"] == "forbidden_pattern" and not item["passed"]
         ),
-        "wrong_version_xml_count": 0,
+        "wrong_version_xml_count": (
+            sum(
+                1 for item in assertions
+                if item["type"] == "xml_forbidden_pattern" and not item["passed"]
+            )
+            if xml_forbidden_patterns else None
+        ),
         "unsupported_assumption_count": None,
         "canonical_fixture_unchanged": canonical_before == tree_digest(fixture),
         "validation_exit": validation_exit,
