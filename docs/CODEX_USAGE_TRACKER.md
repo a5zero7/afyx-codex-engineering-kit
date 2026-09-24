@@ -18,7 +18,7 @@ The watcher also writes the latest metadata-only result to `%USERPROFILE%\.codex
 
 The default session root is `%CODEX_HOME%\sessions` when `CODEX_HOME` is set, otherwise `%USERPROFILE%\.codex\sessions`. Rollout files are named `rollout-*.jsonl`.
 
-The implementation was validated against Codex VS Code telemetry from Codex CLI schema 0.155.x. It uses only these metadata events and fields:
+The implementation was validated against Codex VS Code telemetry from Codex CLI schemas 0.155.x and 0.156.1. It uses only these metadata events and fields:
 
 - `turn_context`: `turn_id` and `model`;
 - `token_usage_record`: per-call `usage`, cumulative `turn_token_usage`, and cumulative `thread_token_usage`;
@@ -83,6 +83,8 @@ The dedicated component installer remains available in PowerShell 7:
 pwsh -NoProfile -File .\scripts\install-codex-usage-tracker.ps1
 ```
 
+The Usage Tracker requires **PowerShell 7+** because it uses PowerShell 7 JSON behavior. This does not change the core Afyx installer contract: core skill installation remains compatible with Windows PowerShell 5.1+ or PowerShell 7 when the optional tracker is not selected.
+
 This installs the runtime files under `%USERPROFILE%\.codex\tools` (or `%CODEX_HOME%\tools`), merges an Afyx-owned `Stop` handler into `%USERPROFILE%\.codex\hooks.json`, and creates or updates the global VS Code User Task at `%APPDATA%\Code\User\tasks.json`. Existing hook events, other `Stop` handlers, and unrelated tasks are preserved. Existing JSON files are backed up before a change, and repeated installation keeps exactly one Afyx handler. Invalid/non-strict JSON is not overwritten.
 
 Codex requires review of changed non-managed hooks. After installation, open Codex and run `/hooks`, then review and trust **Afyx Codex Usage Tracking**. The installer does not bypass this protection.
@@ -91,7 +93,7 @@ The component installer supports `-WhatIf`, `-CodexHome`, `-HooksPath`, `-VSCode
 
 ## Normal usage
 
-After the hook is trusted, no task command needs to be started and no terminal watcher needs to remain open. Each completed turn produces a compact local message such as:
+After the hook is trusted, clients that surface Stop-hook `systemMessage` output can show a compact local message such as:
 
 ```text
 Codex Usage · 209,112 tokens · ~$0.095437
@@ -99,6 +101,8 @@ Input 208,798 · Cached 207,232 · Output 314 · Reasoning 45
 ```
 
 The hook uses the event's `transcript_path`, verifies that it belongs to the event's `session_id`, then reads the bounded transcript tail beginning at the exact `turn_id`'s `task_started`. Codex invokes `Stop` before appending `task_complete`, so the trusted `Stop` event supplies the local completion boundary while the existing parser consumes the latest exact `turn_token_usage`. A short bounded retry covers the final token record write. If correlation is not confident, it returns no usage message rather than selecting a different conversation. Its output uses `continue: true`; it never uses `decision: block`, `additionalContext`, or a continuation prompt.
+
+Codex CLI 0.156.1 has been observed executing the hook through `MESSAGE_EMITTED` while rendering only the hook card, not the `systemMessage` text. Hook execution and message generation are therefore not sufficient evidence of client display. Use the watcher fallback on surfaces that do not render it.
 
 ## Fallback/debug watcher
 
@@ -122,8 +126,28 @@ For a metadata-only inspection of existing telemetry without starting a persiste
 
 ```powershell
 pwsh -NoProfile -File "$env:USERPROFILE\.codex\tools\codex-usage-watch.ps1" `
-  -ReplayLatestCompletedTurns 1
+  -ReplayLatestCompletedTurns 1 -NoSnapshot
 ```
+
+`-NoSnapshot` makes replay read-only. Omit it during normal watcher use when `codex-usage-latest.json` should be updated.
+
+## Doctor and optional diagnostics
+
+Run the read-only doctor first:
+
+```powershell
+pwsh -NoProfile -File "$env:USERPROFILE\.codex\tools\codex-usage-doctor.ps1"
+```
+
+It verifies PowerShell 7, runtime files, strict hook JSON, the exact installed Stop command, sessions, token telemetry, completed-turn parsing, pricing, summary generation, and watcher replay. `Hook display path: CLIENT DISPLAY NOT VERIFIED` means the local pipeline works; it is not a claim that a particular Codex client rendered the message.
+
+Debug logging is off by default. To enable it, set `AFYX_CODEX_USAGE_DEBUG=1` in the environment that launches Codex, then start a fresh CLI session or reload VS Code. The hook writes operational metadata only to:
+
+```text
+~/.codex/tools/logs/codex-usage-debug.log
+```
+
+The log rotates at 1 MB and keeps one previous file. It records stages such as `HOOK_OBSERVED`, `PAYLOAD_INVALID`, `TRANSCRIPT_REJECTED`, `TRANSCRIPT_NOT_FOUND`, `TURN_ID_MISSING`, `TURN_NOT_FOUND`, `USAGE_EVENT_NOT_FOUND`, `USAGE_PARSE_FAILED`, `PRICING_FAILED`, `MESSAGE_GENERATED`, and `MESSAGE_EMITTED`. It never logs prompt/response text, reasoning, tool payloads, credentials, or the full environment.
 
 ## Validation
 
@@ -137,7 +161,23 @@ The tests cover consecutive turns, cumulative deltas, cache-write accounting, re
 
 ## Limitations and troubleshooting
 
-- The parser targets the observed Codex 0.155.x JSONL schema and tolerates missing optional usage fields. A future incompatible telemetry schema may require an update.
+### Hook installed but usage not displayed
+
+Treat parser behavior, hook execution, and client display as separate layers:
+
+1. Verify `pwsh --version` reports PowerShell 7 or newer.
+2. Run `codex-usage-doctor.ps1`.
+3. Replay the latest completed turn with `codex-usage-watch.ps1 -ReplayLatestCompletedTurns 1 -NoSnapshot`.
+4. Enable `AFYX_CODEX_USAGE_DEBUG=1` in the parent environment.
+5. Start a fresh Codex CLI session or reload VS Code; hook changes may not affect an existing session.
+6. Run one minimal CLI turn and inspect the debug log.
+7. Test VS Code separately with one minimal turn.
+8. If the log reaches `MESSAGE_GENERATED` and `MESSAGE_EMITTED` but no summary is visible, the tracker pipeline completed and the remaining limitation is the client display surface. Do not treat that as a parser failure.
+9. Use the watcher or the VS Code task as the supported fallback.
+
+`HOOK_NOT_OBSERVED` in doctor output means no debug evidence proves that the hook ran. CLI success does not prove VS Code display success, and a visible hook card does not prove that its `systemMessage` was rendered.
+
+- The parser targets the observed Codex 0.155.x/0.156.1 JSONL schema and tolerates missing optional usage fields. A future incompatible telemetry schema may require an update.
 - Pricing is deliberately explicit and can become stale. Update the separate JSON only after checking official OpenAI pricing.
 - Hook trust state is not reliably machine-readable; use `/hooks` to review it.
 - If no rollout file exists, start one Codex conversation and rerun the task.

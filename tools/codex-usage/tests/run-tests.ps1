@@ -8,6 +8,7 @@ $root = Split-Path -Parent $PSScriptRoot
 $modulePath = Join-Path $root 'CodexUsage.psm1'
 $watcherPath = Join-Path $root 'codex-usage-watch.ps1'
 $stopHookPath = Join-Path $root 'codex-usage-stop.ps1'
+$doctorPath = Join-Path $root 'codex-usage-doctor.ps1'
 $pricingPath = Join-Path $root 'codex-usage-pricing.json'
 $repositoryRoot = Split-Path -Parent (Split-Path -Parent $root)
 $trackerInstallerPath = Join-Path $repositoryRoot 'scripts\install-codex-usage-tracker.ps1'
@@ -108,7 +109,7 @@ function Start-TestWatcher {
 }
 
 function Invoke-TestScript {
-    param([string]$Path, [string[]]$Arguments = @(), [string]$StandardInput)
+    param([string]$Path, [string[]]$Arguments = @(), [string]$StandardInput, [hashtable]$Environment = @{})
 
     $psi = [Diagnostics.ProcessStartInfo]::new()
     $psi.FileName = (Get-Command pwsh).Source
@@ -117,6 +118,7 @@ function Invoke-TestScript {
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError = $true
     $psi.RedirectStandardInput = $true
+    foreach ($name in $Environment.Keys) { $psi.Environment[[string]$name] = [string]$Environment[$name] }
     foreach ($argument in @('-NoLogo', '-NoProfile', '-File', $Path) + $Arguments) { [void]$psi.ArgumentList.Add($argument) }
     $process = [Diagnostics.Process]::new()
     $process.StartInfo = $psi
@@ -243,7 +245,8 @@ try {
     $codexHome = Join-Path $integrationRoot '.codex'
     $sessionIdA = '01a00000-0000-7000-8000-000000000001'
     $sessionIdB = '01a00000-0000-7000-8000-000000000002'
-    $sessionDirectory = Join-Path $codexHome 'sessions\2026\09\24'
+    $integrationSessions = Join-Path $codexHome 'sessions'
+    $sessionDirectory = Join-Path $integrationSessions '2026\09\24'
     [IO.Directory]::CreateDirectory($sessionDirectory) | Out-Null
     $transcriptA = Join-Path $sessionDirectory "rollout-test-$sessionIdA.jsonl"
     $transcriptB = Join-Path $sessionDirectory "rollout-test-$sessionIdB.jsonl"
@@ -254,6 +257,7 @@ try {
         -not ($_.type -eq 'event_msg' -and $_.payload.type -eq 'task_complete')
     })
     Add-EventsToFile $transcriptA ($turn1 + $turn2BeforeTaskComplete)
+    [IO.File]::AppendAllText($transcriptA, "{`"type`":`"token_usage_record`",broken`n", [Text.UTF8Encoding]::new($false))
     Add-EventsToFile $transcriptB (New-TurnEvents 'session-b-turn' 'unpriced-model' $usage1 $usage1 $thread1)
 
     $eventA = [ordered]@{
@@ -275,6 +279,50 @@ try {
     if ($hookAJson.systemMessage -notmatch 'Codex Usage .* 90 tokens') { throw 'Stop hook did not correlate turn B to its exact usage.' }
     if ($hookAJson.systemMessage -notmatch 'Input 80 .* Output 10 .* Reasoning 2') { throw 'Stop hook compact breakdown is incorrect.' }
     if ($hookA.Output -match 'decision|additionalContext|SENSITIVE TEST CONTENT') { throw 'Stop hook output contains continuation or transcript content.' }
+
+    $debugLog = Join-Path $codexHome 'tools\logs\codex-usage-debug.log'
+    if (Test-Path -LiteralPath $debugLog) { throw 'Debug-disabled hook unexpectedly created a debug log.' }
+    $debugHook = Invoke-TestScript $stopHookPath @('-CodexHome', $codexHome, '-PricingPath', $pricingPath, '-RetryCount', '0') $eventA @{ AFYX_CODEX_USAGE_DEBUG = '1' }
+    Assert-Equal $debugHook.ExitCode 0 "Debug hook exit code; stderr: $($debugHook.Error)"
+    Assert-Equal @($debugHook.Output.Trim().Split("`n", [StringSplitOptions]::RemoveEmptyEntries)).Count 1 'Hook stdout must contain exactly one JSON object'
+    [void]($debugHook.Output | ConvertFrom-Json -ErrorAction Stop)
+    $debugStages = @(Get-Content -LiteralPath $debugLog | ForEach-Object { ($_ | ConvertFrom-Json).stage })
+    foreach ($stage in @('HOOK_OBSERVED', 'TRANSCRIPT_RESOLVED', 'TURN_RESOLVED', 'USAGE_EVENT_FOUND', 'MESSAGE_GENERATED', 'MESSAGE_EMITTED')) {
+        if ($stage -notin $debugStages) { throw "Debug log missing successful stage: $stage" }
+    }
+    if ($debugHook.Output -match 'HOOK_OBSERVED|MESSAGE_GENERATED') { throw 'Debug stages leaked into hook stdout.' }
+
+    $missingTurnEvent = [ordered]@{ session_id = $sessionIdA; transcript_path = $transcriptA; hook_event_name = 'Stop' } | ConvertTo-Json -Compress
+    [void](Invoke-TestScript $stopHookPath @('-CodexHome', $codexHome, '-PricingPath', $pricingPath, '-RetryCount', '0') $missingTurnEvent @{ AFYX_CODEX_USAGE_DEBUG = '1' })
+    $outsideTranscript = Join-Path $integrationRoot 'outside.jsonl'
+    [IO.File]::WriteAllText($outsideTranscript, '', [Text.UTF8Encoding]::new($false))
+    $outsideEvent = [ordered]@{ session_id = $sessionIdA; transcript_path = $outsideTranscript; hook_event_name = 'Stop'; turn_id = 'turn-2' } | ConvertTo-Json -Compress
+    [void](Invoke-TestScript $stopHookPath @('-CodexHome', $codexHome, '-PricingPath', $pricingPath, '-RetryCount', '0') $outsideEvent @{ AFYX_CODEX_USAGE_DEBUG = '1' })
+    $missingTranscript = Join-Path $sessionDirectory "rollout-missing-$sessionIdA.jsonl"
+    $missingTranscriptEvent = [ordered]@{ session_id = $sessionIdA; transcript_path = $missingTranscript; hook_event_name = 'Stop'; turn_id = 'turn-2' } | ConvertTo-Json -Compress
+    [void](Invoke-TestScript $stopHookPath @('-CodexHome', $codexHome, '-PricingPath', $pricingPath, '-RetryCount', '0') $missingTranscriptEvent @{ AFYX_CODEX_USAGE_DEBUG = '1' })
+    $missingCorrelationEvent = [ordered]@{ session_id = $sessionIdA; transcript_path = $transcriptA; hook_event_name = 'Stop'; turn_id = 'turn-not-present' } | ConvertTo-Json -Compress
+    [void](Invoke-TestScript $stopHookPath @('-CodexHome', $codexHome, '-PricingPath', $pricingPath, '-RetryCount', '0') $missingCorrelationEvent @{ AFYX_CODEX_USAGE_DEBUG = '1' })
+
+    $sessionIdC = '01a00000-0000-7000-8000-000000000003'
+    $transcriptC = Join-Path $sessionDirectory "rollout-test-$sessionIdC.jsonl"
+    Add-EventsToFile $transcriptC @(
+        (New-Event 'event_msg' @{ type = 'task_started'; turn_id = 'no-usage-turn' }),
+        (New-Event 'turn_context' @{ turn_id = 'no-usage-turn'; model = 'gpt-5.6-sol' })
+    )
+    $noUsageEvent = [ordered]@{ session_id = $sessionIdC; transcript_path = $transcriptC; hook_event_name = 'Stop'; turn_id = 'no-usage-turn' } | ConvertTo-Json -Compress
+    $noUsage = Invoke-TestScript $stopHookPath @('-CodexHome', $codexHome, '-PricingPath', $pricingPath, '-RetryCount', '0') $noUsageEvent @{ AFYX_CODEX_USAGE_DEBUG = '1' }
+    $noUsageJson = $noUsage.Output | ConvertFrom-Json -ErrorAction Stop
+    if ($noUsageJson.PSObject.Properties['systemMessage']) { throw 'Missing usage must return a safe response without a message.' }
+
+    $pricingFailure = Invoke-TestScript $stopHookPath @('-CodexHome', $codexHome, '-PricingPath', (Join-Path $integrationRoot 'missing-pricing.json'), '-RetryCount', '0') $eventA @{ AFYX_CODEX_USAGE_DEBUG = '1' }
+    [void]($pricingFailure.Output | ConvertFrom-Json -ErrorAction Stop)
+    [void](Invoke-TestScript $stopHookPath @('-CodexHome', $codexHome, '-PricingPath', $pricingPath, '-RetryCount', '0') '{invalid' @{ AFYX_CODEX_USAGE_DEBUG = '1' })
+    $failureStages = @(Get-Content -LiteralPath $debugLog | ForEach-Object { ($_ | ConvertFrom-Json).stage })
+    foreach ($stage in @('TURN_ID_MISSING', 'TRANSCRIPT_REJECTED', 'TRANSCRIPT_NOT_FOUND', 'TURN_NOT_FOUND', 'USAGE_EVENT_NOT_FOUND', 'PRICING_FAILED', 'PAYLOAD_INVALID')) {
+        if ($stage -notin $failureStages) { throw "Debug log missing failure stage: $stage" }
+    }
+    if ((Get-Content -Raw -LiteralPath $debugLog) -match 'SENSITIVE TEST CONTENT') { throw 'Debug log leaked assistant content.' }
 
     $eventB = [ordered]@{
         session_id = $sessionIdB
@@ -318,6 +366,21 @@ try {
     Assert-Equal @($mergedHooks.hooks.PreToolUse).Count 1 'Custom PreToolUse preservation'
     Assert-Equal @($mergedHooks.hooks.Stop | ForEach-Object { $_.hooks } | Where-Object { $_.command -eq 'custom-stop' }).Count 1 'Custom Stop preservation'
     Assert-Equal @($mergedHooks.hooks.Stop | ForEach-Object { $_.hooks } | Where-Object { $_.statusMessage -eq 'Afyx Codex Usage Tracking' }).Count 1 'Repeated install hook idempotency'
+
+    $installedDoctor = Join-Path $codexHome 'tools\codex-usage-doctor.ps1'
+    [IO.File]::SetLastWriteTimeUtc($transcriptB, [DateTime]::UtcNow)
+    $doctor = Invoke-TestScript $installedDoctor @('-CodexHome', $codexHome, '-HooksPath', $hooksPath, '-SessionRoot', $integrationSessions, '-PricingPath', (Join-Path $codexHome 'tools\codex-usage-pricing.json')) $null
+    Assert-Equal $doctor.ExitCode 0 "Usage doctor ready result; stderr: $($doctor.Error)"
+    if ($doctor.Output -notmatch 'READY' -or $doctor.Output -notmatch 'Watcher replay.*latest completed turn replayed') { throw 'Doctor did not validate the complete synthetic installation.' }
+    $doctorMissingHook = Invoke-TestScript $installedDoctor @('-CodexHome', $codexHome, '-HooksPath', (Join-Path $integrationRoot 'missing-hooks.json'), '-SessionRoot', $integrationSessions, '-PricingPath', (Join-Path $codexHome 'tools\codex-usage-pricing.json')) $null
+    if ($doctorMissingHook.ExitCode -eq 0 -or $doctorMissingHook.Output -notmatch '\[FAIL\] Stop hook configured') { throw 'Doctor did not detect a missing hook.' }
+    $doctorPs5 = Invoke-TestScript $doctorPath @('-PowerShellMajor', '5') $null
+    if ($doctorPs5.ExitCode -eq 0 -or $doctorPs5.Output -notmatch 'requires PowerShell 7\+') { throw 'Doctor did not report the PowerShell 7+ requirement.' }
+    $missingRuntimeRoot = Join-Path $integrationRoot 'missing-runtime'
+    [IO.Directory]::CreateDirectory($missingRuntimeRoot) | Out-Null
+    Copy-Item -LiteralPath $doctorPath -Destination (Join-Path $missingRuntimeRoot 'codex-usage-doctor.ps1')
+    $doctorMissingFiles = Invoke-TestScript (Join-Path $missingRuntimeRoot 'codex-usage-doctor.ps1') @('-CodexHome', $codexHome, '-HooksPath', $hooksPath, '-SessionRoot', $integrationSessions) $null
+    if ($doctorMissingFiles.ExitCode -eq 0 -or $doctorMissingFiles.Output -notmatch '\[FAIL\] Tracker runtime files') { throw 'Doctor did not detect missing tracker files.' }
 
     $installedStop = Join-Path $codexHome 'tools\codex-usage-stop.ps1'
     if (-not (Test-Path -LiteralPath $installedStop -PathType Leaf)) { throw 'Stop hook runtime was not installed.' }

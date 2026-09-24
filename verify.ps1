@@ -83,7 +83,7 @@ if (Test-McpEntry 'headroom') { Write-Result 'OK' 'Headroom MCP' 'configured (op
 if (Test-Path -LiteralPath $configPath -PathType Leaf) { Write-Result 'OK' 'Codex config' 'read-only check completed' }
 else { Write-Result 'WARN' 'Codex config' 'not found; optional MCP entries unavailable' }
 
-$usageFiles = @('CodexUsage.psm1', 'codex-usage-stop.ps1', 'codex-usage-watch.ps1', 'codex-usage-pricing.json') | ForEach-Object { Join-Path $codexHome "tools\$_" }
+$usageFiles = @('CodexUsage.psm1', 'codex-usage-stop.ps1', 'codex-usage-watch.ps1', 'codex-usage-doctor.ps1', 'codex-usage-pricing.json') | ForEach-Object { Join-Path $codexHome "tools\$_" }
 $hooksPath = Join-Path $codexHome 'hooks.json'
 $tasksPath = Join-Path $env:APPDATA 'Code\User\tasks.json'
 $installedUsageFileCount = @($usageFiles | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf }).Count

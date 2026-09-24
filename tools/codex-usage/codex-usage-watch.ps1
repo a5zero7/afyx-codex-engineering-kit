@@ -6,7 +6,8 @@ param(
     [string]$LatestUsagePath,
     [ValidateRange(100, 60000)] [int]$PollMilliseconds = 750,
     [ValidateRange(0, 100)] [int]$ReplayLatestCompletedTurns = 0,
-    [ValidateRange(0, 100)] [int]$ExitAfterCompletions = 0
+    [ValidateRange(0, 100)] [int]$ExitAfterCompletions = 0,
+    [switch]$NoSnapshot
 )
 
 Set-StrictMode -Version Latest
@@ -111,6 +112,8 @@ function Initialize-RolloutTracker {
 
 function Write-LatestUsageSnapshot {
     param([Parameter(Mandatory)] [object]$Completion)
+
+    if ($NoSnapshot) { return }
 
     $parent = Split-Path -Parent $LatestUsagePath
     if ($parent) { [IO.Directory]::CreateDirectory($parent) | Out-Null }

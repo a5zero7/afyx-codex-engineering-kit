@@ -386,10 +386,14 @@ function Get-CodexTurnCompletion {
     param(
         [Parameter(Mandatory)] [string]$TranscriptPath,
         [Parameter(Mandatory)] [string]$TurnId,
-        [Parameter(Mandatory)] [hashtable]$Pricing
+        [Parameter(Mandatory)] [hashtable]$Pricing,
+        [ref]$FailureStage
     )
 
-    if (-not (Test-Path -LiteralPath $TranscriptPath -PathType Leaf)) { return $null }
+    if (-not (Test-Path -LiteralPath $TranscriptPath -PathType Leaf)) {
+        if ($null -ne $FailureStage) { $FailureStage.Value = 'TRANSCRIPT_NOT_FOUND' }
+        return $null
+    }
 
     # Stop runs before Codex writes task_complete. Read only the exact turn's tail,
     # then use the existing parser with a local completion boundary supplied by Stop.
@@ -433,10 +437,18 @@ function Get-CodexTurnCompletion {
         $stream.Dispose()
     }
 
-    if ($null -eq $turnLines) { return $null }
+    if ($null -eq $turnLines) {
+        if ($null -ne $FailureStage) { $FailureStage.Value = 'TURN_NOT_FOUND' }
+        return $null
+    }
     $state = New-CodexUsageParserState
+    $usageEventObserved = $false
     foreach ($line in $turnLines) {
         if ([string]::IsNullOrWhiteSpace($line)) { continue }
+        if ($line -match '"type"\s*:\s*"token_usage_record"' -and
+            $line -match ('"turn_id"\s*:\s*"' + [regex]::Escape($TurnId) + '"')) {
+            $usageEventObserved = $true
+        }
         $event = ConvertFrom-CodexTelemetryLine -Line $line
         if ($null -eq $event) { continue }
         $completion = Update-CodexUsageState -State $state -Event $event -Pricing $Pricing -SessionFile $TranscriptPath
@@ -445,8 +457,16 @@ function Get-CodexTurnCompletion {
         }
     }
 
-    if (-not [string]::Equals([string]$state.CurrentTurnId, $TurnId, [StringComparison]::Ordinal) -or
-        $null -eq $state.LatestTurnUsage -or $null -eq $state.LatestCumulative) {
+    if (-not [string]::Equals([string]$state.CurrentTurnId, $TurnId, [StringComparison]::Ordinal)) {
+        if ($null -ne $FailureStage) { $FailureStage.Value = 'TURN_NOT_FOUND' }
+        return $null
+    }
+    if (-not $usageEventObserved) {
+        if ($null -ne $FailureStage) { $FailureStage.Value = 'USAGE_EVENT_NOT_FOUND' }
+        return $null
+    }
+    if ($null -eq $state.LatestTurnUsage -or $null -eq $state.LatestCumulative) {
+        if ($null -ne $FailureStage) { $FailureStage.Value = 'USAGE_PARSE_FAILED' }
         return $null
     }
     $boundary = [pscustomobject]@{
@@ -454,7 +474,9 @@ function Get-CodexTurnCompletion {
         type = 'event_msg'
         payload = [pscustomobject]@{ type = 'task_complete'; turn_id = $TurnId }
     }
-    return Update-CodexUsageState -State $state -Event $boundary -Pricing $Pricing -SessionFile $TranscriptPath
+    $completion = Update-CodexUsageState -State $state -Event $boundary -Pricing $Pricing -SessionFile $TranscriptPath
+    if ($null -eq $completion -and $null -ne $FailureStage) { $FailureStage.Value = 'USAGE_PARSE_FAILED' }
+    return $completion
 }
 
 Export-ModuleMember -Function @(

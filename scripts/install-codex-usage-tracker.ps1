@@ -9,11 +9,14 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+if ($PSVersionTable.PSVersion.Major -lt 7) {
+    throw 'Codex Usage Tracker requires PowerShell 7+. Core Afyx installation compatibility is separate.'
+}
 
 $sourceRoot = Join-Path (Split-Path -Parent $PSScriptRoot) 'tools\codex-usage'
 $toolsRoot = Join-Path $CodexHome 'tools'
 if (-not $HooksPath) { $HooksPath = Join-Path $CodexHome 'hooks.json' }
-$runtimeFiles = @('CodexUsage.psm1', 'codex-usage-stop.ps1', 'codex-usage-watch.ps1', 'codex-usage-pricing.json')
+$runtimeFiles = @('CodexUsage.psm1', 'codex-usage-stop.ps1', 'codex-usage-watch.ps1', 'codex-usage-doctor.ps1', 'codex-usage-pricing.json')
 $taskLabel = 'Codex: Watch Token Usage'
 $hookMarker = 'Afyx Codex Usage Tracking'
 
@@ -149,8 +152,21 @@ if ($PSCmdlet.ShouldProcess($toolsRoot, 'Install Codex usage tracker runtime')) 
 Update-HooksDocument
 if (-not $SkipVSCodeTask) { Update-VSCodeTaskDocument }
 
+if (-not $WhatIfPreference) {
+    $missingRuntime = @($runtimeFiles | Where-Object { -not (Test-Path -LiteralPath (Join-Path $toolsRoot $_) -PathType Leaf) })
+    if ($missingRuntime.Count -gt 0) { throw "Usage Tracker installation incomplete: $($missingRuntime -join ', ')" }
+    $verifiedHooks = Read-JsonDocument -Path $HooksPath -Kind 'Codex hooks file'
+    $verifiedHandlers = @($verifiedHooks.hooks.Stop | ForEach-Object { $_.hooks } | Where-Object { Test-AfyxHookHandler $_ })
+    if ($verifiedHandlers.Count -ne 1) { throw "Expected exactly one Afyx Stop hook after installation; found $($verifiedHandlers.Count)." }
+    $expectedStopPath = [IO.Path]::GetFullPath((Join-Path $toolsRoot 'codex-usage-stop.ps1'))
+    $verifiedCommand = if ($verifiedHandlers[0].PSObject.Properties['commandWindows']) { [string]$verifiedHandlers[0].commandWindows } else { [string]$verifiedHandlers[0].command }
+    if ($verifiedCommand -notmatch [regex]::Escape($expectedStopPath)) { throw 'Installed Stop hook command does not point to the expected runtime script.' }
+}
+
 Write-Host 'Codex Usage Tracking: installed'
 Write-Host 'Automatic UI usage message: configured'
 Write-Host 'Terminal watcher fallback: installed'
+Write-Host 'Usage doctor: installed'
 if (-not $SkipVSCodeTask) { Write-Host 'VS Code User Task: installed' }
 Write-Host 'Hook trust: review required via /hooks'
+Write-Host 'Start a fresh Codex CLI session or reload VS Code after hook installation or changes.'
