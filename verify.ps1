@@ -7,6 +7,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $coreFailure = $false
 $configPath = Join-Path $env:USERPROFILE '.codex\config.toml'
+$codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' }
 
 function Write-Result([string]$State, [string]$Name, [string]$Detail = '') {
     $suffix = if ($Detail) { " — $Detail" } else { '' }
@@ -81,6 +82,55 @@ if (Test-McpEntry 'headroom') { Write-Result 'OK' 'Headroom MCP' 'configured (op
 
 if (Test-Path -LiteralPath $configPath -PathType Leaf) { Write-Result 'OK' 'Codex config' 'read-only check completed' }
 else { Write-Result 'WARN' 'Codex config' 'not found; optional MCP entries unavailable' }
+
+$usageFiles = @('CodexUsage.psm1', 'codex-usage-stop.ps1', 'codex-usage-watch.ps1', 'codex-usage-pricing.json') | ForEach-Object { Join-Path $codexHome "tools\$_" }
+$hooksPath = Join-Path $codexHome 'hooks.json'
+$tasksPath = Join-Path $env:APPDATA 'Code\User\tasks.json'
+$installedUsageFileCount = @($usageFiles | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf }).Count
+$usagePresent = $installedUsageFileCount -gt 0
+if (-not $usagePresent -and (Test-Path -LiteralPath $hooksPath -PathType Leaf)) {
+    try { $usagePresent = (Get-Content -Raw -LiteralPath $hooksPath) -match '(?i)(Afyx Codex Usage Tracking|codex-usage-stop\.ps1)' } catch { }
+}
+if (-not $usagePresent -and (Test-Path -LiteralPath $tasksPath -PathType Leaf)) {
+    try { $usagePresent = (Get-Content -Raw -LiteralPath $tasksPath) -match 'Codex: Watch Token Usage' } catch { }
+}
+if (-not $usagePresent) {
+    Write-Result 'INFO' 'Codex Usage Tracker' 'optional; not installed'
+} else {
+    if ($installedUsageFileCount -eq $usageFiles.Count) { Write-Result 'OK' 'Codex Usage Tracker' 'runtime files installed' }
+    else { Write-Result 'WARN' 'Codex Usage Tracker' 'runtime files incomplete (optional)' }
+
+    $hookConfigured = $false
+    if (Test-Path -LiteralPath $hooksPath -PathType Leaf) {
+        try {
+            $hooksDocument = Get-Content -Raw -LiteralPath $hooksPath | ConvertFrom-Json -Depth 50 -ErrorAction Stop
+            $hookConfigured = [bool](@($hooksDocument.hooks.Stop | ForEach-Object { $_.hooks } | Where-Object {
+                ([string]$_.statusMessage -eq 'Afyx Codex Usage Tracking') -or
+                ([string]$_.commandWindows -match '(?i)codex-usage-stop\.ps1') -or
+                ([string]$_.command -match '(?i)codex-usage-stop\.ps1')
+            }).Count)
+        } catch { Write-Result 'WARN' 'Codex Usage Hook' 'hooks.json is invalid JSON' }
+    }
+    if ($hookConfigured) { Write-Result 'OK' 'Codex Usage Hook' 'global Stop hook configured' }
+    else { Write-Result 'WARN' 'Codex Usage Hook' 'global Stop hook not configured (optional)' }
+
+    try {
+        $pricing = Get-Content -Raw -LiteralPath (Join-Path $codexHome 'tools\codex-usage-pricing.json') | ConvertFrom-Json -Depth 20 -ErrorAction Stop
+        if ($pricing.unit_tokens -and $pricing.models) { Write-Result 'OK' 'Codex Usage Pricing' 'valid' }
+        else { throw 'required pricing fields missing' }
+    } catch { Write-Result 'WARN' 'Codex Usage Pricing' 'missing or invalid (optional)' }
+
+    $taskConfigured = $false
+    if (Test-Path -LiteralPath $tasksPath -PathType Leaf) {
+        try {
+            $taskDocument = Get-Content -Raw -LiteralPath $tasksPath | ConvertFrom-Json -Depth 30 -ErrorAction Stop
+            $taskConfigured = [bool](@($taskDocument.tasks | Where-Object { $_.label -eq 'Codex: Watch Token Usage' }).Count)
+        } catch { }
+    }
+    if ($taskConfigured) { Write-Result 'OK' 'Codex Usage VS Code Task' 'configured' }
+    else { Write-Result 'WARN' 'Codex Usage VS Code Task' 'not configured (optional fallback)' }
+    Write-Result 'INFO' 'Codex Usage Hook trust' 'verify with /hooks'
+}
 
 if ($coreFailure) { Write-Result 'FAIL' 'Core readiness'; exit 1 }
 Write-Result 'OK' 'Core readiness' 'ready; optional enhancement warnings do not affect this result'

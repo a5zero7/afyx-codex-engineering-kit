@@ -7,7 +7,11 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $modulePath = Join-Path $root 'CodexUsage.psm1'
 $watcherPath = Join-Path $root 'codex-usage-watch.ps1'
+$stopHookPath = Join-Path $root 'codex-usage-stop.ps1'
 $pricingPath = Join-Path $root 'codex-usage-pricing.json'
+$repositoryRoot = Split-Path -Parent (Split-Path -Parent $root)
+$trackerInstallerPath = Join-Path $repositoryRoot 'scripts\install-codex-usage-tracker.ps1'
+$mainInstallerPath = Join-Path $repositoryRoot 'install.ps1'
 Import-Module $modulePath -Force
 $pricing = Import-CodexPricing $pricingPath
 
@@ -101,6 +105,28 @@ function Start-TestWatcher {
         Output = $process.StandardOutput.ReadToEndAsync()
         Error = $process.StandardError.ReadToEndAsync()
     }
+}
+
+function Invoke-TestScript {
+    param([string]$Path, [string[]]$Arguments = @(), [string]$StandardInput)
+
+    $psi = [Diagnostics.ProcessStartInfo]::new()
+    $psi.FileName = (Get-Command pwsh).Source
+    $psi.UseShellExecute = $false
+    $psi.CreateNoWindow = $true
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.RedirectStandardInput = $true
+    foreach ($argument in @('-NoLogo', '-NoProfile', '-File', $Path) + $Arguments) { [void]$psi.ArgumentList.Add($argument) }
+    $process = [Diagnostics.Process]::new()
+    $process.StartInfo = $psi
+    [void]$process.Start()
+    if ($null -ne $StandardInput) { $process.StandardInput.Write($StandardInput) }
+    $process.StandardInput.Close()
+    $output = $process.StandardOutput.ReadToEnd()
+    $errorOutput = $process.StandardError.ReadToEnd()
+    $process.WaitForExit()
+    return [pscustomobject]@{ ExitCode = $process.ExitCode; Output = $output; Error = $errorOutput }
 }
 
 $usage1 = New-UsageObject 100 60 10 20 5
@@ -209,6 +235,100 @@ try {
     }
 } finally {
     if (Test-Path -LiteralPath $temporaryRoot) { Remove-Item -Recurse -Force -LiteralPath $temporaryRoot }
+}
+
+$integrationRoot = Join-Path ([IO.Path]::GetTempPath()) ('codex-usage-integration-' + [guid]::NewGuid().ToString('N'))
+[IO.Directory]::CreateDirectory($integrationRoot) | Out-Null
+try {
+    $codexHome = Join-Path $integrationRoot '.codex'
+    $sessionIdA = '01a00000-0000-7000-8000-000000000001'
+    $sessionIdB = '01a00000-0000-7000-8000-000000000002'
+    $sessionDirectory = Join-Path $codexHome 'sessions\2026\09\24'
+    [IO.Directory]::CreateDirectory($sessionDirectory) | Out-Null
+    $transcriptA = Join-Path $sessionDirectory "rollout-test-$sessionIdA.jsonl"
+    $transcriptB = Join-Path $sessionDirectory "rollout-test-$sessionIdB.jsonl"
+    Add-EventsToFile $transcriptA ($turn1 + $turn2)
+    Add-EventsToFile $transcriptB (New-TurnEvents 'session-b-turn' 'unpriced-model' $usage1 $usage1 $thread1)
+
+    $eventA = [ordered]@{
+        session_id = $sessionIdA
+        transcript_path = $transcriptA
+        cwd = $integrationRoot
+        hook_event_name = 'Stop'
+        turn_id = 'turn-2'
+        stop_hook_active = $false
+        last_assistant_message = 'SENSITIVE TEST CONTENT MUST NOT APPEAR'
+    } | ConvertTo-Json -Compress
+    $hookA = Invoke-TestScript $stopHookPath @('-CodexHome', $codexHome, '-PricingPath', $pricingPath, '-RetryCount', '0') $eventA
+    Assert-Equal $hookA.ExitCode 0 "Stop hook exit code; stderr: $($hookA.Error)"
+    $hookAJson = $hookA.Output | ConvertFrom-Json -ErrorAction Stop
+    Assert-Equal $hookAJson.continue $true 'Stop hook must preserve normal completion'
+    if ($hookAJson.systemMessage -notmatch 'Codex Usage .* 90 tokens') { throw 'Stop hook did not correlate turn B to its exact usage.' }
+    if ($hookAJson.systemMessage -notmatch 'Input 80 .* Output 10 .* Reasoning 2') { throw 'Stop hook compact breakdown is incorrect.' }
+    if ($hookA.Output -match 'decision|additionalContext|SENSITIVE TEST CONTENT') { throw 'Stop hook output contains continuation or transcript content.' }
+
+    $eventB = [ordered]@{
+        session_id = $sessionIdB
+        transcript_path = $transcriptB
+        hook_event_name = 'Stop'
+        turn_id = 'session-b-turn'
+        stop_hook_active = $false
+        last_assistant_message = 'ignored'
+    } | ConvertTo-Json -Compress
+    $hookB = Invoke-TestScript $stopHookPath @('-CodexHome', $codexHome, '-PricingPath', $pricingPath, '-RetryCount', '0') $eventB
+    $hookBJson = $hookB.Output | ConvertFrom-Json -ErrorAction Stop
+    if ($hookBJson.systemMessage -notmatch 'API-equivalent N/A') { throw 'Unknown pricing must remain a successful N/A summary.' }
+
+    $wrongSessionEvent = [ordered]@{
+        session_id = $sessionIdB
+        transcript_path = $transcriptA
+        hook_event_name = 'Stop'
+        turn_id = 'turn-2'
+    } | ConvertTo-Json -Compress
+    $wrongSession = Invoke-TestScript $stopHookPath @('-CodexHome', $codexHome, '-PricingPath', $pricingPath, '-RetryCount', '0') $wrongSessionEvent
+    $wrongSessionJson = $wrongSession.Output | ConvertFrom-Json -ErrorAction Stop
+    if ($wrongSessionJson.PSObject.Properties['systemMessage']) { throw 'Mismatched session metadata must not display another session usage.' }
+
+    $hooksPath = Join-Path $codexHome 'hooks.json'
+    $tasksPath = Join-Path $integrationRoot 'Code\User\tasks.json'
+    $existingHooks = [ordered]@{
+        description = 'User hooks'
+        hooks = [ordered]@{
+            PreToolUse = @([ordered]@{ matcher = 'Bash'; hooks = @([ordered]@{ type = 'command'; command = 'custom-pre' }) })
+            Stop = @([ordered]@{ hooks = @([ordered]@{ type = 'command'; command = 'custom-stop'; statusMessage = 'Custom stop' }) })
+        }
+    } | ConvertTo-Json -Depth 20
+    [IO.File]::WriteAllText($hooksPath, $existingHooks, [Text.UTF8Encoding]::new($false))
+
+    $installArguments = @('-CodexHome', $codexHome, '-HooksPath', $hooksPath, '-VSCodeUserTasksPath', $tasksPath, '-Confirm:$false')
+    $install1 = Invoke-TestScript $trackerInstallerPath $installArguments $null
+    Assert-Equal $install1.ExitCode 0 "Tracker installer first run; stderr: $($install1.Error)"
+    $install2 = Invoke-TestScript $trackerInstallerPath $installArguments $null
+    Assert-Equal $install2.ExitCode 0 "Tracker installer repeat run; stderr: $($install2.Error)"
+    $mergedHooks = Get-Content -Raw -LiteralPath $hooksPath | ConvertFrom-Json -Depth 50
+    Assert-Equal @($mergedHooks.hooks.PreToolUse).Count 1 'Custom PreToolUse preservation'
+    Assert-Equal @($mergedHooks.hooks.Stop | ForEach-Object { $_.hooks } | Where-Object { $_.command -eq 'custom-stop' }).Count 1 'Custom Stop preservation'
+    Assert-Equal @($mergedHooks.hooks.Stop | ForEach-Object { $_.hooks } | Where-Object { $_.statusMessage -eq 'Afyx Codex Usage Tracking' }).Count 1 'Repeated install hook idempotency'
+
+    $installedStop = Join-Path $codexHome 'tools\codex-usage-stop.ps1'
+    if (-not (Test-Path -LiteralPath $installedStop -PathType Leaf)) { throw 'Stop hook runtime was not installed.' }
+    $previousCodexHome = $env:CODEX_HOME
+    try {
+        $env:CODEX_HOME = $codexHome
+        $skip = Invoke-TestScript $mainInstallerPath @('-SkillsRoot', (Join-Path $integrationRoot 'skills'), '-SkipUsageTracker', '-WhatIf', '-Confirm:$false') $null
+        Assert-Equal $skip.ExitCode 0 "Main installer skip path; stderr: $($skip.Error)"
+        if ($skip.Output -notmatch 'Codex Usage Tracking: skipped') { throw 'Main installer did not report optional skip.' }
+        if (-not (Test-Path -LiteralPath $installedStop -PathType Leaf)) { throw 'Declining tracker update removed an existing installation.' }
+    } finally { $env:CODEX_HOME = $previousCodexHome }
+
+    $uninstall = Invoke-TestScript $trackerInstallerPath ($installArguments + '-Uninstall') $null
+    Assert-Equal $uninstall.ExitCode 0 "Tracker uninstall; stderr: $($uninstall.Error)"
+    $afterUninstall = Get-Content -Raw -LiteralPath $hooksPath | ConvertFrom-Json -Depth 50
+    Assert-Equal @($afterUninstall.hooks.PreToolUse).Count 1 'Uninstall custom PreToolUse preservation'
+    Assert-Equal @($afterUninstall.hooks.Stop | ForEach-Object { $_.hooks } | Where-Object { $_.command -eq 'custom-stop' }).Count 1 'Uninstall custom Stop preservation'
+    Assert-Equal @($afterUninstall.hooks.Stop | ForEach-Object { $_.hooks } | Where-Object { $_.statusMessage -eq 'Afyx Codex Usage Tracking' }).Count 0 'Afyx hook removal'
+} finally {
+    if (Test-Path -LiteralPath $integrationRoot) { Remove-Item -Recurse -Force -LiteralPath $integrationRoot }
 }
 
 Write-Host 'Codex usage tracker tests: PASS'

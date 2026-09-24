@@ -1,13 +1,20 @@
 [CmdletBinding(SupportsShouldProcess)]
 param(
     [string]$SkillsRoot = (Join-Path $env:USERPROFILE '.agents\skills'),
-    [switch]$SkipSelfUpdate
+    [switch]$SkipSelfUpdate,
+    [switch]$InstallUsageTracker,
+    [switch]$SkipUsageTracker
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $installer = Join-Path $PSScriptRoot 'install.ps1'
 $root = $PSScriptRoot
+
+if ($InstallUsageTracker -and $SkipUsageTracker) {
+    Write-Error '-InstallUsageTracker and -SkipUsageTracker cannot be used together.'
+    exit 1
+}
 
 Write-Host 'Afyx Codex Engineering Kit — Windows updater (PowerShell)'
 
@@ -36,7 +43,20 @@ if (-not $SkipSelfUpdate) {
     }
 } else { Write-Host 'Self-update skipped by -SkipSelfUpdate; using current local source intentionally.' }
 
-& $installer -SkillsRoot $SkillsRoot -Force -Confirm:$false
+$usageArguments = @{}
+if ($InstallUsageTracker) { $usageArguments.InstallUsageTracker = $true }
+elseif ($SkipUsageTracker) { $usageArguments.SkipUsageTracker = $true }
+else {
+    $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' }
+    if ((Test-Path -LiteralPath (Join-Path $codexHome 'tools\CodexUsage.psm1') -PathType Leaf) -or
+        (Test-Path -LiteralPath (Join-Path $codexHome 'tools\codex-usage-stop.ps1') -PathType Leaf)) {
+        $usageArguments.InstallUsageTracker = $true
+    } else {
+        $usageArguments.SkipUsageTracker = $true
+    }
+}
+
+& $installer -SkillsRoot $SkillsRoot -Force -Confirm:$false -WhatIf:$WhatIfPreference @usageArguments
 $installerSucceeded = $?
 $installerExitCode = 0
 if (Test-Path -LiteralPath variable:LASTEXITCODE) { $installerExitCode = [int]$LASTEXITCODE }

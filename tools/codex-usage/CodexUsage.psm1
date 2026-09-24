@@ -356,10 +356,73 @@ function Format-CodexUsageSummary {
     return $lines.ToArray()
 }
 
+function Format-CodexUsageUiMessage {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [object]$Completion)
+
+    $culture = [Globalization.CultureInfo]::InvariantCulture
+    $number = { param([long]$Value) $Value.ToString('N0', $culture) }
+    $cost = if ($Completion.ApiEquivalentAvailable) {
+        '~$' + ([decimal]$Completion.ApiEquivalentCost).ToString('0.000000', $culture)
+    } else {
+        'API-equivalent N/A'
+    }
+    $headline = 'Codex Usage · {0} tokens · {1}' -f (& $number $Completion.TotalTokens), $cost
+    $parts = [System.Collections.Generic.List[string]]::new()
+    $parts.Add(('Input {0}' -f (& $number $Completion.InputTokens)))
+    $parts.Add(('Cached {0}' -f (& $number $Completion.CachedInputTokens)))
+    if ([long]$Completion.CacheWriteInputTokens -gt 0) {
+        $parts.Add(('Cache Write {0}' -f (& $number $Completion.CacheWriteInputTokens)))
+    }
+    $parts.Add(('Output {0}' -f (& $number $Completion.OutputTokens)))
+    if ($Completion.ReasoningAvailable) {
+        $parts.Add(('Reasoning {0}' -f (& $number $Completion.ReasoningTokens)))
+    }
+    return $headline + "`n" + ($parts -join ' · ')
+}
+
+function Get-CodexTurnCompletion {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [string]$TranscriptPath,
+        [Parameter(Mandatory)] [string]$TurnId,
+        [Parameter(Mandatory)] [hashtable]$Pricing
+    )
+
+    if (-not (Test-Path -LiteralPath $TranscriptPath -PathType Leaf)) { return $null }
+    $state = New-CodexUsageParserState
+    $stream = [IO.File]::Open(
+        $TranscriptPath,
+        [IO.FileMode]::Open,
+        [IO.FileAccess]::Read,
+        [IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete
+    )
+    try {
+        $reader = [IO.StreamReader]::new($stream, [Text.Encoding]::UTF8, $true, 4096, $true)
+        try {
+            while (-not $reader.EndOfStream) {
+                $event = ConvertFrom-CodexTelemetryLine -Line $reader.ReadLine()
+                if ($null -eq $event) { continue }
+                $completion = Update-CodexUsageState -State $state -Event $event -Pricing $Pricing -SessionFile $TranscriptPath
+                if ($null -ne $completion -and [string]::Equals([string]$completion.TurnId, $TurnId, [StringComparison]::Ordinal)) {
+                    return $completion
+                }
+            }
+        } finally {
+            $reader.Dispose()
+        }
+    } finally {
+        $stream.Dispose()
+    }
+    return $null
+}
+
 Export-ModuleMember -Function @(
     'ConvertFrom-CodexTelemetryLine',
     'Copy-CodexUsage',
     'Format-CodexUsageSummary',
+    'Format-CodexUsageUiMessage',
+    'Get-CodexTurnCompletion',
     'Get-CodexUncachedInput',
     'Get-CodexUsageCost',
     'Get-CodexUsageDelta',

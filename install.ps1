@@ -3,7 +3,9 @@ param(
     [string]$SkillsRoot = (Join-Path $env:USERPROFILE '.agents\skills'),
     [string]$PromptMasterRepository = 'https://github.com/nidhinjs/prompt-master.git',
     [switch]$Force,
-    [switch]$ValidateOnly
+    [switch]$ValidateOnly,
+    [switch]$InstallUsageTracker,
+    [switch]$SkipUsageTracker
 )
 
 Set-StrictMode -Version Latest
@@ -18,6 +20,11 @@ $efficientTarget = Join-Path $SkillsRoot 'efficient-coding'
 $odooTarget = Join-Path $SkillsRoot 'odoo-engineering'
 $promptTarget = Join-Path $SkillsRoot 'prompt-master'
 $backupRoot = Join-Path $packageRoot 'backups'
+$usageTrackerInstaller = Join-Path $packageRoot 'scripts\install-codex-usage-tracker.ps1'
+
+if ($InstallUsageTracker -and $SkipUsageTracker) {
+    throw '-InstallUsageTracker and -SkipUsageTracker cannot be used together.'
+}
 
 function Test-SkillManifest {
     param([Parameter(Mandatory)][string]$SkillDirectory)
@@ -118,11 +125,35 @@ if (Test-Path -LiteralPath $promptTarget) {
     if ($LASTEXITCODE -ne 0) { throw 'Prompt Master clone failed.' }
 }
 
+$installOptionalTracker = $false
+if ($InstallUsageTracker) {
+    $installOptionalTracker = $true
+} elseif ($SkipUsageTracker) {
+    Write-Host 'Codex Usage Tracking: skipped'
+} elseif ($WhatIfPreference -or $env:CI -or [Console]::IsInputRedirected) {
+    Write-Host 'Codex Usage Tracking: skipped (non-interactive; no explicit opt-in)'
+} else {
+    $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' }
+    $alreadyInstalled = (Test-Path -LiteralPath (Join-Path $codexHome 'tools\CodexUsage.psm1') -PathType Leaf) -or
+        (Test-Path -LiteralPath (Join-Path $codexHome 'tools\codex-usage-stop.ps1') -PathType Leaf)
+    Write-Host ''
+    Write-Host 'Optional Components'
+    Write-Host 'Codex Usage Tracking displays per-turn token usage and API-equivalent cost automatically in Codex UI.'
+    $prompt = if ($alreadyInstalled) { 'Codex Usage Tracking is already installed. Update/reinstall Usage Tracking? [Y/N]' } else { 'Install Codex Usage Tracking? [Y/N]' }
+    do { $answer = (Read-Host $prompt).Trim() } until ($answer -match '(?i)^(y|yes|n|no)$')
+    if ($answer -match '(?i)^(y|yes)$') { $installOptionalTracker = $true }
+    else { Write-Host 'Codex Usage Tracking: skipped' }
+}
+
+if ($installOptionalTracker) {
+    & $usageTrackerInstaller -Confirm:$false -WhatIf:$WhatIfPreference
+    if (-not $?) { throw 'Codex Usage Tracking installation failed.' }
+}
+
 if ($WhatIfPreference) {
     Write-Host 'WhatIf completed; no files or configuration were changed.'
     return
 }
-
 
 if (-not (Test-SkillManifest -SkillDirectory $efficientTarget)) { throw 'Installed Efficient Coding manifest failed validation.' }
 if (-not (Test-SkillManifest -SkillDirectory $odooTarget)) { throw 'Installed Odoo Engineering manifest failed validation.' }

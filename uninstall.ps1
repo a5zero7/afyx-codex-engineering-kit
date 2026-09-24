@@ -1,7 +1,8 @@
 [CmdletBinding(SupportsShouldProcess)]
 param(
     [string]$SkillsRoot = (Join-Path $env:USERPROFILE '.agents\skills'),
-    [switch]$RemovePromptMaster
+    [switch]$RemovePromptMaster,
+    [switch]$RemoveUsageTracker
 )
 
 Set-StrictMode -Version Latest
@@ -19,4 +20,10 @@ foreach ($target in $targets) {
     }
 }
 
-Write-Host 'Headroom and Codex configuration were not changed.'
+if ($RemoveUsageTracker) {
+    $trackerInstaller = Join-Path $PSScriptRoot 'scripts\install-codex-usage-tracker.ps1'
+    & $trackerInstaller -Uninstall -Confirm:$false -WhatIf:$WhatIfPreference
+    if (-not $?) { throw 'Codex Usage Tracking removal failed.' }
+}
+
+Write-Host 'Headroom and unrelated Codex configuration were not changed.'

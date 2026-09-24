@@ -13,6 +13,7 @@ Paket ini memasang `efficient-coding` dan `odoo-engineering`, serta mengambil `p
 | Prompt Master | [nidhinjs/prompt-master](https://github.com/nidhinjs/prompt-master) | Clone baru atau `git pull --ff-only` |
 | CodeGraph | Optional enhancement | Structural intelligence: references, callers/callees, inheritance, dependencies, dan hubungan lintas modul |
 | Headroom | [headroomlabs-ai/headroom](https://github.com/headroomlabs-ai/headroom) | Optional context/token optimization untuk output tool besar |
+| Codex Usage Tracking | Dibundel di `tools/codex-usage/` | Optional; ringkasan token/cost otomatis melalui global Stop hook |
 
 **Core:** Efficient Coding, Odoo Engineering, dan Prompt Master. **Optional:** CodeGraph dan Headroom. Core skill tetap berfungsi saat enhancement optional tidak tersedia.
 
@@ -69,8 +70,11 @@ Jika `efficient-coding` sudah ada, instalasi berhenti dengan pesan jelas. Jika `
 .\install.ps1 -WhatIf
 .\install.ps1 -SkillsRoot "$env:USERPROFILE\.agents\skills"
 .\install.ps1 -Force
+.\install.ps1 -InstallUsageTracker
+.\install.ps1 -SkipUsageTracker
 .\update.ps1
 .\uninstall.ps1
+.\uninstall.ps1 -RemoveUsageTracker
 .\uninstall.ps1 -RemovePromptMaster
 .\verify.ps1
 ```
@@ -90,6 +94,10 @@ Linux/macOS memakai opsi yang setara:
 Updater melakukan self-update kit dengan `git pull --ff-only` hanya pada checkout bersih. Jika worktree memiliki perubahan lokal, updater berhenti sebelum installer dijalankan; gunakan `git status` untuk menanganinya atau `-SkipSelfUpdate` (PowerShell) / `--skip-self-update` (Bash) sebagai opt-in untuk memasang current checkout. Git yang tidak tersedia adalah error terpisah; source non-Git dengan Git tersedia dilaporkan sebagai self-update unavailable dan dapat melanjutkan dengan source saat ini.
 
 Backup dibuat di folder `backups\` di clone lokal dan tidak diunggah ke Git.
+
+Pada instalasi PowerShell interaktif, Usage Tracking ditawarkan sebagai komponen opsional. Gunakan `-InstallUsageTracker` untuk opt-in tanpa prompt atau `-SkipUsageTracker` untuk melewatinya; instalasi non-interaktif tanpa opt-in akan melewatinya dengan aman. Menolak update tidak menghapus tracker yang sudah terpasang. Setelah instalasi, tinjau dan trust hook melalui `/hooks`.
+
+Mode utama menampilkan Usage Summary otomatis di UI Codex setelah turn selesai. VS Code User Task `Codex: Watch Token Usage` tetap tersedia sebagai fallback/debug dan tidak perlu dijalankan untuk penggunaan normal.
 
 ## Headroom
 
