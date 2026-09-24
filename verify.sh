@@ -45,6 +45,13 @@ mcp_configured() {
   [[ -f "$config" ]] && grep -Eq "^\\[mcp_servers\\.$1\\][[:space:]]*$" "$config"
 }
 
+component_label() {
+  case "$1" in
+    codegraph) printf '%s' 'CodeGraph' ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+
 printf 'Afyx Codex Engineering Kit — readiness verification (Linux/macOS Bash)\n'
 codex_detected=false
 if command -v codex >/dev/null 2>&1; then
@@ -68,7 +75,7 @@ for component in codegraph; do
   executable=false; configured=false
   command -v "$component" >/dev/null 2>&1 && executable=true
   mcp_configured "$component" && configured=true
-  label="${component^} enhancement"
+  label="$(component_label "$component") enhancement"
   if "$executable" && "$configured"; then result OK "$label" 'executable and MCP entry found'
   elif "$executable" || "$configured"; then result WARN "$label" 'partially available (optional)'
   else result WARN "$label" 'not installed or configured (optional)'
