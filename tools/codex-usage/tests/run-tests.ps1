@@ -247,7 +247,13 @@ try {
     [IO.Directory]::CreateDirectory($sessionDirectory) | Out-Null
     $transcriptA = Join-Path $sessionDirectory "rollout-test-$sessionIdA.jsonl"
     $transcriptB = Join-Path $sessionDirectory "rollout-test-$sessionIdB.jsonl"
-    Add-EventsToFile $transcriptA ($turn1 + $turn2)
+    # Real Codex ordering invokes Stop before task_complete is appended. Include a
+    # large unrelated prior line to ensure the hook reads the target turn tail only.
+    [IO.File]::WriteAllText($transcriptA, ('{"type":"response_item","ignored":"' + ('x' * 1MB) + '"}' + "`n"), [Text.UTF8Encoding]::new($false))
+    $turn2BeforeTaskComplete = @($turn2 | Where-Object {
+        -not ($_.type -eq 'event_msg' -and $_.payload.type -eq 'task_complete')
+    })
+    Add-EventsToFile $transcriptA ($turn1 + $turn2BeforeTaskComplete)
     Add-EventsToFile $transcriptB (New-TurnEvents 'session-b-turn' 'unpriced-model' $usage1 $usage1 $thread1)
 
     $eventA = [ordered]@{
@@ -259,8 +265,11 @@ try {
         stop_hook_active = $false
         last_assistant_message = 'SENSITIVE TEST CONTENT MUST NOT APPEAR'
     } | ConvertTo-Json -Compress
+    $hookTimer = [Diagnostics.Stopwatch]::StartNew()
     $hookA = Invoke-TestScript $stopHookPath @('-CodexHome', $codexHome, '-PricingPath', $pricingPath, '-RetryCount', '0') $eventA
+    $hookTimer.Stop()
     Assert-Equal $hookA.ExitCode 0 "Stop hook exit code; stderr: $($hookA.Error)"
+    if ($hookTimer.Elapsed.TotalSeconds -ge 3) { throw "Stop hook exceeded configured timeout: $($hookTimer.Elapsed)" }
     $hookAJson = $hookA.Output | ConvertFrom-Json -ErrorAction Stop
     Assert-Equal $hookAJson.continue $true 'Stop hook must preserve normal completion'
     if ($hookAJson.systemMessage -notmatch 'Codex Usage .* 90 tokens') { throw 'Stop hook did not correlate turn B to its exact usage.' }

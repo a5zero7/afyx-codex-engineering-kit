@@ -98,7 +98,7 @@ Codex Usage · 209,112 tokens · ~$0.095437
 Input 208,798 · Cached 207,232 · Output 314 · Reasoning 45
 ```
 
-The hook uses the event's `transcript_path`, verifies that it belongs to the event's `session_id`, then selects only an exact `turn_id` match. A short bounded retry covers telemetry-write timing. If correlation is not confident, it returns no usage message rather than selecting a different conversation. Its output uses `continue: true`; it never uses `decision: block`, `additionalContext`, or a continuation prompt.
+The hook uses the event's `transcript_path`, verifies that it belongs to the event's `session_id`, then reads the bounded transcript tail beginning at the exact `turn_id`'s `task_started`. Codex invokes `Stop` before appending `task_complete`, so the trusted `Stop` event supplies the local completion boundary while the existing parser consumes the latest exact `turn_token_usage`. A short bounded retry covers the final token record write. If correlation is not confident, it returns no usage message rather than selecting a different conversation. Its output uses `continue: true`; it never uses `decision: block`, `additionalContext`, or a continuation prompt.
 
 ## Fallback/debug watcher
 

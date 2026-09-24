@@ -390,7 +390,9 @@ function Get-CodexTurnCompletion {
     )
 
     if (-not (Test-Path -LiteralPath $TranscriptPath -PathType Leaf)) { return $null }
-    $state = New-CodexUsageParserState
+
+    # Stop runs before Codex writes task_complete. Read only the exact turn's tail,
+    # then use the existing parser with a local completion boundary supplied by Stop.
     $stream = [IO.File]::Open(
         $TranscriptPath,
         [IO.FileMode]::Open,
@@ -398,23 +400,61 @@ function Get-CodexTurnCompletion {
         [IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete
     )
     try {
-        $reader = [IO.StreamReader]::new($stream, [Text.Encoding]::UTF8, $true, 4096, $true)
-        try {
-            while (-not $reader.EndOfStream) {
-                $event = ConvertFrom-CodexTelemetryLine -Line $reader.ReadLine()
-                if ($null -eq $event) { continue }
-                $completion = Update-CodexUsageState -State $state -Event $event -Pricing $Pricing -SessionFile $TranscriptPath
-                if ($null -ne $completion -and [string]::Equals([string]$completion.TurnId, $TurnId, [StringComparison]::Ordinal)) {
-                    return $completion
+        [long]$length = $stream.Length
+        [long]$window = [Math]::Min([long](512KB), $length)
+        [long]$maximumWindow = [Math]::Min([long](64MB), $length)
+        $turnLines = $null
+        do {
+            [long]$offset = $length - $window
+            [void]$stream.Seek($offset, [IO.SeekOrigin]::Begin)
+            $bytes = [byte[]]::new([int]$window)
+            $read = 0
+            while ($read -lt $bytes.Length) {
+                $count = $stream.Read($bytes, $read, $bytes.Length - $read)
+                if ($count -eq 0) { break }
+                $read += $count
+            }
+            $text = [Text.Encoding]::UTF8.GetString($bytes, 0, $read)
+            $lines = @([regex]::Split($text, "`r?`n"))
+            if ($offset -gt 0 -and $lines.Count -gt 1) { $lines = @($lines[1..($lines.Count - 1)]) }
+
+            $turnPattern = '"turn_id"\s*:\s*"' + [regex]::Escape($TurnId) + '"'
+            for ($index = $lines.Count - 1; $index -ge 0; $index--) {
+                if ($lines[$index] -match '"type"\s*:\s*"task_started"' -and $lines[$index] -match $turnPattern) {
+                    $turnLines = @($lines[$index..($lines.Count - 1)])
+                    break
                 }
             }
-        } finally {
-            $reader.Dispose()
-        }
+            if ($null -ne $turnLines -or $offset -eq 0) { break }
+            if ($window -ge $maximumWindow) { break }
+            $window = [Math]::Min($maximumWindow, $window * 2)
+        } while ($true)
     } finally {
         $stream.Dispose()
     }
-    return $null
+
+    if ($null -eq $turnLines) { return $null }
+    $state = New-CodexUsageParserState
+    foreach ($line in $turnLines) {
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
+        $event = ConvertFrom-CodexTelemetryLine -Line $line
+        if ($null -eq $event) { continue }
+        $completion = Update-CodexUsageState -State $state -Event $event -Pricing $Pricing -SessionFile $TranscriptPath
+        if ($null -ne $completion -and [string]::Equals([string]$completion.TurnId, $TurnId, [StringComparison]::Ordinal)) {
+            return $completion
+        }
+    }
+
+    if (-not [string]::Equals([string]$state.CurrentTurnId, $TurnId, [StringComparison]::Ordinal) -or
+        $null -eq $state.LatestTurnUsage -or $null -eq $state.LatestCumulative) {
+        return $null
+    }
+    $boundary = [pscustomobject]@{
+        timestamp = [DateTime]::UtcNow.ToString('o')
+        type = 'event_msg'
+        payload = [pscustomobject]@{ type = 'task_complete'; turn_id = $TurnId }
+    }
+    return Update-CodexUsageState -State $state -Event $boundary -Pricing $Pricing -SessionFile $TranscriptPath
 }
 
 Export-ModuleMember -Function @(
