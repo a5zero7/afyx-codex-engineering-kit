@@ -1,9 +1,9 @@
 {
-  "name": "@colbymchenry/codegraph-ui",
+  "name": "@a5zero7/afyx-graph-ui",
   "private": true,
-  "version": "1.6.0",
+  "version": "1.0.0",
   "type": "module",
-  "description": "The CodeGraph reader as Svelte components: Symbol view, Flow strip and architecture Map behind one data adapter.",
+  "description": "The Afyx Graph reader as Svelte components: Symbol view, Flow strip and architecture Map behind one data adapter.",
   "keywords": [
     "codegraph",
     "svelte",
@@ -12,8 +12,8 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/colbymchenry/codegraph.git",
-    "directory": "ui"
+    "url": "git+https://github.com/a5zero7/afyx-codex-engineering-kit.git",
+    "directory": "afyx-codegraph/codegraph-main/ui"
   },
   "license": "MIT",
   "files": [

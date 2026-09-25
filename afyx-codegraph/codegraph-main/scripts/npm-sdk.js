@@ -1,6 +1,6 @@
 'use strict';
 //
-// Programmatic / embedded SDK entry for @colbymchenry/codegraph (issue #354).
+// Programmatic / embedded SDK entry for @a5zero7/afyx-graph.
 //
 // The CLI/MCP `bin` (npm-shim.js) execs the per-platform bundle's OWN Node 24 so
 // the tool never depends on the user's runtime. Embedded library consumers are
@@ -28,7 +28,7 @@ var os = require('os');
 var fs = require('fs');
 
 var target = process.platform + '-' + process.arch; // e.g. darwin-arm64, linux-x64
-var pkg = '@colbymchenry/codegraph-' + target;
+var pkg = '@a5zero7/afyx-graph-' + target;
 
 module.exports = require(resolveLibrary());
 
@@ -51,21 +51,20 @@ function resolveLibrary() {
   if (cached) return cached;
 
   throw new Error(
-    'codegraph: the programmatic API is unavailable because the platform bundle\n' +
+    'afyx-graph: the programmatic API is unavailable because the platform bundle\n' +
     '(' + pkg + ') is not installed.\n' +
     'The compiled library ships inside that per-platform optional dependency.\n' +
     'Fixes:\n' +
     '  - install from the official npm registry so the matching bundle is fetched:\n' +
-    '      npm i @colbymchenry/codegraph --registry=https://registry.npmjs.org\n' +
-    '  - or run the CLI once (e.g. `npx @colbymchenry/codegraph status`) to\n' +
-    '    self-heal the bundle into ~/.codegraph, then require() will find it.'
+    '      npm i @a5zero7/afyx-graph --registry=https://registry.npmjs.org\n' +
+    '  - or run the Afyx Graph CLI once to populate ~/.afyx/graph.'
   );
 }
 
 function cachedLibrary() {
   try {
     var version = require(path.join(__dirname, 'package.json')).version;
-    var base = process.env.CODEGRAPH_INSTALL_DIR || path.join(os.homedir(), '.codegraph');
+    var base = process.env.AFYX_GRAPH_INSTALL_DIR || process.env.CODEGRAPH_INSTALL_DIR || path.join(os.homedir(), '.afyx', 'graph');
     var lib = path.join(base, 'bundles', target + '-' + version, 'lib', 'dist', 'index.js');
     if (fs.existsSync(lib)) return lib;
   } catch (e) {

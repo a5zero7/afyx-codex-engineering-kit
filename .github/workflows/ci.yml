@@ -17,7 +17,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check Bash syntax
-        run: bash -n install.sh update.sh uninstall.sh verify.sh
+        run: bash -n install.sh update.sh uninstall.sh verify.sh scripts/install-afyx-graph.sh
+      - name: Validate Afyx Graph metadata
+        run: python scripts/validate-afyx-graph.py
       - name: Validate installer assets
         run: ./install.sh --validate-only
       - name: Verify repository remains clean
@@ -35,7 +37,7 @@ jobs:
         shell: pwsh
         run: |
           $failed = $false
-          foreach ($file in @('install.ps1', 'update.ps1', 'uninstall.ps1', 'verify.ps1')) {
+          foreach ($file in @('install.ps1', 'update.ps1', 'uninstall.ps1', 'verify.ps1', 'scripts/install-afyx-graph.ps1')) {
             $tokens = $null
             $errors = $null
             [System.Management.Automation.Language.Parser]::ParseFile(

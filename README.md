@@ -10,12 +10,12 @@ Paket ini memasang `efficient-coding` dan `odoo-engineering`, serta mengambil `p
 |---|---|---|
 | Efficient Coding | Salinan utuh dari `~/.agents/skills/efficient-coding`, termasuk `references/` | Dipasang ke skill root yang dipilih tanpa mengubah isinya |
 | Odoo Engineering | Dibundel di repositori ini | Stable Odoo 10–20 |
-| Prompt Master | [nidhinjs/prompt-master](https://github.com/nidhinjs/prompt-master) | Clone baru atau `git pull --ff-only` |
-| CodeGraph | Optional enhancement | Structural intelligence: references, callers/callees, inheritance, dependencies, dan hubungan lintas modul |
-| Headroom | [headroomlabs-ai/headroom](https://github.com/headroomlabs-ai/headroom) | Optional context/token optimization untuk output tool besar |
+| Prompt Master | [nidhinjs/prompt-master](https://github.com/nidhinjs/prompt-master) | Dipasang atau diganti melalui staging, validasi, backup, dan swap aman |
+| Afyx Graph | Distribusi resmi Afyx berbasis CodeGraph | Komponen opsional untuk structural intelligence lokal; runtime mandiri tanpa Node.js sistem |
+| Headroom | [headroomlabs-ai/headroom](https://github.com/headroomlabs-ai/headroom) | Enhancement eksternal opsional; hanya dideteksi |
 | Codex Usage Tracking | Dibundel di `tools/codex-usage/` | Optional; ringkasan token/cost otomatis melalui global Stop hook |
 
-**Core:** Efficient Coding, Odoo Engineering, dan Prompt Master. **Optional:** CodeGraph dan Headroom. Core skill tetap berfungsi saat enhancement optional tidak tersedia.
+**Core:** Efficient Coding, Odoo Engineering, dan Prompt Master. **Komponen opsional Afyx:** Afyx Graph dan Codex Usage Tracking. **Enhancement eksternal:** Headroom dan standalone upstream CodeGraph. Core skill tetap berfungsi tanpa komponen opsional atau eksternal.
 
 ## Pilih installer sesuai sistem operasi
 
@@ -59,9 +59,15 @@ Installer tidak pernah menulis atau mengganti:
 - `%USERPROFILE%\.codex\config.toml`
 - `%USERPROFILE%\.codex\auth.json`
 - provider model, Headroom proxy, server MCP, atau plugin Codex
-- skill yang sudah ada tanpa `-Force`
+- standalone upstream CodeGraph
 
-Jika `efficient-coding` sudah ada, instalasi berhenti dengan pesan jelas. Jika `prompt-master` sudah ada tetapi bukan checkout Git, instalasi juga berhenti. Gunakan `-Force` hanya jika Anda ingin membuat backup lalu menggantinya.
+Installer melakukan inventory sebelum mutasi. Pada sesi interaktif, komponen Afyx yang sudah ada menawarkan **Skip** (default) atau **Replace**; komponen opsional yang belum ada menawarkan **Install?** dengan default **No**. Mode non-interaktif selalu memilih Skip kecuali dedicated component installer dipanggil secara eksplisit. Replace menggunakan staging, validasi, backup, swap, dan rollback bila pemasangan gagal.
+
+### Afyx Graph
+
+Afyx Graph dipasang sebagai runtime opsional di `~/.afyx/graph/`; ia tidak ditempatkan di direktori skill. CLI kanonisnya `afyx-graph`, project state kanonisnya `.afyx-graph/`, environment prefix-nya `AFYX_GRAPH_*`, dan identitas MCP-nya `afyx_graph` dengan tool `afyx_graph_*`. Project yang hanya memiliki `.codegraph/` tetap dikenali di tempat tanpa migrasi otomatis. Alias legacy `codegraph`, `.codegraph/`, `CODEGRAPH_*`, dan `codegraph_*` dipertahankan sebagai lapisan kompatibilitas pada engine yang sama.
+
+Instalasi normal tidak mengubah konfigurasi MCP. Standalone upstream CodeGraph dideteksi sebagai komponen eksternal dan tidak pernah diganti atau dihapus oleh Afyx. Afyx Graph didasarkan pada CodeGraph 1.6.0; lisensi dan copyright upstream tersedia di `afyx-codegraph/THIRD_PARTY_NOTICES.md` dan `afyx-codegraph/LICENSES/CodeGraph-MIT.txt`.
 
 ## Perintah
 
@@ -107,7 +113,7 @@ Jika Headroom sudah ada, installer hanya menampilkan statusnya. Ini mencegah kon
 
 ## Verifikasi
 
-`verify.ps1` dan `verify.sh` membedakan `OK`, `WARN`, dan `FAIL`. Kegagalan core menghasilkan exit code non-zero; CodeGraph dan Headroom yang tidak tersedia atau belum dikonfigurasi hanya menghasilkan peringatan.
+`verify.ps1` dan `verify.sh` membedakan `OK`, `WARN`, dan `FAIL`. Kegagalan core menghasilkan exit code non-zero; Afyx Graph, standalone upstream CodeGraph, dan Headroom yang tidak tersedia atau belum dikonfigurasi tidak menggagalkan core readiness.
 
 Sebagai pemeriksaan manual opsional, jalankan `python scripts/check-reference-staleness.py` untuk menampilkan `WARN` bila header `Last verified` pada reference Odoo lebih lama dari enam bulan. Pemeriksaan ini selalu exit `0`, tidak dijalankan oleh installer, verifier, atau CI, dan bukan klaim bahwa isi reference valid atau tidak valid.
 
@@ -119,4 +125,4 @@ Tracker penggunaan token Codex dan integrasi VS Code dijelaskan di [docs/CODEX_U
 
 ## Lisensi dan atribusi
 
-Wrapper installer dan Efficient Coding dilisensikan MIT. Prompt Master tidak dibundel; paket ini mengambilnya dari upstream yang memiliki lisensi MIT sendiri.
+Wrapper installer dan Efficient Coding dilisensikan MIT. Prompt Master tidak dibundel; paket ini mengambilnya dari upstream yang memiliki lisensi MIT sendiri. Afyx Graph berbasis CodeGraph dan mempertahankan MIT License serta copyright asli Colby Mchenry.

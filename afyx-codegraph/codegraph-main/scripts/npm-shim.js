@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 'use strict';
 //
-// npm thin-installer launcher for CodeGraph.
+// npm thin-installer launcher for Afyx Graph (CodeGraph-compatible engine).
 //
 // The heavy artifact (a vendored Node runtime + the app) ships as a per-platform
-// optionalDependency: @colbymchenry/codegraph-<platform>-<arch>. npm installs
+// optionalDependency: @a5zero7/afyx-graph-<platform>-<arch>. npm installs
 // only the one matching the host, via each package's `os`/`cpu` fields (the
 // esbuild pattern). This shim — run by the user's OWN Node — locates that bundle
 // and execs its launcher, so the real work always runs on the bundled Node 24
@@ -32,12 +32,12 @@ var os = require('os');
 var path = require('path');
 
 var target = process.platform + '-' + process.arch; // e.g. darwin-arm64, linux-x64
-var pkg = '@colbymchenry/codegraph-' + target;
+var pkg = '@a5zero7/afyx-graph-' + target;
 var isWindows = process.platform === 'win32';
-var REPO = 'colbymchenry/codegraph';
+var REPO = 'a5zero7/afyx-codex-engineering-kit';
 
 main().catch(function (e) {
-  process.stderr.write('codegraph: ' + (e && e.message ? e.message : String(e)) + '\n');
+  process.stderr.write('afyx-graph: ' + (e && e.message ? e.message : String(e)) + '\n');
   process.exit(1);
 });
 
@@ -51,6 +51,7 @@ async function main() {
   // of startup used to leave the server orphaned forever (issue #1185). An
   // already-set value (an outer launcher) wins.
   var env = Object.assign({}, process.env);
+  env.AFYX_GRAPH_PRODUCT = '1';
   if (!env.CODEGRAPH_HOST_PPID) env.CODEGRAPH_HOST_PPID = String(process.ppid);
   var res = childProcess.spawnSync(resolved.command, resolved.args, { stdio: 'inherit', windowsHide: true, env: env });
   if (res.error) {
@@ -72,7 +73,7 @@ function resolveInstalledBundle() {
       var entry = require.resolve(pkg + '/lib/dist/bin/codegraph.js');
       return { command: nodeExe, args: liftoff(entry) };
     }
-    return { command: require.resolve(pkg + '/bin/codegraph'), args: process.argv.slice(2) };
+    return { command: require.resolve(pkg + '/bin/afyx-graph'), args: process.argv.slice(2) };
   } catch (e) {
     return null;
   }
@@ -89,7 +90,7 @@ function launcherIn(dir) {
       return { command: nodeExe, args: liftoff(entry) };
     }
   } else {
-    var launcher = path.join(dir, 'bin', 'codegraph');
+    var launcher = path.join(dir, 'bin', 'afyx-graph');
     if (fs.existsSync(launcher)) return { command: launcher, args: process.argv.slice(2) };
   }
   return null;
@@ -110,7 +111,7 @@ function liftoff(entry) {
 // {command, args}; exits the process with guidance if it can't.
 async function selfHealBundle() {
   var version = readVersion();
-  var bundlesDir = path.join(process.env.CODEGRAPH_INSTALL_DIR || path.join(os.homedir(), '.codegraph'), 'bundles');
+  var bundlesDir = path.join(process.env.AFYX_GRAPH_INSTALL_DIR || process.env.CODEGRAPH_INSTALL_DIR || path.join(os.homedir(), '.afyx', 'graph'), 'bundles');
   var dest = path.join(bundlesDir, target + '-' + version);
 
   // Already downloaded by a previous run? Use it even when downloads are
@@ -122,13 +123,13 @@ async function selfHealBundle() {
     fail('the network fallback is disabled (CODEGRAPH_NO_DOWNLOAD is set).');
   }
 
-  var asset = 'codegraph-' + target + (isWindows ? '.zip' : '.tar.gz');
-  var base = process.env.CODEGRAPH_DOWNLOAD_BASE || ('https://github.com/' + REPO + '/releases/download');
-  var url = base + '/v' + version + '/' + asset;
+  var asset = 'afyx-graph-' + target + (isWindows ? '.zip' : '.tar.gz');
+  var base = process.env.AFYX_GRAPH_DOWNLOAD_BASE || process.env.CODEGRAPH_DOWNLOAD_BASE || ('https://github.com/' + REPO + '/releases/download');
+  var url = base + '/afyx-graph-v' + version + '/' + asset;
 
   process.stderr.write(
-    'codegraph: platform bundle missing (registry did not provide ' + pkg + ').\n' +
-    'codegraph: downloading ' + asset + ' from GitHub Releases (' + version + ')...\n'
+    'afyx-graph: platform bundle missing (registry did not provide ' + pkg + ').\n' +
+    'afyx-graph: downloading ' + asset + ' from GitHub Releases (' + version + ')...\n'
   );
 
   // Stage inside bundlesDir so the final rename is on the same filesystem (atomic,
@@ -208,7 +209,7 @@ function download(url, dest, redirectsLeft) {
 async function verifyChecksum(archivePath, asset, base, version) {
   var sumsPath = archivePath + '.SHA256SUMS';
   try {
-    await download(base + '/v' + version + '/SHA256SUMS', sumsPath, 6);
+    await download(base + '/afyx-graph-v' + version + '/SHA256SUMS', sumsPath, 6);
   } catch (e) {
     return; // not published / unreachable → skip
   }
@@ -224,7 +225,7 @@ async function verifyChecksum(archivePath, asset, base, version) {
     throw new Error('checksum mismatch for ' + asset +
       ' (expected ' + expected.slice(0, 12) + '…, got ' + actual.slice(0, 12) + '…)');
   }
-  process.stderr.write('codegraph: checksum verified.\n');
+  process.stderr.write('afyx-graph: checksum verified.\n');
 }
 
 // Extract via the system tar — present on macOS, Linux, and Windows 10+
@@ -265,15 +266,15 @@ function pruneOldBundles(bundlesDir, keepDir) {
 
 function fail(reason) {
   process.stderr.write(
-    'codegraph: no prebuilt bundle for ' + target + '.\n' +
-    (reason ? 'codegraph: ' + reason + '\n' : '') +
+    'afyx-graph: no prebuilt bundle for ' + target + '.\n' +
+    (reason ? 'afyx-graph: ' + reason + '\n' : '') +
     'Expected the optional package ' + pkg + ' to be installed.\n' +
     'A registry mirror (e.g. npmmirror/cnpm) that did not mirror the per-platform\n' +
     'package is the usual cause. Fixes:\n' +
     '  - install from the official registry:\n' +
-    '      npm i -g @colbymchenry/codegraph --registry=https://registry.npmjs.org\n' +
+    '      npm i -g @a5zero7/afyx-graph --registry=https://registry.npmjs.org\n' +
     '  - or use the standalone installer (no Node required):\n' +
-    '      curl -fsSL https://raw.githubusercontent.com/' + REPO + '/main/install.sh | sh\n'
+    '      use scripts/install-afyx-graph.sh from Afyx Codex Engineering Kit\n'
   );
   process.exit(1);
 }

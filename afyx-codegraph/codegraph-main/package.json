@@ -1,14 +1,16 @@
 {
-  "name": "@colbymchenry/codegraph",
-  "version": "1.6.0",
-  "description": "Supercharge AI coding agents with semantic code intelligence — surgical context, fewer tool calls, faster answers. 100% local.",
+  "name": "@a5zero7/afyx-graph",
+  "version": "1.0.0",
+  "description": "Afyx Graph local structural code intelligence, based on CodeGraph.",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/colbymchenry/codegraph.git"
+    "url": "git+https://github.com/a5zero7/afyx-codex-engineering-kit.git",
+    "directory": "afyx-codegraph/codegraph-main"
   },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
+    "afyx-graph": "./dist/bin/codegraph.js",
     "codegraph": "./dist/bin/codegraph.js"
   },
   "files": [

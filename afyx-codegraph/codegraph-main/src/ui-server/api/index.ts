@@ -62,6 +62,7 @@ import { buildDeadCode } from './deadcode';
 import { buildFlow } from './flow';
 import { buildTrails, removeTrail, saveTrail, type TrailsOptions } from './trails';
 import { EventHub } from './events';
+import { CLI_NAME } from '../../product';
 
 export { GraphSession } from './session';
 export { ApiError } from './respond';
@@ -164,7 +165,7 @@ export interface GraphApiOptions {
 
 /** What `GET /api` answers: the endpoint list, for anyone poking at it by hand. */
 const API_INDEX = {
-  name: 'codegraph ui',
+  name: `${CLI_NAME} ui`,
   /**
    * Every endpoint but `/api/trails` is a pure read. Kept as a field rather
    * than dropped, because it was `true` and something may be reading it; it is

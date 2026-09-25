@@ -33,6 +33,7 @@ import {
 } from './security';
 import { sendFile, sendJson, sendText, shouldFallBackToIndex } from './static';
 import { DEFAULT_PORT_ATTEMPTS, DEFAULT_UI_PORT, LOOPBACK_ADDRESS } from './constants';
+import { CLI_NAME, PRODUCT_NAME } from '../product';
 
 export { ViewerMissingError } from './assets';
 export {
@@ -246,7 +247,7 @@ async function handleRequest(
 
   if (!ALLOWED_METHODS.includes(method)) {
     res.setHeader('Allow', ALLOWED_METHODS.join(', '));
-    sendText(res, 405, `codegraph ui does not answer ${method}.`, method);
+    sendText(res, 405, `${CLI_NAME} ui does not answer ${method}.`, method);
     return;
   }
 
@@ -257,7 +258,7 @@ async function handleRequest(
     sendText(
       res,
       403,
-      'Refused: codegraph ui only answers requests addressed to this machine ' +
+      `Refused: ${CLI_NAME} ui only answers requests addressed to this machine ` +
         `(localhost, 127.0.0.1 or [::1] on port ${port}).\n` +
         `This request said Host: ${forEcho(req.headers.host)}`,
       method
@@ -464,7 +465,7 @@ function describeBindFailure(
       ? new Error(
           `Ports ${opts.port}–${port} are all in use. Free one, or pick another with --port.`
         )
-      : new Error(`Port ${port} is already in use. Pick another with --port, or omit --port to let CodeGraph find a free one.`);
+      : new Error(`Port ${port} is already in use. Pick another with --port, or omit --port to let ${PRODUCT_NAME} find a free one.`);
   }
   if (code === 'EACCES') {
     return new Error(`Not allowed to listen on port ${port}. Ports below 1024 usually need elevated privileges — pick a higher one with --port.`);

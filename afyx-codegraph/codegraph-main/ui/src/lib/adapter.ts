@@ -318,8 +318,8 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): GraphAdapte
       throw new ApiFailure(
         0,
         'unreachable',
-        'The codegraph ui server is not answering.',
-        'It may have been stopped — restart it with `codegraph ui` and reload this page.'
+        'The afyx-graph ui server is not answering.',
+        'It may have been stopped — restart it with `afyx-graph ui` and reload this page.'
       );
     }
 

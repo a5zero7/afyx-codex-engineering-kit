@@ -15,6 +15,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { VIEWER_PATH_ENV } from './constants';
+import { PRODUCT_NAME } from '../product';
 
 export { VIEWER_PATH_ENV };
 
@@ -26,10 +27,10 @@ export { VIEWER_PATH_ENV };
 export class ViewerMissingError extends Error {
   constructor(searched: readonly string[]) {
     super(
-      'The CodeGraph viewer assets are missing from this installation.\n' +
+      `The ${PRODUCT_NAME} viewer assets are missing from this installation.\n` +
         'Looked in:\n' +
         searched.map((p) => `  ${p}`).join('\n') +
-        '\n\nIf you installed CodeGraph normally, reinstall it — the release bundle ' +
+        `\n\nIf you installed ${PRODUCT_NAME} normally, reinstall it — the release bundle ` +
         'ships the viewer.\nIf you are working from a source checkout, run: npm run build'
     );
     this.name = 'ViewerMissingError';

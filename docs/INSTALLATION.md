@@ -17,7 +17,7 @@ Headroom tidak diperlukan untuk memasang skill. Jika digunakan, pasang terlebih 
 3. Jalankan installer platform Anda untuk memasang jika target belum ada.
 4. Mulai sesi Codex baru.
 
-Default installer tidak menghapus, mengganti, atau memperbarui folder skill yang ada secara paksa.
+Installer melakukan inventory read-only lebih dahulu. Dalam sesi interaktif, komponen Afyx yang sudah ada menawarkan Skip (default) atau Replace; komponen opsional yang belum ada menawarkan Install dengan default No. Mode non-interaktif selalu Skip. Replace memakai staging, validasi, backup, swap, dan rollback bila pemasangan gagal.
 
 ## Verifikasi
 
@@ -33,13 +33,13 @@ Kedua skill memakai frontmatter Agent Skills dengan `name`, `description`, dan `
 
 | Kondisi | Perilaku default | Opsi aman |
 |---|---|---|
-| `efficient-coding` ada | Berhenti, tidak mengubah apa pun | Periksa folder, lalu gunakan `-Force` bila memang ingin menggantinya |
-| `prompt-master` checkout Git | Hanya fast-forward dari upstream | Pastikan perubahan lokal sudah di-commit atau disimpan |
-| `prompt-master` bukan checkout Git | Berhenti, tidak mengubah apa pun | Gunakan `-Force`; installer membuat backup lebih dulu |
+| Komponen Afyx sudah ada | Skip | Pilih Replace untuk staged replacement dengan backup |
+| Prompt Master memiliki perubahan lokal | Skip dan laporkan dirty state | Pilih Replace secara eksplisit; backup lokal dipertahankan |
+| Afyx Graph belum terpasang | Skip | Pilih Install; runtime dipasang ke `~/.afyx/graph/` |
 
 ## Konfigurasi Codex yang sengaja tidak diubah
 
-Installer tidak pernah memodifikasi `config.toml`, `auth.json`, konfigurasi MCP, Headroom, CodeGraph, plugin, sandbox, model, atau provider. CodeGraph dan Headroom adalah enhancement eksternal yang dikonfigurasi sendiri mengikuti dokumentasi upstream masing-masing.
+Installer tidak pernah memodifikasi `config.toml`, `auth.json`, konfigurasi MCP, Headroom, standalone upstream CodeGraph, plugin, sandbox, model, atau provider. Afyx Graph adalah komponen opsional resmi yang memasang runtime mandiri dan CLI `afyx-graph` di `~/.afyx/graph/`; Headroom dan standalone upstream CodeGraph tetap eksternal dan hanya dideteksi. Project state baru memakai `.afyx-graph/`, sedangkan `.codegraph/` lama tetap dikenali tanpa migrasi otomatis.
 
 ## Pembaruan
 
@@ -47,7 +47,7 @@ Installer tidak pernah memodifikasi `config.toml`, `auth.json`, konfigurasi MCP,
 
 ## Penghapusan
 
-`./uninstall.ps1` atau `./uninstall.sh` menghapus Efficient Coding dan Odoo Engineering. Prompt Master hanya dihapus saat opsi `-RemovePromptMaster` atau `--remove-prompt-master` disebut secara eksplisit. Headroom dan konfigurasi Codex tidak pernah dihapus.
+`./uninstall.ps1` atau `./uninstall.sh` menghapus Efficient Coding dan Odoo Engineering. Prompt Master hanya dihapus saat opsi `-RemovePromptMaster` atau `--remove-prompt-master` disebut secara eksplisit. Uninstaller dapat menghapus runtime Afyx Graph milik Afyx, tetapi tidak menghapus standalone upstream CodeGraph, konfigurasi Codex, `.afyx-graph/`, atau `.codegraph/` milik project.
 
 ## Pemulihan
 

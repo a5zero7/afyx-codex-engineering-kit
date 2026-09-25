@@ -22,6 +22,7 @@ import { resolveServerRoot } from '../directory';
 import { getTelemetry, ClientInfo } from '../telemetry';
 import { getUpdateNotice } from '../upgrade/update-check';
 import { ExploreSessionState } from './explore-session-state';
+import { MCP_SERVER_NAME, publicText } from '../product';
 
 /**
  * MCP Server Info — kept on the session because some clients log it. The
@@ -30,7 +31,7 @@ import { ExploreSessionState } from './explore-session-state';
 // Exported so the proxy can answer `initialize` locally with the IDENTICAL
 // payload the daemon would send — no drift between the two handshake paths.
 export const SERVER_INFO = {
-  name: 'codegraph',
+  name: MCP_SERVER_NAME,
   version: CodeGraphPackageVersion,
 };
 
@@ -48,6 +49,7 @@ export const SERVER_INFO = {
  * env or it will fail only in the weeks after a release ships.
  */
 export function initializeInstructions(base: string, notice: string | null = getUpdateNotice()): string {
+  base = publicText(base);
   if (!notice) return base;
   return (
     `${base}\n\n---\n${notice} This server keeps running the old version until ` +

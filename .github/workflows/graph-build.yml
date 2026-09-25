@@ -1,0 +1,57 @@
+name: Afyx Graph Build
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'afyx-codegraph/**'
+      - 'scripts/install-afyx-graph.*'
+      - 'scripts/validate-afyx-graph.py'
+      - '.github/workflows/graph-build.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: afyx-codegraph/codegraph-main/package-lock.json
+      - name: Validate metadata and attribution
+        run: python scripts/validate-afyx-graph.py
+      - name: Install locked dependencies
+        working-directory: afyx-codegraph/codegraph-main
+        run: npm ci
+      - name: Build and test engine
+        working-directory: afyx-codegraph/codegraph-main
+        run: |
+          npm run build
+          npm test
+          node scripts/test-afyx-equivalence.mjs
+      - name: Build six self-contained bundles
+        working-directory: afyx-codegraph/codegraph-main
+        run: |
+          for target in win32-x64 win32-arm64 linux-x64 linux-arm64 darwin-x64 darwin-arm64; do
+            bash scripts/build-bundle.sh "$target"
+          done
+          (cd release && sha256sum afyx-graph-* > SHA256SUMS)
+      - name: Smoke-test host bundle
+        working-directory: afyx-codegraph/codegraph-main
+        run: |
+          mkdir -p /tmp/afyx-graph-smoke
+          tar -xzf release/afyx-graph-linux-x64.tar.gz -C /tmp/afyx-graph-smoke
+          /tmp/afyx-graph-smoke/afyx-graph-linux-x64/bin/afyx-graph --version
+          /tmp/afyx-graph-smoke/afyx-graph-linux-x64/bin/afyx-graph help
+      - uses: actions/upload-artifact@v4
+        with:
+          name: afyx-graph-bundles
+          path: |
+            afyx-codegraph/codegraph-main/release/afyx-graph-*
+            afyx-codegraph/codegraph-main/release/SHA256SUMS
+          if-no-files-found: error

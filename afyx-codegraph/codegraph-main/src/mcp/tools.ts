@@ -7,6 +7,7 @@
 import type CodeGraph from '../index';
 import type { QueryPool } from './query-pool';
 import { findNearestCodeGraphRoot } from '../directory';
+import { AFYX_GRAPH_MODE, engineToolName, publicText, publicToolName, shortToolName } from '../product';
 // Lazy-load the heavy CodeGraph chain off the MCP startup path — see the same
 // helper in engine.ts. ToolHandler must load to answer tools/list (static
 // schemas), but it must NOT drag in sqlite/query layers before the daemon binds;
@@ -1398,6 +1399,15 @@ export const tools: ToolDefinition[] = [
   },
 ];
 
+function publicToolDefinitions(defs: ToolDefinition[]): ToolDefinition[] {
+  if (!AFYX_GRAPH_MODE) return defs;
+  return defs.map((tool) => ({
+    ...tool,
+    name: publicToolName(tool.name),
+    description: publicText(tool.description),
+  }));
+}
+
 /**
  * Return `defs` with `projectPath` marked `required` in each tool's inputSchema.
  *
@@ -1437,10 +1447,10 @@ function withRequiredProjectPath(defs: ToolDefinition[]): ToolDefinition[] {
 export function getStaticTools(): ToolDefinition[] {
   const raw = process.env.CODEGRAPH_MCP_TOOLS;
   if (!raw || !raw.trim()) {
-    return tools.filter(t => DEFAULT_MCP_TOOLS.has(t.name.replace(/^codegraph_/, '')));
+    return publicToolDefinitions(tools.filter(t => DEFAULT_MCP_TOOLS.has(shortToolName(t.name))));
   }
-  const allow = new Set(raw.split(',').map(s => s.trim().replace(/^codegraph_/, '')).filter(Boolean));
-  return allow.size ? tools.filter(t => allow.has(t.name.replace(/^codegraph_/, ''))) : tools;
+  const allow = new Set(raw.split(',').map(s => shortToolName(s.trim())).filter(Boolean));
+  return publicToolDefinitions(allow.size ? tools.filter(t => allow.has(shortToolName(t.name))) : tools);
 }
 
 /**
@@ -1611,7 +1621,7 @@ export class ToolHandler {
   private toolAllowlist(): Set<string> | null {
     const raw = process.env.CODEGRAPH_MCP_TOOLS;
     if (!raw || !raw.trim()) return null;
-    const short = (s: string) => s.trim().replace(/^codegraph_/, '');
+    const short = (s: string) => shortToolName(s.trim());
     const set = new Set(raw.split(',').map(short).filter(Boolean));
     return set.size ? set : null;
   }
@@ -1619,7 +1629,7 @@ export class ToolHandler {
   /** Whether a tool name passes the CODEGRAPH_MCP_TOOLS allowlist (if any). */
   private isToolAllowed(name: string): boolean {
     const allow = this.toolAllowlist();
-    return !allow || allow.has(name.replace(/^codegraph_/, ''));
+    return !allow || allow.has(shortToolName(name));
   }
 
   /**
@@ -1634,8 +1644,8 @@ export class ToolHandler {
     // DEFAULT_MCP_TOOLS for the evidence). An allowlist replaces the
     // default entirely, so any defined tool can be re-enabled.
     let visible = allow
-      ? tools.filter(t => allow.has(t.name.replace(/^codegraph_/, '')))
-      : tools.filter(t => DEFAULT_MCP_TOOLS.has(t.name.replace(/^codegraph_/, '')));
+      ? tools.filter(t => allow.has(shortToolName(t.name)))
+      : tools.filter(t => DEFAULT_MCP_TOOLS.has(shortToolName(t.name)));
     // No default project loaded → no-root-index case (#993): a gateway server
     // started outside any repo, or a monorepo root whose indexes live in
     // sub-projects. With nothing to fall back to, EVERY call needs an explicit
@@ -1646,7 +1656,7 @@ export class ToolHandler {
     // null here means "genuinely no default", not a startup race. When a default
     // IS open we leave projectPath optional (below): a bare call falls back to
     // it, exactly as in the common single-project launch.
-    if (!this.cg) return withRequiredProjectPath(visible);
+    if (!this.cg) return publicToolDefinitions(withRequiredProjectPath(visible));
 
     try {
       const stats = this.cg.getStats();
@@ -1685,7 +1695,7 @@ export class ToolHandler {
         visible = visible.filter(t => TINY_REPO_CORE_TOOLS.has(t.name));
       }
 
-      return visible.map(tool => {
+      return publicToolDefinitions(visible.map(tool => {
         if (tool.name === 'codegraph_explore') {
           return {
             ...tool,
@@ -1693,9 +1703,9 @@ export class ToolHandler {
           };
         }
         return tool;
-      });
+      }));
     } catch {
-      return visible;
+      return publicToolDefinitions(visible);
     }
   }
 
@@ -2105,6 +2115,7 @@ export class ToolHandler {
     args: Record<string, unknown>,
     sessionState?: ExploreSessionState,
   ): Promise<ToolResult> {
+    toolName = engineToolName(toolName);
     try {
       // Block the first tool call on the engine's post-open reconcile so we
       // never serve rows for files deleted/edited while no MCP server was

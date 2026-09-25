@@ -3,9 +3,9 @@
 # Assemble the npm thin-installer packages from built bundles (esbuild pattern).
 #
 # Produces, under release/npm/:
-#   codegraph-<target>/   one per built bundle — the vendored Node + app, tagged
+#   afyx-graph-<target>/  one per built bundle — the vendored Node + app, tagged
 #                         with os/cpu so npm installs only the matching one.
-#   main/                 the @colbymchenry/codegraph shim package: a tiny bin
+#   main/                 the @a5zero7/afyx-graph shim package: a tiny bin
 #                         that execs the matching platform bundle, with every
 #                         platform package in optionalDependencies.
 #
@@ -13,13 +13,17 @@
 # repo's package.json — the dev/from-source path keeps working; the *published*
 # main package's shape is generated here.
 #
-# Prereq: run build-bundle.sh for each target first (release/codegraph-*.tar.gz).
+# Prereq: run build-bundle.sh for each target first (release/afyx-graph-*.tar.gz).
 # Usage:  scripts/pack-npm.sh [version]    (default: version from package.json)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-VERSION="${1:-$(node -p "require('$ROOT/package.json').version")}"
-SCOPE="@colbymchenry"
+if [ "$#" -gt 0 ]; then
+  VERSION="$1"
+else
+  VERSION="$(cd "$ROOT" && node -p "require('./package.json').version")"
+fi
+SCOPE="@a5zero7"
 REL="$ROOT/release"
 NPM="$REL/npm"
 
@@ -27,7 +31,7 @@ rm -rf "$NPM"
 mkdir -p "$NPM/main"
 
 shopt -s nullglob
-archives=("$REL"/codegraph-*.tar.gz "$REL"/codegraph-*.zip)
+archives=("$REL"/afyx-graph-*.tar.gz "$REL"/afyx-graph-*.zip)
 [ ${#archives[@]} -gt 0 ] || { echo "[pack-npm] no bundles in $REL — run build-bundle.sh first" >&2; exit 1; }
 
 targets=()
@@ -37,7 +41,7 @@ for archive in "${archives[@]}"; do
     *.tar.gz) base="${fname%.tar.gz}" ;;   # codegraph-<target>
     *.zip)    base="${fname%.zip}" ;;
   esac
-  target="${base#codegraph-}"             # <target>, e.g. darwin-arm64 / win32-x64
+  target="${base#afyx-graph-}"            # <target>, e.g. darwin-arm64 / win32-x64
   os="${target%-*}"                       # darwin | linux | win32
   arch="${target##*-}"                    # arm64 | x64
   pkgdir="$NPM/$base"
@@ -46,7 +50,7 @@ for archive in "${archives[@]}"; do
     *.zip)
       tmpx="$(mktemp -d)"
       unzip -q "$archive" -d "$tmpx"
-      mv "$tmpx/codegraph-${target}"/* "$pkgdir"/
+      mv "$tmpx/afyx-graph-${target}"/* "$pkgdir"/
       rm -rf "$tmpx"
       nodefile="node.exe"
       ;;
@@ -63,19 +67,19 @@ for archive in "${archives[@]}"; do
     node -e '
       const fs=require("fs");
       fs.writeFileSync(process.argv[1], JSON.stringify({
-        name: `${process.env.SCOPE}/codegraph-${process.env.TARGET}`,
+        name: `${process.env.SCOPE}/afyx-graph-${process.env.TARGET}`,
         version: process.env.VERSION,
-        description: `CodeGraph self-contained bundle for ${process.env.TARGET}`,
+        description: `Afyx Graph self-contained bundle for ${process.env.TARGET}`,
         os: [process.env.OSV], cpu: [process.env.ARCHV],
         files: [process.env.NODEFILE, "lib", "bin"],
         license: "MIT",
         // npm --provenance refuses to publish unless this matches the repo
         // the release workflow runs in.
-        repository: { type: "git", url: "git+https://github.com/colbymchenry/codegraph.git" }
+        repository: { type: "git", url: "git+https://github.com/a5zero7/afyx-codex-engineering-kit.git" }
       }, null, 2) + "\n");
     ' "$pkgdir/package.json"
   targets+=("$target")
-  echo "[pack-npm] ${SCOPE}/codegraph-${target}@${VERSION}"
+  echo "[pack-npm] ${SCOPE}/afyx-graph-${target}@${VERSION}"
 done
 
 # Main shim package.
@@ -104,12 +108,12 @@ VERSION="$VERSION" SCOPE="$SCOPE" TARGETS="${targets[*]}" \
     const fs=require("fs");
     const opt={};
     for (const t of process.env.TARGETS.split(/\s+/).filter(Boolean))
-      opt[`${process.env.SCOPE}/codegraph-${t}`]=process.env.VERSION;
+      opt[`${process.env.SCOPE}/afyx-graph-${t}`]=process.env.VERSION;
     fs.writeFileSync(process.argv[1], JSON.stringify({
-      name: `${process.env.SCOPE}/codegraph`,
+      name: `${process.env.SCOPE}/afyx-graph`,
       version: process.env.VERSION,
       description: "Local-first code intelligence for AI agents (MCP). Self-contained — bundles its own runtime.",
-      bin: { codegraph: "npm-shim.js" },
+      bin: { "afyx-graph": "npm-shim.js", codegraph: "npm-shim.js" },
       main: "npm-sdk.js",
       types: "dist/index.d.ts",
       exports: {
@@ -119,11 +123,11 @@ VERSION="$VERSION" SCOPE="$SCOPE" TARGETS="${targets[*]}" \
       optionalDependencies: opt,
       files: ["npm-shim.js","npm-sdk.js","dist","README.md"],
       license: "MIT",
-      repository: { type: "git", url: "git+https://github.com/colbymchenry/codegraph.git" }
+      repository: { type: "git", url: "git+https://github.com/a5zero7/afyx-codex-engineering-kit.git" }
     }, null, 2) + "\n");
   ' "$NPM/main/package.json"
 
-echo "[pack-npm] ${SCOPE}/codegraph@${VERSION} (${#targets[@]} platform packages in optionalDependencies)"
+echo "[pack-npm] ${SCOPE}/afyx-graph@${VERSION} (${#targets[@]} platform packages in optionalDependencies)"
 echo "[pack-npm] output: $NPM"
 
 # ---------------------------------------------------------------------------

@@ -764,7 +764,7 @@ describe('@colbymchenry/codegraph-ui — the published shape', () => {
   });
 
   it('is named, scoped and not publishable by accident', () => {
-    expect(manifest.name).toBe('@colbymchenry/codegraph-ui');
+    expect(manifest.name).toBe('@a5zero7/afyx-graph-ui');
     // The package is PREPARED, not published (CG-61). `private` is the guard:
     // npm refuses to publish it until the maintainer deliberately removes this.
     expect(manifest.private).toBe(true);

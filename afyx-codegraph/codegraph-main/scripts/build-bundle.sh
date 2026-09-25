@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Build a self-contained CodeGraph bundle: an official Node runtime + the
-# compiled app + its production deps, so CodeGraph runs with NO system Node and
+# Build a self-contained Afyx Graph bundle: an official Node runtime + the
+# compiled app + its production deps, so Afyx Graph runs with NO system Node and
 # NO native build — node:sqlite is built into the bundled Node. One archive per
 # platform.
 #
@@ -16,8 +16,8 @@
 #     node-version:  e.g. v24.16.0 (default below; pin for reproducible builds)
 #
 # Output:
-#   unix:    release/codegraph-<target>.tar.gz   (launcher: bin/codegraph)
-#   windows: release/codegraph-<target>.zip      (launcher: bin/codegraph.cmd)
+#   unix:    release/afyx-graph-<target>.tar.gz   (launcher: bin/afyx-graph)
+#   windows: release/afyx-graph-<target>.zip      (launcher: bin/afyx-graph.cmd)
 set -euo pipefail
 
 TARGET="${1:?usage: build-bundle.sh <target> [node-version]}"
@@ -60,7 +60,7 @@ echo "[bundle] building app"
 ( cd "$ROOT" && npm run build >/dev/null )
 
 # 3. Stage: app + production-only deps (pure JS/wasm → portable across platforms).
-STAGE="$WORK/codegraph-${TARGET}"
+STAGE="$WORK/afyx-graph-${TARGET}"
 mkdir -p "$STAGE/lib" "$STAGE/bin"
 cp -R "$ROOT/dist" "$STAGE/lib/dist"
 # The browser viewer rides along inside dist/viewer (built by `npm run build`
@@ -76,6 +76,10 @@ echo "[bundle] installing production dependencies"
 # stub ui/package.json before this line rather than editing the lock.)
 ( cd "$STAGE/lib" && npm ci --omit=dev --ignore-scripts >/dev/null 2>&1 )
 rm -f "$STAGE/lib/package-lock.json"
+mkdir -p "$STAGE/licenses"
+cp "$ROOT/../afyx-graph.json" "$STAGE/metadata.json"
+cp "$ROOT/../THIRD_PARTY_NOTICES.md" "$STAGE/licenses/THIRD_PARTY_NOTICES.md"
+cp "$ROOT/../LICENSES/CodeGraph-MIT.txt" "$STAGE/licenses/CodeGraph-MIT.txt"
 
 # 3b. Native extraction kernel (optional). Included when a prebuilt .node for
 #     the target exists — release/kernel/<target>/codegraph-kernel.node (the
@@ -110,13 +114,15 @@ fi
 # runs are covered too; passing it here avoids that extra spawn.)
 if [ "$OSFAM" = "win32" ]; then
   cp "$NODE_BIN" "$STAGE/node.exe"
-  printf '@"%%~dp0..\\node.exe" --liftoff-only --disable-warning=ExperimentalWarning "%%~dp0..\\lib\\dist\\bin\\codegraph.js" %%*\r\n' \
-    > "$STAGE/bin/codegraph.cmd"
+  printf '@echo off\r\nset "AFYX_GRAPH_PRODUCT=1"\r\n@"%%~dp0..\\node.exe" --liftoff-only --disable-warning=ExperimentalWarning "%%~dp0..\\lib\\dist\\bin\\codegraph.js" %%*\r\n' \
+    > "$STAGE/bin/afyx-graph.cmd"
+  printf '@echo off\r\n@call "%%~dp0afyx-graph.cmd" %%*\r\n' > "$STAGE/bin/codegraph.cmd"
 else
   cp "$NODE_BIN" "$STAGE/node"
-  cat > "$STAGE/bin/codegraph" <<'LAUNCH'
+  chmod +x "$STAGE/node"
+  cat > "$STAGE/bin/afyx-graph" <<'LAUNCH'
 #!/bin/sh
-# Resolve symlinks (e.g. the ~/.local/bin/codegraph link install.sh creates) so
+# Resolve symlinks so
 # we find the real bundle dir, not the symlink's location.
 SELF="$0"
 while [ -L "$SELF" ]; do
@@ -127,6 +133,8 @@ while [ -L "$SELF" ]; do
   esac
 done
 DIR="$(cd "$(dirname "$SELF")/.." && pwd)"
+AFYX_GRAPH_PRODUCT=1
+export AFYX_GRAPH_PRODUCT
 # Thread the MCP host's pid to the server's orphan watchdog (issue #1185).
 # $PPID is our parent — the host itself when it launched this script directly;
 # an already-threaded value (the npm shim sets the true host pid) wins.
@@ -137,18 +145,36 @@ export CODEGRAPH_HOST_PPID
 # "experimental feature" warning that otherwise interleaves with the progress UI.
 exec "$DIR/node" --liftoff-only --disable-warning=ExperimentalWarning "$DIR/lib/dist/bin/codegraph.js" "$@"
 LAUNCH
+  chmod +x "$STAGE/bin/afyx-graph"
+  cat > "$STAGE/bin/codegraph" <<'LEGACY'
+#!/bin/sh
+exec "$(dirname "$0")/afyx-graph" "$@"
+LEGACY
   chmod +x "$STAGE/bin/codegraph"
 fi
 
 # 5. Archive (.zip for Windows, .tar.gz otherwise).
 mkdir -p "$OUT"
 if [ "$OSFAM" = "win32" ]; then
-  ARCHIVE="$OUT/codegraph-${TARGET}.zip"
+  ARCHIVE="$OUT/afyx-graph-${TARGET}.zip"
   rm -f "$ARCHIVE"
-  ( cd "$WORK" && zip -rqX "$ARCHIVE" "codegraph-${TARGET}" )
+  if command -v zip >/dev/null 2>&1; then
+    ( cd "$WORK" && zip -rqX "$ARCHIVE" "afyx-graph-${TARGET}" )
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 -c 'import pathlib,sys,zipfile; root=pathlib.Path(sys.argv[1]); source=root/sys.argv[2]; archive=zipfile.ZipFile(sys.argv[3], "w", zipfile.ZIP_DEFLATED); [archive.write(entry, entry.relative_to(root)) for entry in sorted(source.rglob("*"))]; archive.close()' "$WORK" "afyx-graph-${TARGET}" "$ARCHIVE"
+  else
+    echo "[bundle] error: zip or python3 is required to create Windows archives" >&2
+    exit 1
+  fi
 else
-  ARCHIVE="$OUT/codegraph-${TARGET}.tar.gz"
+  ARCHIVE="$OUT/afyx-graph-${TARGET}.tar.gz"
   # --no-xattrs: don't embed macOS xattrs that make GNU tar warn on Linux.
-  tar --no-xattrs -czf "$ARCHIVE" -C "$WORK" "codegraph-${TARGET}"
+  # Git Bash cannot persist POSIX executable bits on NTFS for an extensionless
+  # Node binary, so explicitly record executable archive modes when cross-
+  # packaging Unix targets on Windows.
+  case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*) tar --no-xattrs --mode=755 -czf "$ARCHIVE" -C "$WORK" "afyx-graph-${TARGET}" ;;
+    *) tar --no-xattrs -czf "$ARCHIVE" -C "$WORK" "afyx-graph-${TARGET}" ;;
+  esac
 fi
 echo "[bundle] wrote ${ARCHIVE} ($(du -h "$ARCHIVE" | cut -f1))"

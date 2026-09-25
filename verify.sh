@@ -3,6 +3,7 @@ set -euo pipefail
 
 skills_root="${CODEX_SKILLS_ROOT:-$HOME/.agents/skills}"
 config="$HOME/.codex/config.toml"
+graph_root="${AFYX_GRAPH_RUNTIME_ROOT:-$HOME/.afyx/graph}"
 core_failure=false
 
 usage() {
@@ -45,13 +46,6 @@ mcp_configured() {
   [[ -f "$config" ]] && grep -Eq "^\\[mcp_servers\\.$1\\][[:space:]]*$" "$config"
 }
 
-component_label() {
-  case "$1" in
-    codegraph) printf '%s' 'CodeGraph' ;;
-    *) printf '%s' "$1" ;;
-  esac
-}
-
 printf 'Afyx Codex Engineering Kit — readiness verification (Linux/macOS Bash)\n'
 codex_detected=false
 if command -v codex >/dev/null 2>&1; then
@@ -71,16 +65,20 @@ if skill_ok odoo-engineering true && refs_ok odoo-engineering "${odoo_refs[@]}" 
 
 if skill_ok prompt-master; then result OK 'Prompt Master' 'frontmatter valid'; else result FAIL 'Prompt Master' 'SKILL.md invalid or missing'; core_failure=true; fi
 
-for component in codegraph; do
-  executable=false; configured=false
-  command -v "$component" >/dev/null 2>&1 && executable=true
-  mcp_configured "$component" && configured=true
-  label="$(component_label "$component") enhancement"
-  if "$executable" && "$configured"; then result OK "$label" 'executable and MCP entry found'
-  elif "$executable" || "$configured"; then result WARN "$label" 'partially available (optional)'
-  else result WARN "$label" 'not installed or configured (optional)'
-  fi
-done
+if [[ ! -e "$graph_root" ]]; then result INFO 'Afyx Graph' 'not installed (optional)'
+elif [[ ! -s "$graph_root/metadata.json" || ! -x "$graph_root/current/bin/afyx-graph" ]]; then result WARN 'Afyx Graph' 'incomplete Afyx-owned runtime (optional)'
+elif grep -q '"product_name"[[:space:]]*:[[:space:]]*"Afyx Graph"' "$graph_root/metadata.json"; then
+  graph_version="$(sed -n 's/.*"afyx_graph_version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$graph_root/metadata.json")"
+  engine_version="$(sed -n 's/.*"codegraph_upstream_version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$graph_root/metadata.json")"
+  result OK 'Afyx Graph' "$graph_version (CodeGraph engine $engine_version)"
+else result WARN 'Afyx Graph' 'invalid metadata (optional)'; fi
+if mcp_configured afyx_graph; then result OK 'Afyx Graph MCP' 'configured explicitly'; else result INFO 'Afyx Graph MCP' 'not configured; installation does not mutate MCP config'; fi
+upstream_detected=false
+if command -v codegraph >/dev/null 2>&1; then
+  codegraph_path="$(command -v codegraph)"
+  case "$codegraph_path" in "$graph_root"/*) ;; *) upstream_detected=true ;; esac
+fi
+if "$upstream_detected" || mcp_configured codegraph; then result INFO 'Upstream CodeGraph' 'detected; externally managed and unchanged'; else result INFO 'Upstream CodeGraph' 'not detected'; fi
 headroom_cli=false; command -v headroom >/dev/null 2>&1 && headroom_cli=true
 headroom_provider=false; headroom_proxy=false
 if [[ -f "$config" ]] && grep -Eiq "^[[:space:]]*model_provider[[:space:]]*=[[:space:]]*['\"]headroom['\"][[:space:]]*$|^[[:space:]]*\[model_providers\.headroom\][[:space:]]*$" "$config"; then headroom_provider=true; fi

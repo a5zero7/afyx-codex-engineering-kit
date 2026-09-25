@@ -303,7 +303,7 @@
         <p>
           This view draws the routes a UI framework binds to components and the navigation calls
           that reach them. The index has {payload.screens.length === 0 ? 'no routes' : 'routes'} but no
-          navigation between them — it is not an app with screens, or its router is one CodeGraph
+          navigation between them — it is not an app with screens, or its router is one Afyx Graph
           does not read yet.
         </p>
       </div>

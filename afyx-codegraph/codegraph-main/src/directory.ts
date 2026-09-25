@@ -7,9 +7,11 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { AFYX_GRAPH_MODE } from './product';
 
 /** The default per-project data directory name. */
 const DEFAULT_CODEGRAPH_DIR = '.codegraph';
+const DEFAULT_AFYX_GRAPH_DIR = '.afyx-graph';
 
 let warnedBadDirName = false;
 
@@ -34,7 +36,7 @@ let warnedBadDirName = false;
  */
 export function codeGraphDirName(): string {
   const raw = process.env.CODEGRAPH_DIR?.trim();
-  if (!raw) return DEFAULT_CODEGRAPH_DIR;
+  if (!raw) return AFYX_GRAPH_MODE ? DEFAULT_AFYX_GRAPH_DIR : DEFAULT_CODEGRAPH_DIR;
   const invalid =
     raw === '.' ||
     raw.includes('..') ||
@@ -50,7 +52,7 @@ export function codeGraphDirName(): string {
           `directory name (no path separators, no "..", not absolute). Using "${DEFAULT_CODEGRAPH_DIR}".`
       );
     }
-    return DEFAULT_CODEGRAPH_DIR;
+    return AFYX_GRAPH_MODE ? DEFAULT_AFYX_GRAPH_DIR : DEFAULT_CODEGRAPH_DIR;
   }
   return raw;
 }
@@ -74,8 +76,10 @@ export const CODEGRAPH_DIR = codeGraphDirName();
 export function isCodeGraphDataDir(name: string): boolean {
   return (
     name === DEFAULT_CODEGRAPH_DIR ||
+    name === DEFAULT_AFYX_GRAPH_DIR ||
     name === codeGraphDirName() ||
-    name.startsWith(DEFAULT_CODEGRAPH_DIR + '-')
+    name.startsWith(DEFAULT_CODEGRAPH_DIR + '-') ||
+    name.startsWith(DEFAULT_AFYX_GRAPH_DIR + '-')
   );
 }
 
@@ -83,7 +87,14 @@ export function isCodeGraphDataDir(name: string): boolean {
  * Get the .codegraph directory path for a project
  */
 export function getCodeGraphDir(projectRoot: string): string {
-  return path.join(projectRoot, codeGraphDirName());
+  const configured = process.env.CODEGRAPH_DIR?.trim();
+  if (configured || !AFYX_GRAPH_MODE) return path.join(projectRoot, codeGraphDirName());
+  const canonical = path.join(projectRoot, DEFAULT_AFYX_GRAPH_DIR);
+  const legacy = path.join(projectRoot, DEFAULT_CODEGRAPH_DIR);
+  // Prefer Afyx-owned state. An existing legacy index is adopted in place and
+  // is never renamed or deleted implicitly.
+  if (fs.existsSync(canonical) || !fs.existsSync(legacy)) return canonical;
+  return legacy;
 }
 
 /**

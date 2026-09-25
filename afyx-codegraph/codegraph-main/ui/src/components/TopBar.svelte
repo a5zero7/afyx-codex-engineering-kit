@@ -55,7 +55,7 @@
       return {
         text: 'Not live',
         title:
-          'Lost the connection to codegraph ui and stopped retrying. Focus this tab to try again, or reload the page.',
+          'Lost the connection to afyx-graph ui and stopped retrying. Focus this tab to try again, or reload the page.',
       };
     }
     return null;
@@ -63,9 +63,9 @@
 </script>
 
 <header class="topbar">
-  <a class="brand" href="#/" aria-label="CodeGraph home">
+    <a class="brand" href="#/" aria-label="Afyx Graph home">
     <span class="brand-mark" aria-hidden="true"></span>
-    <span class="brand-name">CodeGraph</span>
+      <span class="brand-name">Afyx Graph</span>
     <span class="brand-sub">ui</span>
   </a>
 

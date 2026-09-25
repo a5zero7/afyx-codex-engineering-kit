@@ -28,6 +28,7 @@
 // launcher is (almost certainly) still alive. A launcher killed mid-startup
 // otherwise blinds the PPID watchdog forever (#1185) — see early-ppid.ts.
 import '../mcp/early-ppid';
+import { CLI_NAME, PRODUCT_NAME, publicText } from '../product';
 
 // Persist V8 compile artifacts across runs (Node ≥22.8). Every invocation —
 // and every worker thread, which re-requires the whole extraction module
@@ -74,7 +75,7 @@ async function loadCodeGraph(): Promise<typeof import('../index')> {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     const [red, reset] = COLORS_ENABLED ? ['\x1b[31m', '\x1b[0m'] : ['', ''];
-    console.error(`${red}${getGlyphs().err}${reset} Failed to load CodeGraph modules.`);
+    console.error(`${red}${getGlyphs().err}${reset} ${publicText('Failed to load CodeGraph modules.')}`);
     console.error(`\n  Node: ${process.version}  Platform: ${process.platform} ${process.arch}`);
     console.error(`\n  Error: ${msg}`);
     console.error('\n  Try reinstalling with: npm install -g @colbymchenry/codegraph\n');
@@ -211,8 +212,8 @@ const chalk = {
 };
 
 program
-  .name('codegraph')
-  .description('Code intelligence and knowledge graph for any codebase')
+  .name(CLI_NAME)
+  .description(`${PRODUCT_NAME} local structural code intelligence`)
   .version(packageJson.version)
   // Parsed manually before commander runs (any argv position works); declared
   // here so they show up in --help. NO_COLOR / FORCE_COLOR env vars are also
@@ -341,28 +342,28 @@ function createVerboseProgress(): (progress: { phase: string; current: number; t
  * Print success message
  */
 function success(message: string): void {
-  console.log(chalk.green(getGlyphs().ok) + ' ' + message);
+  console.log(chalk.green(getGlyphs().ok) + ' ' + publicText(message));
 }
 
 /**
  * Print error message
  */
 function error(message: string): void {
-  console.error(chalk.red(getGlyphs().err) + ' ' + message);
+  console.error(chalk.red(getGlyphs().err) + ' ' + publicText(message));
 }
 
 /**
  * Print info message
  */
 function info(message: string): void {
-  console.log(chalk.blue(getGlyphs().info) + ' ' + message);
+  console.log(chalk.blue(getGlyphs().info) + ' ' + publicText(message));
 }
 
 /**
  * Print warning message
  */
 function warn(message: string): void {
-  console.log(chalk.yellow(getGlyphs().warn) + ' ' + message);
+  console.log(chalk.yellow(getGlyphs().warn) + ' ' + publicText(message));
 }
 
 /** "not found" (+ optional did-you-mean) when no exact symbol matches. */
@@ -467,7 +468,7 @@ function printIndexResult(clack: typeof import('@clack/prompts'), result: IndexR
       `No supported source files found ${getGlyphs().dash} ${formatNumber(result.filesSkippedUnsupported)} file(s) present, none in a language CodeGraph indexes`
       + (top ? `: ${top}` : '')
     );
-    clack.log.info('CodeGraph is inactive for this workspace — searches will return nothing. Use your own file tools here.');
+    clack.log.info(`${PRODUCT_NAME} is inactive for this workspace — searches will return nothing. Use your own file tools here.`);
   } else {
     clack.log.warn('No files found to index');
   }
@@ -622,7 +623,7 @@ function writeErrorLog(projectPath: string, errors: Array<{ message: string; fil
   }
 
   const lines: string[] = [
-    `CodeGraph Error Log - ${new Date().toISOString()}`,
+    `${PRODUCT_NAME} Error Log - ${new Date().toISOString()}`,
     `${errorsByFile.size} files with errors`,
     '',
   ];
@@ -671,7 +672,7 @@ async function runInit(
 ): Promise<void> {
   const clack = await importESM('@clack/prompts');
 
-  clack.intro('Initializing CodeGraph');
+  clack.intro(`Initializing ${PRODUCT_NAME}`);
 
   try {
     // Refuse to index your home directory / a filesystem root — it pulls in
@@ -756,7 +757,7 @@ async function runInit(
  */
 program
   .command('init [path]')
-  .description('Initialize CodeGraph in a project directory and build the initial index')
+  .description(`Initialize ${PRODUCT_NAME} in a project directory and build the initial index`)
   .option('-i, --index', 'Deprecated: indexing now runs by default; flag accepted for backward compatibility')
   .option('-f, --force', 'Initialize even if the path looks like your home directory or a filesystem root')
   .option('-v, --verbose', 'Show detailed worker lifecycle and memory info')
@@ -770,7 +771,7 @@ program
  */
 program
   .command('uninit [path]')
-  .description('Remove CodeGraph from a project (deletes .codegraph/ directory)')
+  .description(publicText('Remove CodeGraph from a project (deletes .codegraph/ directory)'))
   .option('-f, --force', 'Skip confirmation prompt')
   .action(async (pathArg: string | undefined, options: { force?: boolean }) => {
     const projectPath = resolveProjectPath(pathArg);
@@ -787,7 +788,7 @@ program
         const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
         const answer = await new Promise<string>((resolve) => {
           rl.question(
-            chalk.yellow(`${getGlyphs().warn} This will permanently delete all CodeGraph data. Continue? (y/N) `),
+            chalk.yellow(`${getGlyphs().warn} This will permanently delete all ${PRODUCT_NAME} data. Continue? (y/N) `),
             resolve
           );
         });
@@ -962,7 +963,7 @@ program
       }
 
       const clack = await importESM('@clack/prompts');
-      clack.intro('Syncing CodeGraph');
+      clack.intro(`Syncing ${PRODUCT_NAME}`);
 
       process.stdout.write(`${colors.dim}${getGlyphs().rail}${colors.reset}\n`);
       const progress = createShimmerProgress();
@@ -1023,7 +1024,7 @@ program
           }));
           return;
         }
-        console.log(chalk.bold('\nCodeGraph Status\n'));
+        console.log(chalk.bold(`\n${PRODUCT_NAME} Status\n`));
         info(`Project: ${projectPath}`);
         warn('Not initialized');
         info('Run "codegraph init" to initialize');
@@ -1089,7 +1090,7 @@ program
         return;
       }
 
-      console.log(chalk.bold('\nCodeGraph Status\n'));
+      console.log(chalk.bold(`\n${PRODUCT_NAME} Status\n`));
 
       // Project info
       console.log(chalk.cyan('Project:'), projectPath);
@@ -1394,7 +1395,7 @@ program
  */
 program
   .command('prompt-hook', { hidden: true })
-  .description('Claude UserPromptSubmit hook: inject CodeGraph context for structural prompts (reads {prompt,cwd} JSON on stdin)')
+  .description(`Claude UserPromptSubmit hook: inject ${PRODUCT_NAME} context for structural prompts (reads {prompt,cwd} JSON on stdin)`)
   .action(async () => {
     try {
       // Kill-switch: lets a user disable the nudge without uninstalling /
@@ -1854,7 +1855,7 @@ function printFileTree(
 program
   .command('daemon')
   .aliases(['daemons'])
-  .description('Manage running CodeGraph background daemons — pick one and press enter to stop it')
+  .description(`Manage running ${PRODUCT_NAME} background daemons — pick one and press enter to stop it`)
   .action(async () => {
     const { listVerifiedDaemons, stopDaemonAt, stopAllDaemons } = await import('../mcp/daemon-registry');
     const { runDaemonPicker } = await import('../mcp/daemon-manager');
@@ -1880,7 +1881,7 @@ program
     if (found) { try { cwdRoot = fs.realpathSync(found); } catch { cwdRoot = found; } }
 
     const clack = await importESM('@clack/prompts');
-    clack.intro('CodeGraph daemons');
+    clack.intro(`${PRODUCT_NAME} daemons`);
     await runDaemonPicker({
       list: listVerifiedDaemons,
       stop: stopDaemonAt,
@@ -1910,11 +1911,11 @@ function printNoIndexGuidance(projectPath: string): void {
   console.error(`  The viewer reads an index that already exists ${getGlyphs().dash} it never creates one.`);
   console.error('  To index this project:');
   console.error('');
-  console.error(`    ${chalk.cyan('codegraph init')}`);
+  console.error(`    ${chalk.cyan(`${CLI_NAME} init`)}`);
   console.error('');
   console.error('  Already indexed somewhere else? Point the viewer at it:');
   console.error('');
-  console.error(`    ${chalk.cyan('codegraph ui /path/to/indexed/project')}`);
+  console.error(`    ${chalk.cyan(`${CLI_NAME} ui /path/to/indexed/project`)}`);
   console.error('');
 }
 
@@ -1935,7 +1936,7 @@ function printNoIndexGuidance(projectPath: string): void {
 program
   .command('ui [path]')
   .alias('web')
-  .description('Open the CodeGraph viewer in your browser — read your indexed project as a graph')
+  .description(`Open the ${PRODUCT_NAME} viewer in your browser — read your indexed project as a graph`)
   .option('--port <number>', `Port to listen on (default: ${DEFAULT_UI_PORT}, or the next free one)`)
   .option('--no-open', 'Print the URL instead of opening a browser')
   .option('--read-only', 'Refuse every write — saved trails can be opened but not saved or deleted')
@@ -1943,11 +1944,11 @@ program
     'after',
     `
 Examples:
-  $ codegraph ui                    Read the project you're standing in
-  $ codegraph ui ~/code/my-app      Read a specific indexed project
-  $ codegraph ui --port 8080        Use one specific port (fails if it's taken)
-  $ codegraph ui --no-open          Just print the URL (headless boxes, SSH)
-  $ codegraph web                   Same command under its alias
+  $ ${CLI_NAME} ui                    Read the project you're standing in
+  $ ${CLI_NAME} ui ~/code/my-app      Read a specific indexed project
+  $ ${CLI_NAME} ui --port 8080        Use one specific port (fails if it's taken)
+  $ ${CLI_NAME} ui --no-open          Just print the URL (headless boxes, SSH)
+  $ ${CLI_NAME} web                   Same command under its alias
 
 Pick a symbol and you see who calls it on the left, its source in the middle,
 and what it calls on the right at the height of the line that calls it. Search
@@ -2047,7 +2048,7 @@ ${BROWSER_ENV}=none to never open one.
     }
 
     console.log('');
-    console.log(chalk.bold('CodeGraph viewer'));
+    console.log(chalk.bold(`${PRODUCT_NAME} viewer`));
     console.log('');
     console.log(`  ${chalk.dim('Reading')}  ${projectPath}`);
     console.log(`  ${chalk.dim('URL')}      ${chalk.cyan(handle.url)}`);
@@ -2089,7 +2090,7 @@ program
   // invoked — hiding only removes it from the listing. See the interactive-TTY
   // guard below, which explains this to anyone who runs it by hand.
   .command('serve', { hidden: true })
-  .description('Start CodeGraph as an MCP server for AI assistants')
+  .description(`Start ${PRODUCT_NAME} as an MCP server for AI assistants`)
   .option('-p, --path <path>', 'Project path (optional for MCP mode, uses rootUri from client)')
   .option('--mcp', 'Run as MCP server (stdio transport)')
   .option('--no-watch', 'Disable the file watcher (no auto-sync; useful on slow filesystems like WSL2 /mnt drives)')
@@ -2111,11 +2112,11 @@ program
         // pipe and the detached daemon both have a non-TTY stdin, so this only
         // ever fires for a person who typed it.
         if (process.stdin.isTTY && !process.env.CODEGRAPH_DAEMON_INTERNAL) {
-          console.error(chalk.bold('\nCodeGraph MCP server\n'));
+          console.error(chalk.bold(`\n${PRODUCT_NAME} MCP server\n`));
           console.error("This is the MCP server your AI agent (Claude Code, Cursor, Codex, opencode, …)");
           console.error("starts automatically — you don't run it yourself.");
           console.error(`\nIt's already wired up by ${chalk.cyan('codegraph install')}. To check on things:`);
-          console.error(`  ${chalk.cyan('codegraph status')}   ${chalk.dim('— is this project indexed and healthy?')}`);
+          console.error(`  ${chalk.cyan(`${CLI_NAME} status`)}   ${chalk.dim('— is this project indexed and healthy?')}`);
           console.error(`  ${chalk.cyan('codegraph daemon')}   ${chalk.dim('— list or stop background MCP servers')}`);
           console.error(chalk.dim('\n(Running it directly only does something when an MCP client drives it over stdin.)'));
           return;
@@ -2128,7 +2129,7 @@ program
       } else {
         // Default: show info about MCP mode.
         // Use stderr so stdout stays clean for any piped/stdio usage.
-        console.error(chalk.bold('\nCodeGraph MCP Server\n'));
+        console.error(chalk.bold(`\n${PRODUCT_NAME} MCP Server\n`));
         console.error(chalk.blue(getGlyphs().info) + ' Use --mcp flag to start the MCP server');
         console.error('\nTo use with Claude Code, add to your MCP configuration:');
         console.error(chalk.dim(`
@@ -2572,7 +2573,7 @@ program
   .option('-t, --target <ids>', 'Target agent(s): comma-separated ids, or "auto"|"all"|"none". Default: prompt')
   .option('-l, --location <where>', 'Install location: "global" or "local". Default: prompt')
   .option('-y, --yes', 'Non-interactive: defaults to --location=global --target=auto, auto-allow on')
-  .option('-i, --init', 'After wiring agents, also run `codegraph init` in the current directory — builds this project’s index, so install + index is one command (combine with --yes for an unattended bootstrap)')
+  .option('-i, --init', `After wiring agents, also run \`${CLI_NAME} init\` in the current directory — builds this project’s index, so install + index is one command (combine with --yes for an unattended bootstrap)`)
   .option('--no-permissions', 'Skip writing the auto-allow permissions list (Claude Code only)')
   .option('--print-config <id>', 'Print MCP config snippet for the named agent and exit (no file writes)')
   .option('--refresh', 'Rewrite what previous installs configured, for already-configured agents only (never adds new ones). Run automatically by `codegraph upgrade`')
@@ -2765,7 +2766,7 @@ program
  */
 program
   .command('upgrade [version]')
-  .description('Update CodeGraph to the latest release (or a specific version)')
+  .description(`Update ${PRODUCT_NAME} to the latest release (or a specific version)`)
   .option('--check', 'Check whether an update is available without installing')
   .option('-f, --force', 'Reinstall even if already on the target version')
   .action(async (versionArg: string | undefined, options: { check?: boolean; force?: boolean }) => {
@@ -2808,7 +2809,7 @@ program
  */
 program
   .command('version')
-  .description('Print the installed CodeGraph version (also: -v, --version)')
+  .description(`Print the installed ${PRODUCT_NAME} version (also: -v, --version)`)
   .action(() => {
     console.log(packageJson.version);
   });

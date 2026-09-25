@@ -8,6 +8,7 @@ $ErrorActionPreference = 'Stop'
 $coreFailure = $false
 $configPath = Join-Path $env:USERPROFILE '.codex\config.toml'
 $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' }
+$graphRoot = Join-Path $env:USERPROFILE '.afyx\graph'
 
 function Write-Result([string]$State, [string]$Name, [string]$Detail = '') {
     $suffix = if ($Detail) { " — $Detail" } else { '' }
@@ -63,13 +64,26 @@ foreach ($check in $checks) {
     else { Write-Result 'FAIL' $check.Label $result.Detail; $coreFailure = $true }
 }
 
-foreach ($component in @(@{ Label = 'CodeGraph'; Command = 'codegraph' })) {
-    $executable = [bool](Get-Command $component.Command -ErrorAction SilentlyContinue)
-    $configured = Test-McpEntry $component.Command
-    if ($executable -and $configured) { Write-Result 'OK' "$($component.Label) enhancement" 'executable and MCP entry found' }
-    elseif ($executable -or $configured) { Write-Result 'WARN' "$($component.Label) enhancement" 'partially available (optional)' }
-    else { Write-Result 'WARN' "$($component.Label) enhancement" 'not installed or configured (optional)' }
+$graphMetadataPath = Join-Path $graphRoot 'metadata.json'
+$graphLauncher = Join-Path $graphRoot 'current\bin\afyx-graph.cmd'
+if (-not (Test-Path -LiteralPath $graphRoot)) { Write-Result 'INFO' 'Afyx Graph' 'not installed (optional)' }
+elseif (-not (Test-Path -LiteralPath $graphMetadataPath -PathType Leaf) -or -not (Test-Path -LiteralPath $graphLauncher -PathType Leaf)) { Write-Result 'WARN' 'Afyx Graph' 'incomplete Afyx-owned runtime (optional)' }
+else {
+    try {
+        $graphMetadata = Get-Content -Raw -LiteralPath $graphMetadataPath | ConvertFrom-Json -ErrorAction Stop
+        if ($graphMetadata.product_name -ne 'Afyx Graph') { throw 'ownership marker mismatch' }
+        Write-Result 'OK' 'Afyx Graph' "$($graphMetadata.afyx_graph_version) (CodeGraph engine $($graphMetadata.codegraph_upstream_version))"
+    } catch { Write-Result 'WARN' 'Afyx Graph' 'invalid metadata (optional)' }
 }
+if (Test-McpEntry 'afyx_graph') { Write-Result 'OK' 'Afyx Graph MCP' 'configured explicitly' } else { Write-Result 'INFO' 'Afyx Graph MCP' 'not configured; installation does not mutate MCP config' }
+$codegraphCommand = Get-Command codegraph -ErrorAction SilentlyContinue
+$upstreamDetected = $false
+if ($codegraphCommand) {
+    $source = [string]$codegraphCommand.Source
+    $upstreamDetected = -not $source.StartsWith($graphRoot, [System.StringComparison]::OrdinalIgnoreCase)
+}
+if ($upstreamDetected -or (Test-McpEntry 'codegraph')) { Write-Result 'INFO' 'Upstream CodeGraph' 'detected; externally managed and unchanged' }
+else { Write-Result 'INFO' 'Upstream CodeGraph' 'not detected' }
 $headroom = [bool](Get-Command headroom -ErrorAction SilentlyContinue)
 $configText = if (Test-Path -LiteralPath $configPath -PathType Leaf) { Get-Content -Raw -LiteralPath $configPath -Encoding utf8 } else { '' }
 $headroomProvider = $configText -match '(?im)^\s*model_provider\s*=\s*["'']headroom["'']\s*$' -or
