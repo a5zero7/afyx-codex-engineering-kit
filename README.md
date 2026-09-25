@@ -67,7 +67,7 @@ Installer melakukan inventory sebelum mutasi. Pada sesi interaktif, komponen Afy
 
 Afyx Graph dipasang sebagai runtime opsional di `~/.afyx/graph/`; ia tidak ditempatkan di direktori skill. CLI kanonisnya `afyx-graph`, project state kanonisnya `.afyx-graph/`, environment prefix-nya `AFYX_GRAPH_*`, dan identitas MCP-nya `afyx_graph` dengan tool `afyx_graph_*`. Project yang hanya memiliki `.codegraph/` tetap dikenali di tempat tanpa migrasi otomatis. Alias legacy `codegraph`, `.codegraph/`, `CODEGRAPH_*`, dan `codegraph_*` dipertahankan sebagai lapisan kompatibilitas pada engine yang sama.
 
-Instalasi normal tidak mengubah konfigurasi MCP. Standalone upstream CodeGraph dideteksi sebagai komponen eksternal dan tidak pernah diganti atau dihapus oleh Afyx. Afyx Graph didasarkan pada CodeGraph 1.6.0; lisensi dan copyright upstream tersedia di `afyx-codegraph/THIRD_PARTY_NOTICES.md` dan `afyx-codegraph/LICENSES/CodeGraph-MIT.txt`.
+Instalasi normal tidak mengubah konfigurasi MCP. Standalone upstream CodeGraph dideteksi sebagai komponen eksternal dan tidak pernah diganti atau dihapus oleh Afyx. Afyx Graph didasarkan pada CodeGraph 1.6.0; lisensi dan copyright upstream tersedia di `afyx-graph/THIRD_PARTY_NOTICES.md` dan `afyx-graph/LICENSES/CodeGraph-MIT.txt`.
 
 ## Perintah
 

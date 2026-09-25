@@ -2,7 +2,7 @@
 set -euo pipefail
 
 PACKAGE_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-METADATA="$PACKAGE_ROOT/afyx-codegraph/afyx-graph.json"
+METADATA="$PACKAGE_ROOT/afyx-graph/afyx-graph.json"
 RUNTIME_ROOT="${AFYX_GRAPH_RUNTIME_ROOT:-$HOME/.afyx/graph}"
 BIN_DIR="${AFYX_GRAPH_BIN_DIR:-$HOME/.local/bin}"
 mode=install
@@ -96,7 +96,7 @@ cleanup() { rm -rf -- "$transaction"; }
 trap cleanup EXIT
 
 if [[ -z "$archive_path" ]]; then
-  local_archive="$PACKAGE_ROOT/afyx-codegraph/codegraph-main/release/$asset"
+  local_archive="$PACKAGE_ROOT/afyx-graph/engine/release/$asset"
   if [[ -f "$local_archive" ]]; then
     archive_path="$local_archive"
   else

@@ -13,7 +13,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $kitRoot = Split-Path -Parent $PSScriptRoot
-$metadataPath = Join-Path $kitRoot 'afyx-codegraph\afyx-graph.json'
+$metadataPath = Join-Path $kitRoot 'afyx-graph\afyx-graph.json'
 $metadata = Get-Content -Raw -LiteralPath $metadataPath -Encoding utf8 | ConvertFrom-Json
 $architecture = switch ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()) {
     'Arm64' { 'arm64' }
@@ -69,7 +69,7 @@ function Resolve-Archive {
         $resolved = Resolve-Path -LiteralPath $ArchivePath -ErrorAction Stop
         return $resolved.Path
     }
-    $local = Join-Path $kitRoot "afyx-codegraph\codegraph-main\release\$assetName"
+    $local = Join-Path $kitRoot "afyx-graph\engine\release\$assetName"
     if (Test-Path -LiteralPath $local -PathType Leaf) { return $local }
     $downloadRoot = Join-Path ([System.IO.Path]::GetTempPath()) "afyx-graph-$([guid]::NewGuid().ToString('N'))"
     New-Item -ItemType Directory -Path $downloadRoot | Out-Null

@@ -7,11 +7,11 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-metadata_path = ROOT / "afyx-codegraph" / "afyx-graph.json"
-package_path = ROOT / "afyx-codegraph" / "codegraph-main" / "package.json"
-ui_package_path = ROOT / "afyx-codegraph" / "codegraph-main" / "ui" / "package.json"
-license_path = ROOT / "afyx-codegraph" / "LICENSES" / "CodeGraph-MIT.txt"
-notices_path = ROOT / "afyx-codegraph" / "THIRD_PARTY_NOTICES.md"
+metadata_path = ROOT / "afyx-graph" / "afyx-graph.json"
+package_path = ROOT / "afyx-graph" / "engine" / "package.json"
+ui_package_path = ROOT / "afyx-graph" / "engine" / "ui" / "package.json"
+license_path = ROOT / "afyx-graph" / "LICENSES" / "CodeGraph-MIT.txt"
+notices_path = ROOT / "afyx-graph" / "THIRD_PARTY_NOTICES.md"
 
 metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
 package = json.loads(package_path.read_text(encoding="utf-8"))
