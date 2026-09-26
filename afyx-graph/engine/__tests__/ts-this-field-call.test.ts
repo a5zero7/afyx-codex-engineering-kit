@@ -13,11 +13,11 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { CodeGraph } from '../src';
+import { AfyxGraph } from '../src';
 import { initGrammars, loadAllGrammars } from '../src/extraction/grammars';
 
 let dir: string;
-let cg: CodeGraph;
+let cg: AfyxGraph;
 
 beforeAll(async () => {
   await initGrammars();
@@ -65,7 +65,7 @@ beforeAll(async () => {
       '  async settings(): Promise<object> { return this.storage.getSettings(); }\n' +
       '}\n'
   );
-  cg = CodeGraph.initSync(dir);
+  cg = AfyxGraph.initSync(dir);
   await cg.indexAll();
 });
 

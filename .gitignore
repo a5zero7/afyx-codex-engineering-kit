@@ -2,4 +2,5 @@ backups/
 *.tmp
 *.bak
 .vs/
-.codegraph
+.afyx-graph/
+__pycache__/

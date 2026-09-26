@@ -5,8 +5,8 @@
  * in-process engine that owns the FileWatcher) may serve a given project.
  * The shared daemon already multiplexes N stdio proxies onto one writer; this
  * lock closes the same-OS gap where two direct-mode `serve --mcp` processes
- * (via `CODEGRAPH_NO_DAEMON=1` or proxy→in-process fallback) each start a
- * watcher, contend on `codegraph.lock`, and degrade auto-sync.
+ * (via `AFYX_GRAPH_NO_DAEMON=1` or proxy→in-process fallback) each start a
+ * watcher, contend on `afyx-graph.lock`, and degrade auto-sync.
  *
  * Deliberately separate from `daemon.pid`: proxies probe the daemon socket
  * and may clear a live pid that has no socket. A direct-mode holder must not
@@ -15,7 +15,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { getCodeGraphDir } from '../directory';
+import { getAfyxGraphDir } from '../directory';
 /** Signal-0 liveness (EPERM ⇒ alive). Local copy to avoid a daemon↔writer cycle. */
 function isProcessAlive(pid: number): boolean {
   try {
@@ -33,7 +33,7 @@ function isProcessAlive(pid: number): boolean {
 export function getWriterPidPath(projectRoot: string): string {
   let root = projectRoot;
   try { root = fs.realpathSync(projectRoot); } catch { /* keep lexical */ }
-  return path.join(getCodeGraphDir(root), 'writer.pid');
+  return path.join(getAfyxGraphDir(root), 'writer.pid');
 }
 
 /** Structured contents of the writer pidfile. */
@@ -179,10 +179,10 @@ export function writerLockHeldMessage(
     ? `PID ${existing.pid} (${existing.mode || 'unknown'} mode)`
     : 'another process';
   return (
-    'CodeGraph writer lock held by ' + who + '. ' +
+    'Afyx Graph writer lock held by ' + who + '. ' +
     'Only one live MCP writer may serve a project (auto-sync / index). ' +
-    'Stop the other server (codegraph daemon stop if a shared daemon, or end the other MCP session), ' +
-    'or unset CODEGRAPH_NO_DAEMON so additional clients proxy to the shared daemon. ' +
+    'Stop the other server (afyx-graph daemon stop if a shared daemon, or end the other MCP session), ' +
+    'or unset AFYX_GRAPH_NO_DAEMON so additional clients proxy to the shared daemon. ' +
     'If this is stale, delete ' + pidPath
   );
 }

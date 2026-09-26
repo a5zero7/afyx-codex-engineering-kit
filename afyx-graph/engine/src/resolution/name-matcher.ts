@@ -26,11 +26,11 @@ import { JS_BUILT_INS, TS_PRIMITIVE_TYPES } from './js-builtins';
  * resolution all still run and resolve a ubiquitous name when the context names
  * its exact target. Real repos top out near ~40 same-named methods, so a normal
  * codebase never reaches this; only bulk-vendored code does. Tune via
- * `CODEGRAPH_AMBIGUOUS_NAME_CEILING`.
+ * `AFYX_GRAPH_AMBIGUOUS_NAME_CEILING`.
  */
 const DEFAULT_AMBIGUOUS_NAME_CEILING = 500;
 function resolveAmbiguousNameCeiling(): number {
-  const raw = process.env.CODEGRAPH_AMBIGUOUS_NAME_CEILING;
+  const raw = process.env.AFYX_GRAPH_AMBIGUOUS_NAME_CEILING;
   if (!raw) return DEFAULT_AMBIGUOUS_NAME_CEILING;
   const parsed = Number.parseInt(raw, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_AMBIGUOUS_NAME_CEILING;
@@ -3447,14 +3447,14 @@ export function matchFuzzy(
 const ARKUI_ATTRIBUTE_DECORATORS = new Set(['Extend', 'Styles', 'AnimatableExtend', 'Builder']);
 
 /**
- * CODEGRAPH_RESOLVE_PROFILE=2 sub-stage attribution for matchReference's
+ * AFYX_GRAPH_RESOLVE_PROFILE=2 sub-stage attribution for matchReference's
  * strategy pipeline (`nm:<stage>|<refKind>|hit/miss`). Module-global because
  * the matcher is a free function; each thread (main + every pool worker) has
  * its own module instance, and dumpNameMatcherProfile is invoked from
  * ReferenceResolver.dumpResolveProfile so worker tables surface too.
  */
 const NM_PROFILE: Map<string, { n: number; ns: bigint }> | null =
-  process.env.CODEGRAPH_RESOLVE_PROFILE === '2' ? new Map() : null;
+  process.env.AFYX_GRAPH_RESOLVE_PROFILE === '2' ? new Map() : null;
 
 function nmTimedT<T>(stage: string, ref: UnresolvedRef, fn: () => T): T {
   if (!NM_PROFILE) return fn();

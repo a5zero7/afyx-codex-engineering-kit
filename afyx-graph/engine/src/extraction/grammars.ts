@@ -173,12 +173,12 @@ export const EXTENSION_MAP: Record<string, Language> = {
 };
 
 /**
- * Whether a file is one CodeGraph can parse, based purely on its extension.
+ * Whether a file is one Afyx Graph can parse, based purely on its extension.
  * This is the single source of truth for "should we index this file" — derived
  * from EXTENSION_MAP so parser support and indexing selection never drift.
  *
  * `overrides` is the project's validated custom extension → language map (from
- * `codegraph.json`); when present its extensions count as indexable in addition
+ * `afyx-graph.json`); when present its extensions count as indexable in addition
  * to the built-ins. Omitting it is byte-identical to the zero-config behavior.
  */
 export function isSourceFile(filePath: string, overrides?: Record<string, Language>): boolean {
@@ -275,7 +275,7 @@ export async function initGrammars(): Promise<void> {
  * TypeScript/TSX/JavaScript (+jsx, which shares the javascript grammar): the
  * tree-sitter-wasms builds are 2023-era (^0.20.x); we vendor wasm built from
  * the SAME grammar revisions the native extraction kernel compiles
- * (codegraph-kernel/Cargo.toml), so the kernel path and the wasm fallback
+ * (afyx-graph-kernel/Cargo.toml), so the kernel path and the wasm fallback
  * parse identically and per-language routing stays graph-neutral:
  *   - tree-sitter/tree-sitter-typescript v0.23.2 (f975a62) → typescript + tsx
  *   - tree-sitter/tree-sitter-javascript v0.25.0 (44c892e) → javascript + jsx
@@ -328,14 +328,14 @@ const VENDORED_WASM_LANGS: ReadonlySet<GrammarLanguage> = new Set([
   // gate repos) — a reproducibility re-vendor, ABI stays 14. The crates.io
   // crate is UNUSABLE by the kernel (pins tree-sitter <0.23) and
   // tree-sitter-kotlin-ng is a different grammar — the kernel compiles the
-  // same vendored C sources instead (codegraph-kernel/grammars/kotlin).
+  // same vendored C sources instead (afyx-graph-kernel/grammars/kotlin).
   'kotlin',
   // R7b batch 4 (Dart kernel port prep): the byte-copied tree-sitter-wasms
   // 0.1.13 artifact (sha256 7f5364e4…, built from UserNobody14/
   // tree-sitter-dart master@d4d8f3e337d8). tree-sitter-wasms' dart dep is an
   // UNPINNED github ref, so a routine tree-sitter-wasms update would have
   // silently changed dart's grammar — vendoring kills that hazard. The
-  // kernel compiles the same-commit vendored C (codegraph-kernel/grammars/
+  // kernel compiles the same-commit vendored C (afyx-graph-kernel/grammars/
   // dart); crates.io tree-sitter-dart is a different-lineage fork (rejected).
   'dart',
 ]);
@@ -425,7 +425,7 @@ export async function loadGrammarsForLanguages(languages: Language[], wasmBytes?
       languageCache.set(lang, language);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.warn(`[CodeGraph] Failed to load ${lang} grammar — parsing will be unavailable: ${message}`);
+      console.warn(`[Afyx Graph] Failed to load ${lang} grammar — parsing will be unavailable: ${message}`);
       unavailableGrammarErrors.set(lang, message);
     }
   }
@@ -471,7 +471,7 @@ export function getParser(language: Language): Parser | null {
  * Detect language from file extension.
  *
  * `overrides` is the project's validated custom extension → language map (from
- * `codegraph.json`); when present its mappings take precedence over the built-in
+ * `afyx-graph.json`); when present its mappings take precedence over the built-in
  * `EXTENSION_MAP`. Omitting it is byte-identical to the zero-config behavior.
  */
 export function detectLanguage(filePath: string, source?: string, overrides?: Record<string, Language>): Language {

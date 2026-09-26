@@ -7,49 +7,64 @@ const originalEnv = { ...process.env };
 
 beforeEach(() => {
   vi.resetModules();
-  process.env.AFYX_GRAPH_PRODUCT = '1';
   delete process.env.AFYX_GRAPH_DIR;
-  delete process.env.CODEGRAPH_DIR;
-  delete process.env.CODEGRAPH_MCP_TOOLS;
+  delete process.env.AFYX_GRAPH_MCP_TOOLS;
 });
 
 afterEach(() => {
   process.env = { ...originalEnv };
 });
 
-describe('Afyx Graph compatibility surface', () => {
+describe('Afyx Graph native identity', () => {
   it('publishes the canonical MCP identity and tool prefix', async () => {
-    const [{ SERVER_INFO }, { getStaticTools }, { engineToolName, publicToolName }] = await Promise.all([
+    const [{ SERVER_INFO }, { getStaticTools }] = await Promise.all([
       import('../src/mcp/session'),
       import('../src/mcp/tools'),
-      import('../src/product'),
     ]);
     expect(SERVER_INFO.name).toBe('afyx_graph');
     expect(getStaticTools().length).toBeGreaterThan(0);
     expect(getStaticTools().every((tool) => tool.name.startsWith('afyx_graph_'))).toBe(true);
-    expect(engineToolName('afyx_graph_explore')).toBe('codegraph_explore');
-    expect(engineToolName('codegraph_explore')).toBe('codegraph_explore');
-    expect(publicToolName('codegraph_explore')).toBe('afyx_graph_explore');
   });
 
-  it('maps canonical environment settings without overriding legacy settings', async () => {
+  it('reads the state directory from AFYX_GRAPH_DIR', async () => {
     process.env.AFYX_GRAPH_DIR = '.canonical-state';
-    process.env.CODEGRAPH_DIR = '.legacy-explicit';
-    const { codeGraphDirName } = await import('../src/directory');
-    expect(codeGraphDirName()).toBe('.legacy-explicit');
+    const { afyxGraphDirName } = await import('../src/directory');
+    expect(afyxGraphDirName()).toBe('.canonical-state');
   });
 
-  it('prefers .afyx-graph but adopts an existing .codegraph in place', async () => {
+  it('recognises only its own state directory', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-graph-state-'));
     try {
-      const { getCodeGraphDir } = await import('../src/directory');
-      expect(getCodeGraphDir(root)).toBe(path.join(root, '.afyx-graph'));
-      fs.mkdirSync(path.join(root, '.codegraph'));
-      expect(getCodeGraphDir(root)).toBe(path.join(root, '.codegraph'));
-      fs.mkdirSync(path.join(root, '.afyx-graph'));
-      expect(getCodeGraphDir(root)).toBe(path.join(root, '.afyx-graph'));
+      const { getAfyxGraphDir, getDatabasePath, isInitialized } = await import('../src/directory');
+      expect(getAfyxGraphDir(root)).toBe(path.join(root, '.afyx-graph'));
+
+      const foreign = path.join(root, '.foreign-state');
+      fs.mkdirSync(foreign);
+      fs.writeFileSync(path.join(foreign, 'index.db'), 'foreign-bytes');
+      expect(getAfyxGraphDir(root)).toBe(path.join(root, '.afyx-graph'));
+      expect(isInitialized(root)).toBe(false);
+
+      fs.mkdirSync(getAfyxGraphDir(root));
+      fs.writeFileSync(getDatabasePath(root), '');
+      expect(isInitialized(root)).toBe(true);
+      expect(fs.readFileSync(path.join(foreign, 'index.db'), 'utf8')).toBe('foreign-bytes');
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  it('classifies only .afyx-graph and its siblings as data directories', async () => {
+    const { isAfyxGraphDataDir } = await import('../src/directory');
+    expect(isAfyxGraphDataDir('.afyx-graph')).toBe(true);
+    expect(isAfyxGraphDataDir('.afyx-graph-win')).toBe(true);
+    for (const other of ['.git', '.foreign-state', '.afyx', 'afyx-graph', 'node_modules']) {
+      expect(isAfyxGraphDataDir(other)).toBe(false);
+    }
+  });
+
+  it('ships exactly one CLI binary, afyx-graph', () => {
+    const manifest = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../package.json'), 'utf8'));
+    expect(manifest.name).toBe('@a5zero7/afyx-graph');
+    expect(manifest.bin).toEqual({ 'afyx-graph': './dist/bin/afyx-graph.js' });
   });
 });

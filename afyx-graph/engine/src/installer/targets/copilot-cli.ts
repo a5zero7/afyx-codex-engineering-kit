@@ -44,6 +44,7 @@ import {
   readJsonFile,
   writeJsonFile,
 } from './shared';
+import { MCP_SERVER_NAME } from '../../product';
 
 function configDir(): string {
   const override = process.env.COPILOT_HOME;
@@ -98,7 +99,7 @@ function copilotOnPath(): boolean {
 /**
  * The shared stdio entry, every tool allowed, and `deferTools: 'never'`: Copilot CLI's tool
  * search (on by default from ~30 connected tools on Claude and GPT-5.4+ models) otherwise holds
- * MCP tools back until the model searches for them, so `codegraph_explore` would be a name the
+ * MCP tools back until the model searches for them, so `afyx_graph_explore` would be a name the
  * model has to go looking for before it can follow the "call it instead of Read" instruction.
  */
 function buildCopilotMcpConfig(): { type: string; command: string; args: string[]; tools: string[]; deferTools: 'never' } {
@@ -121,7 +122,7 @@ class CopilotCliTarget implements AgentTarget {
     }
     const file = mcpConfigPath();
     const config = readJsonFile(file);
-    const alreadyConfigured = !!config.mcpServers?.codegraph;
+    const alreadyConfigured = !!config.mcpServers?.[MCP_SERVER_NAME];
     const installed = cliConfigDirPresent() || copilotOnPath();
     return { installed, alreadyConfigured, configPath: file };
   }
@@ -147,10 +148,10 @@ class CopilotCliTarget implements AgentTarget {
       return { files: [{ path: file, action: 'not-found' }] };
     }
     const config = readJsonFile(file);
-    if (!config.mcpServers?.codegraph) {
+    if (!config.mcpServers?.[MCP_SERVER_NAME]) {
       return { files: [{ path: file, action: 'not-found' }] };
     }
-    delete config.mcpServers.codegraph;
+    delete config.mcpServers[MCP_SERVER_NAME];
     if (Object.keys(config.mcpServers).length === 0) {
       delete config.mcpServers;
     }
@@ -169,7 +170,7 @@ class CopilotCliTarget implements AgentTarget {
     if (loc !== 'global') {
       return '# Copilot CLI has no project-local config — use --location=global.\n';
     }
-    const snippet = JSON.stringify({ mcpServers: { codegraph: buildCopilotMcpConfig() } }, null, 2);
+    const snippet = JSON.stringify({ mcpServers: { [MCP_SERVER_NAME]: buildCopilotMcpConfig() } }, null, 2);
     return `# Add to ${mcpConfigPath()}\n\n${snippet}\n`;
   }
 
@@ -182,7 +183,7 @@ class CopilotCliTarget implements AgentTarget {
 function writeMcpEntry(): WriteResult['files'][number] {
   const file = mcpConfigPath();
   const existing = readJsonFile(file);
-  const before = existing.mcpServers?.codegraph;
+  const before = existing.mcpServers?.[MCP_SERVER_NAME];
   const after = buildCopilotMcpConfig();
 
   if (jsonDeepEqual(before, after)) {
@@ -190,7 +191,7 @@ function writeMcpEntry(): WriteResult['files'][number] {
   }
   const existed = fs.existsSync(file);
   if (!existing.mcpServers) existing.mcpServers = {};
-  existing.mcpServers.codegraph = after;
+  existing.mcpServers[MCP_SERVER_NAME] = after;
   writeJsonFile(file, existing);
   return { path: file, action: existed ? 'updated' : 'created' };
 }

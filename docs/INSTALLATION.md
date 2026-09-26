@@ -39,7 +39,7 @@ Kedua skill memakai frontmatter Agent Skills dengan `name`, `description`, dan `
 
 ## Konfigurasi Codex yang sengaja tidak diubah
 
-Installer tidak pernah memodifikasi `config.toml`, `auth.json`, konfigurasi MCP, Headroom, standalone upstream CodeGraph, plugin, sandbox, model, atau provider. Afyx Graph adalah komponen opsional resmi yang memasang runtime mandiri dan CLI `afyx-graph` di `~/.afyx/graph/`; Headroom dan standalone upstream CodeGraph tetap eksternal dan hanya dideteksi. Project state baru memakai `.afyx-graph/`, sedangkan `.codegraph/` lama tetap dikenali tanpa migrasi otomatis.
+Installer tidak pernah memodifikasi `config.toml`, `auth.json`, konfigurasi MCP, Headroom, plugin, sandbox, model, atau provider. Afyx Graph adalah komponen opsional Afyx yang memasang runtime mandiri dan CLI `afyx-graph` di `~/.afyx/graph/`; Headroom tetap eksternal dan hanya dideteksi. Project state memakai `.afyx-graph/` (database `afyx-graph.db`); direktori state lain tidak dibaca atau diubah.
 
 ## Pembaruan
 
@@ -47,7 +47,7 @@ Installer tidak pernah memodifikasi `config.toml`, `auth.json`, konfigurasi MCP,
 
 ## Penghapusan
 
-`./uninstall.ps1` atau `./uninstall.sh` menghapus Efficient Coding dan Odoo Engineering. Prompt Master hanya dihapus saat opsi `-RemovePromptMaster` atau `--remove-prompt-master` disebut secara eksplisit. Uninstaller dapat menghapus runtime Afyx Graph milik Afyx, tetapi tidak menghapus standalone upstream CodeGraph, konfigurasi Codex, `.afyx-graph/`, atau `.codegraph/` milik project.
+`./uninstall.ps1` atau `./uninstall.sh` menghapus Efficient Coding dan Odoo Engineering. Prompt Master hanya dihapus saat opsi `-RemovePromptMaster` atau `--remove-prompt-master` disebut secara eksplisit. Uninstaller dapat menghapus runtime Afyx Graph milik Afyx, tetapi tidak menghapus konfigurasi Codex atau state `.afyx-graph/` milik project.
 
 ## Pemulihan
 

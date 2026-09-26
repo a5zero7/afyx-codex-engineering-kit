@@ -11,8 +11,17 @@ $ErrorActionPreference = 'Stop'
 
 Write-Host 'Afyx Codex Engineering Kit — Windows uninstaller (PowerShell)'
 
-$targets = @(Join-Path $SkillsRoot 'efficient-coding'), (Join-Path $SkillsRoot 'odoo-engineering')
-if ($RemovePromptMaster) { $targets += Join-Path $SkillsRoot 'prompt-master' }
+# One component truth: scripts/components.json. Afyx-owned skills are always removed;
+# the upstream-owned skill (Prompt Master) only on explicit request.
+Import-Module (Join-Path $PSScriptRoot 'scripts\lib\AfyxComponents.psm1') -Force
+$componentContext = New-AfyxComponentContext -SkillsRoot $SkillsRoot
+$targets = @()
+foreach ($component in (Get-AfyxComponentContract)) {
+    if ($component.type -ne 'skill') { continue }
+    if ($component.ownership -eq 'afyx' -or ($component.ownership -eq 'upstream' -and $RemovePromptMaster)) {
+        $targets += Get-AfyxComponentRoot -Component $component -Context $componentContext
+    }
+}
 
 foreach ($target in $targets) {
     if ((Test-Path -LiteralPath $target) -and $PSCmdlet.ShouldProcess($target, 'Delete installed skill')) {
@@ -27,7 +36,7 @@ if ($RemoveUsageTracker) {
     if (-not $?) { throw 'Codex Usage Tracking removal failed.' }
 }
 
-$graphRoot = Join-Path $env:USERPROFILE '.afyx\graph'
+$graphRoot = $componentContext.GraphRoot
 if (Test-Path -LiteralPath $graphRoot) {
     $removeGraph = $RemoveAfyxGraph
     if (-not $removeGraph -and -not $WhatIfPreference -and -not $env:CI -and -not [Console]::IsInputRedirected) {
@@ -40,4 +49,4 @@ if (Test-Path -LiteralPath $graphRoot) {
     } else { Write-Host 'Afyx Graph: kept' }
 }
 
-Write-Host 'Standalone CodeGraph, project indexes, Headroom, and unrelated Codex configuration were not changed.'
+Write-Host 'Project indexes, Headroom, and unrelated Codex configuration were not changed.'

@@ -28,7 +28,7 @@ async function deadPid(): Promise<number> {
 }
 
 function rec(root: string, pid: number, startedAt = Date.now()): DaemonRecord {
-  return { root, pid, version: '1.0.0', socketPath: `${root}/.codegraph/daemon.sock`, startedAt };
+  return { root, pid, version: '1.0.0', socketPath: `${root}/.afyx-graph/daemon.sock`, startedAt };
 }
 
 describe('daemon-registry', () => {
@@ -43,7 +43,7 @@ describe('daemon-registry', () => {
     process.env.HOME = tmpHome; // os.homedir() honors HOME (POSIX) ...
     process.env.USERPROFILE = tmpHome; // ... and USERPROFILE (Windows)
     // Sanity: the registry must resolve under our temp home, or the test would
-    // pollute the real ~/.codegraph.
+    // pollute the real ~/.afyx-graph.
     expect(getRegistryDir().startsWith(tmpHome)).toBe(true);
   });
 
@@ -116,7 +116,7 @@ describe('daemon-registry', () => {
       socket.end(JSON.stringify({
         protocol: 1,
         pid: process.pid,
-        codegraph: '1.5.0',
+        afyxGraph: '1.5.0',
         socketPath,
       }) + '\n');
     });
@@ -139,7 +139,7 @@ describe('daemon-registry', () => {
     fs.writeFileSync(pidPath, encodeLockInfo({
       pid: process.pid,
       version: '1.5.0',
-      socketPath: path.join(root, '.codegraph', 'missing.sock'),
+      socketPath: path.join(root, '.afyx-graph', 'missing.sock'),
       startedAt: Date.now() - 60_000,
     }));
 
@@ -147,7 +147,7 @@ describe('daemon-registry', () => {
       root,
       pid: process.pid,
       version: '1.5.0',
-      socketPath: path.join(root, '.codegraph', 'missing.sock'),
+      socketPath: path.join(root, '.afyx-graph', 'missing.sock'),
       startedAt: Date.now() - 60_000,
     });
 
@@ -226,7 +226,7 @@ describe('daemon-registry', () => {
     const lock = encodeLockInfo({
       pid: process.pid,
       version: '1.5.0',
-      socketPath: path.join(root, '.codegraph', 'not-listening.sock'),
+      socketPath: path.join(root, '.afyx-graph', 'not-listening.sock'),
       startedAt: 1,
     });
     fs.mkdirSync(path.dirname(pidPath), { recursive: true });

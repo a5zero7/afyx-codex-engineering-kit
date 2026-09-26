@@ -10,7 +10,7 @@ Do not repeat an unchanged search, reread unchanged material, or request a full 
 
 ## Tool boundaries
 
-Use CodeGraph when resolving relationships is the efficient way to answer a structural question. Prefer direct search or focused reads for known locations and simple textual facts.
+Use Afyx Graph when resolving relationships is the efficient way to answer a structural question. Prefer direct search or focused reads for known locations and simple textual facts.
 
 Use Headroom for genuinely large logs, test output, search results, JSON, API responses, database output, or generated tool output when compression preserves the needed meaning. Do not compress small results by default. Retrieve the original output before relying on an exact line, value, order, or detail that compression could omit.
 

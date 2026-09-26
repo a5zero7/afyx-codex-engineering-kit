@@ -5,7 +5,7 @@
   "type": "module",
   "description": "The Afyx Graph reader as Svelte components: Symbol view, Flow strip and architecture Map behind one data adapter.",
   "keywords": [
-    "codegraph",
+    "afyx-graph",
     "svelte",
     "code-intelligence",
     "knowledge-graph"

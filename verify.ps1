@@ -15,23 +15,11 @@ function Write-Result([string]$State, [string]$Name, [string]$Detail = '') {
     Write-Host "[$State] $Name$suffix"
 }
 
-function Test-Skill([string]$Name, [string[]]$RequiredReferences = @(), [bool]$RequireMetadataVersion = $false) {
-    $directory = Join-Path $SkillsRoot $Name
-    $manifest = Join-Path $directory 'SKILL.md'
-    if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) { return @{ Ok = $false; Detail = 'SKILL.md missing' } }
-    try { $text = Get-Content -Raw -LiteralPath $manifest -Encoding utf8 } catch { return @{ Ok = $false; Detail = 'not readable as UTF-8' } }
-    if ([string]::IsNullOrWhiteSpace($text)) { return @{ Ok = $false; Detail = 'SKILL.md is empty' } }
-    if ($text -notmatch '\A---\r?\n[\s\S]*?\r?\n---\r?\n') { return @{ Ok = $false; Detail = 'frontmatter delimiters missing or malformed' } }
-    if ($text -notmatch '(?m)^name:\s*[a-z0-9-]+\s*$') { return @{ Ok = $false; Detail = 'valid name missing' } }
-    if ($text -notmatch '(?m)^description:\s*\S.+$') { return @{ Ok = $false; Detail = 'description missing' } }
-    if ($RequireMetadataVersion -and $text -notmatch '(?ms)^metadata:\s*\r?\n\s+version:\s*["''][^"'']+["'']\s*$') { return @{ Ok = $false; Detail = 'metadata.version missing' } }
-    foreach ($reference in $RequiredReferences) {
-        $referencePath = Join-Path $directory $reference
-        if (-not (Test-Path -LiteralPath $referencePath -PathType Leaf)) { return @{ Ok = $false; Detail = "reference missing: $reference" } }
-        if ([string]::IsNullOrWhiteSpace((Get-Content -Raw -LiteralPath $referencePath -Encoding utf8))) { return @{ Ok = $false; Detail = "reference empty: $reference" } }
-    }
-    return @{ Ok = $true; Detail = 'frontmatter and required references valid' }
-}
+# One component truth: scripts/components.json, read through the shared module.
+Import-Module (Join-Path $PSScriptRoot 'scripts\lib\AfyxComponents.psm1') -Force
+$componentContext = New-AfyxComponentContext -SkillsRoot $SkillsRoot -GraphRoot $graphRoot -CodexHome $codexHome
+$componentStates = @{}
+foreach ($componentState in (Get-AfyxComponentStates -Context $componentContext)) { $componentStates[$componentState.Id] = $componentState }
 
 function Test-McpEntry([string]$Name) {
     if (-not (Test-Path -LiteralPath $configPath -PathType Leaf)) { return $false }
@@ -52,38 +40,20 @@ if ($codex) {
 if ($extension) { Write-Result 'OK' 'VS Code extension' 'detected' } else { Write-Result 'INFO' 'VS Code extension' 'not detected' }
 if (-not $codex -and -not $extension) { $coreFailure = $true }
 
-$odooReferences = @('references/common.md') + (10..20 | ForEach-Object { "references/odoo-$_.md" })
-$checks = @(
-    @{ Name = 'efficient-coding'; Label = 'Efficient Coding'; Refs = @('references/investigation.md', 'references/tool-routing.md', 'references/token-efficiency.md'); Versioned = $true },
- @{ Name = 'odoo-engineering'; Label = 'Odoo Engineering (stable refs 10–20)'; Refs = @('references/common.md', 'references/version-detection.md', 'references/reference-schema.md') + (10..20 | ForEach-Object { "references/odoo-$_.md" }); Versioned = $true },
-    @{ Name = 'prompt-master'; Label = 'Prompt Master'; Refs = @(); Versioned = $false }
-)
-foreach ($check in $checks) {
-    $result = Test-Skill $check.Name $check.Refs $check.Versioned
-    if ($result.Ok) { Write-Result 'OK' $check.Label $result.Detail }
-    else { Write-Result 'FAIL' $check.Label $result.Detail; $coreFailure = $true }
+foreach ($component in ($componentStates.Values | Where-Object { $_.Tier -eq 'core' } | Sort-Object { @('efficient-coding', 'odoo-engineering', 'prompt-master').IndexOf($_.Id) })) {
+    if ($component.State -eq 'HEALTHY') { Write-Result 'OK' $component.Name $component.Detail }
+    else { Write-Result 'FAIL' $component.Name "$($component.State): $($component.Detail)"; $coreFailure = $true }
 }
 
-$graphMetadataPath = Join-Path $graphRoot 'metadata.json'
-$graphLauncher = Join-Path $graphRoot 'current\bin\afyx-graph.cmd'
-if (-not (Test-Path -LiteralPath $graphRoot)) { Write-Result 'INFO' 'Afyx Graph' 'not installed (optional)' }
-elseif (-not (Test-Path -LiteralPath $graphMetadataPath -PathType Leaf) -or -not (Test-Path -LiteralPath $graphLauncher -PathType Leaf)) { Write-Result 'WARN' 'Afyx Graph' 'incomplete Afyx-owned runtime (optional)' }
-else {
-    try {
-        $graphMetadata = Get-Content -Raw -LiteralPath $graphMetadataPath | ConvertFrom-Json -ErrorAction Stop
-        if ($graphMetadata.product_name -ne 'Afyx Graph') { throw 'ownership marker mismatch' }
-        Write-Result 'OK' 'Afyx Graph' "$($graphMetadata.afyx_graph_version) (CodeGraph engine $($graphMetadata.codegraph_upstream_version))"
-    } catch { Write-Result 'WARN' 'Afyx Graph' 'invalid metadata (optional)' }
+$graph = $componentStates['afyx-graph']
+switch ($graph.State) {
+    'NOT INSTALLED' { Write-Result 'INFO' 'Afyx Graph' 'not installed (optional)' }
+    'HEALTHY' { Write-Result 'OK' 'Afyx Graph' $graph.Version }
+    'INCOMPLETE' { Write-Result 'WARN' 'Afyx Graph' 'incomplete Afyx-owned runtime (optional)' }
+    'INVALID' { Write-Result 'WARN' 'Afyx Graph' 'invalid metadata (optional)' }
+    default { Write-Result 'WARN' 'Afyx Graph' "state $($graph.State): $($graph.Detail) (optional)" }
 }
 if (Test-McpEntry 'afyx_graph') { Write-Result 'OK' 'Afyx Graph MCP' 'configured explicitly' } else { Write-Result 'INFO' 'Afyx Graph MCP' 'not configured; installation does not mutate MCP config' }
-$codegraphCommand = Get-Command codegraph -ErrorAction SilentlyContinue
-$upstreamDetected = $false
-if ($codegraphCommand) {
-    $source = [string]$codegraphCommand.Source
-    $upstreamDetected = -not $source.StartsWith($graphRoot, [System.StringComparison]::OrdinalIgnoreCase)
-}
-if ($upstreamDetected -or (Test-McpEntry 'codegraph')) { Write-Result 'INFO' 'Upstream CodeGraph' 'detected; externally managed and unchanged' }
-else { Write-Result 'INFO' 'Upstream CodeGraph' 'not detected' }
 $headroom = [bool](Get-Command headroom -ErrorAction SilentlyContinue)
 $configText = if (Test-Path -LiteralPath $configPath -PathType Leaf) { Get-Content -Raw -LiteralPath $configPath -Encoding utf8 } else { '' }
 $headroomProvider = $configText -match '(?im)^\s*model_provider\s*=\s*["'']headroom["'']\s*$' -or
@@ -97,11 +67,10 @@ if (Test-McpEntry 'headroom') { Write-Result 'OK' 'Headroom MCP' 'configured (op
 if (Test-Path -LiteralPath $configPath -PathType Leaf) { Write-Result 'OK' 'Codex config' 'read-only check completed' }
 else { Write-Result 'WARN' 'Codex config' 'not found; optional MCP entries unavailable' }
 
-$usageFiles = @('CodexUsage.psm1', 'codex-usage-stop.ps1', 'codex-usage-watch.ps1', 'codex-usage-doctor.ps1', 'codex-usage-pricing.json') | ForEach-Object { Join-Path $codexHome "tools\$_" }
+$usageComponent = $componentStates['codex-usage-tracking']
 $hooksPath = Join-Path $codexHome 'hooks.json'
 $tasksPath = Join-Path $env:APPDATA 'Code\User\tasks.json'
-$installedUsageFileCount = @($usageFiles | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf }).Count
-$usagePresent = $installedUsageFileCount -gt 0
+$usagePresent = $usageComponent.State -notin @('NOT INSTALLED', 'UNKNOWN')
 if (-not $usagePresent -and (Test-Path -LiteralPath $hooksPath -PathType Leaf)) {
     try { $usagePresent = (Get-Content -Raw -LiteralPath $hooksPath) -match '(?i)(Afyx Codex Usage Tracking|codex-usage-stop\.ps1)' } catch { }
 }
@@ -111,7 +80,7 @@ if (-not $usagePresent -and (Test-Path -LiteralPath $tasksPath -PathType Leaf)) 
 if (-not $usagePresent) {
     Write-Result 'INFO' 'Codex Usage Tracker' 'optional; not installed'
 } else {
-    if ($installedUsageFileCount -eq $usageFiles.Count) { Write-Result 'OK' 'Codex Usage Tracker' 'runtime files installed' }
+    if ($usageComponent.State -eq 'HEALTHY') { Write-Result 'OK' 'Codex Usage Tracker' 'runtime files installed' }
     else { Write-Result 'WARN' 'Codex Usage Tracker' 'runtime files incomplete (optional)' }
 
     $hookConfigured = $false

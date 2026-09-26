@@ -52,8 +52,8 @@ npm-debug.log*
 # public engine repo (see the IP boundary in CLAUDE.md)
 docs/business/
 
-# CodeGraph data directories (in test projects)
-.codegraph/
+# Afyx Graph data directories (in test projects)
+.afyx-graph/
 
 test_frameworks
 

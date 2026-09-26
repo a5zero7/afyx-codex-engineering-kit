@@ -1,5 +1,5 @@
 /**
- * The `codegraph ui` server.
+ * The `afyx-graph ui` server.
  *
  * A loopback-only `node:http` server that hands the browser the built viewer
  * (`dist/viewer/`) and, through the JSON API mounted on the `api` seam below
@@ -8,7 +8,7 @@
  *
  * It is a reader with one exception, added deliberately and scoped as narrowly
  * as it could be: `POST`/`DELETE /api/trails` saves and removes the reader's own
- * named trails, as JSON files under `.codegraph/ui/trails/`. Nothing else it
+ * named trails, as JSON files under `.afyx-graph/ui/trails/`. Nothing else it
  * serves has a side effect, no other path accepts a write, and `--read-only`
  * turns even that one off. See `security.ts` for what a write has to carry.
  *

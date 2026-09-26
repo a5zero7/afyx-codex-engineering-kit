@@ -16,7 +16,7 @@ jobs:
           node-version: 24
       - run: python scripts/validate-afyx-graph.py
       - working-directory: afyx-graph/engine
-        run: npm ci && npm run build && npm test && node scripts/test-afyx-equivalence.mjs
+        run: npm ci && npm run build:clean && npm test && npm run test:semantic && npm run test:smoke
       - working-directory: afyx-graph/engine
         run: |
           for target in win32-x64 win32-arm64 linux-x64 linux-arm64 darwin-x64 darwin-arm64; do
@@ -27,5 +27,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          version=$(python -c "import json; print(json.load(open('afyx-graph/afyx-graph.json'))['afyx_graph_version'])")
-          gh release create "afyx-graph-v$version" afyx-graph/engine/release/afyx-graph-* afyx-graph/engine/release/SHA256SUMS --title "Afyx Graph v$version" --notes "Afyx Graph self-contained runtimes. Based on CodeGraph; see bundled third-party notices."
+          version=$(python -c "import json; print(json.load(open('afyx-graph/afyx-graph.json'))['product_version'])")
+          gh release create "afyx-graph-v$version" afyx-graph/engine/release/afyx-graph-* afyx-graph/engine/release/SHA256SUMS --title "Afyx Graph v$version" --notes "Afyx Graph self-contained runtimes. See the bundled third-party notices."

@@ -963,7 +963,7 @@ export function mapSvg(layout: MapLayout, options: MapExportOptions = {}): strin
 /* ------------------------------------------------------------- filenames -- */
 
 /**
- * A safe file stem — `codegraph-flow-execute-getfile`. No extension: the caller
+ * A safe file stem — `afyx-graph-flow-execute-getfile`. No extension: the caller
  * adds one, because the same picture goes out as both `.svg` and `.png`.
  */
 export function exportFilename(kind: 'flow' | 'map', label: string): string {

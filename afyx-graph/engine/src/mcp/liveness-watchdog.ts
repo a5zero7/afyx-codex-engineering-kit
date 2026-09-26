@@ -32,8 +32,8 @@
  * (off-thread) and the daemon's indexing shells out to a child process, so the
  * daemon's main thread only ever does fast, bounded work. The default timeout
  * is ~300× the 5h #850 wedge shorter, yet far longer than any legitimate
- * main-thread block. Opt out with `CODEGRAPH_NO_WATCHDOG=1`; tune with
- * `CODEGRAPH_WATCHDOG_TIMEOUT_MS`.
+ * main-thread block. Opt out with `AFYX_GRAPH_NO_WATCHDOG=1`; tune with
+ * `AFYX_GRAPH_WATCHDOG_TIMEOUT_MS`.
  *
  * **Disk-progress deferral (`progressPaths`).** The CLI `index`/`init` path is
  * different: it runs the SQLite store on this thread, and one long synchronous
@@ -88,8 +88,8 @@ export function deriveCheckIntervalMs(timeoutMs: number): number {
 
 /** Arming/teardown diagnostics, gated on the existing MCP debug switch. */
 function debug(msg: string): void {
-  if (process.env.CODEGRAPH_MCP_DEBUG) {
-    try { fs.writeSync(2, `[CodeGraph watchdog] ${msg}\n`); } catch { /* ignore */ }
+  if (process.env.AFYX_GRAPH_MCP_DEBUG) {
+    try { fs.writeSync(2, `[Afyx Graph watchdog] ${msg}\n`); } catch { /* ignore */ }
   }
 }
 
@@ -115,7 +115,7 @@ const secs = Math.round(timeoutMs / 1000);
 function kill(extra) {
   // Timestamped so daemon.log kills can be correlated with anything (#1431) —
   // computed here at kill time; this child process is never the wedged one.
-  try { fs.writeSync(2, Buffer.from('[' + new Date().toISOString() + '] [CodeGraph] Main thread unresponsive for ~' + secs + 's' + (extra || '') + ' — killing the wedged process so a fresh one can start (#850). Disable with CODEGRAPH_NO_WATCHDOG=1.\\n')); } catch (e) {}
+  try { fs.writeSync(2, Buffer.from('[' + new Date().toISOString() + '] [Afyx Graph] Main thread unresponsive for ~' + secs + 's' + (extra || '') + ' — killing the wedged process so a fresh one can start (#850). Disable with AFYX_GRAPH_NO_WATCHDOG=1.\\n')); } catch (e) {}
   try { process.kill(parentPid, 'SIGKILL'); } catch (e) {}
   process.exit(0);
 }
@@ -178,9 +178,9 @@ export interface WatchdogOptions {
  * starting).
  */
 export function installMainThreadWatchdog(options: WatchdogOptions = {}): WatchdogHandle | null {
-  if (isEnvTruthy(process.env.CODEGRAPH_NO_WATCHDOG)) return null;
+  if (isEnvTruthy(process.env.AFYX_GRAPH_NO_WATCHDOG)) return null;
 
-  const timeoutMs = parseWatchdogTimeoutMs(process.env.CODEGRAPH_WATCHDOG_TIMEOUT_MS);
+  const timeoutMs = parseWatchdogTimeoutMs(process.env.AFYX_GRAPH_WATCHDOG_TIMEOUT_MS);
   const checkMs = deriveCheckIntervalMs(timeoutMs);
   const capMs = timeoutMs * PROGRESS_CAP_MULTIPLIER;
   const progressPaths = options.progressPaths ?? [];

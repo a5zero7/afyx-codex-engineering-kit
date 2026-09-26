@@ -1,12 +1,12 @@
 {
   "schema_version": 1,
-  "frozen_at": "2026-09-23T03:38:45+07:00",
-  "afyx_commit": "5f97eb2c541dd0df5fb7f146753505fdb34f06fa",
+  "frozen_at": "2026-09-26T19:17:38+07:00",
+  "afyx_commit": "e5241020e304862474d313c3c35ff67cfbe68dd2",
   "skills": {
     "efficient-coding": {
       "version": "1.1.0",
       "source": "repository",
-      "content_sha256": "92c0507532e59fe7986426f5f87df6643537bdf85739bd4014dbf107b1842ca5"
+      "content_sha256": "ec3a43466073b8c1ab4277a0974b73e1a8d717bc113483ee90f8c5011d357ec7"
     },
     "odoo-engineering": {
       "version": "1.1.0",
@@ -30,10 +30,11 @@
     "python": "3.10.11"
   },
   "optional": {
-    "codegraph": {
+    "afyx_graph": {
       "available": true,
-      "version": "1.6.0",
-      "mode": "MCP configured"
+      "version": "1.0.0",
+      "source": "repository",
+      "evaluated": false
     },
     "headroom": {
       "available": true,

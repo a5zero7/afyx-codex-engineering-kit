@@ -1,9 +1,9 @@
 /**
- * `@colbymchenry/codegraph-ui` — the package's own test (task CG-61).
+ * `@a5zero7/afyx-graph-ui` — the package's own test (task CG-61).
  *
  * A minimal Svelte host mounts the three headline components from the package
  * entry against a MOCK adapter and asserts what lands in the document. That is
- * the whole promise of the package in one file: CodeGraph Pro renders these
+ * the whole promise of the package in one file: Afyx Graph Pro renders these
  * same components over its own in-process engine reads, so if a screen can be
  * drawn from an object literal here, it can be drawn from a graph there.
  *
@@ -24,7 +24,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   ArchitectureMap,
-  CodegraphUi,
+  AfyxGraphUi,
   FlowStrip,
   SearchPalette,
   SymbolView,
@@ -416,7 +416,7 @@ function mockAdapter(): { adapter: GraphAdapter; calls: string[] } {
         // nothing.
         readOnly: true,
         readOnlyReason: 'This host does not store trails.',
-        directory: '.codegraph/ui/trails',
+        directory: '.afyx-graph/ui/trails',
         skipped: 0,
         bounded: false,
       }),
@@ -500,7 +500,7 @@ async function render(
   }
 }
 
-describe('@colbymchenry/codegraph-ui — a host renders the package', () => {
+describe('@a5zero7/afyx-graph-ui — a host renders the package', () => {
   it('SymbolView draws callers, source and the callee rail from a mock adapter', async () => {
     const { adapter, calls } = mockAdapter();
     setGraphAdapter(adapter);
@@ -637,19 +637,19 @@ describe('@colbymchenry/codegraph-ui — a host renders the package', () => {
     expect(text).toContain('This host does not store trails.');
   });
 
-  it('CodegraphUi installs the adapter before its children ask for data', async () => {
+  it('AfyxGraphUi installs the adapter before its children ask for data', async () => {
     const { adapter, calls } = mockAdapter();
     // NOT installed by hand — the provider is the only thing that installs it.
     expect(getGraphAdapter()).not.toBe(adapter);
 
-    mounted = mount(CodegraphUi, { target: host, props: { adapter } }) as Record<string, unknown>;
+    mounted = mount(AfyxGraphUi, { target: host, props: { adapter } }) as Record<string, unknown>;
     flushSync();
     expect(getGraphAdapter()).toBe(adapter);
     expect(calls).toEqual([]);
   });
 });
 
-describe('@colbymchenry/codegraph-ui — the seams', () => {
+describe('@a5zero7/afyx-graph-ui — the seams', () => {
   it('a host navigation driver replaces every href the components build', () => {
     const seen: string[] = [];
     const driver: NavigationDriver = {
@@ -751,7 +751,7 @@ describe('@colbymchenry/codegraph-ui — the seams', () => {
   });
 });
 
-describe('@colbymchenry/codegraph-ui — the published shape', () => {
+describe('@a5zero7/afyx-graph-ui — the published shape', () => {
   const manifest = JSON.parse(
     readFileSync(join(ROOT, 'ui', 'package.json'), 'utf8')
   ) as Record<string, any>;

@@ -11,7 +11,7 @@
  */
 
 import * as fs from 'fs';
-import type CodeGraph from '../../index';
+import type AfyxGraph from '../../index';
 import type { Language } from '../../types';
 import {
   callArgumentsForFile,
@@ -52,7 +52,7 @@ export interface WhenBatch {
   edges: WireEdge[];
 }
 
-export async function annotateWhen(cg: CodeGraph, projectRoot: string, batches: readonly WhenBatch[]): Promise<void> {
+export async function annotateWhen(cg: AfyxGraph, projectRoot: string, batches: readonly WhenBatch[]): Promise<void> {
   const byFile = new Map<string, WireEdge[]>();
   for (const batch of batches) {
     const bucket = byFile.get(batch.file);
@@ -140,7 +140,7 @@ const OWN_DIRECTIVE = /^\s*(['"])use server\1\s*;?\s*$/m;
  * parsed tree serve both; drifted files yield nothing; one site budget bounds
  * the whole pass.
  */
-export function createSiteReader(cg: CodeGraph, projectRoot: string, maxSites = 600): SiteReader {
+export function createSiteReader(cg: AfyxGraph, projectRoot: string, maxSites = 600): SiteReader {
   const files = new Map<string, { abs: string; language: Language } | null>();
   const texts = new Map<string, string | null>();
   let sites = 0;
@@ -256,7 +256,7 @@ export function createSiteReader(cg: CodeGraph, projectRoot: string, maxSites = 
 
 /** The `when` half of {@link createSiteReader}, for callers that read nothing else. */
 export function createWhenReader(
-  cg: CodeGraph,
+  cg: AfyxGraph,
   projectRoot: string,
   maxSites = 600
 ): (caller: { filePath: string; language: Language }, site: { line?: number; column?: number }) => Promise<string> {

@@ -60,7 +60,7 @@ port.on('message', (msg: InMessage) => {
         queries = new QueryBuilder(db);
         resolver = new ReferenceResolver(msg.projectRoot, queries);
         resolver.initialize();
-        if (process.env.CODEGRAPH_SYNTH_TIMINGS) console.error(`[pool-timing] worker open: db=${tDb - tOpen}ms init=${Date.now() - tDb}ms`);
+        if (process.env.AFYX_GRAPH_SYNTH_TIMINGS) console.error(`[pool-timing] worker open: db=${tDb - tOpen}ms init=${Date.now() - tDb}ms`);
         port.postMessage({ type: 'ready' });
         break;
       }
@@ -87,7 +87,7 @@ port.on('message', (msg: InMessage) => {
         if (!resolver) throw new Error('resolver-worker: resolve before open');
         const tRes = Date.now();
         const out = resolver.resolveListForAdmission(msg.refs);
-        if (process.env.CODEGRAPH_SYNTH_TIMINGS) console.error(`[pool-timing] worker resolve: ${msg.refs.length} refs in ${Date.now() - tRes}ms`);
+        if (process.env.AFYX_GRAPH_SYNTH_TIMINGS) console.error(`[pool-timing] worker resolve: ${msg.refs.length} refs in ${Date.now() - tRes}ms`);
         port.postMessage({ type: 'result', id: msg.id, ...out });
         break;
       }

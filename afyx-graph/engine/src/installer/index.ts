@@ -1,5 +1,5 @@
 /**
- * CodeGraph Interactive Installer
+ * Afyx Graph Interactive Installer
  *
  * Multi-target: writes MCP server config + instructions for the
  * agents the user picks (Claude Code, Cursor, Codex CLI, opencode,
@@ -13,7 +13,6 @@
  * `--print-config` CLI flags.
  */
 
-import { execSync } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 import {
@@ -28,9 +27,7 @@ import type { AgentTarget, Location, TargetId } from './targets/types';
 // installer must stay importable even when native modules can't load).
 import { watchDisabledReason } from '../sync/watch-policy';
 import { isGitRepo, isSyncHookInstalled, installGitSyncHook } from '../sync/git-hooks';
-import { getCodeGraphDir, codeGraphDirName } from '../directory';
-import { getTelemetry, TELEMETRY_DOCS } from '../telemetry';
-import { maybeOfferBetaSignup } from './beta-signup';
+import { getAfyxGraphDir, afyxGraphDirName } from '../directory';
 
 // Backwards-compat: keep these named exports — downstream code may
 // import them. The shim in `config-writer.ts` continues to re-export
@@ -75,7 +72,7 @@ export interface RunInstallerOptions {
 }
 
 /**
- * Interactive entry point — preserves the historical UX (`codegraph
+ * Interactive entry point — preserves the historical UX (`afyx-graph
  * install` with no args goes through the prompts), but now starts
  * the targets multi-select pre-populated with detected agents.
  */
@@ -86,7 +83,7 @@ export async function runInstaller(): Promise<void> {
 export async function runInstallerWithOptions(opts: RunInstallerOptions): Promise<void> {
   const clack = await importESM('@clack/prompts');
 
-  clack.intro(`CodeGraph v${getVersion()}`);
+  clack.intro(`Afyx Graph v${getVersion()}`);
 
   // --yes implies all defaults; explicit flags still win.
   const useDefaults = opts.yes === true;
@@ -102,33 +99,8 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
     return;
   }
 
-  // Step 2: install the codegraph npm package on PATH (always offered;
-  // matches existing behavior). Skipped when --yes (assume present).
-  if (!useDefaults) {
-    const shouldInstallGlobally = await clack.confirm({
-      message: 'Install the codegraph CLI on your PATH? (Required so agents can launch the MCP server)',
-      initialValue: true,
-    });
-    if (clack.isCancel(shouldInstallGlobally)) {
-      clack.cancel('Installation cancelled.');
-      process.exit(0);
-    }
-    if (shouldInstallGlobally) {
-      const s = clack.spinner();
-      s.start('Installing codegraph CLI...');
-      try {
-        // Generous bound (slow networks / cold npm cache) — but bounded, so a
-        // wedged npm can't hang the interactive installer forever (#1139).
-        execSync('npm install -g @colbymchenry/codegraph', { stdio: 'pipe', windowsHide: true, timeout: 120_000 });
-        s.stop('Installed codegraph CLI on PATH');
-      } catch {
-        s.stop('Could not install (permission denied)');
-        clack.log.warn('Try: sudo npm install -g @colbymchenry/codegraph');
-      }
-    } else {
-      clack.log.info('Skipped CLI install — agents will not be able to launch the MCP server without it');
-    }
-  }
+  // The MCP entries launch `afyx-graph`; the Afyx kit installs and updates that
+  // CLI, so this command only wires agents.
 
   // Step 3: where the per-agent config files should land.
   let location: Location;
@@ -170,7 +142,7 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
     autoAllow = true;
   } else if (targets.some((t) => t.id === 'claude')) {
     const ans = await clack.confirm({
-      message: 'Auto-allow CodeGraph commands? (Skips permission prompts in Claude Code)',
+      message: 'Auto-allow Afyx Graph commands? (Skips permission prompts in Claude Code)',
       initialValue: true,
     });
     if (clack.isCancel(ans)) {
@@ -182,31 +154,8 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
     autoAllow = false;
   }
 
-  // Step 4½: anonymous usage telemetry — a visible default-on toggle, asked
-  // exactly once. Skipped when an env var (DO_NOT_TRACK / CODEGRAPH_TELEMETRY)
-  // already decides, or when a previous run stored a choice — re-runs and
-  // upgrades never re-ask.
-  if (!useDefaults && getTelemetry().getStatus().decidedBy === 'default' && !getTelemetry().hasStoredChoice()) {
-    const share = await clack.confirm({
-      message: 'Share anonymous usage stats? (No code, paths, or names — see TELEMETRY.md)',
-      initialValue: true,
-    });
-    if (clack.isCancel(share)) {
-      // Don't kill the install over the telemetry question — leave it
-      // undecided (the documented default + first-run notice applies later).
-      clack.log.info('Skipped — manage anytime with `codegraph telemetry on|off`.');
-    } else {
-      getTelemetry().setEnabled(share, 'installer');
-      clack.log.info(
-        share
-          ? `Thanks! Exactly what is collected: ${TELEMETRY_DOCS}`
-          : 'Telemetry disabled — nothing will be collected or sent.',
-      );
-    }
-  }
-
   // Step 4¾: front-load prompt hook (Claude Code only). A UserPromptSubmit hook
-  // that runs `codegraph prompt-hook` — it injects codegraph_explore context on
+  // that runs `afyx-graph prompt-hook` — it injects afyx_graph_explore context on
   // structural ("how / where / trace / impact") prompts so the agent reliably
   // reaches for the graph instead of grepping. Opt-in, default-yes. Only Claude
   // Code has UserPromptSubmit, so it's offered only when Claude is a target;
@@ -219,7 +168,7 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
     } else {
       const ans = await clack.confirm({
         message:
-          'Front-load CodeGraph on “how / where / trace” prompts? Auto-injects structural context so answers need fewer steps (adds a moment to those prompts; Claude Code only).',
+          'Front-load Afyx Graph on “how / where / trace” prompts? Auto-injects structural context so answers need fewer steps (adds a moment to those prompts; Claude Code only).',
         initialValue: true,
       });
       if (clack.isCancel(ans)) {
@@ -232,8 +181,6 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
 
   // Step 5: per-target install loop.
   const installedIds: TargetId[] = [];
-  let sawCreated = false;
-  let sawUpdated = false;
   for (const target of targets) {
     if (!target.supportsLocation(location)) {
       clack.log.warn(
@@ -244,8 +191,6 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
     const result = target.install(location, { autoAllow, promptHook });
     installedIds.push(target.id);
     for (const file of result.files) {
-      if (file.action === 'created') sawCreated = true;
-      if (file.action === 'updated') sawUpdated = true;
       const verb = file.action === 'unchanged'
         ? 'Unchanged'
         : file.action === 'created' ? 'Created'
@@ -258,46 +203,21 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
     }
   }
 
-  // Telemetry: which agents were configured, where, fresh-vs-upgrade (derived
-  // from the file actions above). Target IDs and the location enum only.
-  if (installedIds.length > 0) {
-    getTelemetry().recordLifecycle('install', {
-      targets: installedIds,
-      scope: location,
-      kind: sawCreated ? 'fresh' : sawUpdated ? 'upgrade' : 'reinstall',
-    });
-  }
-
-  // Step 5½: CodeGraph Pro beta opt-in — the same waitlist as the
-  // getcodegraph.com homepage form, offered once per machine at the end of a
-  // successful install (and after `codegraph upgrade` — the shared gate in
-  // maybeOfferBetaSignup means whichever asks first is the ONLY ask ever).
-  // Strictly opt-in (user answers yes AND types an email), never shown under
-  // --yes, and any yes/no answer is stored so nothing re-asks. Cancel or a
-  // failed submit stores nothing, so a later install/upgrade may offer again.
-  if (!useDefaults && installedIds.length > 0) {
-    await maybeOfferBetaSignup({ source: 'cli-install' });
-  }
-
   // Step 6: install wires up agents only — it deliberately does NOT index.
-  // Building the per-project graph is the user's explicit `codegraph init`
+  // Building the per-project graph is the user's explicit `afyx-graph init`
   // (or `index`), so they choose what gets indexed and when, and we never
   // index a surprise directory (e.g. a shell sitting in $HOME). Same next step
   // regardless of global/local scope.
   clack.note(
     (location === 'local'
-      ? 'codegraph init        # build this project’s graph (one time; auto-syncs after)'
-      : 'cd <your-project>\ncodegraph init        # build a project’s graph (one time; auto-syncs after)') +
-      '\n# (codegraph install --init does both steps in one command)',
+      ? 'afyx-graph init        # build this project’s graph (one time; auto-syncs after)'
+      : 'cd <your-project>\nafyx-graph init        # build a project’s graph (one time; auto-syncs after)') +
+      '\n# (afyx-graph install --init does both steps in one command)',
     'Next: index a project',
   );
 
-  // Deliver buffered telemetry while we're already in a long interactive
-  // command — bounded (~1.5s worst case), invisible after a multi-second install.
-  await getTelemetry().flushNow();
-
   const finalNote = targets.length > 0
-    ? `Done! Restart your agent${targets.length > 1 ? 's' : ''} to use CodeGraph.`
+    ? `Done! Restart your agent${targets.length > 1 ? 's' : ''} to use Afyx Graph.`
     : 'Done!';
   clack.outro(finalNote);
 }
@@ -314,20 +234,13 @@ export interface RunUninstallerOptions {
   location?: Location;
   /** Non-interactive: location=global, target=all, no prompts. */
   yes?: boolean;
-  /** Remove agent configs only — leave the CLI binary installed. */
-  keepCli?: boolean;
-  /**
-   * `__filename` of the CLI entry (dist/bin/codegraph.js) — install-method
-   * detection is keyed off the running binary's real location.
-   */
-  cliFilename?: string;
 }
 
 export type UninstallStatus = 'removed' | 'not-configured' | 'unsupported';
 
 /**
  * Per-target outcome of an uninstall sweep. `removed` means we deleted
- * at least one thing; `not-configured` means the agent had no codegraph
+ * at least one thing; `not-configured` means the agent had no afyx-graph
  * config at this location (nothing to do); `unsupported` means the
  * agent has no config concept for this location (e.g. the Copilot CLI
  * is global-only, so a `local` uninstall skips it).
@@ -447,13 +360,13 @@ export function refreshTargets(
  * one block per agent so the user sees exactly which providers it hit.
  *
  * Removes only what install wrote (MCP server entry, instructions
- * block, permissions) — never the `.codegraph/` index, which `codegraph
+ * block, permissions) — never the `.afyx-graph/` index, which `afyx-graph
  * uninit` owns.
  */
 export async function runUninstaller(opts: RunUninstallerOptions): Promise<void> {
   const clack = await importESM('@clack/prompts');
 
-  clack.intro(`CodeGraph v${getVersion()} — uninstall`);
+  clack.intro(`Afyx Graph v${getVersion()} — uninstall`);
 
   const useDefaults = opts.yes === true;
 
@@ -467,7 +380,7 @@ export async function runUninstaller(opts: RunUninstallerOptions): Promise<void>
     location = 'global';
   } else {
     const sel = await clack.select({
-      message: 'Remove CodeGraph from all your projects, or just this one?',
+      message: 'Remove Afyx Graph from all your projects, or just this one?',
       options: [
         { value: 'global' as const, label: 'All projects (global)', hint: '~/.claude, ~/.cursor, ~/.codex, ~/.config/opencode, ~/.hermes, ~/.gemini, ~/.kiro, ~/.copilot, ~/.config/github-copilot' },
         { value: 'local'  as const, label: 'Just this project (local)', hint: './.claude, ./.cursor, ./.vscode, ./opencode.jsonc, ./.gemini, ./.kiro' },
@@ -514,78 +427,19 @@ export async function runUninstaller(opts: RunUninstallerOptions): Promise<void>
 
   // Step 4: for local uninstall, the index dir is separate — point at
   // `uninit` so the user knows it's still there (and how to remove it).
-  if (location === 'local' && fs.existsSync(getCodeGraphDir(process.cwd()))) {
-    clack.log.info(`The ${codeGraphDirName()}/ index for this project is still here. Run \`codegraph uninit\` to delete it.`);
-  }
-
-  // Step 4b: the CLI binary itself (global uninstall only — a project-scoped
-  // uninstall must not touch the machine-wide install). Before this step,
-  // `codegraph uninstall` removed agent configs but left every installed
-  // binary — bundle AND npm global — so `codegraph` still resolved afterward
-  // (the #1071 shadow, uninstall edition). Plan every install present on the
-  // machine, confirm, then remove them all. Skippable with --keep-cli.
-  let cliRemoved = false;
-  if (location === 'global' && opts.keepCli !== true && opts.cliFilename) {
-    const { planBinaryRemoval, executeBinaryRemoval, defaultProbes } =
-      await import('../upgrade/remove-binary');
-    const plan = planBinaryRemoval(defaultProbes(opts.cliFilename));
-
-    if (plan.sourceRoot) {
-      clack.log.info(`Running from a source checkout (${tildify(plan.sourceRoot)}) — leaving it untouched.`);
-    }
-    if (plan.summary.length > 0) {
-      let removeBinaries = useDefaults;
-      if (!useDefaults) {
-        const sel = await clack.confirm({
-          message: `Also remove the CodeGraph CLI from this machine?\n${plan.summary.map((s) => `     - ${s}`).join('\n')}`,
-          initialValue: true,
-        });
-        if (clack.isCancel(sel)) {
-          clack.cancel('Uninstall cancelled.');
-          process.exit(0);
-        }
-        removeBinaries = sel;
-      }
-      if (removeBinaries) {
-        const result = executeBinaryRemoval(plan);
-        for (const p of result.removed) clack.log.success(`Removed ${tildify(p)}`);
-        if (result.npm === 'removed') {
-          clack.log.success('Removed the npm global package (npm uninstall -g).');
-        } else if (result.npm === 'failed') {
-          clack.log.warn('npm uninstall failed — run `npm uninstall -g @colbymchenry/codegraph` yourself (EACCES usually means it needs sudo).');
-        }
-        for (const p of result.leftovers) {
-          clack.log.warn(`Could not remove ${tildify(p)} — delete it manually${process.platform === 'win32' ? ' after this window closes' : ''}.`);
-        }
-        cliRemoved = result.removed.length > 0 || result.npm === 'removed';
-        if (cliRemoved && process.platform === 'win32') {
-          clack.log.info('If your PATH still lists a codegraph bin directory, remove that entry from your user PATH.');
-        }
-      } else {
-        clack.log.info('Kept the CLI. Remove it later with `codegraph uninstall` or `npm uninstall -g @colbymchenry/codegraph`.');
-      }
-    }
-  }
-
-  // Telemetry churn signal (agent IDs only) — flush now, since after an
-  // uninstall there is usually no "next run" to deliver it.
-  if (removed.length > 0) {
-    getTelemetry().recordLifecycle('uninstall', { targets: removed.map((r) => r.id) });
-    await getTelemetry().flushNow();
+  if (location === 'local' && fs.existsSync(getAfyxGraphDir(process.cwd()))) {
+    clack.log.info(`The ${afyxGraphDirName()}/ index for this project is still here. Run \`afyx-graph uninit\` to delete it.`);
   }
 
   // Step 5: summary.
-  const cliNote = cliRemoved ? ' The CLI is removed too — this was its last run.' : '';
   if (removed.length > 0) {
     const names = removed.map((r) => r.displayName).join(', ');
     clack.outro(
-      `Removed CodeGraph from ${removed.length} agent${removed.length > 1 ? 's' : ''}: ${names}. ` +
-      `Restart ${removed.length > 1 ? 'them' : 'it'} to apply.` + cliNote,
+      `Removed Afyx Graph from ${removed.length} agent${removed.length > 1 ? 's' : ''}: ${names}. ` +
+      `Restart ${removed.length > 1 ? 'them' : 'it'} to apply.`,
     );
-  } else if (cliRemoved) {
-    clack.outro(`No ${location} agent had CodeGraph configured.` + cliNote);
   } else {
-    clack.outro(`CodeGraph was not configured in any ${location} agent — nothing to remove.`);
+    clack.outro(`Afyx Graph was not configured in any ${location} agent — nothing to remove.`);
   }
 }
 
@@ -625,7 +479,7 @@ async function resolveTargets(
   const initial = initialValues.length > 0 ? initialValues : ['claude'];
 
   const choice = await clack.multiselect<string>({
-    message: 'Which agents should CodeGraph configure?',
+    message: 'Which agents should Afyx Graph configure?',
     options: ALL_TARGETS.map((t) => {
       const det = detected.find(({ target }) => target.id === t.id)!.detection;
       const flag = det.installed ? '(detected)' : '(not found)';
@@ -652,9 +506,9 @@ async function resolveTargets(
 
 /**
  * When the live file watcher will be disabled for this project (e.g. WSL2
- * /mnt drives, or CODEGRAPH_NO_WATCH), the index would silently go stale.
+ * /mnt drives, or AFYX_GRAPH_NO_WATCH), the index would silently go stale.
  * Explain that, and offer to keep it fresh automatically via git hooks
- * (commit / pull / checkout) instead of manual `codegraph sync`.
+ * (commit / pull / checkout) instead of manual `afyx-graph sync`.
  *
  * No-op on environments where the watcher runs normally, so it's safe to
  * call unconditionally after init.
@@ -668,11 +522,11 @@ export async function offerWatchFallback(
   if (!reason) return; // Watcher runs normally — nothing to set up.
 
   clack.log.warn(`Live file watching is disabled here — ${reason}.`);
-  clack.log.info('Until you re-sync, the CodeGraph index stays frozen — it will not pick up edits on its own.');
+  clack.log.info('Until you re-sync, the Afyx Graph index stays frozen — it will not pick up edits on its own.');
 
   // No git repo → the commit-hook path doesn't apply; point at manual sync.
   if (!isGitRepo(projectPath)) {
-    clack.log.info('Run `codegraph sync` after changing files to refresh the index.');
+    clack.log.info('Run `afyx-graph sync` after changing files to refresh the index.');
     return;
   }
 
@@ -687,22 +541,22 @@ export async function offerWatchFallback(
     choice = 'hook';
   } else {
     const sel = await clack.select({
-      message: 'How should CodeGraph keep its index fresh?',
+      message: 'How should Afyx Graph keep its index fresh?',
       options: [
         { value: 'hook' as const, label: 'Sync on git commit / pull / checkout', hint: 'installs git hooks (recommended)' },
-        { value: 'manual' as const, label: 'I\'ll run `codegraph sync` myself', hint: 'fully manual' },
+        { value: 'manual' as const, label: 'I\'ll run `afyx-graph sync` myself', hint: 'fully manual' },
       ],
       initialValue: 'hook' as const,
     });
     if (clack.isCancel(sel)) {
-      clack.log.info('Skipped — run `codegraph sync` after changes to refresh the index.');
+      clack.log.info('Skipped — run `afyx-graph sync` after changes to refresh the index.');
       return;
     }
     choice = sel;
   }
 
   if (choice === 'manual') {
-    clack.log.info('Run `codegraph sync` after changing files to refresh the index.');
+    clack.log.info('Run `afyx-graph sync` after changing files to refresh the index.');
     return;
   }
 
@@ -712,11 +566,11 @@ export async function offerWatchFallback(
       `Installed git ${result.installed.join(', ')} hook${result.installed.length > 1 ? 's' : ''} — ` +
       'the index refreshes in the background after each.',
     );
-    clack.log.info('Run `codegraph sync` anytime to refresh immediately.');
+    clack.log.info('Run `afyx-graph sync` anytime to refresh immediately.');
   } else {
     clack.log.warn(
       `Could not install git hooks${result.skipped ? ` (${result.skipped})` : ''}. ` +
-      'Run `codegraph sync` after changes instead.',
+      'Run `afyx-graph sync` after changes instead.',
     );
   }
 }

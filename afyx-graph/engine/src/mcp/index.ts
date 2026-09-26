@@ -1,14 +1,14 @@
 /**
- * CodeGraph MCP Server
+ * Afyx Graph MCP Server
  *
- * Model Context Protocol server that exposes CodeGraph functionality
+ * Model Context Protocol server that exposes Afyx Graph functionality
  * as tools for AI assistants like Claude.
  *
  * @module mcp
  *
  * @example
  * ```typescript
- * import { MCPServer } from 'codegraph';
+ * import { MCPServer } from 'afyx-graph';
  *
  * const server = new MCPServer('/path/to/project');
  * await server.start();
@@ -17,14 +17,14 @@
  * Runtime modes (decided in {@link MCPServer.start}):
  *
  * - **Direct** — one process serves one MCP client over stdio. The pre-#411
- *   behavior; used when the user opts out (`CODEGRAPH_NO_DAEMON=1`), no
- *   `.codegraph/` is reachable, or the daemon machinery fails for any reason.
+ *   behavior; used when the user opts out (`AFYX_GRAPH_NO_DAEMON=1`), no
+ *   `.afyx-graph/` is reachable, or the daemon machinery fails for any reason.
  * - **Proxy** — what an MCP host actually talks to when sharing is on: a thin
  *   stdio↔socket pipe to the shared daemon. The proxy carries the #277 PPID
  *   watchdog, so a SIGKILL'd host reaps its proxy promptly. See {@link ./proxy.ts}.
  * - **Daemon** — a *detached* background process (its own session/process
  *   group) that serves N proxies over a Unix-domain socket / named pipe,
- *   sharing one CodeGraph + watcher + SQLite handle. Spawned on demand; never a
+ *   sharing one Afyx Graph + watcher + SQLite handle. Spawned on demand; never a
  *   child of any host, so it survives individual sessions and is reaped by
  *   client-refcount + idle timeout. See {@link ./daemon.ts} and issue #411.
  *
@@ -37,7 +37,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { spawn, StdioOptions } from 'child_process';
-import { resolveServerRoot, getCodeGraphDir } from '../directory';
+import { resolveServerRoot, getAfyxGraphDir, getDatabasePath } from '../directory';
 import { StdioTransport } from './transport';
 import { MCPEngine } from './engine';
 import { MCPSession } from './session';
@@ -63,8 +63,6 @@ import {
   getDaemonSocketCandidates,
   probeDaemonIdentity,
 } from './daemon-paths';
-import { getTelemetry } from '../telemetry';
-import { checkForUpdateInBackground } from '../upgrade/update-check';
 import { EARLY_PPID } from './early-ppid';
 import { supervisionLostReason, parsePpidPollMs, parseHostPpid } from './ppid-watchdog';
 import { installMainThreadWatchdog, WatchdogHandle } from './liveness-watchdog';
@@ -78,7 +76,7 @@ import { HOST_PPID_ENV } from '../extraction/wasm-runtime-flags';
  * `serve --mcp` invocation is a launcher that connects-or-spawns; with it, the
  * process IS the daemon and must never try to spawn another (infinite spawn).
  */
-const DAEMON_INTERNAL_ENV = 'CODEGRAPH_DAEMON_INTERNAL';
+const DAEMON_INTERNAL_ENV = 'AFYX_GRAPH_DAEMON_INTERNAL';
 
 /**
  * Retries for the detached daemon arbitrating the O_EXCL lock against a racing
@@ -135,14 +133,14 @@ function makeFallbackEngine(root: string): MCPEngine {
 // daemon binds, instead of waiting up to a coarse 100ms after — shaves the
 // cold-start handshake (the window the headless agent races). Same ~6s total
 // give-up budget (240 × 25ms), just finer granularity; socket-connect probes
-// are cheap. Paired with deferring the CodeGraph load (engine.ts) off the bind
+// are cheap. Paired with deferring the Afyx Graph load (engine.ts) off the bind
 // path, this narrows the "No such tool available" race window.
 const DAEMON_CONNECT_MAX_RETRIES = 240;
 const DAEMON_CONNECT_RETRY_DELAY_MS = 25;
 
-/** Whether `CODEGRAPH_NO_DAEMON` was set to a truthy value. */
+/** Whether `AFYX_GRAPH_NO_DAEMON` was set to a truthy value. */
 function daemonOptOutSet(): boolean {
-  const raw = process.env.CODEGRAPH_NO_DAEMON;
+  const raw = process.env.AFYX_GRAPH_NO_DAEMON;
   if (!raw) return false;
   return raw !== '0' && raw.toLowerCase() !== 'false';
 }
@@ -156,7 +154,7 @@ function daemonInternalSet(): boolean {
 /**
  * Prefix every `process.stderr.write` chunk with an ISO-8601 timestamp. Called
  * once, only when this process becomes the detached daemon — whose stderr is
- * appended to `.codegraph/daemon.log`. Before #1431 no log line carried a
+ * appended to `.afyx-graph/daemon.log`. Before #1431 no log line carried a
  * timestamp, so watchdog kills and restarts could be counted but never placed
  * in time. (The watchdog child writes its kill notice through its own
  * inherited fd 2, bypassing this wrapper — it stamps that line itself.)
@@ -190,15 +188,15 @@ export function stampLogChunk(chunk: string | Uint8Array): string | Uint8Array {
  */
 export function watchdogProgressPaths(root: string | null): { progressPaths?: string[] } {
   if (!root) return {};
-  const dbPath = path.join(getCodeGraphDir(root), 'codegraph.db');
+  const dbPath = getDatabasePath(root);
   return { progressPaths: [dbPath, `${dbPath}-wal`] };
 }
 
 /**
  * Resolve the project root the daemon machinery should key on. Returns
- * `null` when no `.codegraph/` is reachable from the candidate path — in
+ * `null` when no `.afyx-graph/` is reachable from the candidate path — in
  * that case the caller must run in direct mode, since the daemon lockfile
- * and socket both live under `.codegraph/`.
+ * and socket both live under `.afyx-graph/`.
  *
  * Uses the same resolution as the engine (#1606): up-walk first, then the
  * bounded workspace down-scan that adopts a SINGLE indexed sub-project. A
@@ -224,7 +222,7 @@ function resolveDaemonRoot(explicitPath: string | null): string | null {
  * Spawn the shared daemon as a fully detached background process: its own
  * session/process group (so a SIGHUP/SIGINT to the launcher's terminal can't
  * reach it) with stdio decoupled from the launcher (logs to
- * `.codegraph/daemon.log`). Re-invokes the *same* CLI faithfully across dev and
+ * `.afyx-graph/daemon.log`). Re-invokes the *same* CLI faithfully across dev and
  * bundled launches by reusing `process.argv[0]` (the right node), the current
  * `process.execArgv` (carries `--liftoff-only`, so the daemon never re-execs)
  * and `process.argv[1]` (this script). The spawned process self-arbitrates the
@@ -242,7 +240,7 @@ function spawnDetachedDaemon(root: string): void {
   let logFd: number | null = null;
   let stdio: StdioOptions = 'ignore';
   try {
-    logFd = fs.openSync(path.join(getCodeGraphDir(root), 'daemon.log'), 'a');
+    logFd = fs.openSync(path.join(getAfyxGraphDir(root), 'daemon.log'), 'a');
     stdio = ['ignore', logFd, logFd];
   } catch {
     stdio = 'ignore'; // no log file — discard daemon output rather than fail
@@ -273,9 +271,9 @@ function spawnDetachedDaemon(root: string): void {
 }
 
 /**
- * MCP Server for CodeGraph
+ * MCP Server for Afyx Graph
  *
- * Implements the Model Context Protocol to expose CodeGraph
+ * Implements the Model Context Protocol to expose Afyx Graph
  * functionality as tools that can be called by AI assistants.
  *
  * Backwards-compatible constructor and `start()` signature with the
@@ -313,29 +311,16 @@ export class MCPServer {
    * Start the MCP server.
    *
    * Decision order:
-   *   1. `CODEGRAPH_NO_DAEMON=1` → direct mode (unchanged pre-#411 behavior).
-   *   2. `CODEGRAPH_DAEMON_INTERNAL=1` → we ARE the detached daemon; listen.
-   *   3. No `.codegraph/` reachable → direct mode (the daemon's lockfile and
-   *      socket both live under `.codegraph/`).
+   *   1. `AFYX_GRAPH_NO_DAEMON=1` → direct mode (unchanged pre-#411 behavior).
+   *   2. `AFYX_GRAPH_DAEMON_INTERNAL=1` → we ARE the detached daemon; listen.
+   *   3. No `.afyx-graph/` reachable → direct mode (the daemon's lockfile and
+   *      socket both live under `.afyx-graph/`).
    *   4. Otherwise connect to (or spawn) the shared daemon and proxy to it.
    *
    * On any unexpected failure in step 4 we transparently fall back to direct
    * mode — a misbehaving daemon must never block a session from starting.
    */
   async start(): Promise<void> {
-    // Long-lived process (direct / proxy / daemon alike): flush buffered
-    // telemetry opportunistically. Fire-and-forget + unref'd — adds nothing
-    // to the handshake path and never keeps the process alive.
-    getTelemetry().startInterval();
-
-    // #1243: the MCP config launches the local binary, so a server left
-    // running drifts behind releases with no signal. Refresh the shared
-    // update-check cache in the background and log ONE stderr notice when a
-    // newer version exists (stderr only — stdout is the protocol channel).
-    // The notice also reaches the agent via the initialize instructions and
-    // codegraph_status. Fire-and-forget: adds nothing to the handshake path.
-    checkForUpdateInBackground();
-
     // The detached daemon process itself. Checked before the opt-out so the
     // daemon honors the same env it was spawned with (it never sets NO_DAEMON).
     if (daemonInternalSet()) {
@@ -345,14 +330,14 @@ export class MCPServer {
     // Direct mode if the user opted out. Setting the env var is sufficient to
     // get the pre-#411 single-process behavior.
     if (daemonOptOutSet()) {
-      return this.startDirect('CODEGRAPH_NO_DAEMON set');
+      return this.startDirect('AFYX_GRAPH_NO_DAEMON set');
     }
 
     const root = resolveDaemonRoot(this.projectPath);
     if (!root) {
       // No initialized project found — daemon mode has nowhere to put its
       // socket. The fresh-checkout / outside-project case; behave as before.
-      return this.startDirect('no .codegraph/ root found');
+      return this.startDirect('no .afyx-graph/ root found');
     }
 
     try {
@@ -368,7 +353,7 @@ export class MCPServer {
       // Belt-and-braces: a throw during proxy SETUP (before the client was served)
       // is still safe to recover from with a direct-mode session.
       const msg = err instanceof Error ? err.message : String(err);
-      process.stderr.write(`[CodeGraph MCP] Proxy path failed (${msg}); falling back to direct mode.\n`);
+      process.stderr.write(`[Afyx Graph MCP] Proxy path failed (${msg}); falling back to direct mode.\n`);
       return this.startDirect('proxy path threw');
     }
   }
@@ -411,8 +396,8 @@ export class MCPServer {
 
   /** Single-process stdio MCP session — the pre-issue-#411 code path. */
   private async startDirect(reason: string): Promise<void> {
-    if (reason && process.env.CODEGRAPH_MCP_DEBUG) {
-      process.stderr.write(`[CodeGraph MCP] Direct mode: ${reason}.\n`);
+    if (reason && process.env.AFYX_GRAPH_MCP_DEBUG) {
+      process.stderr.write(`[Afyx Graph MCP] Direct mode: ${reason}.\n`);
     }
 
     // #1740: refuse a second direct writer on an initialized project. Daemon
@@ -422,7 +407,7 @@ export class MCPServer {
       const writer = tryAcquireWriterLock(writerRoot, 'direct');
       if (writer.kind === 'taken') {
         const msg = writerLockHeldMessage(writer.existing, writer.pidPath);
-        process.stderr.write(`[CodeGraph MCP] ${msg}\n`);
+        process.stderr.write(`[Afyx Graph MCP] ${msg}\n`);
         process.exit(1);
       }
       this.writerLockRoot = writerRoot;
@@ -454,8 +439,8 @@ export class MCPServer {
     // after session.start() attached the real stdin consumer.
     armStartupHandshakeTimeout(() => {
       process.stderr.write(
-        '[CodeGraph MCP] No MCP traffic since startup; assuming an abandoned launch and shutting down (#1185). ' +
-        'Tune with CODEGRAPH_STARTUP_HANDSHAKE_TIMEOUT_MS (0 disables).\n'
+        '[Afyx Graph MCP] No MCP traffic since startup; assuming an abandoned launch and shutting down (#1185). ' +
+        'Tune with AFYX_GRAPH_STARTUP_HANDSHAKE_TIMEOUT_MS (0 disables).\n'
       );
       this.stop();
     });
@@ -468,7 +453,7 @@ export class MCPServer {
 
   /**
    * Run as the detached shared daemon (process spawned with
-   * `CODEGRAPH_DAEMON_INTERNAL=1`). Arbitrate the O_EXCL lock, then either
+   * `AFYX_GRAPH_DAEMON_INTERNAL=1`). Arbitrate the O_EXCL lock, then either
    * become the daemon (bind the socket, serve forever) or — if a live daemon
    * already holds the lock — exit so we don't leak a redundant process.
    *
@@ -476,7 +461,7 @@ export class MCPServer {
    * and reaps itself via client-refcount + idle timeout (see {@link Daemon}).
    */
   private async startDaemonProcess(): Promise<void> {
-    // In daemon mode stderr IS `.codegraph/daemon.log`; stamp every line so
+    // In daemon mode stderr IS `.afyx-graph/daemon.log`; stamp every line so
     // kills/restarts can be placed in time (#1431 — the log was undatable).
     timestampStderrLines();
     const root = resolveDaemonRoot(this.projectPath) ?? this.projectPath ?? process.cwd();
@@ -515,7 +500,7 @@ export class MCPServer {
           await probeDaemonIdentity(existing)
         ) {
           process.stderr.write(
-            `[CodeGraph daemon] Another daemon (pid ${existing.pid}) already holds the lock; exiting.\n`
+            `[Afyx Graph daemon] Another daemon (pid ${existing.pid}) already holds the lock; exiting.\n`
           );
           process.exit(0);
         }
@@ -538,7 +523,7 @@ export class MCPServer {
       await sleep(TAKEOVER_RETRY_DELAY_MS);
     }
 
-    process.stderr.write('[CodeGraph daemon] Could not acquire the daemon lock; exiting.\n');
+    process.stderr.write('[Afyx Graph daemon] Could not acquire the daemon lock; exiting.\n');
     process.exit(0);
   }
 
@@ -600,7 +585,7 @@ export class MCPServer {
    */
   private installPpidWatchdog(): void {
     if (this.mode !== 'direct') return;
-    const pollMs = parsePpidPollMs(process.env.CODEGRAPH_PPID_POLL_MS);
+    const pollMs = parsePpidPollMs(process.env.AFYX_GRAPH_PPID_POLL_MS);
     if (pollMs <= 0) return;
     this.ppidWatchdog = setInterval(() => {
       const reason = supervisionLostReason({
@@ -611,7 +596,7 @@ export class MCPServer {
       });
       if (reason) {
         process.stderr.write(
-          `[CodeGraph MCP] Parent process exited (${reason}); shutting down.\n`
+          `[Afyx Graph MCP] Parent process exited (${reason}); shutting down.\n`
         );
         this.stop();
       }
@@ -633,4 +618,4 @@ export { StdioTransport } from './transport';
 export { tools, ToolHandler } from './tools';
 // Surface a few daemon-mode bits for tests + diagnostics.
 export { Daemon } from './daemon';
-export { CodeGraphPackageVersion } from './version';
+export { AfyxGraphPackageVersion } from './version';

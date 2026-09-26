@@ -2,9 +2,8 @@
 """Generate assets/languages/*.svg — the README "Language Support" icon grid.
 
 One tile per supported language: a paper card with the language's vector mark and
-its name centered underneath. Labels are converted to vector outlines (Archivo,
-same pipeline as generate-waitlist.py) so the SVG renders pixel-identical
-everywhere: GitHub loads README SVGs in "secure static mode", which blocks
+its name centered underneath. Labels are converted to vector outlines (Archivo)
+so the SVG renders pixel-identical everywhere: GitHub loads README SVGs in "secure static mode", which blocks
 @font-face / web-font loading, so outlines are the only reliable way to ship the
 brand typeface. Every tile sits on the brand paper (#f7f6f2), so brand-colored
 marks — including near-black ones like Rust — stay legible on GitHub light *and*
@@ -37,7 +36,7 @@ from fontTools.pens.svgPathPen import SVGPathPen
 from fontTools.pens.transformPen import TransformPen
 from fontTools.misc.transform import Transform
 
-# --- brand palette (mirrors generate-waitlist.py) ---------------------------
+# --- brand palette -----------------------------------------------------------
 PAPER    = "#f7f6f2"
 HAIRLINE = "#d6d3c8"
 INK      = "#16150f"
@@ -48,7 +47,7 @@ FONT = os.path.join(
 )
 
 # --- tile geometry (px) ------------------------------------------------------
-TILE        = 104     # square tile, rx=8 card like the waitlist button
+TILE        = 104     # square tile, rx=8 card
 GLYPH_BOX   = 44      # logo box, horizontally centered
 GLYPH_TOP   = 18
 LABEL_SIZE  = 12.5
@@ -99,7 +98,7 @@ LANGS = [
 
 
 def fetch(url):
-    req = urllib.request.Request(url, headers={"User-Agent": "codegraph-assets"})
+    req = urllib.request.Request(url, headers={"User-Agent": "afyx-graph-assets"})
     with urllib.request.urlopen(req, timeout=20) as r:
         return r.read().decode("utf-8")
 

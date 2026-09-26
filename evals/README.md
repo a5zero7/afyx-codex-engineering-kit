@@ -97,5 +97,5 @@ Smoke mode uses one repetition to validate mechanics and fixtures. It is not evi
 
 - Tool/read/search metrics depend on the event detail exposed by the installed Codex CLI.
 - File-open and duplicate-read counts remain unavailable when event payloads do not identify paths.
-- Phase 3A does not evaluate CodeGraph, Headroom, end-to-end Prompt Master value, or comparative skill effectiveness.
+- Phase 3A does not evaluate Afyx Graph, Headroom, end-to-end Prompt Master value, or comparative skill effectiveness.
 - The current fixtures validate the harness only and must not be used to claim benchmark superiority.

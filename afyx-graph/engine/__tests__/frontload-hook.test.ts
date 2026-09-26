@@ -1,7 +1,7 @@
 /**
  * Front-load hook project resolution (#964).
  *
- * The Claude `UserPromptSubmit` front-load hook must inject CodeGraph context
+ * The Claude `UserPromptSubmit` front-load hook must inject Afyx Graph context
  * for the RIGHT project — including the monorepo case where the agent's cwd is
  * an un-indexed workspace root and the index lives in a sub-project. These test
  * `planFrontload` / `findIndexedSubprojectRoots` directly (the hook's decision
@@ -18,10 +18,10 @@ import { planFrontload, findIndexedSubprojectRoots, unsafeIndexRootReason, isStr
 // fixture without changing the process environment or the user's home files.
 vi.mock('os', async (importOriginal) => ({ ...await importOriginal<typeof import('os')>() }));
 
-/** Make `dir` look indexed (isInitialized needs `.codegraph/codegraph.db`). */
+/** Make `dir` look indexed (isInitialized needs `.afyx-graph/afyx-graph.db`). */
 function mkIndexed(dir: string): string {
-  fs.mkdirSync(path.join(dir, '.codegraph'), { recursive: true });
-  fs.writeFileSync(path.join(dir, '.codegraph', 'codegraph.db'), '');
+  fs.mkdirSync(path.join(dir, '.afyx-graph'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.afyx-graph', 'afyx-graph.db'), '');
   return dir;
 }
 /** A workspace-root manifest so the down-scan gate (looksLikeProjectRoot) passes. */
@@ -357,7 +357,7 @@ describe('prompt-hook injection cap (#1694)', () => {
     expect(PROMPT_HOOK_INJECTION_MAX).toBe(9000);
     expect(CLAUDE_CODE_INLINE_HOOK_OUTPUT_LIMIT).toBe(10_000);
     expect(PROMPT_HOOK_INJECTION_MAX).toBeLessThan(CLAUDE_CODE_INLINE_HOOK_OUTPUT_LIMIT);
-    // Leave headroom for the <codegraph_context> wrapper + projectPath nudge lines.
+    // Leave headroom for the <afyx_graph_context> wrapper + projectPath nudge lines.
     expect(CLAUDE_CODE_INLINE_HOOK_OUTPUT_LIMIT - PROMPT_HOOK_INJECTION_MAX).toBeGreaterThanOrEqual(500);
   });
 
@@ -371,7 +371,7 @@ describe('prompt-hook injection cap (#1694)', () => {
     const out = capPromptHookInjection(over);
     expect(out.length).toBeLessThan(over.length);
     expect(out.startsWith('a'.repeat(PROMPT_HOOK_INJECTION_MAX))).toBe(true);
-    expect(out).toContain('…(truncated; call codegraph_explore for the rest)');
+    expect(out).toContain('…(truncated; call afyx_graph_explore for the rest)');
     // Capped body alone must still fit under the host inline limit.
     expect(out.length).toBeLessThan(CLAUDE_CODE_INLINE_HOOK_OUTPUT_LIMIT);
   });

@@ -32,7 +32,7 @@ describe('writer lock (#1740)', () => {
 
   function makeProject(): string {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg1740-lock-'));
-    fs.mkdirSync(path.join(dir, '.codegraph'), { recursive: true });
+    fs.mkdirSync(path.join(dir, '.afyx-graph'), { recursive: true });
     return dir;
   }
 
@@ -72,7 +72,7 @@ describe('writer lock (#1740)', () => {
       expect(r.existing?.pid).toBe(1);
       const msg = writerLockHeldMessage(r.existing, r.pidPath);
       expect(msg).toMatch(/writer lock held/i);
-      expect(msg).toMatch(/CODEGRAPH_NO_DAEMON/);
+      expect(msg).toMatch(/AFYX_GRAPH_NO_DAEMON/);
       expect(msg).toMatch(/daemon stop/);
     }
   });

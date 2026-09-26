@@ -1,7 +1,7 @@
 /**
  * Kernel↔wasm TS/JS extraction parity (R2 of the kernel migration).
  *
- * Asserts the native walker (codegraph-kernel/src/tsjs/) produces the SAME
+ * Asserts the native walker (afyx-graph-kernel/src/tsjs/) produces the SAME
  * ExtractionResult as the wasm TreeSitterExtractor — nodes, edges, and
  * unresolved refs compared as canonicalized multisets — over:
  *   - the checked-in torture fixtures (every ported feature: components/HOCs,
@@ -11,7 +11,7 @@
  *
  * The full-repo sweep lives in scripts/kernel-parity.mjs (excalidraw et al.,
  * run for the §5 gate); this suite keeps the invariant alive in `npm test`.
- * Skips when no kernel binary is staged; CODEGRAPH_KERNEL_EXPECT=1 turns that
+ * Skips when no kernel binary is staged; AFYX_GRAPH_KERNEL_EXPECT=1 turns that
  * into a failure (wired in kernel-scaffold.test.ts).
  */
 
@@ -26,10 +26,10 @@ import type { ExtractionResult, Language } from '../src/types';
 const KERNEL_PATH = path.join(
   __dirname,
   '..',
-  'codegraph-kernel',
+  'afyx-graph-kernel',
   'prebuilds',
   `${process.platform}-${process.arch}`,
-  'codegraph-kernel.node'
+  'afyx-graph-kernel.node'
 );
 const kernelBuilt = fs.existsSync(KERNEL_PATH);
 
@@ -54,7 +54,7 @@ function canon(result: ExtractionResult): { nodes: string[]; edges: string[]; re
   };
 }
 
-const ENV_KEYS = ['CODEGRAPH_KERNEL', 'CODEGRAPH_KERNEL_LANGS'] as const;
+const ENV_KEYS = ['AFYX_GRAPH_KERNEL', 'AFYX_GRAPH_KERNEL_LANGS'] as const;
 let savedEnv: Record<string, string | undefined>;
 
 describe.skipIf(!kernelBuilt)('kernel TS/JS extraction parity', () => {
@@ -77,14 +77,14 @@ describe.skipIf(!kernelBuilt)('kernel TS/JS extraction parity', () => {
   });
 
   function assertParity(filePath: string, source: string, language: Language): ExtractionResult {
-    process.env.CODEGRAPH_KERNEL_LANGS = 'all';
-    delete process.env.CODEGRAPH_KERNEL;
+    process.env.AFYX_GRAPH_KERNEL_LANGS = 'all';
+    delete process.env.AFYX_GRAPH_KERNEL;
     const viaKernel = tryKernelExtract(filePath, source, language);
     expect(viaKernel, `kernel extraction failed for ${filePath}`).not.toBeNull();
 
-    process.env.CODEGRAPH_KERNEL = '0';
+    process.env.AFYX_GRAPH_KERNEL = '0';
     const viaWasm = extractFromSource(filePath, source, language);
-    delete process.env.CODEGRAPH_KERNEL;
+    delete process.env.AFYX_GRAPH_KERNEL;
 
     const k = canon(viaKernel!);
     const w = canon(viaWasm);
@@ -178,13 +178,13 @@ function nested(holder) {
     // (web-tree-sitter) parsing — same grammar, same core version — so the
     // kernel defers any erroring file to keep routing graph-neutral.
     const broken = 'export function f( {\n  return }} 12 (\n';
-    process.env.CODEGRAPH_KERNEL_LANGS = 'all';
-    delete process.env.CODEGRAPH_KERNEL;
+    process.env.AFYX_GRAPH_KERNEL_LANGS = 'all';
+    delete process.env.AFYX_GRAPH_KERNEL;
     expect(tryKernelExtract('src/broken.ts', broken, 'typescript')).toBeNull();
     // The seam still serves the file — through the wasm path.
-    process.env.CODEGRAPH_KERNEL = '0';
+    process.env.AFYX_GRAPH_KERNEL = '0';
     const viaWasm = extractFromSource('src/broken.ts', broken, 'typescript');
-    delete process.env.CODEGRAPH_KERNEL;
+    delete process.env.AFYX_GRAPH_KERNEL;
     expect(viaWasm.nodes.some((n) => n.kind === 'file')).toBe(true);
   });
 

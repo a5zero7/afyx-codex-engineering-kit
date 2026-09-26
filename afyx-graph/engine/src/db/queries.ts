@@ -240,7 +240,7 @@ export class QueryBuilder {
   // Project-name tokens (go.mod / package.json / repo dir), normalized. A query
   // word matching one is dropped from path-relevance scoring — it names the
   // whole project, not a symbol, so it carries no discriminative signal (#720).
-  // Set once by the CodeGraph instance; empty by default (no down-weighting).
+  // Set once by the Afyx Graph instance; empty by default (no down-weighting).
   private projectNameTokens: Set<string> = new Set();
   private isDeprioritizedPath: ((filePath: string) => boolean) | undefined;
 
@@ -383,7 +383,7 @@ export class QueryBuilder {
 
   /**
    * Set the predicate that marks a path as de-prioritized by the project's
-   * `codegraph.json` `deprioritize` patterns (#982). Ranking-only: those paths
+   * `afyx-graph.json` `deprioritize` patterns (#982). Ranking-only: those paths
    * stay indexed and findable, they just stop outranking first-party code.
    * Called once when the project opens; undefined disables the lever.
    */
@@ -424,7 +424,7 @@ export class QueryBuilder {
 
     // Validate required fields to prevent SQLite bind errors
     if (!node.id || !node.kind || !node.name || !node.filePath || !node.language) {
-      console.error('[CodeGraph] Skipping node with missing required fields:', {
+      console.error('[Afyx Graph] Skipping node with missing required fields:', {
         id: node.id,
         kind: node.kind,
         name: node.name,
@@ -509,7 +509,7 @@ export class QueryBuilder {
       const segmentRows: unknown[][] = [];
       for (const node of nodes) {
         if (!node.id || !node.kind || !node.name || !node.filePath || !node.language) {
-          console.error('[CodeGraph] Skipping node with missing required fields:', {
+          console.error('[Afyx Graph] Skipping node with missing required fields:', {
             id: node.id,
             kind: node.kind,
             name: node.name,
@@ -656,7 +656,7 @@ export class QueryBuilder {
 
     // Validate required fields
     if (!node.id || !node.kind || !node.name || !node.filePath || !node.language) {
-      console.error('[CodeGraph] Skipping node update with missing required fields:', node.id);
+      console.error('[Afyx Graph] Skipping node update with missing required fields:', node.id);
       return;
     }
 
@@ -1013,7 +1013,7 @@ export class QueryBuilder {
    * `route` nodes (framework-emitted: Express/Gin/Flask/Rails/Drupal/etc.).
    * Used by handleContext on small repos to inline the project's routing
    * config when the agent's query is about request flow — eliminating the
-   * "Glob + Read routes.rb" pattern that beats codegraph on tiny realworld
+   * "Glob + Read routes.rb" pattern that beats afyx-graph on tiny realworld
    * template repos.
    *
    * Excludes test/generated files from candidacy. Returns null if there
@@ -2095,7 +2095,7 @@ export class QueryBuilder {
    * Which of `names` are carried by MORE THAN ONE symbol, at least one of which
    * something points at.
    *
-   * The false positive this exists to kill: `CodeGraph.getTopRouteFile` calls
+   * The false positive this exists to kill: `AfyxGraph.getTopRouteFile` calls
    * `this.queries.getTopRouteFile()`, and the resolver — which prefers a
    * same-name definition in the call site's own file — attaches that edge to
    * the *calling* method. One of the two ends up with a self-edge and the other
@@ -2207,7 +2207,7 @@ export class QueryBuilder {
    * ranked by how much of the project they set in motion.
    *
    * The engine records a statement at the top level of a file as an edge from
-   * the *file* node, so `src/bin/codegraph.ts` calling `program.parse()` at
+   * the *file* node, so `src/bin/afyx-graph.ts` calling `program.parse()` at
    * module scope is a `calls` edge out of a `file`. That set is what makes the
    * roots of a dependency graph visible: a library module holds definitions and
    * runs nothing until someone imports it, while a CLI, a worker entry or a
