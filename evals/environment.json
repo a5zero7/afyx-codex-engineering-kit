@@ -2,7 +2,7 @@
   "schema_version": 2,
   "frozen_at": "2026-09-26T22:01:06+07:00",
   "repository": {
-    "benchmark_subject_commit": "fd3b384bcecb5ae2fea5819ef3425f68c7926d73",
+    "benchmark_subject_commit": "11d44916f00d8a67c9336e35bd4ac19fa3a8581d",
     "branch": "afyx/graph-independence-hardening"
   },
   "skills": {
