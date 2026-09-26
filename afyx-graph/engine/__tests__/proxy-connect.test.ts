@@ -34,7 +34,7 @@ async function fakeDaemon(version: string): Promise<{ sockPath: string; server: 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-proxy-'));
   const sockPath = path.join(dir, 'd.sock');
   const server = net.createServer((socket) => {
-    const hello = { afyx_graph: version, pid: process.pid, socketPath: sockPath, protocol: 1 };
+    const hello = { afyxGraph: version, pid: process.pid, socketPath: sockPath, protocol: 1 };
     socket.write(JSON.stringify(hello) + '\n');
   });
   await new Promise<void>((resolve) => server.listen(sockPath, resolve));
