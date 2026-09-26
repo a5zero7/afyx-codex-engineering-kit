@@ -36,7 +36,6 @@
   },
   "scripts": {
     "build": "vite build",
-    "build:lib": "node ../scripts/sync-ui-version.mjs && svelte-package -i src -o dist && node ../scripts/check-ui-package.mjs",
     "dev": "vite",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json"
