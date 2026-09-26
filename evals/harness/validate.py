@@ -7,6 +7,7 @@ import json
 import re
 import sys
 from collections import Counter
+import subprocess
 from datetime import date
 from pathlib import Path
 
@@ -124,6 +125,28 @@ def validate_manifest(violations: list[str]) -> None:
         violations.append(f"duplicate scenario_id: {scenario_id!r}")
 
 
+def git_ok(*args: str) -> bool | None:
+    try:
+        return subprocess.run(["git", "-C", str(REPO_ROOT), *args], capture_output=True).returncode == 0
+    except OSError:
+        return None
+
+
+def validate_subject_ancestry(subject: str, violations: list[str]) -> None:
+    """Best effort: needs full history, so shallow clones and non-git trees are skipped."""
+    if git_ok("rev-parse", "--git-dir") is not True:
+        return
+    shallow = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "rev-parse", "--is-shallow-repository"], capture_output=True, text=True
+    ).stdout.strip()
+    if shallow == "true":
+        return
+    if not git_ok("cat-file", "-e", f"{subject}^{{commit}}"):
+        violations.append(f"repository.benchmark_subject_commit {subject[:12]} is not a commit in this repository")
+    elif not git_ok("merge-base", "--is-ancestor", subject, "HEAD"):
+        violations.append(f"repository.benchmark_subject_commit {subject[:12]} is not an ancestor of HEAD")
+
+
 def validate_environment(violations: list[str]) -> None:
     path = EVAL_ROOT / "environment.json"
     try:
@@ -142,6 +165,8 @@ def validate_environment(violations: list[str]) -> None:
     subject = repository.get("benchmark_subject_commit")
     if not isinstance(subject, str) or not re.fullmatch(r"[0-9a-f]{40}", subject):
         violations.append("repository.benchmark_subject_commit must be a full 40-hex commit SHA")
+    else:
+        validate_subject_ancestry(subject, violations)
     if not repository.get("branch"):
         violations.append("repository.branch is required")
 
