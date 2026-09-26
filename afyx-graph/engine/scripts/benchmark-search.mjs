@@ -48,6 +48,10 @@ const CANDIDATES = Array.from({ length: 2000 }, (_, index) => ({
   filePath: `${DIRS[index % DIRS.length]}/${FILES[(index * 3) % FILES.length]}`,
 }));
 const INDEXED = CANDIDATES.slice(0, 400).map((candidate) => candidate.filePath);
+// A large index and queries that only resolve through segment-aligned suffixes (absolute or prefixed paths).
+const LARGE_INDEX = Array.from({ length: 20000 }, (_, index) => `packages/pkg${index % 200}/src/module${index % 97}/file${index}.ts`);
+const PLAIN_QUERIES = ['how does non-blocking io work', 'the quick-fix flow for failures', 'update the pre-commit hook logic'];
+const SUFFIX_QUERIES = ['/Users/dev/work/repo/packages/pkg7/src/module7/file7.ts', 'repo/packages/pkg150/src/module55/file19950.ts open', 'see /a/b/c/d/packages/pkg3/src/module3/file3003.ts and file9999.ts'];
 
 const CASES = {
   extractSearchTerms: () => { for (const q of QUERIES) utils.extractSearchTerms(q); },
@@ -55,6 +59,8 @@ const CASES = {
   splitIdentifierSegments: () => { for (const n of NAMES) segments.splitIdentifierSegments(n); },
   extractSegmentSearchWords: () => { for (const q of QUERIES) segments.extractSegmentSearchWords(q); },
   extractQueryPaths: () => { for (const q of QUERIES) paths.extractQueryPaths(q, INDEXED); },
+  extractQueryPaths_20k_no_path_spans: () => { for (const q of PLAIN_QUERIES) paths.extractQueryPaths(q, LARGE_INDEX); },
+  extractQueryPaths_20k_paths: () => { for (const q of SUFFIX_QUERIES) paths.extractQueryPaths(q, LARGE_INDEX); },
   isTestFile: () => { for (const c of CANDIDATES) utils.isTestFile(c.filePath); },
   rank_2000_candidates: () => {
     let total = 0;
