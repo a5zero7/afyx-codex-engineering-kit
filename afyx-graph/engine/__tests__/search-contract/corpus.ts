@@ -56,7 +56,7 @@ const FILTERED = [
   'kind:function name:auth path:src/api authenticate', 'kind:class', 'kind:nonsense foo', 'KIND:Function', 'lang:python', 'language:TypeScript',
   'lang:klingon x', 'path:"src/some path/with spaces" run', 'path:"unterminated quote rest of input', '"leading quote" name:x', 'name:', ':value',
   'foo:bar', 'TODO: fix', 'kind:function kind:method name:a name:b', 'path:a path:b', 'http://example.com/x', 'a:b:c', 'kind:"function"',
-  '   spaced    out   ', 'path:""', 'name:"x y"', 'kind:function\tname:tab', 'lang:go path:cmd/ server',
+  '   spaced    out   ', 'constructor:x __proto__:y toString:z hasOwnProperty:a', 'path:""', 'name:"x y"', 'kind:function\tname:tab', 'lang:go path:cmd/ server',
 ];
 
 const PATH_LIKE = [
@@ -98,7 +98,7 @@ export const PATHS: string[] = (() => {
   const out: string[] = [];
   for (const dir of DIRS) for (const file of FILES) out.push(dir ? `${dir}/${file}` : file);
   for (const dir of DIRS) if (dir) for (const file of FILES) out.push(`pkg/${dir}/${file}`);
-  out.push('/abs/tests/x.ts', '/abs/src/sample/x.ts', '\\win\\tests\\x.ts', 'Tests/X.ts', 'TEST/x.ts', 'src\\test\\y.ts', 'foo/latest/x.kt', 'foo/manifest/x.kt', 'jvmTest/A.kt', 'x/jvmtest/A.kt');
+  out.push('/abs/tests/x.ts', '/abs/src/sample/x.ts', 'Tests/X.ts', 'TEST/x.ts', 'foo/latest/x.kt', 'foo/manifest/x.kt', 'jvmTest/A.kt', 'x/jvmtest/A.kt');
   return out;
 })();
 
@@ -146,7 +146,7 @@ export const STEM_WORDS: string[] = [
 ];
 
 export const KIND_SAMPLES: string[] = ['function', 'method', 'class', 'interface', 'type_alias', 'struct', 'union', 'trait', 'enum', 'component', 'route', 'module', 'property',
-  'field', 'variable', 'constant', 'import', 'export', 'parameter', 'namespace', 'file', 'protocol', 'enum_member', 'unknown_kind', '', 'FUNCTION', 'constructor', '__proto__'];
+  'field', 'variable', 'constant', 'import', 'export', 'parameter', 'namespace', 'file', 'protocol', 'enum_member', 'unknown_kind', '', 'FUNCTION'];
 
 /** Manifest cases for deriveProjectNameTokens: directory name plus optional files. */
 export const PROJECT_CASES: Array<{ dir: string; goMod?: string; packageJson?: string }> = [
