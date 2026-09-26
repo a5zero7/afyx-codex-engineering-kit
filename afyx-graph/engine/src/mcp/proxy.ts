@@ -26,12 +26,11 @@ import { EARLY_PPID } from './early-ppid';
 import { supervisionLostReason } from './ppid-watchdog';
 import { armStartupHandshakeTimeout } from './startup-handshake';
 import { treatStdinFailureAsShutdown } from './stdin-teardown';
-import { CodeGraphPackageVersion } from './version';
-import { SERVER_INFO, PROTOCOL_VERSION, initializeInstructions } from './session';
+import { AfyxGraphPackageVersion } from './version';
+import { SERVER_INFO, PROTOCOL_VERSION } from './session';
 import { SERVER_INSTRUCTIONS } from './server-instructions';
 import { getStaticTools } from './tools';
 import { ExploreSessionState } from './explore-session-state';
-import { getTelemetry, ClientInfo } from '../telemetry';
 import type { MCPEngine } from './engine';
 
 /** Default poll cadence for the PPID watchdog (same as the direct server). */
@@ -44,7 +43,7 @@ const DEFAULT_PPID_POLL_MS = 5000;
  * a healthy attach showed up as `[error] … undefined`. Set to `1` to surface it
  * when debugging daemon attach. (#618; approach from #640 by @mturac)
  */
-const LOG_ATTACH_ENV = 'CODEGRAPH_MCP_LOG_ATTACH';
+const LOG_ATTACH_ENV = 'AFYX_GRAPH_MCP_LOG_ATTACH';
 
 /**
  * Log a successful daemon attach — gated behind {@link LOG_ATTACH_ENV} so it is
@@ -53,7 +52,7 @@ const LOG_ATTACH_ENV = 'CODEGRAPH_MCP_LOG_ATTACH';
 export function logAttachedDaemon(socketPath: string, hello: DaemonHello): void {
   if (process.env[LOG_ATTACH_ENV] !== '1') return;
   process.stderr.write(
-    `[CodeGraph MCP] Attached to shared daemon on ${socketPath} (pid ${hello.pid}, v${hello.codegraph}).\n`
+    `[Afyx Graph MCP] Attached to shared daemon on ${socketPath} (pid ${hello.pid}, v${hello.afyxGraph}).\n`
   );
 }
 
@@ -85,7 +84,7 @@ export interface ProxyResult {
  */
 export async function runProxy(
   socketPath: string,
-  expectedVersion: string = CodeGraphPackageVersion,
+  expectedVersion: string = AfyxGraphPackageVersion,
 ): Promise<ProxyResult> {
   // POSIX: refuse to connect to a stale socket file that points at no
   // listening process. `fs.existsSync` is a cheap pre-check; a real
@@ -105,9 +104,9 @@ export async function runProxy(
     return { outcome: 'fallback-needed', reason: hello.message };
   }
 
-  if (hello.codegraph !== expectedVersion) {
+  if (hello.afyxGraph !== expectedVersion) {
     process.stderr.write(
-      `[CodeGraph MCP] Found a daemon on ${socketPath} but version (${hello.codegraph}) ` +
+      `[Afyx Graph MCP] Found a daemon on ${socketPath} but version (${hello.afyxGraph}) ` +
       `differs from ours (${expectedVersion}); falling back to direct mode.\n`
     );
     socket.destroy();
@@ -133,7 +132,7 @@ export async function runProxy(
  */
 export async function connectWithHello(
   socketPath: string,
-  expectedVersion: string = CodeGraphPackageVersion,
+  expectedVersion: string = AfyxGraphPackageVersion,
 ): Promise<net.Socket | 'version-mismatch' | null> {
   if (process.platform !== 'win32' && !fs.existsSync(socketPath)) return null;
   const socket = net.createConnection(socketPath);
@@ -153,11 +152,11 @@ export async function connectWithHello(
     socket.destroy();
     return null; // no daemon yet — caller should keep polling
   }
-  if (hello.codegraph !== expectedVersion) {
+  if (hello.afyxGraph !== expectedVersion) {
     // A daemon IS up but it's the wrong version — definitive, not a "not yet".
     // Don't poll; the caller serves in-process so we never run stale-vs-new.
     process.stderr.write(
-      `[CodeGraph MCP] Found a daemon on ${socketPath} but version (${hello.codegraph}) ` +
+      `[Afyx Graph MCP] Found a daemon on ${socketPath} but version (${hello.afyxGraph}) ` +
       `differs from ours (${expectedVersion}); serving this session in-process.\n`
     );
     socket.destroy();
@@ -179,7 +178,7 @@ export async function connectWithHello(
  */
 function sendClientHello(socket: net.Socket): void {
   const clientHello: DaemonClientHello = {
-    codegraph_client: 1,
+    afyx_graph_client: 1,
     pid: process.pid,
     hostPid: parseHostPpid(process.env[HOST_PPID_ENV]) ?? EARLY_PPID,
   };
@@ -218,10 +217,6 @@ export async function runLocalHandshakeProxy(deps: LocalHandshakeDeps): Promise<
   let daemonStatus: 'connecting' | 'ready' | 'failed' = 'connecting';
   let daemonSocket: net.Socket | null = null;
   let clientInitId: unknown = undefined;   // suppress the daemon's reply to the forwarded initialize
-  // Telemetry attribution for the in-process fallback only — calls routed to
-  // the daemon are counted by the daemon's own session (which receives the
-  // forwarded initialize, clientInfo included), never double-counted here.
-  let telemetryClient: ClientInfo | undefined;
   const pending: string[] = [];            // client lines buffered until the daemon resolves
   let engine: MCPEngine | null = null;
   let engineReady: Promise<void> | null = null;
@@ -268,7 +263,6 @@ export async function runLocalHandshakeProxy(deps: LocalHandshakeDeps): Promise<
         const params = (msg.params || {}) as { name: string; arguments?: Record<string, unknown> };
         const result = await engine!.getToolHandler().execute(params.name, params.arguments || {}, exploreSession);
         writeClient({ jsonrpc: '2.0', id, result });
-        getTelemetry().recordUsage('mcp_tool', params.name, !result.isError, telemetryClient);
       } catch (err) {
         writeClient({ jsonrpc: '2.0', id, error: { code: -32603, message: err instanceof Error ? err.message : String(err) } });
       }
@@ -277,19 +271,19 @@ export async function runLocalHandshakeProxy(deps: LocalHandshakeDeps): Promise<
     } else if (id !== undefined && msg.method !== 'initialize') {
       // A request we can't serve in-process (and the daemon is gone) — answer
       // with an error rather than let the host hang on a reply that won't come.
-      writeClient({ jsonrpc: '2.0', id, error: { code: -32603, message: 'CodeGraph daemon unavailable' } });
+      writeClient({ jsonrpc: '2.0', id, error: { code: -32603, message: 'Afyx Graph daemon unavailable' } });
     }
     // initialize already answered locally; notifications (initialized) need no reply.
   };
   const routeToDaemon = (line: string): void => {
     if (daemonStatus === 'ready' && daemonSocket) {
       trackInflight(line);
-      if (process.env.CODEGRAPH_MCP_DEBUG) process.stderr.write(`[mcp-debug] proxy->daemon ${line.slice(0, 80)}\n`);
+      if (process.env.AFYX_GRAPH_MCP_DEBUG) process.stderr.write(`[mcp-debug] proxy->daemon ${line.slice(0, 80)}\n`);
       try { daemonSocket.write(line.endsWith('\n') ? line : line + '\n'); } catch { /* close path */ }
     } else if (daemonStatus === 'failed') {
       void handleLocally(line);
     } else {
-      if (process.env.CODEGRAPH_MCP_DEBUG) process.stderr.write(`[mcp-debug] proxy-buffer(${daemonStatus}) ${line.slice(0, 80)}\n`);
+      if (process.env.AFYX_GRAPH_MCP_DEBUG) process.stderr.write(`[mcp-debug] proxy-buffer(${daemonStatus}) ${line.slice(0, 80)}\n`);
       pending.push(line);
     }
   };
@@ -307,14 +301,7 @@ export async function runLocalHandshakeProxy(deps: LocalHandshakeDeps): Promise<
       let msg: JsonRpc; try { msg = JSON.parse(line) as JsonRpc; } catch { routeToDaemon(line); continue; }
       if (msg.method === 'initialize') {
         clientInitId = msg.id;
-        const initParams = (msg.params ?? {}) as { clientInfo?: { name?: unknown; version?: unknown } };
-        if (initParams.clientInfo) {
-          telemetryClient = {
-            name: typeof initParams.clientInfo.name === 'string' ? initParams.clientInfo.name : undefined,
-            version: typeof initParams.clientInfo.version === 'string' ? initParams.clientInfo.version : undefined,
-          };
-        }
-        writeClient({ jsonrpc: '2.0', id: msg.id, result: { protocolVersion: PROTOCOL_VERSION, capabilities: { tools: {} }, serverInfo: SERVER_INFO, instructions: initializeInstructions(SERVER_INSTRUCTIONS) } });
+        writeClient({ jsonrpc: '2.0', id: msg.id, result: { protocolVersion: PROTOCOL_VERSION, capabilities: { tools: {} }, serverInfo: SERVER_INFO, instructions: SERVER_INSTRUCTIONS } });
         routeToDaemon(line); // prime the daemon so it resolves the project (its reply is suppressed below)
       } else if (msg.method === 'tools/list') {
         writeClient({ jsonrpc: '2.0', id: msg.id, result: { tools: getStaticTools() } });
@@ -344,8 +331,8 @@ export async function runLocalHandshakeProxy(deps: LocalHandshakeDeps): Promise<
   // only the backstop's listener exists.
   armStartupHandshakeTimeout(() => {
     process.stderr.write(
-      '[CodeGraph MCP] No MCP traffic since startup; assuming an abandoned launch and shutting down (#1185). ' +
-      'Tune with CODEGRAPH_STARTUP_HANDSHAKE_TIMEOUT_MS (0 disables).\n'
+      '[Afyx Graph MCP] No MCP traffic since startup; assuming an abandoned launch and shutting down (#1185). ' +
+      'Tune with AFYX_GRAPH_STARTUP_HANDSHAKE_TIMEOUT_MS (0 disables).\n'
     );
     shutdown();
   });
@@ -371,7 +358,7 @@ export async function runLocalHandshakeProxy(deps: LocalHandshakeDeps): Promise<
         if (!line.trim()) continue;
         let resp: JsonRpc | null = null;
         try { resp = JSON.parse(line) as JsonRpc; } catch { /* not JSON — relay verbatim */ }
-        if (process.env.CODEGRAPH_MCP_DEBUG) process.stderr.write(`[mcp-debug] daemon->proxy ${line.slice(0, 80)}\n`);
+        if (process.env.AFYX_GRAPH_MCP_DEBUG) process.stderr.write(`[mcp-debug] daemon->proxy ${line.slice(0, 80)}\n`);
         if (resp && resp.id !== undefined && ('result' in resp || 'error' in resp)) {
           inflight.delete(resp.id); // answered — no longer in flight
           // Suppress the daemon's reply to the initialize we forwarded to prime it
@@ -383,7 +370,7 @@ export async function runLocalHandshakeProxy(deps: LocalHandshakeDeps): Promise<
     });
     // The daemon going away does NOT end the session (#662). An MCP host can
     // SIGTERM the shared daemon when another session starts; if we exited here,
-    // this host would silently lose CodeGraph and any in-flight request would
+    // this host would silently lose Afyx Graph and any in-flight request would
     // hang. Instead, fall back to the in-process engine for the rest of the
     // session and re-serve whatever the dead daemon never answered.
     const onDaemonLost = (): void => {
@@ -392,7 +379,7 @@ export async function runLocalHandshakeProxy(deps: LocalHandshakeDeps): Promise<
       try { daemonSocket?.destroy(); } catch { /* ignore */ }
       daemonSocket = null;
       process.stderr.write(
-        `[CodeGraph MCP] Shared daemon connection lost; serving this session in-process (degraded), re-serving ${inflight.size} in-flight request(s).\n`
+        `[Afyx Graph MCP] Shared daemon connection lost; serving this session in-process (degraded), re-serving ${inflight.size} in-flight request(s).\n`
       );
       const orphaned = [...inflight.values()];
       inflight.clear();
@@ -402,13 +389,13 @@ export async function runLocalHandshakeProxy(deps: LocalHandshakeDeps): Promise<
     socket.on('error', onDaemonLost);
     for (const line of pending) {
       trackInflight(line);
-      if (process.env.CODEGRAPH_MCP_DEBUG) process.stderr.write(`[mcp-debug] proxy-flush ${line.slice(0, 80)}\n`);
+      if (process.env.AFYX_GRAPH_MCP_DEBUG) process.stderr.write(`[mcp-debug] proxy-flush ${line.slice(0, 80)}\n`);
       try { socket.write(line + '\n'); } catch { /* ignore */ }
     }
     pending.length = 0;
   } else if (!shuttingDown) {
     daemonStatus = 'failed';
-    process.stderr.write('[CodeGraph MCP] Shared daemon unavailable; serving this session in-process (degraded).\n');
+    process.stderr.write('[Afyx Graph MCP] Shared daemon unavailable; serving this session in-process (degraded).\n');
     const buffered = pending.splice(0);
     for (const line of buffered) await handleLocally(line);
   }
@@ -420,7 +407,7 @@ export async function runLocalHandshakeProxy(deps: LocalHandshakeDeps): Promise<
  *  {@link startPpidWatchdog} but with no socket to close (the caller's shutdown
  *  handles teardown). */
 function startPpidWatchdogNoSocket(onDeath: () => void): void {
-  const pollMs = parsePollMs(process.env.CODEGRAPH_PPID_POLL_MS);
+  const pollMs = parsePollMs(process.env.AFYX_GRAPH_PPID_POLL_MS);
   if (pollMs <= 0) return;
   // Baseline from the CLI entry's earliest capture, not process.ppid here —
   // a launcher killed during our first ~100ms would otherwise leave the
@@ -435,7 +422,7 @@ function startPpidWatchdogNoSocket(onDeath: () => void): void {
       isAlive: isProcessAliveLocal,
     });
     if (reason) {
-      process.stderr.write(`[CodeGraph MCP] Parent process exited (${reason}); shutting down.\n`);
+      process.stderr.write(`[Afyx Graph MCP] Parent process exited (${reason}); shutting down.\n`);
       onDeath();
     }
   }, pollMs);
@@ -477,7 +464,7 @@ function readHelloLine(socket: net.Socket): Promise<DaemonHello> {
       }
       try {
         const parsed = JSON.parse(line) as DaemonHello;
-        if (typeof parsed.codegraph !== 'string' || typeof parsed.pid !== 'number') {
+        if (typeof parsed.afyxGraph !== 'string' || typeof parsed.pid !== 'number') {
           reject(new Error('daemon hello missing required fields'));
           return;
         }
@@ -535,7 +522,7 @@ function pipeUntilClose(socket: net.Socket): Promise<void> {
     socket.on('end', () => done());
     socket.on('close', () => done());
     socket.on('error', (err) => {
-      process.stderr.write(`[CodeGraph MCP] daemon socket error: ${err.message}\n`);
+      process.stderr.write(`[Afyx Graph MCP] daemon socket error: ${err.message}\n`);
       done();
     });
   });
@@ -551,7 +538,7 @@ function pipeUntilClose(socket: net.Socket): Promise<void> {
  * watchers to clean up, so this is cheap.
  */
 function startPpidWatchdog(socket: net.Socket): void {
-  const pollMs = parsePollMs(process.env.CODEGRAPH_PPID_POLL_MS);
+  const pollMs = parsePollMs(process.env.AFYX_GRAPH_PPID_POLL_MS);
   if (pollMs <= 0) return;
   // Baseline from the CLI entry's earliest capture, not process.ppid here —
   // a launcher killed during our first ~100ms would otherwise leave the
@@ -566,7 +553,7 @@ function startPpidWatchdog(socket: net.Socket): void {
       isAlive: isProcessAliveLocal,
     });
     if (reason) {
-      process.stderr.write(`[CodeGraph MCP] Parent process exited (${reason}); shutting down.\n`);
+      process.stderr.write(`[Afyx Graph MCP] Parent process exited (${reason}); shutting down.\n`);
       try { socket.destroy(); } catch { /* ignore */ }
       process.exit(0);
     }

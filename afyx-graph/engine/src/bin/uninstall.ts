@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * CodeGraph preuninstall cleanup script
+ * Afyx Graph preuninstall cleanup script
  *
- * Runs automatically when `npm uninstall -g @colbymchenry/codegraph`
+ * Runs automatically when `npm uninstall -g @a5zero7/afyx-graph`
  * is called. Loops over every known agent target's `uninstall(loc)`
  * for the global location only — local-location entries live inside
  * project working trees and aren't ours to nuke at npm-uninstall

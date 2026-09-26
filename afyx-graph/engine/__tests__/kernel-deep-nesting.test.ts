@@ -5,13 +5,13 @@
  * parser is iterative, so a pathologically nested file — clang's
  * `clang/test/Parser/parser_overflow.c` nests 16,384 `{`; fuzzer corpora go
  * deeper — parses fine and then overflowed the WALKER's native stack. A native
- * overflow is uncatchable: the parse worker is a thread of the `codegraph`
+ * overflow is uncatchable: the parse worker is a thread of the `afyx-graph`
  * process, so the SIGSEGV killed the whole indexer with no message, no partial
  * index, no per-file fallback. Worker threads get Node's 4 MiB default stack;
  * the 8 MiB main thread only moved the cliff (100k levels still died).
  *
  * The kernel now guards its recursion against the calling thread's real stack
- * bounds (codegraph-kernel/src/stack.rs) and turns an imminent overflow into
+ * bounds (afyx-graph-kernel/src/stack.rs) and turns an imminent overflow into
  * its `defer:` routing signal, so the file takes the wasm path — whose walker
  * catches its own JS `RangeError` per file and stores a partial result with a
  * `parse_error`. These tests pin that contract on every default-routed
@@ -19,7 +19,7 @@
  * end-to-end through the built CLI.
  *
  * Like the other kernel suites: skipped without a staged .node; CI that
- * builds the kernel sets CODEGRAPH_KERNEL_EXPECT=1 so a missing binary FAILS.
+ * builds the kernel sets AFYX_GRAPH_KERNEL_EXPECT=1 so a missing binary FAILS.
  */
 
 import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
@@ -36,14 +36,14 @@ import type { Language } from '../src/types';
 const REPO = path.resolve(__dirname, '..');
 const KERNEL_PATH = path.join(
   REPO,
-  'codegraph-kernel',
+  'afyx-graph-kernel',
   'prebuilds',
   `${process.platform}-${process.arch}`,
-  'codegraph-kernel.node'
+  'afyx-graph-kernel.node'
 );
 const kernelBuilt = fs.existsSync(KERNEL_PATH);
-const expectKernel = process.env.CODEGRAPH_KERNEL_EXPECT === '1';
-const BIN = path.join(REPO, 'dist', 'bin', 'codegraph.js');
+const expectKernel = process.env.AFYX_GRAPH_KERNEL_EXPECT === '1';
+const BIN = path.join(REPO, 'dist', 'bin', 'afyx-graph.js');
 const DIST_KERNEL = path.join(REPO, 'dist', 'extraction', 'kernel');
 const distBuilt = fs.existsSync(BIN) && fs.existsSync(path.join(DIST_KERNEL, 'index.js'));
 
@@ -110,7 +110,7 @@ function deepBraces(depth: number): string {
   return `void foo(void) {\n${'{'.repeat(depth)}${'}'.repeat(depth)}\n}\n`;
 }
 
-const ENV_KEYS = ['CODEGRAPH_KERNEL', 'CODEGRAPH_KERNEL_LANGS', 'CODEGRAPH_KERNEL_PATH'] as const;
+const ENV_KEYS = ['AFYX_GRAPH_KERNEL', 'AFYX_GRAPH_KERNEL_LANGS', 'AFYX_GRAPH_KERNEL_PATH'] as const;
 let savedEnv: Record<string, string | undefined>;
 
 describe.skipIf(!kernelBuilt)('kernel deep-nesting guard (#1581)', () => {
@@ -150,7 +150,7 @@ describe.skipIf(!kernelBuilt)('kernel deep-nesting guard (#1581)', () => {
       // R's wasm walker mints `f <- function()` only after walking the
       // assignment's value, so its partial result for a file this deep holds
       // just the file node — the same shape main's wasm-only path produces
-      // (verified with CODEGRAPH_KERNEL=0). Pre-existing and out of scope
+      // (verified with AFYX_GRAPH_KERNEL=0). Pre-existing and out of scope
       // here; what this test pins for R is that the process survives.
       if (!fn && language !== 'r') failures.push(`${language}: no function node 'f' (nodes=${result.nodes.map((n) => `${n.kind}:${n.name}`).join(',')})`);
       for (const e of result.errors) {
@@ -180,7 +180,7 @@ describe.skipIf(!kernelBuilt)('kernel deep-nesting guard (#1581)', () => {
   describe.skipIf(!distBuilt)('inside a default-sized (4 MiB) parse worker, through dist/', () => {
     let tmp: string;
     beforeEach(() => {
-      tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'codegraph-deep-'));
+      tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-graph-deep-'));
     });
     afterEach(() => {
       fs.rmSync(tmp, { recursive: true, force: true });
@@ -234,10 +234,10 @@ describe.skipIf(!kernelBuilt)('kernel deep-nesting guard (#1581)', () => {
     }, 30_000);
   });
 
-  describe.skipIf(!distBuilt)('end-to-end: codegraph init on a repo holding the deep file', () => {
+  describe.skipIf(!distBuilt)('end-to-end: afyx-graph init on a repo holding the deep file', () => {
     let tmp: string;
     beforeEach(() => {
-      tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'codegraph-deep-cli-'));
+      tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-graph-deep-cli-'));
     });
     afterEach(() => {
       fs.rmSync(tmp, { recursive: true, force: true });
@@ -253,15 +253,14 @@ describe.skipIf(!kernelBuilt)('kernel deep-nesting guard (#1581)', () => {
         timeout: 120_000,
         env: {
           ...process.env,
-          CODEGRAPH_NO_DAEMON: '1',
-          CODEGRAPH_WASM_RELAUNCHED: '1',
-          CODEGRAPH_TELEMETRY: '0',
+          AFYX_GRAPH_NO_DAEMON: '1',
+          AFYX_GRAPH_WASM_RELAUNCHED: '1',
           DO_NOT_TRACK: '1',
-          CODEGRAPH_NO_PROMPT_HOOK: '1',
+          AFYX_GRAPH_NO_PROMPT_HOOK: '1',
         },
       });
       const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite');
-      const db = new DatabaseSync(path.join(tmp, '.codegraph', 'codegraph.db'), { readOnly: true });
+      const db = new DatabaseSync(path.join(tmp, '.afyx-graph', 'afyx-graph.db'), { readOnly: true });
       try {
         const files = (db.prepare('SELECT path FROM files ORDER BY path').all() as Array<{ path: string }>).map((r) => r.path);
         expect(files).toEqual(['deep.c', 'ok.c']);
@@ -274,7 +273,7 @@ describe.skipIf(!kernelBuilt)('kernel deep-nesting guard (#1581)', () => {
   });
 });
 
-describe.skipIf(!expectKernel)('kernel presence (CODEGRAPH_KERNEL_EXPECT=1)', () => {
+describe.skipIf(!expectKernel)('kernel presence (AFYX_GRAPH_KERNEL_EXPECT=1)', () => {
   it('the staged .node exists so the deep-nesting suite actually ran', () => {
     expect(kernelBuilt).toBe(true);
   });

@@ -1,10 +1,10 @@
 node_modules
 dist
 .git
-.codegraph
+.afyx-graph
 .kommandr
 docs
 assets
-codegraph-kernel/target
-codegraph-kernel/prebuilds
+afyx-graph-kernel/target
+afyx-graph-kernel/prebuilds
 release

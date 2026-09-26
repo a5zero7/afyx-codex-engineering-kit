@@ -5,13 +5,13 @@
  * Routing policy is deliberately TS-side and per-language (migration plan §2):
  * a language routes to the kernel only after its equivalence gate passes;
  * everything else stays on the wasm path forever if need be. Rollback per
- * language = removing it from DEFAULT_ROUTED (or CODEGRAPH_KERNEL=0 for all).
+ * language = removing it from DEFAULT_ROUTED (or AFYX_GRAPH_KERNEL=0 for all).
  *
  * Routing status: TypeScript/TSX/JavaScript/JSX are default-routed (R3 gate
  * passed 2026-07-16 — full-index dumps byte-identical on express/excalidraw/
  * vscode, control repo unchanged; see the migration plan §4a). Override with
- *   CODEGRAPH_KERNEL_LANGS=<langs|all>  (replaces the default set), or
- *   CODEGRAPH_KERNEL=0                  (kill switch, everything → wasm).
+ *   AFYX_GRAPH_KERNEL_LANGS=<langs|all>  (replaces the default set), or
+ *   AFYX_GRAPH_KERNEL=0                  (kill switch, everything → wasm).
  */
 
 import type { ExtractionResult, Language } from '../../types';
@@ -141,7 +141,7 @@ function preParsedSource(filePath: string, source: string, language: Language): 
 }
 
 function isRouted(language: Language): boolean {
-  const env = process.env.CODEGRAPH_KERNEL_LANGS;
+  const env = process.env.AFYX_GRAPH_KERNEL_LANGS;
   if (env === undefined || env === '') return DEFAULT_ROUTED.has(language);
   if (env === 'all') return true;
   return env
@@ -243,7 +243,7 @@ export function tryKernelExtractRaw(
     if (!warned.has(language)) {
       warned.add(language);
       process.stderr.write(
-        `[codegraph-kernel] ${language} extraction failed (${message}) — falling back to the wasm path\n`
+        `[afyx-graph-kernel] ${language} extraction failed (${message}) — falling back to the wasm path\n`
       );
     }
     return null;
@@ -308,7 +308,7 @@ export function tryKernelExtract(
     if (!warned.has(language)) {
       warned.add(language);
       process.stderr.write(
-        `[codegraph-kernel] ${language} extraction failed (${message}) — falling back to the wasm path\n`
+        `[afyx-graph-kernel] ${language} extraction failed (${message}) — falling back to the wasm path\n`
       );
     }
     return null;

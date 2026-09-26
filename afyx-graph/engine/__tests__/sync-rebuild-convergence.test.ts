@@ -3,7 +3,7 @@
  *
  * A long-lived, auto-synced index silently diverged from a clean rebuild of the
  * identical tree: 4.3% of distinct edges wrong, in BOTH directions, on
- * codegraph's own repo. Two mechanisms, both exercised here:
+ * afyx-graph's own repo. Two mechanisms, both exercised here:
  *
  * 1. Resolution binds a reference to one of the same-named definitions
  *    PROJECT-WIDE, so adding or removing a definition changes the answer for
@@ -21,14 +21,14 @@
  *
  * ---
  *
- * THIS SUITE MUST FAIL WITH `CODEGRAPH_NO_REBIND=1` (CG-35).
+ * THIS SUITE MUST FAIL WITH `AFYX_GRAPH_NO_REBIND=1` (CG-35).
  *
  * That environment variable is the kill switch on the rebind half of the fix
  * (`src/index.ts`, guarding `resurrectStaleResolutionEdges`). The convergence
  * cases below are the only coverage that half has, so the check is the suite's
  * own regression test:
  *
- *     CODEGRAPH_NO_REBIND=1 npx vitest run __tests__/sync-rebuild-convergence.test.ts
+ *     AFYX_GRAPH_NO_REBIND=1 npx vitest run __tests__/sync-rebuild-convergence.test.ts
  *
  * must report failures, and an unset run must be green. If you change a case
  * here, re-run both. A version of this suite passed under the kill switch
@@ -39,12 +39,12 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import CodeGraph from '../src/index';
+import AfyxGraph from '../src/index';
 import { createDatabase } from '../src/db/sqlite-adapter';
 
 describe('Incremental sync converges to a full rebuild (CG-33)', () => {
   let testDir: string;
-  let cg: CodeGraph;
+  let cg: AfyxGraph;
 
   const write = (rel: string, content: string) => {
     const full = path.join(testDir, rel);
@@ -59,7 +59,7 @@ describe('Incremental sync converges to a full rebuild (CG-33)', () => {
    * which is what makes the two sets directly comparable.
    */
   const edgeSet = (): Set<string> => {
-    const { db } = createDatabase(path.join(testDir, '.codegraph', 'codegraph.db'), { readOnly: true });
+    const { db } = createDatabase(path.join(testDir, '.afyx-graph', 'afyx-graph.db'), { readOnly: true });
     try {
       const rows = db.prepare('SELECT source, target, kind FROM edges').all() as Array<{
         source: string;
@@ -79,7 +79,7 @@ describe('Incremental sync converges to a full rebuild (CG-33)', () => {
    * and a synthesized dispatch edge.
    */
   const withDb = <T>(fn: (db: ReturnType<typeof createDatabase>['db']) => T): T => {
-    const { db } = createDatabase(path.join(testDir, '.codegraph', 'codegraph.db'));
+    const { db } = createDatabase(path.join(testDir, '.afyx-graph', 'afyx-graph.db'));
     try {
       return fn(db);
     } finally {
@@ -96,27 +96,27 @@ describe('Incremental sync converges to a full rebuild (CG-33)', () => {
 
   /**
    * Rebuild the index from scratch over the CURRENT tree and return its edge
-   * set — the ground truth a user gets from `codegraph index`.
+   * set — the ground truth a user gets from `afyx-graph index`.
    *
-   * It must go through `CodeGraph.recreate`, which is what the CLI's `index`
+   * It must go through `AfyxGraph.recreate`, which is what the CLI's `index`
    * command does: it DELETES the database file and builds an empty one. Calling
    * `indexAll` on the live handle instead is not a rebuild at all — every file
    * hashes identical, so the store writes nothing (`nodesCreated: 0`), no
    * reference is re-created, and every existing edge survives untouched. The
    * comparison then reads the synced index against ITSELF and can never fail,
-   * which is exactly how this suite passed with `CODEGRAPH_NO_REBIND=1` (CG-35).
+   * which is exactly how this suite passed with `AFYX_GRAPH_NO_REBIND=1` (CG-35).
    */
   const rebuildEdgeSet = async (): Promise<Set<string>> => {
     // Close the live handle first: `recreate` unlinks the database file, and a
     // held handle makes that EBUSY on Windows.
     cg.destroy();
-    cg = await CodeGraph.recreate(testDir);
+    cg = await AfyxGraph.recreate(testDir);
     await cg.indexAll();
     return edgeSet();
   };
 
   beforeEach(() => {
-    testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codegraph-cg33-'));
+    testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-graph-cg33-'));
   });
 
   afterEach(() => {
@@ -133,7 +133,7 @@ describe('Incremental sync converges to a full rebuild (CG-33)', () => {
   it('rebinds references in UNCHANGED files when a sync adds a competing definition', async () => {
     write('src/caller.ts', `export function run(): number {\n  return pct(1);\n}\n`);
     write('src/zeta.ts', `export function pct(n: number): number {\n  return n;\n}\n`);
-    cg = CodeGraph.initSync(testDir, { config: { include: ['**/*.ts'], exclude: [] } });
+    cg = AfyxGraph.initSync(testDir, { config: { include: ['**/*.ts'], exclude: [] } });
     await cg.indexAll();
 
     write('src/alpha.ts', `export function pct(n: number): number {\n  return n * 2;\n}\n`);
@@ -149,7 +149,7 @@ describe('Incremental sync converges to a full rebuild (CG-33)', () => {
   it('keeps one edge when re-resolution selects the same target', async () => {
     write('src/caller.ts', `export function run(): number {\n  return pct(1);\n}\n`);
     write('src/alpha.ts', `export function pct(n: number): number {\n  return n;\n}\n`);
-    cg = CodeGraph.initSync(testDir, { config: { include: ['**/*.ts'], exclude: [] } });
+    cg = AfyxGraph.initSync(testDir, { config: { include: ['**/*.ts'], exclude: [] } });
     await cg.indexAll();
 
     // zeta.ts introduces a competing definition, so the existing edge is
@@ -179,7 +179,7 @@ describe('Incremental sync converges to a full rebuild (CG-33)', () => {
   it('rolls back edge deletion when requeueing its reference is interrupted', async () => {
     write('src/caller.ts', `export function run(): number {\n  return pct(1);\n}\n`);
     write('src/zeta.ts', `export function pct(n: number): number {\n  return n;\n}\n`);
-    cg = CodeGraph.initSync(testDir, { config: { include: ['**/*.ts'], exclude: [] } });
+    cg = AfyxGraph.initSync(testDir, { config: { include: ['**/*.ts'], exclude: [] } });
     await cg.indexAll();
 
     const originalEdge = withDb((db) => {
@@ -241,7 +241,7 @@ describe('Incremental sync converges to a full rebuild (CG-33)', () => {
     write('src/caller.ts', `export function run(): number {\n  return pct(1);\n}\n`);
     write('src/alpha.ts', `export function pct(n: number): number {\n  return n;\n}\n`);
     write('src/zeta.ts', `export function pct(n: number): number {\n  return n * 2;\n}\n`);
-    cg = CodeGraph.initSync(testDir, { config: { include: ['**/*.ts'], exclude: [] } });
+    cg = AfyxGraph.initSync(testDir, { config: { include: ['**/*.ts'], exclude: [] } });
     await cg.indexAll();
 
     fs.rmSync(path.join(testDir, 'src', 'alpha.ts'));
@@ -263,7 +263,7 @@ describe('Incremental sync converges to a full rebuild (CG-33)', () => {
   it('flags a name added in one changed file even when another changed file already defines it', async () => {
     write('src/caller.ts', `export function run(): number {\n  return pct(1);\n}\n`);
     write('src/zeta.ts', `export function pct(n: number): number {\n  return n;\n}\nexport function keep(): number {\n  return 0;\n}\n`);
-    cg = CodeGraph.initSync(testDir, { config: { include: ['**/*.ts'], exclude: [] } });
+    cg = AfyxGraph.initSync(testDir, { config: { include: ['**/*.ts'], exclude: [] } });
     await cg.indexAll();
 
     // One commit: a NEW file gains `pct`, and the file that already had `pct`
@@ -287,7 +287,7 @@ describe('Incremental sync converges to a full rebuild (CG-33)', () => {
     write('src/caller.ts', `export function run(): number {\n  return pct(1) + fmt(2) + collect(3);\n}\n`);
     write('src/util/zeta.ts', `export function pct(n: number): number {\n  return n;\n}\n`);
     write('src/util/omega.ts', `export function fmt(n: number): number {\n  return n;\n}\n`);
-    cg = CodeGraph.initSync(testDir, { config: { include: ['**/*.ts'], exclude: [] } });
+    cg = AfyxGraph.initSync(testDir, { config: { include: ['**/*.ts'], exclude: [] } });
     await cg.indexAll();
 
     // 1. add a competing `pct` that sorts before the existing one
@@ -347,7 +347,7 @@ describe('Incremental sync converges to a full rebuild (CG-33)', () => {
     write('src/caller.ts', `export function run(): number {\n  return pct(1);\n}\n`);
     write('src/other.ts', `export function other(): number {\n  return 0;\n}\n`);
     write('src/zeta.ts', `export function pct(n: number): number {\n  return n;\n}\n`);
-    cg = CodeGraph.initSync(testDir, { config: { include: ['**/*.ts'], exclude: [] } });
+    cg = AfyxGraph.initSync(testDir, { config: { include: ['**/*.ts'], exclude: [] } });
     await cg.indexAll();
 
     const planted = withDb((db) => {
@@ -413,7 +413,7 @@ describe('Incremental sync converges to a full rebuild (CG-33)', () => {
       'src/zzz_defs.ts',
       `export function push(n: number): number {\n  return n;\n}\nexport function tug(n: number): number {\n  return n;\n}\n`
     );
-    cg = CodeGraph.initSync(testDir, { config: { include: ['**/*.ts'], exclude: [] } });
+    cg = AfyxGraph.initSync(testDir, { config: { include: ['**/*.ts'], exclude: [] } });
     await cg.indexAll();
 
     const targetsOf = (name: string): string[] =>
@@ -461,19 +461,19 @@ describe('Incremental sync converges to a full rebuild (CG-33)', () => {
    * just a drifted one. If this ever fails, the pass is doing something the
    * kill switch cannot undo.
    */
-  it('CODEGRAPH_NO_REBIND=1 disables the pass without corrupting the index', async () => {
+  it('AFYX_GRAPH_NO_REBIND=1 disables the pass without corrupting the index', async () => {
     write('src/caller.ts', `export function run(): number {\n  return pct(1);\n}\n`);
     write('src/zeta.ts', `export function pct(n: number): number {\n  return n;\n}\n`);
-    cg = CodeGraph.initSync(testDir, { config: { include: ['**/*.ts'], exclude: [] } });
+    cg = AfyxGraph.initSync(testDir, { config: { include: ['**/*.ts'], exclude: [] } });
     await cg.indexAll();
     const before = edgeSet();
 
-    process.env.CODEGRAPH_NO_REBIND = '1';
+    process.env.AFYX_GRAPH_NO_REBIND = '1';
     try {
       write('src/alpha.ts', `export function pct(n: number): number {\n  return n * 2;\n}\n`);
       await cg.sync();
     } finally {
-      delete process.env.CODEGRAPH_NO_REBIND;
+      delete process.env.AFYX_GRAPH_NO_REBIND;
     }
 
     const after = edgeSet();
@@ -491,7 +491,7 @@ describe('Incremental sync converges to a full rebuild (CG-33)', () => {
  */
 describe('Same-name candidate order is content-derived, not insertion-derived (CG-33)', () => {
   let testDir: string;
-  let cg: CodeGraph;
+  let cg: AfyxGraph;
 
   afterEach(() => {
     cg?.destroy();
@@ -499,11 +499,11 @@ describe('Same-name candidate order is content-derived, not insertion-derived (C
   });
 
   it('getNodesByName orders by (file_path, start_line) even when rows were written in another order', async () => {
-    testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codegraph-cg33-order-'));
+    testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-graph-cg33-order-'));
     fs.mkdirSync(path.join(testDir, 'src'), { recursive: true });
     fs.writeFileSync(path.join(testDir, 'src', 'mid.ts'), `export function pad(): void {}\nexport function dup(): number {\n  return 2;\n}\n`);
     fs.writeFileSync(path.join(testDir, 'src', 'zeta.ts'), `export function dup(): number {\n  return 1;\n}\n`);
-    cg = CodeGraph.initSync(testDir, { config: { include: ['**/*.ts'], exclude: [] } });
+    cg = AfyxGraph.initSync(testDir, { config: { include: ['**/*.ts'], exclude: [] } });
     await cg.indexAll();
 
     // A sync APPENDS this file's nodes, so `alpha.ts` gets the highest rowids

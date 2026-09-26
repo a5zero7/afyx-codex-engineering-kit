@@ -29,14 +29,11 @@ done
 printf 'Afyx Codex Engineering Kit — Linux/macOS installer (Bash)\n'
 
 valid_manifest() { [[ -s "$1/SKILL.md" ]] && [[ "$(head -n 1 "$1/SKILL.md")" == '---' ]]; }
-skill_state() { if [[ ! -e "$1" ]]; then printf 'NOT INSTALLED'; elif valid_manifest "$1"; then printf HEALTHY; else printf INVALID; fi; }
-skill_version() { sed -n 's/^[[:space:]]*version:[[:space:]]*"\{0,1\}\([^"[:space:]]*\).*/\1/p' "$1/SKILL.md" 2>/dev/null | head -n 1; }
-graph_state() {
-  if [[ ! -e "$graph_root" ]]; then printf 'NOT INSTALLED'
-  elif [[ ! -s "$graph_root/metadata.json" || ! -x "$graph_root/current/bin/afyx-graph" ]]; then printf INCOMPLETE
-  elif grep -q '"product_name"[[:space:]]*:[[:space:]]*"Afyx Graph"' "$graph_root/metadata.json"; then printf HEALTHY
-  else printf INVALID; fi
-}
+# One component truth: scripts/components.json, read through the shared library.
+# shellcheck source=scripts/lib/afyx-components.sh
+. "$PACKAGE_ROOT/scripts/lib/afyx-components.sh"
+component_state() { afyx_component_evaluate "$1"; printf '%s' "$AFYX_STATE"; }
+component_version() { afyx_component_evaluate "$1"; printf '%s' "$AFYX_VERSION"; }
 run() { if "$dry_run"; then printf '+ '; printf '%q ' "$@"; printf '\n'; else "$@"; fi; }
 interactive=false
 if [[ -t 0 && -z "${CI:-}" ]] && ! "$dry_run"; then interactive=true; fi
@@ -82,33 +79,31 @@ safe_skill_install() {
 
 valid_manifest "$BUNDLED_EFFICIENT" || { printf 'Bundled Efficient Coding is invalid.\n' >&2; exit 1; }
 valid_manifest "$BUNDLED_ODOO" || { printf 'Bundled Odoo Engineering is invalid.\n' >&2; exit 1; }
-[[ -s "$PACKAGE_ROOT/afyx-codegraph/afyx-graph.json" ]] || { printf 'Bundled Afyx Graph metadata is missing.\n' >&2; exit 1; }
+[[ -s "$PACKAGE_ROOT/afyx-graph/afyx-graph.json" ]] || { printf 'Bundled Afyx Graph metadata is missing.\n' >&2; exit 1; }
 
 efficient_target="$skills_root/efficient-coding"
 odoo_target="$skills_root/odoo-engineering"
 prompt_target="$skills_root/prompt-master"
-efficient_state="$(skill_state "$efficient_target")"
-odoo_state="$(skill_state "$odoo_target")"
-prompt_state="$(skill_state "$prompt_target")"
-afyx_graph_state="$(graph_state)"
+efficient_state="$(component_state efficient-coding)"
+odoo_state="$(component_state odoo-engineering)"
+prompt_state="$(component_state prompt-master)"
+afyx_graph_state="$(component_state afyx-graph)"
 
 printf '\nComponent Inventory\n'
 printf 'Efficient Coding: %s\nOdoo Engineering: %s\nPrompt Master: %s\nAfyx Graph: %s\n' "$efficient_state" "$odoo_state" "$prompt_state" "$afyx_graph_state"
 printf 'Codex Usage Tracking: NOT INSTALLED (Windows-only runtime)\n'
 if command -v headroom >/dev/null 2>&1; then printf 'Headroom: externally managed; detected\n'; else printf 'Headroom: externally managed; not detected\n'; fi
-if command -v codegraph >/dev/null 2>&1; then printf 'Upstream CodeGraph: externally managed; detected\n'; else printf 'Upstream CodeGraph: externally managed; not detected\n'; fi
 
 codex_cli_detected=false; command -v codex >/dev/null 2>&1 && codex_cli_detected=true
 vscode_extension_detected=false
 for extension in "$HOME"/.vscode/extensions/openai.chatgpt-*; do [[ -d "$extension" ]] && { vscode_extension_detected=true; break; }; done
 
 if "$validate_only"; then
-  graph_version="$(sed -n 's/.*"afyx_graph_version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$PACKAGE_ROOT/afyx-codegraph/afyx-graph.json")"
-  engine_version="$(sed -n 's/.*"codegraph_upstream_version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$PACKAGE_ROOT/afyx-codegraph/afyx-graph.json")"
-  printf 'BundledEfficientCoding: true\nInstalledEfficientCoding: %s\nEfficientCodingState: %s\nEfficientCodingVersion: %s\n' "$([[ "$efficient_state" == HEALTHY ]] && echo true || echo false)" "$efficient_state" "$(skill_version "$efficient_target")"
-  printf 'BundledOdooEngineering: true\nInstalledOdooEngineering: %s\nOdooEngineeringState: %s\nOdooEngineeringVersion: %s\n' "$([[ "$odoo_state" == HEALTHY ]] && echo true || echo false)" "$odoo_state" "$(skill_version "$odoo_target")"
+  graph_version="$(sed -n 's/.*"product_version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$PACKAGE_ROOT/afyx-graph/afyx-graph.json")"
+  printf 'BundledEfficientCoding: true\nInstalledEfficientCoding: %s\nEfficientCodingState: %s\nEfficientCodingVersion: %s\n' "$([[ "$efficient_state" == HEALTHY ]] && echo true || echo false)" "$efficient_state" "$(component_version efficient-coding)"
+  printf 'BundledOdooEngineering: true\nInstalledOdooEngineering: %s\nOdooEngineeringState: %s\nOdooEngineeringVersion: %s\n' "$([[ "$odoo_state" == HEALTHY ]] && echo true || echo false)" "$odoo_state" "$(component_version odoo-engineering)"
   printf 'InstalledPromptMaster: %s\nPromptMasterState: %s\n' "$([[ "$prompt_state" == HEALTHY ]] && echo true || echo false)" "$prompt_state"
-  printf 'BundledAfyxGraphSource: true\nInstalledAfyxGraph: %s\nAfyxGraphState: %s\nAfyxGraphVersion: %s\nAfyxGraphEngineVersion: %s\n' "$([[ "$afyx_graph_state" == HEALTHY ]] && echo true || echo false)" "$afyx_graph_state" "$graph_version" "$engine_version"
+  printf 'BundledAfyxGraphSource: true\nInstalledAfyxGraph: %s\nAfyxGraphState: %s\nAfyxGraphVersion: %s\n' "$([[ "$afyx_graph_state" == HEALTHY ]] && echo true || echo false)" "$afyx_graph_state" "$graph_version"
   printf 'InstalledUsageTracker: false\nUsageTrackerState: NOT INSTALLED\nCodexCliDetected: %s\nVsCodeExtensionDetected: %s\n' "$codex_cli_detected" "$vscode_extension_detected"
   exit 0
 fi
@@ -149,5 +144,5 @@ if "$install_graph"; then
 fi
 
 printf '\nInstallation Summary\n[%s] Efficient Coding\n[%s] Odoo Engineering\n[%s] Prompt Master\n[%s] Afyx Graph\n[SKIPPED] Codex Usage Tracking\n' "$efficient_result" "$odoo_result" "$prompt_result" "$graph_result"
-printf '[INFO] Headroom — externally managed; unchanged\n[INFO] Upstream CodeGraph — externally managed; unchanged\n'
+printf '[INFO] Headroom — externally managed; unchanged\n'
 "$dry_run" && printf 'Dry-run completed; no files or configuration were changed.\n' || printf 'Start a new Codex session to load installed components.\n'

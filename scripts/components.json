@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "components": [
+    {
+      "id": "efficient-coding",
+      "name": "Efficient Coding",
+      "type": "skill",
+      "tier": "core",
+      "ownership": "afyx",
+      "platforms": "all",
+      "install_root": "skills_root",
+      "install_path": "efficient-coding",
+      "version_source": "SKILL.md#metadata.version",
+      "version_required": "true",
+      "required_files": "SKILL.md;references/investigation.md;references/tool-routing.md;references/token-efficiency.md"
+    },
+    {
+      "id": "odoo-engineering",
+      "name": "Odoo Engineering",
+      "type": "skill",
+      "tier": "core",
+      "ownership": "afyx",
+      "platforms": "all",
+      "install_root": "skills_root",
+      "install_path": "odoo-engineering",
+      "version_source": "SKILL.md#metadata.version",
+      "version_required": "true",
+      "required_files": "SKILL.md;references/common.md;references/version-detection.md;references/reference-schema.md;references/odoo-10.md;references/odoo-11.md;references/odoo-12.md;references/odoo-13.md;references/odoo-14.md;references/odoo-15.md;references/odoo-16.md;references/odoo-17.md;references/odoo-18.md;references/odoo-19.md;references/odoo-20.md"
+    },
+    {
+      "id": "prompt-master",
+      "name": "Prompt Master",
+      "type": "skill",
+      "tier": "core",
+      "ownership": "upstream",
+      "platforms": "all",
+      "install_root": "skills_root",
+      "install_path": "prompt-master",
+      "version_source": "SKILL.md#metadata.version",
+      "version_required": "false",
+      "required_files": "SKILL.md",
+      "source": "https://github.com/nidhinjs/prompt-master.git"
+    },
+    {
+      "id": "afyx-graph",
+      "name": "Afyx Graph",
+      "type": "runtime",
+      "tier": "optional",
+      "ownership": "afyx",
+      "platforms": "all",
+      "install_root": "afyx_graph_root",
+      "install_path": "",
+      "version_source": "metadata.json#product_version",
+      "version_required": "true",
+      "required_files": "metadata.json",
+      "required_files_windows": "current/bin/afyx-graph.cmd;current/node.exe",
+      "required_files_unix": "current/bin/afyx-graph;current/node",
+      "marker_file": "metadata.json",
+      "marker_field": "product_name",
+      "marker_value": "Afyx Graph"
+    },
+    {
+      "id": "codex-usage-tracking",
+      "name": "Codex Usage Tracking",
+      "type": "toolset",
+      "tier": "optional",
+      "ownership": "afyx",
+      "platforms": "windows",
+      "install_root": "codex_tools",
+      "install_path": "",
+      "version_source": "",
+      "version_required": "false",
+      "required_files": "CodexUsage.psm1;codex-usage-stop.ps1;codex-usage-watch.ps1;codex-usage-doctor.ps1;codex-usage-pricing.json"
+    },
+    {
+      "id": "headroom",
+      "name": "Headroom",
+      "type": "detected-cli",
+      "tier": "external",
+      "ownership": "external",
+      "platforms": "all",
+      "install_root": "",
+      "install_path": "",
+      "version_source": "",
+      "version_required": "false",
+      "required_files": "",
+      "detect_command": "headroom"
+    }
+  ]
+}

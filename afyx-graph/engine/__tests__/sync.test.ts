@@ -2,7 +2,7 @@
  * Sync Module Tests
  *
  * Tests for sync functionality (incremental updates).
- * Note: Git hooks functionality has been removed in favor of codegraph's
+ * Note: Git hooks functionality has been removed in favor of afyx-graph's
  * Claude Code hooks integration.
  */
 
@@ -11,15 +11,15 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { execFileSync } from 'child_process';
-import CodeGraph from '../src/index';
+import AfyxGraph from '../src/index';
 
 describe('Sync Module', () => {
   describe('Sync Functionality', () => {
     let testDir: string;
-    let cg: CodeGraph;
+    let cg: AfyxGraph;
 
     beforeEach(async () => {
-      testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codegraph-sync-func-'));
+      testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-graph-sync-func-'));
 
       // Create initial source files
       const srcDir = path.join(testDir, 'src');
@@ -30,7 +30,7 @@ describe('Sync Module', () => {
       );
 
       // Initialize and index
-      cg = CodeGraph.initSync(testDir, {
+      cg = AfyxGraph.initSync(testDir, {
         config: {
           include: ['**/*.ts'],
           exclude: [],
@@ -176,14 +176,14 @@ describe('Sync Module', () => {
 
   describe('Git-based sync', () => {
     let testDir: string;
-    let cg: CodeGraph;
+    let cg: AfyxGraph;
 
     function git(...args: string[]) {
       execFileSync('git', args, { cwd: testDir, stdio: 'pipe' });
     }
 
     beforeEach(async () => {
-      testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codegraph-git-sync-'));
+      testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-graph-git-sync-'));
 
       // Initialize a git repo with an initial commit
       git('init');
@@ -200,8 +200,8 @@ describe('Sync Module', () => {
       git('add', '-A');
       git('commit', '-m', 'initial');
 
-      // Initialize CodeGraph and index
-      cg = CodeGraph.initSync(testDir, {
+      // Initialize Afyx Graph and index
+      cg = AfyxGraph.initSync(testDir, {
         config: {
           include: ['**/*.ts'],
           exclude: [],
@@ -248,7 +248,7 @@ describe('Sync Module', () => {
     });
 
     it('should stop reporting untracked files once they are indexed (issue #206)', async () => {
-      // Untracked files stay `??` in git status even after codegraph indexes
+      // Untracked files stay `??` in git status even after afyx-graph indexes
       // them. Change detection must compare them against the DB by hash, not
       // report every untracked file as "added" on every sync/status.
       fs.writeFileSync(
@@ -333,14 +333,14 @@ describe('Sync Module', () => {
   // git fast path must exclude exactly what the full scan does. (#766)
   describe('Incremental sync honors the ignore matcher (#766)', () => {
     let testDir: string;
-    let cg: CodeGraph;
+    let cg: AfyxGraph;
 
     function git(...args: string[]) {
       execFileSync('git', args, { cwd: testDir, stdio: 'pipe' });
     }
 
     beforeEach(async () => {
-      testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codegraph-766-'));
+      testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-graph-766-'));
 
       git('init');
       git('config', 'user.email', 'test@test.com');
@@ -374,7 +374,7 @@ describe('Sync Module', () => {
       git('add', '-f', 'generated/out.ts'); // force the ignored-but-tracked file in
       git('commit', '-m', 'initial');
 
-      cg = CodeGraph.initSync(testDir, {
+      cg = AfyxGraph.initSync(testDir, {
         config: { include: ['**/*.ts'], exclude: [] },
       });
       await cg.indexAll();
@@ -423,7 +423,7 @@ describe('Sync Module', () => {
     });
 
     it('status (getChangedFiles) agrees with sync — no phantom pending changes', async () => {
-      // The user-visible symptom today: `codegraph status` reads getChangedFiles
+      // The user-visible symptom today: `afyx-graph status` reads getChangedFiles
       // and reports a vendor edit as a pending change that `sync` (a filesystem
       // reconcile) then never indexes — so the count never clears. Both must now
       // agree that nothing happened.
@@ -460,7 +460,7 @@ describe('Sync Module', () => {
   // carrying a matching symbol name. (#1240)
   describe('Sync resolves refs satisfied by a new export in another file (#1240)', () => {
     let testDir: string;
-    let cg: CodeGraph;
+    let cg: AfyxGraph;
 
     function write(rel: string, content: string) {
       fs.writeFileSync(path.join(testDir, rel), content);
@@ -474,14 +474,14 @@ describe('Sync Module', () => {
     }
 
     beforeEach(async () => {
-      testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codegraph-1240-'));
+      testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-graph-1240-'));
 
       // a.ts references `greet`, which does not exist anywhere yet — the ref
       // fails resolution during the initial index.
       write('a.ts', `import { greet } from './b';\n\nexport function run(): number {\n  return greet();\n}\n`);
       write('b.ts', `export function other(): number {\n  return 1;\n}\n`);
 
-      cg = CodeGraph.initSync(testDir, {
+      cg = AfyxGraph.initSync(testDir, {
         config: { include: ['**/*.ts'], exclude: [] },
       });
       await cg.indexAll();
@@ -561,7 +561,7 @@ describe('Sync Module', () => {
   // failed until the symbol reappears.
   describe('Sync rebinds or parks refs when a resolved symbol is removed (#1240 removal case)', () => {
     let testDir: string;
-    let cg: CodeGraph;
+    let cg: AfyxGraph;
 
     function write(rel: string, content: string) {
       fs.writeFileSync(path.join(testDir, rel), content);
@@ -579,14 +579,14 @@ describe('Sync Module', () => {
     }
 
     beforeEach(async () => {
-      testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codegraph-1240-removal-'));
+      testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-graph-1240-removal-'));
 
       // No import — cross-file name matching, so the caller can legitimately
       // rebind to a definition in ANY file, which is what a full re-index does.
       write('a.ts', `export function run(): number {\n  return greet();\n}\n`);
       write('b.ts', `export function greet(): number {\n  return 42;\n}\n`);
 
-      cg = CodeGraph.initSync(testDir, {
+      cg = AfyxGraph.initSync(testDir, {
         config: { include: ['**/*.ts'], exclude: [] },
       });
       await cg.indexAll();
@@ -647,10 +647,10 @@ describe('Sync Module', () => {
 
   describe('Cross-file module-attribute caller edges survive callee re-index (#899)', () => {
     let testDir: string;
-    let cg: CodeGraph;
+    let cg: AfyxGraph;
 
     beforeEach(async () => {
-      testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codegraph-899-'));
+      testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-graph-899-'));
 
       // pkg/mod.py — a module with two functions, both called from a separate
       // test file via `mod.<fn>(...)` (module-attribute access). This is the
@@ -691,7 +691,7 @@ describe('Sync Module', () => {
         ].join('\n')
       );
 
-      cg = CodeGraph.initSync(testDir, {
+      cg = AfyxGraph.initSync(testDir, {
         config: { include: ['**/*.py'], exclude: [] },
       });
       await cg.indexAll();
@@ -782,9 +782,9 @@ describe('Sync Module', () => {
 
 describe('Scoped sync parity (#watcher-scoped)', () => {
   let testDir: string;
-  let cg: CodeGraph;
+  let cg: AfyxGraph;
 
-  const snapshot = (g: CodeGraph): string => {
+  const snapshot = (g: AfyxGraph): string => {
     // Natural-key snapshot of the whole graph, mirroring dump-graph.mjs at
     // unit scale: scoped and full sync must land the DB in the same state.
     const nodes = g
@@ -797,12 +797,12 @@ describe('Scoped sync parity (#watcher-scoped)', () => {
   };
 
   beforeEach(async () => {
-    testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codegraph-sync-scoped-'));
+    testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-graph-sync-scoped-'));
     const srcDir = path.join(testDir, 'src');
     fs.mkdirSync(srcDir);
     fs.writeFileSync(path.join(srcDir, 'a.ts'), `export function alpha() { return beta(); }`);
     fs.writeFileSync(path.join(srcDir, 'b.ts'), `export function beta() { return 1; }`);
-    cg = CodeGraph.initSync(testDir);
+    cg = AfyxGraph.initSync(testDir);
     await cg.indexAll();
   });
 
@@ -852,11 +852,11 @@ describe('Scoped sync parity (#watcher-scoped)', () => {
     expect(cg.searchNodes('beta').length).toBeGreaterThan(0);
   });
 
-  it('a scoped path that codegraph.json now excludes is removed, never re-parsed (#1590)', async () => {
+  it('a scoped path that afyx-graph.json now excludes is removed, never re-parsed (#1590)', async () => {
     // The daemon's watcher hands sync the exact edited path. If the project's
     // scope changed underneath it, that path must be treated the way the full
     // scan treats it — out of scope, hence gone — never parsed on trust.
-    const cfg = path.join(testDir, 'codegraph.json');
+    const cfg = path.join(testDir, 'afyx-graph.json');
     fs.writeFileSync(cfg, JSON.stringify({ exclude: ['src/b.ts'] }));
     fs.writeFileSync(path.join(testDir, 'src', 'b.ts'), `export function beta() { return 2; }\nexport function gamma() { return 3; }`);
     const scoped = await cg.sync({ paths: ['src/b.ts'] });
@@ -890,13 +890,13 @@ describe('Scoped sync parity (#watcher-scoped)', () => {
 // (#1829)
 describe('committed-but-unindexed changes (#1829)', () => {
   let testDir: string;
-  let cg: CodeGraph;
+  let cg: AfyxGraph;
 
   const git = (...args: string[]) =>
     execFileSync('git', args, { cwd: testDir, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
 
   beforeEach(async () => {
-    testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codegraph-1829-'));
+    testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-graph-1829-'));
     git('init');
     git('config', 'user.email', 'test@test.com');
     git('config', 'user.name', 'Test');
@@ -906,7 +906,7 @@ describe('committed-but-unindexed changes (#1829)', () => {
     git('add', '-A');
     git('commit', '-m', 'initial');
 
-    cg = CodeGraph.initSync(testDir, { config: { include: ['**/*.ts'], exclude: [] } });
+    cg = AfyxGraph.initSync(testDir, { config: { include: ['**/*.ts'], exclude: [] } });
     await cg.indexAll();
   });
 

@@ -1,5 +1,10 @@
 name: Afyx Graph Build
 
+# Normal Afyx Graph CI: host build, unit tests, semantic baseline, CLI smoke and
+# MCP smoke on Linux, Windows and macOS (Node 24), plus Cargo verification of the
+# native kernel. Zero-model. The six platform bundles are built only by
+# graph-release.yml, not on every pull request.
+
 on:
   workflow_dispatch:
   pull_request:
@@ -8,13 +13,14 @@ on:
       - 'afyx-graph/**'
       - 'scripts/install-afyx-graph.*'
       - 'scripts/validate-afyx-graph.py'
+      - 'scripts/audit-legacy-identity.py'
       - '.github/workflows/graph-build.yml'
 
 permissions:
   contents: read
 
 jobs:
-  build:
+  linux:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,35 +29,115 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: afyx-graph/engine/package-lock.json
-      - name: Validate metadata and attribution
+      - name: Validate identity, metadata and attribution
         run: python scripts/validate-afyx-graph.py
+      - name: Operational independence audit
+        run: python scripts/audit-legacy-identity.py
       - name: Install locked dependencies
         working-directory: afyx-graph/engine
         run: npm ci
-      - name: Build and test engine
+      - name: Clean build (no stale dist artifacts)
+        working-directory: afyx-graph/engine
+        run: npm run build:clean
+      - name: Unit tests
+        working-directory: afyx-graph/engine
+        run: npm test
+      - name: Semantic baseline
+        working-directory: afyx-graph/engine
+        run: npm run test:semantic
+      - name: CLI and MCP smoke
+        working-directory: afyx-graph/engine
+        run: npm run test:smoke
+      - name: Host bundle smoke
         working-directory: afyx-graph/engine
         run: |
-          npm run build
-          npm test
-          node scripts/test-afyx-equivalence.mjs
-      - name: Build six self-contained bundles
-        working-directory: afyx-graph/engine
-        run: |
-          for target in win32-x64 win32-arm64 linux-x64 linux-arm64 darwin-x64 darwin-arm64; do
-            bash scripts/build-bundle.sh "$target"
-          done
+          bash scripts/build-bundle.sh linux-x64
           (cd release && sha256sum afyx-graph-* > SHA256SUMS)
-      - name: Smoke-test host bundle
-        working-directory: afyx-graph/engine
-        run: |
           mkdir -p /tmp/afyx-graph-smoke
           tar -xzf release/afyx-graph-linux-x64.tar.gz -C /tmp/afyx-graph-smoke
           /tmp/afyx-graph-smoke/afyx-graph-linux-x64/bin/afyx-graph --version
           /tmp/afyx-graph-smoke/afyx-graph-linux-x64/bin/afyx-graph help
-      - uses: actions/upload-artifact@v4
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          name: afyx-graph-bundles
-          path: |
-            afyx-graph/engine/release/afyx-graph-*
-            afyx-graph/engine/release/SHA256SUMS
-          if-no-files-found: error
+          node-version: 24
+          cache: npm
+          cache-dependency-path: afyx-graph/engine/package-lock.json
+      - name: Validate identity, metadata and attribution
+        run: python scripts/validate-afyx-graph.py
+      - name: Install locked dependencies
+        working-directory: afyx-graph/engine
+        run: npm ci
+      - name: Clean build (no stale dist artifacts)
+        working-directory: afyx-graph/engine
+        run: npm run build:clean
+      - name: Semantic baseline
+        working-directory: afyx-graph/engine
+        run: npm run test:semantic
+      - name: CLI and MCP smoke
+        working-directory: afyx-graph/engine
+        run: npm run test:smoke
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: afyx-graph/engine/package-lock.json
+      - name: Validate identity, metadata and attribution
+        run: python3 scripts/validate-afyx-graph.py
+      - name: Operational independence audit
+        run: python3 scripts/audit-legacy-identity.py
+      - name: Install locked dependencies
+        working-directory: afyx-graph/engine
+        run: npm ci
+      - name: Clean build (no stale dist artifacts)
+        working-directory: afyx-graph/engine
+        run: npm run build:clean
+      - name: Semantic baseline
+        working-directory: afyx-graph/engine
+        run: npm run test:semantic
+      - name: CLI and MCP smoke
+        working-directory: afyx-graph/engine
+        run: npm run test:smoke
+
+  rust-kernel:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: afyx-graph/engine/package-lock.json
+      - name: Toolchain versions
+        run: |
+          rustc --version
+          cargo --version
+      - name: Cargo check
+        working-directory: afyx-graph/engine/afyx-graph-kernel
+        run: cargo check --locked --all-targets
+      - name: Cargo test
+        working-directory: afyx-graph/engine/afyx-graph-kernel
+        run: cargo test --locked
+      - name: Install locked dependencies
+        working-directory: afyx-graph/engine
+        run: npm ci
+      - name: Clean build
+        working-directory: afyx-graph/engine
+        run: npm run build:clean
+      - name: Build the native kernel
+        working-directory: afyx-graph/engine
+        run: bash scripts/build-kernel.sh
+      - name: Kernel parity tests (the built kernel must load)
+        working-directory: afyx-graph/engine
+        env:
+          AFYX_GRAPH_KERNEL_EXPECT: '1'
+        run: npx vitest run __tests__/kernel-

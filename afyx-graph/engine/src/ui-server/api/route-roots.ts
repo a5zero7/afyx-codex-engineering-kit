@@ -25,7 +25,7 @@
  * same edges.
  */
 
-import type CodeGraph from '../../index';
+import type AfyxGraph from '../../index';
 import type { Node } from '../../types';
 
 export interface RouteRoot {
@@ -53,7 +53,7 @@ export function looksLikeComponent(node: Node): boolean {
 }
 
 /** Route id → where its code starts, for every route that has an answer. */
-export function routeRoots(cg: CodeGraph, routes: readonly Node[]): Map<string, RouteRoot> {
+export function routeRoots(cg: AfyxGraph, routes: readonly Node[]): Map<string, RouteRoot> {
   const out = new Map<string, RouteRoot>();
   if (routes.length === 0) return out;
   const ids = routes.map((r) => r.id);

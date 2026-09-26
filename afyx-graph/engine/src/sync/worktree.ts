@@ -1,9 +1,9 @@
 /**
  * Git Worktree Awareness
  *
- * A CodeGraph index lives in a `.codegraph/` directory and is resolved by
+ * An Afyx Graph index lives in a `.afyx-graph/` directory and is resolved by
  * walking up parent directories to the nearest one (see
- * `findNearestCodeGraphRoot`). That walk is unaware of git worktrees: when a
+ * `findNearestAfyxGraphRoot`). That walk is unaware of git worktrees: when a
  * worktree is created *inside* the main checkout (e.g. some tools place them
  * under `.gitignore`d paths like `.claude/worktrees/<name>/`), a command run
  * from the worktree walks up and silently resolves the MAIN checkout's index.
@@ -75,19 +75,19 @@ export function gitCommonDir(dir: string): string | null {
 export interface WorktreeIndexMismatch {
   /** The git working tree the command was run from. */
   worktreeRoot: string;
-  /** The (different) working tree whose `.codegraph` index is being used. */
+  /** The (different) working tree whose `.afyx-graph` index is being used. */
   indexRoot: string;
 }
 
 /**
  * Detect when `startPath` lives in one git working tree but the resolved
- * CodeGraph index (`indexRoot`) belongs to a *different* working tree.
+ * Afyx Graph index (`indexRoot`) belongs to a *different* working tree.
  *
  * Returns null — meaning "nothing to warn about" — when:
  *   - `startPath` isn't in a git repo (or git is unavailable),
  *   - the index already lives in `startPath`'s own working tree, or
  *   - `indexRoot` isn't itself a working-tree root (an unrelated parent dir
- *     that merely happens to contain a `.codegraph/`), which keeps non-git
+ *     that merely happens to contain a `.afyx-graph/`), which keeps non-git
  *     and monorepo-subdir layouts from producing false warnings.
  */
 export function detectWorktreeIndexMismatch(
@@ -110,7 +110,7 @@ export function detectWorktreeIndexMismatch(
   // and gitlinked clones, so a query run from inside one resolves up to the
   // parent index — whose graph *does* contain that nested repo's files. The
   // warning's premise ("results are a different branch; symbols changed only
-  // here are missing") is false there, and its "run codegraph init -i" advice
+  // here are missing") is false there, and its "run afyx-graph init -i" advice
   // would needlessly fragment the unified workspace index. A genuine borrowed
   // worktree and the index root are the SAME repository (they share a git
   // common dir); a submodule/embedded clone is a DIFFERENT repository and does
@@ -125,11 +125,11 @@ export function detectWorktreeIndexMismatch(
 /** One-line-per-fact warning describing a detected mismatch. */
 export function worktreeMismatchWarning(m: WorktreeIndexMismatch): string {
   return (
-    `This CodeGraph index belongs to a different git working tree.\n` +
+    `This Afyx Graph index belongs to a different git working tree.\n` +
     `  Running in: ${m.worktreeRoot}\n` +
     `  Index from: ${m.indexRoot}\n` +
     `Results reflect that tree's code (often a different branch), not this worktree — ` +
-    `symbols changed only here are missing. Run "codegraph init -i" in this worktree ` +
+    `symbols changed only here are missing. Run "afyx-graph init -i" in this worktree ` +
     `for a worktree-local index.`
   );
 }
@@ -141,9 +141,9 @@ export function worktreeMismatchWarning(m: WorktreeIndexMismatch): string {
  */
 export function worktreeMismatchNotice(m: WorktreeIndexMismatch): string {
   return (
-    `⚠ CodeGraph results below come from a different git worktree (${m.indexRoot}), ` +
+    `⚠ Afyx Graph results below come from a different git worktree (${m.indexRoot}), ` +
     `not where you're working (${m.worktreeRoot}) — they may reflect another branch, ` +
-    `and symbols changed only here are missing. Run "codegraph init -i" here for a ` +
+    `and symbols changed only here are missing. Run "afyx-graph init -i" here for a ` +
     `worktree-local index.`
   );
 }

@@ -21,49 +21,22 @@ $promptTarget = Join-Path $SkillsRoot 'prompt-master'
 $backupRoot = Join-Path $packageRoot 'backups'
 $usageTrackerInstaller = Join-Path $packageRoot 'scripts\install-codex-usage-tracker.ps1'
 $graphInstaller = Join-Path $packageRoot 'scripts\install-afyx-graph.ps1'
-$graphMetadataPath = Join-Path $packageRoot 'afyx-codegraph\afyx-graph.json'
+$graphMetadataPath = Join-Path $packageRoot 'afyx-graph\afyx-graph.json'
 $graphRuntimeRoot = Join-Path $env:USERPROFILE '.afyx\graph'
 $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' }
 
 if ($InstallUsageTracker -and $SkipUsageTracker) { throw '-InstallUsageTracker and -SkipUsageTracker cannot be used together.' }
 
+# One component truth: scripts/components.json, read through the shared module.
+Import-Module (Join-Path $packageRoot 'scripts\lib\AfyxComponents.psm1') -Force
+$componentContext = New-AfyxComponentContext -SkillsRoot $SkillsRoot -GraphRoot $graphRuntimeRoot -CodexHome $codexHome
+$componentStates = @{}
+foreach ($componentState in (Get-AfyxComponentStates -Context $componentContext)) { $componentStates[$componentState.Id] = $componentState }
+
 function Test-SkillManifest([string]$SkillDirectory) {
     $manifest = Join-Path $SkillDirectory 'SKILL.md'
     if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) { return $false }
     return (Get-Content -LiteralPath $manifest -TotalCount 1 -Encoding utf8) -eq '---'
-}
-
-function Get-SkillVersion([string]$SkillDirectory) {
-    if (-not (Test-SkillManifest $SkillDirectory)) { return $null }
-    $text = Get-Content -Raw -LiteralPath (Join-Path $SkillDirectory 'SKILL.md') -Encoding utf8
-    $match = [regex]::Match($text, '(?m)^\s+version:\s*["'']?([^"''\s]+)')
-    if ($match.Success) { return $match.Groups[1].Value }
-    return $null
-}
-
-function Get-SkillState([string]$SkillDirectory) {
-    if (-not (Test-Path -LiteralPath $SkillDirectory)) { return 'NOT INSTALLED' }
-    if (Test-SkillManifest $SkillDirectory) { return 'HEALTHY' }
-    return 'INVALID'
-}
-
-function Get-GraphState {
-    if (-not (Test-Path -LiteralPath $graphRuntimeRoot)) { return 'NOT INSTALLED' }
-    if (-not (Test-Path -LiteralPath (Join-Path $graphRuntimeRoot 'metadata.json') -PathType Leaf) -or
-        -not (Test-Path -LiteralPath (Join-Path $graphRuntimeRoot 'current\bin\afyx-graph.cmd') -PathType Leaf)) { return 'INCOMPLETE' }
-    try {
-        $document = Get-Content -Raw -LiteralPath (Join-Path $graphRuntimeRoot 'metadata.json') | ConvertFrom-Json
-        if ($document.product_name -eq 'Afyx Graph') { return 'HEALTHY' }
-    } catch { }
-    return 'INVALID'
-}
-
-function Get-UsageState {
-    $required = @('CodexUsage.psm1', 'codex-usage-stop.ps1', 'codex-usage-watch.ps1', 'codex-usage-doctor.ps1', 'codex-usage-pricing.json')
-    $count = @($required | Where-Object { Test-Path -LiteralPath (Join-Path $codexHome "tools\$_") -PathType Leaf }).Count
-    if ($count -eq 0) { return 'NOT INSTALLED' }
-    if ($count -eq $required.Count) { return 'HEALTHY' }
-    return 'INCOMPLETE'
 }
 
 function Read-ReplaceChoice([string]$Label) {
@@ -117,18 +90,16 @@ if (-not (Test-Path -LiteralPath $graphMetadataPath -PathType Leaf)) { throw 'Bu
 $codexCliDetected = [bool](Get-Command codex -ErrorAction SilentlyContinue)
 $vscodeExtensionDetected = [bool](Get-ChildItem -Path (Join-Path $env:USERPROFILE '.vscode\extensions\openai.chatgpt-*') -Directory -ErrorAction SilentlyContinue | Select-Object -First 1)
 $states = [ordered]@{
-    'Efficient Coding' = Get-SkillState $efficientTarget
-    'Odoo Engineering' = Get-SkillState $odooTarget
-    'Prompt Master' = Get-SkillState $promptTarget
-    'Afyx Graph' = Get-GraphState
-    'Codex Usage Tracking' = Get-UsageState
+    'Efficient Coding' = $componentStates['efficient-coding'].State
+    'Odoo Engineering' = $componentStates['odoo-engineering'].State
+    'Prompt Master' = $componentStates['prompt-master'].State
+    'Afyx Graph' = $componentStates['afyx-graph'].State
+    'Codex Usage Tracking' = $componentStates['codex-usage-tracking'].State
 }
 Write-Host ''
 Write-Host 'Component Inventory'
 foreach ($entry in $states.GetEnumerator()) { Write-Host ("{0}: {1}" -f $entry.Key, $entry.Value) }
-$upstreamCodeGraph = Get-Command codegraph -ErrorAction SilentlyContinue
 Write-Host "Headroom: $(if (Get-Command headroom -ErrorAction SilentlyContinue) { 'externally managed; detected' } else { 'externally managed; not detected' })"
-Write-Host "Upstream CodeGraph: $(if ($upstreamCodeGraph) { 'externally managed; detected' } else { 'externally managed; not detected' })"
 
 if ($ValidateOnly) {
     $graphMetadata = Get-Content -Raw -LiteralPath $graphMetadataPath | ConvertFrom-Json
@@ -136,22 +107,20 @@ if ($ValidateOnly) {
         BundledEfficientCoding = Test-SkillManifest $bundledEfficientCoding
         InstalledEfficientCoding = $states['Efficient Coding'] -eq 'HEALTHY'
         EfficientCodingState = $states['Efficient Coding']
-        EfficientCodingVersion = Get-SkillVersion $efficientTarget
+        EfficientCodingVersion = $componentStates['efficient-coding'].Version
         BundledOdooEngineering = Test-SkillManifest $bundledOdooEngineering
         InstalledOdooEngineering = $states['Odoo Engineering'] -eq 'HEALTHY'
         OdooEngineeringState = $states['Odoo Engineering']
-        OdooEngineeringVersion = Get-SkillVersion $odooTarget
+        OdooEngineeringVersion = $componentStates['odoo-engineering'].Version
         InstalledPromptMaster = $states['Prompt Master'] -eq 'HEALTHY'
         PromptMasterState = $states['Prompt Master']
-        BundledAfyxGraphSource = Test-Path -LiteralPath (Join-Path $packageRoot 'afyx-codegraph\codegraph-main\package.json')
+        BundledAfyxGraphSource = Test-Path -LiteralPath (Join-Path $packageRoot 'afyx-graph\engine\package.json')
         InstalledAfyxGraph = $states['Afyx Graph'] -eq 'HEALTHY'
         AfyxGraphState = $states['Afyx Graph']
-        AfyxGraphVersion = $graphMetadata.afyx_graph_version
-        AfyxGraphEngineVersion = $graphMetadata.codegraph_upstream_version
+        AfyxGraphVersion = $graphMetadata.product_version
         InstalledUsageTracker = $states['Codex Usage Tracking'] -eq 'HEALTHY'
         UsageTrackerState = $states['Codex Usage Tracking']
         HeadroomAvailable = [bool](Get-Command headroom -ErrorAction SilentlyContinue)
-        UpstreamCodeGraphDetected = [bool]$upstreamCodeGraph
         CodexCliDetected = $codexCliDetected
         VsCodeExtensionDetected = $vscodeExtensionDetected
     } | Format-List
@@ -227,6 +196,5 @@ Write-Host ''
 Write-Host 'Installation Summary'
 foreach ($entry in $summary.GetEnumerator()) { Write-Host "[$($entry.Value.ToUpperInvariant())] $($entry.Key)" }
 Write-Host '[INFO] Headroom — externally managed; unchanged'
-Write-Host '[INFO] Upstream CodeGraph — externally managed; unchanged'
 if ($WhatIfPreference) { Write-Host 'WhatIf completed; no files or configuration were changed.' }
 else { Write-Host 'Start a new Codex session to load installed components.' }

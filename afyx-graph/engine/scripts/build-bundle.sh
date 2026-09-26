@@ -64,7 +64,7 @@ STAGE="$WORK/afyx-graph-${TARGET}"
 mkdir -p "$STAGE/lib" "$STAGE/bin"
 cp -R "$ROOT/dist" "$STAGE/lib/dist"
 # The browser viewer rides along inside dist/viewer (built by `npm run build`
-# above). Fail here rather than shipping a bundle whose `codegraph ui` serves
+# above). Fail here rather than shipping a bundle whose `afyx-graph ui` serves
 # a 404 — the copy is verified, not assumed.
 node "$ROOT/scripts/check-ui-build.mjs" --root "$STAGE/lib"
 cp "$ROOT/package.json" "$ROOT/package-lock.json" "$STAGE/lib/"
@@ -79,23 +79,26 @@ rm -f "$STAGE/lib/package-lock.json"
 mkdir -p "$STAGE/licenses"
 cp "$ROOT/../afyx-graph.json" "$STAGE/metadata.json"
 cp "$ROOT/../THIRD_PARTY_NOTICES.md" "$STAGE/licenses/THIRD_PARTY_NOTICES.md"
-cp "$ROOT/../LICENSES/CodeGraph-MIT.txt" "$STAGE/licenses/CodeGraph-MIT.txt"
+cp "$ROOT/../LICENSES/THIRD_PARTY_ENGINE_MIT.txt" "$STAGE/licenses/THIRD_PARTY_ENGINE_MIT.txt"
+for notice in THIRD_PARTY_NOTICES.md THIRD_PARTY_ENGINE_MIT.txt; do
+  [ -s "$STAGE/licenses/$notice" ] || { echo "[bundle] required legal file missing from bundle: licenses/$notice" >&2; exit 1; }
+done
 
 # 3b. Native extraction kernel (optional). Included when a prebuilt .node for
-#     the target exists — release/kernel/<target>/codegraph-kernel.node (the
+#     the target exists — release/kernel/<target>/afyx-graph-kernel.node (the
 #     release workflow's prebuild artifacts) or the locally staged
-#     codegraph-kernel/prebuilds/<target>/ (scripts/build-kernel.sh). Absent →
+#     afyx-graph-kernel/prebuilds/<target>/ (scripts/build-kernel.sh). Absent →
 #     the bundle simply runs the wasm extraction path; the kernel is a
 #     per-language speedup, never a requirement (see
 #     docs/design/rust-kernel-migration-plan.md).
 KERNEL_NODE=""
-for candidate in "$ROOT/release/kernel/${TARGET}/codegraph-kernel.node" \
-                 "$ROOT/codegraph-kernel/prebuilds/${TARGET}/codegraph-kernel.node"; do
+for candidate in "$ROOT/release/kernel/${TARGET}/afyx-graph-kernel.node" \
+                 "$ROOT/afyx-graph-kernel/prebuilds/${TARGET}/afyx-graph-kernel.node"; do
   if [ -f "$candidate" ]; then KERNEL_NODE="$candidate"; break; fi
 done
 if [ -n "$KERNEL_NODE" ]; then
   mkdir -p "$STAGE/lib/kernel"
-  cp "$KERNEL_NODE" "$STAGE/lib/kernel/codegraph-kernel.node"
+  cp "$KERNEL_NODE" "$STAGE/lib/kernel/afyx-graph-kernel.node"
   echo "[bundle] native kernel included ($KERNEL_NODE)"
 else
   echo "[bundle] no native kernel for ${TARGET} — bundle uses the wasm extraction path"
@@ -114,9 +117,8 @@ fi
 # runs are covered too; passing it here avoids that extra spawn.)
 if [ "$OSFAM" = "win32" ]; then
   cp "$NODE_BIN" "$STAGE/node.exe"
-  printf '@echo off\r\nset "AFYX_GRAPH_PRODUCT=1"\r\n@"%%~dp0..\\node.exe" --liftoff-only --disable-warning=ExperimentalWarning "%%~dp0..\\lib\\dist\\bin\\codegraph.js" %%*\r\n' \
+  printf '@echo off\r\n@"%%~dp0..\\node.exe" --liftoff-only --disable-warning=ExperimentalWarning "%%~dp0..\\lib\\dist\\bin\\afyx-graph.js" %%*\r\n' \
     > "$STAGE/bin/afyx-graph.cmd"
-  printf '@echo off\r\n@call "%%~dp0afyx-graph.cmd" %%*\r\n' > "$STAGE/bin/codegraph.cmd"
 else
   cp "$NODE_BIN" "$STAGE/node"
   chmod +x "$STAGE/node"
@@ -133,24 +135,17 @@ while [ -L "$SELF" ]; do
   esac
 done
 DIR="$(cd "$(dirname "$SELF")/.." && pwd)"
-AFYX_GRAPH_PRODUCT=1
-export AFYX_GRAPH_PRODUCT
 # Thread the MCP host's pid to the server's orphan watchdog (issue #1185).
 # $PPID is our parent — the host itself when it launched this script directly;
 # an already-threaded value (the npm shim sets the true host pid) wins.
-CODEGRAPH_HOST_PPID="${CODEGRAPH_HOST_PPID:-$PPID}"
-export CODEGRAPH_HOST_PPID
+AFYX_GRAPH_HOST_PPID="${AFYX_GRAPH_HOST_PPID:-$PPID}"
+export AFYX_GRAPH_HOST_PPID
 # --liftoff-only: avoid the V8 turboshaft WASM Zone OOM (issues #293/#298).
 # --disable-warning=ExperimentalWarning: mute node:sqlite's per-thread
 # "experimental feature" warning that otherwise interleaves with the progress UI.
-exec "$DIR/node" --liftoff-only --disable-warning=ExperimentalWarning "$DIR/lib/dist/bin/codegraph.js" "$@"
+exec "$DIR/node" --liftoff-only --disable-warning=ExperimentalWarning "$DIR/lib/dist/bin/afyx-graph.js" "$@"
 LAUNCH
   chmod +x "$STAGE/bin/afyx-graph"
-  cat > "$STAGE/bin/codegraph" <<'LEGACY'
-#!/bin/sh
-exec "$(dirname "$0")/afyx-graph" "$@"
-LEGACY
-  chmod +x "$STAGE/bin/codegraph"
 fi
 
 # 5. Archive (.zip for Windows, .tar.gz otherwise).

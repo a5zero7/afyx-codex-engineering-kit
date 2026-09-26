@@ -26,7 +26,7 @@ import * as http from 'http';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import CodeGraph from '../src/index';
+import AfyxGraph from '../src/index';
 import { createGraphApi, startUiServer, type GraphApi, type UiServerHandle } from '../src/ui-server';
 import { flowEdgeLabel, parseFlowQuery } from '../src/ui-server/api/flow';
 import { resolveNamedSymbolFlow } from '../src/graph/named-symbol-flow';
@@ -86,7 +86,7 @@ function names(flow: any): string[] {
 }
 
 beforeAll(async () => {
-  tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codegraph-ui-flow-'));
+  tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-graph-ui-flow-'));
   projectRoot = path.join(tempDir, 'project');
 
   // A five-hop chain: bootstrap -> handleRequest -> loadRow -> readRow -> toRow.
@@ -221,7 +221,7 @@ func Tick(c Clock) string {
 `
   );
 
-  const cg = CodeGraph.initSync(projectRoot, {
+  const cg = AfyxGraph.initSync(projectRoot, {
     config: { include: ['src/**/*.ts', '__tests__/**/*.ts', 'go/**/*.go'], exclude: [] },
   });
   await cg.indexAll();
@@ -467,14 +467,14 @@ describe('GET /api/flow — where the graph stops', () => {
   });
 });
 
-describe('the end cap and codegraph_explore agree', () => {
+describe('the end cap and afyx_graph_explore agree', () => {
   it('names the same site, the same key and the same candidate', async () => {
     const payload = await getFlow('?from=routeSave&to=onSave');
     const site = payload.flows[0].boundary.sites[0];
 
-    const cg = CodeGraph.openSync(projectRoot);
+    const cg = AfyxGraph.openSync(projectRoot);
     try {
-      const res = await new ToolHandler(cg).execute('codegraph_explore', {
+      const res = await new ToolHandler(cg).execute('afyx_graph_explore', {
         query: 'routeSave onSave',
       });
       const text = res.content[0].text as string;
@@ -492,7 +492,7 @@ describe('the end cap and codegraph_explore agree', () => {
   });
 
   it('splits a symbol\'s outgoing calls into the sure and the unfollowed', () => {
-    const cg = CodeGraph.openSync(projectRoot);
+    const cg = AfyxGraph.openSync(projectRoot);
     try {
       const node = cg.getNodesByName('handleRequest')[0]!;
       const all = continuationsFrom(cg, node);
@@ -534,7 +534,7 @@ describe('GET /api/flow — explore parity', () => {
 
     // The endpoint must not have its own path finder. Run the engine's directly
     // and require the same hops, in the same order.
-    const cg = CodeGraph.openSync(projectRoot);
+    const cg = AfyxGraph.openSync(projectRoot);
     try {
       const flow = resolveNamedSymbolFlow(cg, 'bootstrap,loadRow,toRow');
       expect(flow.chains[0]?.steps.map((s) => s.node.id)).toEqual(

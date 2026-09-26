@@ -1,5 +1,9 @@
 name: CI
 
+# Zero-model CI: static analysis, deterministic fixtures and local tests only.
+# Afyx Graph engine build/tests live in graph-build.yml (path filtered);
+# all six release bundles are built only by graph-release.yml.
+
 on:
   push:
     branches:
@@ -11,15 +15,30 @@ on:
 permissions:
   contents: read
 
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+
 jobs:
-  bash-validation:
+  linux:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Check Bash syntax
-        run: bash -n install.sh update.sh uninstall.sh verify.sh scripts/install-afyx-graph.sh
-      - name: Validate Afyx Graph metadata
+        run: bash -n install.sh update.sh uninstall.sh verify.sh scripts/install-afyx-graph.sh scripts/afyx-doctor.sh scripts/afyx-project.sh scripts/lib/afyx-components.sh
+      - name: Validate Afyx Graph identity and metadata
         run: python scripts/validate-afyx-graph.py
+      - name: Validate the component contract
+        run: python scripts/validate-components.py
+      - name: Operational independence audit (legacy references must be legal or negative tests only)
+        run: python scripts/audit-legacy-identity.py
+      - name: Compile and validate evaluation assets
+        run: |
+          python -m py_compile evals/harness/*.py
+          python evals/harness/validate.py
+      - name: Zero-token skill routing validation
+        run: python evals/harness/routing.py
+      - name: Deterministic tests (component contract, project detector, doctor, routing guard)
+        run: python -m unittest discover -s scripts/tests -p 'test_*.py' -v
       - name: Validate installer assets
         run: ./install.sh --validate-only
       - name: Verify repository remains clean
@@ -29,7 +48,7 @@ jobs:
             exit 1
           fi
 
-  powershell-syntax:
+  windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -37,7 +56,9 @@ jobs:
         shell: pwsh
         run: |
           $failed = $false
-          foreach ($file in @('install.ps1', 'update.ps1', 'uninstall.ps1', 'verify.ps1', 'scripts/install-afyx-graph.ps1')) {
+          $files = @('install.ps1', 'update.ps1', 'uninstall.ps1', 'verify.ps1') +
+            (Get-ChildItem -Path scripts, tools -Recurse -Include *.ps1, *.psm1 | ForEach-Object { Resolve-Path -Relative $_.FullName })
+          foreach ($file in $files) {
             $tokens = $null
             $errors = $null
             [System.Management.Automation.Language.Parser]::ParseFile(
@@ -45,7 +66,6 @@ jobs:
               [ref] $tokens,
               [ref] $errors
             ) | Out-Null
-
             foreach ($parseError in $errors) {
               Write-Error "$file`: $($parseError.Message)"
             }
@@ -56,6 +76,22 @@ jobs:
           if ($failed) {
             exit 1
           }
+      - name: Installer ValidateOnly
+        shell: pwsh
+        run: ./install.ps1 -ValidateOnly
+      - name: Validate identity, metadata and component contract
+        run: |
+          python scripts/validate-afyx-graph.py
+          python scripts/validate-components.py
+          python scripts/audit-legacy-identity.py
+      - name: Usage Tracker deterministic tests
+        shell: pwsh
+        run: ./tools/codex-usage/tests/run-tests.ps1
+      - name: Component contract, project detector and doctor tests (PowerShell and Git Bash)
+        run: |
+          python scripts/tests/test_components.py
+          python scripts/tests/test_project_detect.py
+          python scripts/tests/test_doctor.py
       - name: Verify repository remains clean
         shell: pwsh
         run: |
@@ -65,16 +101,37 @@ jobs:
             exit 1
           }
 
-  static-evals:
-    runs-on: ubuntu-latest
-    env:
-      PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache
+  macos:
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Compile evaluation harness
-        run: python -m py_compile evals/harness/*.py
-      - name: Validate evaluation assets
-        run: python evals/harness/validate.py
+      - name: Bash 3.2 syntax and portability (system /bin/bash)
+        run: |
+          /bin/bash --version | head -n 1
+          for f in install.sh update.sh uninstall.sh verify.sh scripts/install-afyx-graph.sh scripts/afyx-doctor.sh scripts/afyx-project.sh scripts/lib/afyx-components.sh; do
+            /bin/bash -n "$f"
+          done
+      - name: Installer ValidateOnly (system /bin/bash)
+        run: /bin/bash ./install.sh --validate-only
+      - name: Verifier on a staged skills root (system /bin/bash)
+        run: |
+          root="$RUNNER_TEMP/skills"
+          mkdir -p "$root/prompt-master"
+          cp -R skills/efficient-coding skills/odoo-engineering "$root/"
+          printf -- '---\nname: prompt-master\ndescription: stub\n---\n' > "$root/prompt-master/SKILL.md"
+          # Core skills must verify; the overall exit may be non-zero only because no Codex host exists on a CI runner.
+          /bin/bash ./verify.sh --skills-root "$root" | tee verify.out || true
+          grep -q '^\[OK\] Efficient Coding' verify.out
+          grep -q '^\[OK\] Odoo Engineering' verify.out
+          grep -q '^\[OK\] Prompt Master' verify.out
+          ! grep -q '^\[FAIL\] \(Efficient Coding\|Odoo Engineering\|Prompt Master\)' verify.out
+          rm -f verify.out
+      - name: Component contract and project detector (system /bin/bash)
+        run: |
+          export PATH="/bin:$PATH"
+          python3 scripts/validate-components.py
+          python3 scripts/tests/test_components.py
+          python3 scripts/tests/test_project_detect.py
       - name: Verify repository remains clean
         run: |
           if [[ -n "$(git status --porcelain)" ]]; then

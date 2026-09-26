@@ -23,7 +23,7 @@ import { describe, it, expect, beforeAll, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { CodeGraph } from '../src';
+import { AfyxGraph } from '../src';
 import type { Edge } from '../src/types';
 import { initGrammars, loadAllGrammars } from '../src/extraction/grammars';
 
@@ -33,7 +33,7 @@ beforeAll(async () => {
 });
 
 /** Incoming edges to `name`'s node that came from function-as-value capture. */
-function fnRefEdgesInto(cg: CodeGraph, name: string): Edge[] {
+function fnRefEdgesInto(cg: AfyxGraph, name: string): Edge[] {
   const targets = cg.getNodesByName(name);
   const edges: Edge[] = [];
   for (const t of targets) {
@@ -47,7 +47,7 @@ function fnRefEdgesInto(cg: CodeGraph, name: string): Edge[] {
 }
 
 /** Names of the source nodes of the given edges, sorted. */
-function sourceNames(cg: CodeGraph, edges: Edge[]): string[] {
+function sourceNames(cg: AfyxGraph, edges: Edge[]): string[] {
   const names: string[] = [];
   for (const e of edges) {
     const n = cg.getNode(e.source);
@@ -87,7 +87,7 @@ describe('Function-as-value capture (#756)', () => {
       ].join('\n')
     );
 
-    const cg = CodeGraph.initSync(tmpDir);
+    const cg = AfyxGraph.initSync(tmpDir);
     try {
       await cg.indexAll();
 
@@ -135,7 +135,7 @@ describe('Function-as-value capture (#756)', () => {
       ].join('\n')
     );
 
-    const cg = CodeGraph.initSync(tmpDir);
+    const cg = AfyxGraph.initSync(tmpDir);
     try {
       await cg.indexAll();
 
@@ -171,7 +171,7 @@ describe('Function-as-value capture (#756)', () => {
       ].join('\n')
     );
 
-    const cg = CodeGraph.initSync(tmpDir);
+    const cg = AfyxGraph.initSync(tmpDir);
     try {
       await cg.indexAll();
       const edges = fnRefEdgesInto(cg, 'onMessage');
@@ -199,7 +199,7 @@ describe('Function-as-value capture (#756)', () => {
       'export function wire(bus: { on(cb: unknown): void }, process: unknown): void { bus.on(process); }\n'
     );
 
-    const cg = CodeGraph.initSync(tmpDir);
+    const cg = AfyxGraph.initSync(tmpDir);
     try {
       await cg.indexAll();
       const edges = fnRefEdgesInto(cg, 'process');
@@ -222,7 +222,7 @@ describe('Function-as-value capture (#756)', () => {
       ].join('\n')
     );
 
-    const cg = CodeGraph.initSync(tmpDir);
+    const cg = AfyxGraph.initSync(tmpDir);
     try {
       await cg.indexAll();
       const wires = fnRefEdgesInto(cg, 'my_cb').filter((e) => {
@@ -249,7 +249,7 @@ describe('Function-as-value capture (#756)', () => {
       ].join('\n')
     );
 
-    const cg = CodeGraph.initSync(tmpDir);
+    const cg = AfyxGraph.initSync(tmpDir);
     try {
       await cg.indexAll();
       const strategy = cg.getNodesByName('Strategy').find((n) => n.kind === 'class')!;
@@ -273,7 +273,7 @@ describe('Function-as-value capture (#756)', () => {
       ].join('\n')
     );
 
-    const cg = CodeGraph.initSync(tmpDir);
+    const cg = AfyxGraph.initSync(tmpDir);
     try {
       await cg.indexAll();
       const retry = cg.getNodesByName('retry')[0]!;
@@ -317,7 +317,7 @@ describe('Function-as-value capture (#756)', () => {
       ].join('\n')
     );
 
-    const cg = CodeGraph.initSync(tmpDir);
+    const cg = AfyxGraph.initSync(tmpDir);
     try {
       await cg.indexAll();
 
@@ -395,7 +395,7 @@ describe('Function-as-value capture (#756)', () => {
       ].join('\n')
     );
 
-    const cg = CodeGraph.initSync(tmpDir);
+    const cg = AfyxGraph.initSync(tmpDir);
     try {
       await cg.indexAll();
       expect(sourceNames(cg, fnRefEdgesInto(cg, 'TargetCb'))).toEqual([
@@ -429,7 +429,7 @@ describe('Function-as-value capture (#756)', () => {
       ].join('\n')
     );
 
-    const cg = CodeGraph.initSync(tmpDir);
+    const cg = AfyxGraph.initSync(tmpDir);
     try {
       await cg.indexAll();
 
@@ -480,7 +480,7 @@ describe('Function-as-value capture (#756)', () => {
       ].join('\n')
     );
 
-    const cg = CodeGraph.initSync(tmpDir);
+    const cg = AfyxGraph.initSync(tmpDir);
     try {
       await cg.indexAll();
       const handleSubmits = cg.getNodesByName('handleSubmit');
@@ -531,7 +531,7 @@ describe('Function-as-value capture (#756)', () => {
       ].join('\n')
     );
 
-    const cg = CodeGraph.initSync(tmpDir);
+    const cg = AfyxGraph.initSync(tmpDir);
     try {
       await cg.indexAll();
 
@@ -575,7 +575,7 @@ describe('Function-as-value capture (#756)', () => {
       ].join('\n')
     );
 
-    const cg = CodeGraph.initSync(tmpDir);
+    const cg = AfyxGraph.initSync(tmpDir);
     try {
       await cg.indexAll();
       const handles = cg.getNodesByName('handle');
@@ -609,7 +609,7 @@ describe('Function-as-value capture (#756)', () => {
       ].join('\n')
     );
 
-    const cg = CodeGraph.initSync(tmpDir);
+    const cg = AfyxGraph.initSync(tmpDir);
     try {
       await cg.indexAll();
       const edges = fnRefEdgesInto(cg, 'report');
@@ -646,7 +646,7 @@ describe('Function-as-value capture (#756)', () => {
       ].join('\n')
     );
 
-    const cg = CodeGraph.initSync(tmpDir);
+    const cg = AfyxGraph.initSync(tmpDir);
     try {
       await cg.indexAll();
 
@@ -692,7 +692,7 @@ describe('Function-as-value capture (#756)', () => {
       ].join('\n')
     );
 
-    const cg = CodeGraph.initSync(tmpDir);
+    const cg = AfyxGraph.initSync(tmpDir);
     try {
       await cg.indexAll();
       // Exactly ONE source for cmp_items: the usort site, not some_random_fn.
@@ -727,7 +727,7 @@ describe('Function-as-value capture (#756)', () => {
       ].join('\n')
     );
 
-    const cg = CodeGraph.initSync(tmpDir);
+    const cg = AfyxGraph.initSync(tmpDir);
     try {
       await cg.indexAll();
 
@@ -789,7 +789,7 @@ describe('Function-as-value capture (#756)', () => {
       ].join('\n')
     );
 
-    const cg = CodeGraph.initSync(tmpDir);
+    const cg = AfyxGraph.initSync(tmpDir);
     try {
       await cg.indexAll();
 
@@ -848,7 +848,7 @@ describe('Function-as-value capture (#756)', () => {
       ].join('\n')
     );
 
-    const cg = CodeGraph.initSync(tmpDir);
+    const cg = AfyxGraph.initSync(tmpDir);
     try {
       await cg.indexAll();
       expect(fnRefEdgesInto(cg, 'refresh')).toHaveLength(0);
@@ -870,7 +870,7 @@ describe('Function-as-value capture (#756)', () => {
       ].join('\n')
     );
 
-    const cg = CodeGraph.initSync(tmpDir);
+    const cg = AfyxGraph.initSync(tmpDir);
     try {
       await cg.indexAll();
       const stats1 = cg.getStats();

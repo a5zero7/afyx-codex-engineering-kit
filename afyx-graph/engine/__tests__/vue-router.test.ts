@@ -14,7 +14,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { CodeGraph } from '../src';
+import { AfyxGraph } from '../src';
 import { initGrammars, loadAllGrammars } from '../src/extraction/grammars';
 import { buildScreens } from '../src/ui-server/api/screens';
 import { parseVueRoutes, vueNavVerb, routeNameInExpression } from '../src/resolution/frameworks/vue-router';
@@ -114,7 +114,7 @@ describe('vue-router: navigation call names', () => {
 
 describe('vue-router: a routed app end to end', () => {
   let tmpDir: string;
-  let cg: CodeGraph;
+  let cg: AfyxGraph;
 
   function write(rel: string, content: string): void {
     const full = path.join(tmpDir, rel);
@@ -212,7 +212,7 @@ describe('vue-router: a routed app end to end', () => {
     );
     // The precision floor: an array's `push` with a string that IS a route.
     write('src/utils/trail.js', 'export function trail() {\n  const paths = []\n  paths.push("/login")\n  return paths\n}\n');
-    cg = CodeGraph.initSync(tmpDir);
+    cg = AfyxGraph.initSync(tmpDir);
     await cg.indexAll();
   });
 

@@ -30,7 +30,7 @@
  * it the moment a cap bit.
  */
 
-import type { CodeGraph } from '../../index';
+import type { AfyxGraph } from '../../index';
 import type { Edge, Node } from '../../types';
 import { isTestFile } from '../../search/query-utils';
 import { buildOutlineEntries, type WireOutlineEntry } from './file';
@@ -140,7 +140,7 @@ export interface WireFileCodePayload {
 }
 
 export function buildFileCode(
-  cg: CodeGraph,
+  cg: AfyxGraph,
   projectRoot: string,
   requested: string
 ): WireFileCodePayload {
@@ -202,7 +202,7 @@ export function buildFileCode(
  * and the outline already draws it.
  */
 function buildCalls(
-  cg: CodeGraph,
+  cg: AfyxGraph,
   nodes: readonly Node[],
   posixPath: string
 ): { calls: WireFileCall[]; total: number; intraFileCalls: number } {
@@ -264,7 +264,7 @@ function buildCalls(
  * symbol.
  */
 function buildOutsideRefs(
-  cg: CodeGraph,
+  cg: AfyxGraph,
   storedPath: string
 ): { items: WireFileOutsideRef[]; total: number } {
   let raw;

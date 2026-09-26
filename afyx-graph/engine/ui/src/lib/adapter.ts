@@ -2,8 +2,8 @@
  * The data seam: everything these components know about a project arrives
  * through one {@link GraphAdapter} (task CG-61).
  *
- * The viewer shipped by `codegraph ui` uses {@link createHttpAdapter}, which is
- * the JSON API over loopback. A host that already holds the graph — CodeGraph
+ * The viewer shipped by `afyx-graph ui` uses {@link createHttpAdapter}, which is
+ * the JSON API over loopback. A host that already holds the graph — Afyx Graph
  * Pro, which opens the index in-process — implements the same thirteen required
  * methods against its own reads and never makes an HTTP request. The components
  * cannot tell the difference, which is the whole point: one implementation of
@@ -25,7 +25,7 @@
  * plain TypeScript and cannot read a component's context, and a reader is
  * looking at one project at a time — the screens are a reading of *a* graph.
  * A host calls {@link setGraphAdapter} once before it renders, or wraps its
- * tree in `<CodegraphUi>`, which does it during initialisation.
+ * tree in `<AfyxGraphUi>`, which does it during initialisation.
  */
 
 import type {
@@ -98,7 +98,7 @@ export interface SourceRequest {
 
 /**
  * A flow question. Exactly one of the three shapes is asked at a time:
- * `{ from, to }` ("how does X reach Y"), `{ symbols }` (`codegraph_explore`'s
+ * `{ from, to }` ("how does X reach Y"), `{ symbols }` (`afyx_graph_explore`'s
  * own question, verbatim) or `{ trail }` (the hops the reader walked, as
  * `<dir><id>` strings).
  */
@@ -294,10 +294,10 @@ function query(params: URLSearchParams): string {
  * proof the request came from a page the server itself served. Must match
  * `WRITE_HEADER` in `src/ui-server/security.ts`.
  */
-export const WRITE_HEADER = 'X-CodeGraph-UI';
+export const WRITE_HEADER = 'X-Afyx-Graph-UI';
 
 /**
- * The default adapter: the JSON API `codegraph ui` serves.
+ * The default adapter: the JSON API `afyx-graph ui` serves.
  *
  * Every failure it can describe comes back as an {@link ApiFailure} carrying
  * the server's own sentence. The one it cannot describe — the server was

@@ -15,10 +15,10 @@ import { describe, it, expect, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import CodeGraph from '../src/index';
+import AfyxGraph from '../src/index';
 
 describe('calls through an alias binding reach the aliased symbol', () => {
-  let cg: CodeGraph;
+  let cg: AfyxGraph;
   let dir: string;
 
   afterEach(() => {
@@ -27,11 +27,11 @@ describe('calls through an alias binding reach the aliased symbol', () => {
   });
 
   const index = async (files: Record<string, string>): Promise<void> => {
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codegraph-alias-'));
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-graph-alias-'));
     for (const [name, content] of Object.entries(files)) {
       fs.writeFileSync(path.join(dir, name), content);
     }
-    cg = CodeGraph.initSync(dir, { config: { include: ['**/*.ts'], exclude: [] } });
+    cg = AfyxGraph.initSync(dir, { config: { include: ['**/*.ts'], exclude: [] } });
     await cg.indexAll();
   };
 

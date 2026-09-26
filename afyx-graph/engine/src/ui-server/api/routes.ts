@@ -20,7 +20,7 @@
  * instead, which is the number a reader means by "how many routes are there".
  */
 
-import type { CodeGraph } from '../../index';
+import type { AfyxGraph } from '../../index';
 import { intParam } from './respond';
 import { toPosixPath } from './wire';
 
@@ -89,7 +89,7 @@ const MAX_HANDLER_FILES = 60;
  */
 const MIN_LIMIT = 3;
 
-export function buildRoutes(cg: CodeGraph, query: URLSearchParams): WireRoutes {
+export function buildRoutes(cg: AfyxGraph, query: URLSearchParams): WireRoutes {
   const limit = intParam(query, 'limit', { min: MIN_LIMIT, max: 500, default: 200 });
 
   // One row over the limit, purely to learn whether there were more.

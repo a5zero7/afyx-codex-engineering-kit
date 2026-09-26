@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { CodeGraph } from '../src';
+import { AfyxGraph } from '../src';
 
 /**
  * A JSX tag names ONE component, and the file it is written in says which:
@@ -42,7 +42,7 @@ describe('JSX child disambiguation among same-named components', () => {
   };
 
   async function index() {
-    cg = await CodeGraph.init(dir, { silent: true });
+    cg = await AfyxGraph.init(dir, { silent: true });
     await cg.indexAll();
     return (cg as any).db.db;
   }

@@ -3,7 +3,7 @@
  * tools/list, tools/call) over a single {@link JsonRpcTransport}. It owns
  * per-client state only (which protocol version the client asked for, whether
  * it advertised `roots`, the one-shot roots/list latch); the heavyweight
- * resources (CodeGraph, watcher, ToolHandler) live in the shared
+ * resources (Afyx Graph, watcher, ToolHandler) live in the shared
  * {@link MCPEngine} so daemon mode can collapse N inotify sets / DB handles
  * to one.
  *
@@ -17,12 +17,10 @@ import { JsonRpcRequest, JsonRpcNotification, JsonRpcTransport, ErrorCodes } fro
 import { MCPEngine } from './engine';
 import { tools } from './tools';
 import { SERVER_INSTRUCTIONS, SERVER_INSTRUCTIONS_NO_ROOT_INDEX } from './server-instructions';
-import { CodeGraphPackageVersion } from './version';
+import { AfyxGraphPackageVersion } from './version';
 import { resolveServerRoot } from '../directory';
-import { getTelemetry, ClientInfo } from '../telemetry';
-import { getUpdateNotice } from '../upgrade/update-check';
 import { ExploreSessionState } from './explore-session-state';
-import { MCP_SERVER_NAME, publicText } from '../product';
+import { MCP_SERVER_NAME } from '../product';
 
 /**
  * MCP Server Info — kept on the session because some clients log it. The
@@ -32,30 +30,8 @@ import { MCP_SERVER_NAME, publicText } from '../product';
 // payload the daemon would send — no drift between the two handshake paths.
 export const SERVER_INFO = {
   name: MCP_SERVER_NAME,
-  version: CodeGraphPackageVersion,
+  version: AfyxGraphPackageVersion,
 };
-
-/**
- * Instructions for the `initialize` response, with the update-availability
- * notice appended when one is known (#1243). Exported so the proxy's local
- * handshake sends the IDENTICAL payload — same convention as SERVER_INFO.
- * `getUpdateNotice` is a memoized synchronous cache read, so the #172
- * respond-fast contract holds; when no notice exists the instructions are
- * byte-identical to the bare constants.
- *
- * Test-authoring note: on a machine whose real `~/.codegraph` cache knows a
- * newer release, spawned servers append the notice — a test asserting exact
- * instructions equality must set `CODEGRAPH_NO_UPDATE_CHECK=1` in the spawn
- * env or it will fail only in the weeks after a release ships.
- */
-export function initializeInstructions(base: string, notice: string | null = getUpdateNotice()): string {
-  base = publicText(base);
-  if (!notice) return base;
-  return (
-    `${base}\n\n---\n${notice} This server keeps running the old version until ` +
-    `the user upgrades — mention it when convenient; do not run the upgrade yourself.`
-  );
-}
 
 /** MCP Protocol Version (latest the server claims). */
 export const PROTOCOL_VERSION = '2024-11-05';
@@ -108,13 +84,11 @@ export interface MCPSessionOptions {
  */
 export class MCPSession {
   private clientSupportsRoots = false;
-  /** From the initialize handshake — attributes usage rollups to the agent host. */
-  private clientInfo: ClientInfo | undefined;
   private rootsAttempted = false;
   private resolvePromise: Promise<void> | null = null;
   private explicitProjectPath: string | null;
   /**
-   * What `codegraph_explore` has already returned to THIS client, per project
+   * What `afyx_graph_explore` has already returned to THIS client, per project
    * (CG-17). Owned by the session, not the engine: the daemon shares one engine
    * (and one ToolHandler, and a pool of worker threads) across every connected
    * client, so state kept over there would blend two agents' histories and let
@@ -208,16 +182,9 @@ export class MCPSession {
       rootUri?: string;
       workspaceFolders?: Array<{ uri: string; name: string }>;
       capabilities?: { roots?: unknown };
-      clientInfo?: { name?: unknown; version?: unknown };
     } | undefined;
 
     this.clientSupportsRoots = !!params?.capabilities?.roots;
-    if (params?.clientInfo) {
-      this.clientInfo = {
-        name: typeof params.clientInfo.name === 'string' ? params.clientInfo.name : undefined,
-        version: typeof params.clientInfo.version === 'string' ? params.clientInfo.version : undefined,
-      };
-    }
 
     // Explicit project signal, strongest first: client-provided rootUri /
     // workspaceFolders (LSP-style), else the --path the server was launched
@@ -243,10 +210,10 @@ export class MCPSession {
     // is assumed). When the root ISN'T indexed (and nothing was adopted), send
     // the per-project variant (tools are still exposed — see handleToolsList):
     // it tells the agent there is no default project and to pass `projectPath`
-    // to any project that has a `.codegraph/`. Gating tool AVAILABILITY on
+    // to any project that has a `.afyx-graph/`. Gating tool AVAILABILITY on
     // whether `./` is indexed was the #964 bug — it broke monorepos (only
     // sub-projects indexed) and never surfaced the tools after a mid-session
-    // `codegraph init`. When no explicit path is known yet (roots/list dance
+    // `afyx-graph init`. When no explicit path is known yet (roots/list dance
     // pending), cwd is the best predictor of where the default will resolve.
     const indexed = resolveServerRoot(explicitPath ?? process.cwd()).root !== null;
 
@@ -255,7 +222,7 @@ export class MCPSession {
       protocolVersion: PROTOCOL_VERSION,
       capabilities: { tools: {} },
       serverInfo: SERVER_INFO,
-      instructions: initializeInstructions(indexed ? SERVER_INSTRUCTIONS : SERVER_INSTRUCTIONS_NO_ROOT_INDEX),
+      instructions: indexed ? SERVER_INSTRUCTIONS : SERVER_INSTRUCTIONS_NO_ROOT_INDEX,
     });
 
     if (explicitPath) {
@@ -270,14 +237,14 @@ export class MCPSession {
     await this.retryInitIfNeeded();
     // Always expose the tools — even when the server root has no index. Gating
     // availability on whether `./` is indexed (the old behavior) breaks the
-    // monorepo case where only sub-projects carry a `.codegraph/` (the agent
+    // monorepo case where only sub-projects carry a `.afyx-graph/` (the agent
     // saw zero tools and couldn't even reach an indexed sub-project by
     // `projectPath`), and it hides the tools from a session that started before
-    // the user ran `codegraph init` (most hosts request the list once, so the
+    // the user ran `afyx-graph init` (most hosts request the list once, so the
     // freshly-built index never surfaces). #964. The not-indexed case is still
     // safe: a call against an un-indexed path returns SUCCESS-shaped guidance
-    // ("pass projectPath / run codegraph init"), never `isError`, so it can't
-    // teach the agent to abandon codegraph. `getTools()` returns the default
+    // ("pass projectPath / run afyx-graph init"), never `isError`, so it can't
+    // teach the agent to abandon afyx-graph. `getTools()` returns the default
     // surface even before a project is open.
     this.transport.sendResult(request.id, {
       tools: this.engine.getToolHandler().getTools(),
@@ -308,16 +275,13 @@ export class MCPSession {
       return;
     }
 
-    if (process.env.CODEGRAPH_MCP_DEBUG) process.stderr.write(`[mcp-debug] toolsCall ${toolName} id=${String(request.id)} pre-init\n`);
+    if (process.env.AFYX_GRAPH_MCP_DEBUG) process.stderr.write(`[mcp-debug] toolsCall ${toolName} id=${String(request.id)} pre-init\n`);
     await this.retryInitIfNeeded();
 
-    if (process.env.CODEGRAPH_MCP_DEBUG) process.stderr.write(`[mcp-debug] toolsCall ${toolName} id=${String(request.id)} dispatch\n`);
+    if (process.env.AFYX_GRAPH_MCP_DEBUG) process.stderr.write(`[mcp-debug] toolsCall ${toolName} id=${String(request.id)} dispatch\n`);
     const result = await this.engine.getToolHandler().execute(toolName, toolArgs, this.exploreSession);
-    if (process.env.CODEGRAPH_MCP_DEBUG) process.stderr.write(`[mcp-debug] toolsCall ${toolName} id=${String(request.id)} done\n`);
+    if (process.env.AFYX_GRAPH_MCP_DEBUG) process.stderr.write(`[mcp-debug] toolsCall ${toolName} id=${String(request.id)} done\n`);
     this.transport.sendResult(request.id, result);
-    // After the reply is on the wire — telemetry must never delay a tool
-    // response (in-memory increment only; see src/telemetry).
-    getTelemetry().recordUsage('mcp_tool', toolName, !result.isError, this.clientInfo);
   }
 
   /**
@@ -326,7 +290,7 @@ export class MCPSession {
    *   2. if still uninitialized and we never asked the client for its roots,
    *      do so now (one-shot); fall back to cwd if the client lacks roots;
    *   3. last-resort: re-walk from the best candidate — picks up projects
-   *      that were `codegraph init`'d *after* the server started.
+   *      that were `afyx-graph init`'d *after* the server started.
    */
   private async retryInitIfNeeded(): Promise<void> {
     if (this.resolvePromise) {
@@ -334,7 +298,7 @@ export class MCPSession {
       this.resolvePromise = null;
     }
 
-    if (this.engine.hasDefaultCodeGraph()) return;
+    if (this.engine.hasDefaultAfyxGraph()) return;
 
     const hint = this.explicitProjectPath ?? this.engine.getProjectPath();
     if (!hint && !this.rootsAttempted) {
@@ -344,7 +308,7 @@ export class MCPSession {
         : this.engine.ensureInitialized(process.cwd());
       try { await this.resolvePromise; } catch { /* fall through */ }
       this.resolvePromise = null;
-      if (this.engine.hasDefaultCodeGraph()) return;
+      if (this.engine.hasDefaultAfyxGraph()) return;
     }
 
     // Last resort: walk from the best candidate (sync open). Picks up
@@ -365,11 +329,11 @@ export class MCPSession {
       if (rootPath) {
         target = rootPath;
       } else {
-        process.stderr.write('[CodeGraph MCP] Client returned no workspace roots; falling back to process cwd.\n');
+        process.stderr.write('[Afyx Graph MCP] Client returned no workspace roots; falling back to process cwd.\n');
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      process.stderr.write(`[CodeGraph MCP] roots/list request failed (${msg}); falling back to process cwd.\n`);
+      process.stderr.write(`[Afyx Graph MCP] roots/list request failed (${msg}); falling back to process cwd.\n`);
     }
     await this.engine.ensureInitialized(target);
   }

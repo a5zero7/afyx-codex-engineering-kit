@@ -20,7 +20,7 @@
  * slice is the useful end: same file first, then production code, then tests.
  */
 
-import type { CodeGraph } from '../../index';
+import type { AfyxGraph } from '../../index';
 import type { Edge, Node, NodeKind } from '../../types';
 import { isTestFile } from '../../search/query-utils';
 import { buildHierarchy, type WireOverride } from './hierarchy';
@@ -74,7 +74,7 @@ export interface WireMember extends WireNodeRef {
   overrides?: WireOverride;
 }
 
-export async function buildNode(cg: CodeGraph, projectRoot: string, nodeId: string): Promise<unknown> {
+export async function buildNode(cg: AfyxGraph, projectRoot: string, nodeId: string): Promise<unknown> {
   const node = cg.getNode(nodeId);
   if (!node) {
     throw notFound(
@@ -238,7 +238,7 @@ export async function buildNode(cg: CodeGraph, projectRoot: string, nodeId: stri
  * `getOutgoingEdgesFrom` over the container children, never a query per child.
  */
 function buildMembers(
-  cg: CodeGraph,
+  cg: AfyxGraph,
   focal: Node,
   containsOut: readonly Edge[],
   endpoints: Map<string, Node>,
@@ -314,7 +314,7 @@ export interface WireTestSummary {
 
 /**
  * Which tests reach this symbol — the same question, and the same method,
- * behind `codegraph_explore`'s "tests:" line.
+ * behind `afyx_graph_explore`'s "tests:" line.
  *
  * Direct test callers first; failing that, walk up to two more caller hops,
  * because a helper called only by production code is still tested through
@@ -323,7 +323,7 @@ export interface WireTestSummary {
  * incomplete search would be exactly the kind of confident wrong answer the
  * viewer exists to avoid.
  */
-function summarizeTestCallers(cg: CodeGraph, directCallers: readonly Node[]): WireTestSummary {
+function summarizeTestCallers(cg: AfyxGraph, directCallers: readonly Node[]): WireTestSummary {
   const directFiles = [
     ...new Set(directCallers.map((n) => toPosixPath(n.filePath)).filter(isTestFile)),
   ];
@@ -401,7 +401,7 @@ function summarizeTestCallers(cg: CodeGraph, directCallers: readonly Node[]): Wi
  * symbols outside the index" is the honest version of the same screen.
  */
 function summarizeOutsideIndex(
-  cg: CodeGraph,
+  cg: AfyxGraph,
   nodeId: string
 ): {
   total: number;
@@ -456,7 +456,7 @@ export interface WireBlastSummary {
  * not explode into its whole class, container members expanded downward so
  * callers of a class's methods count against the class.
  */
-function summarizeBlast(cg: CodeGraph, node: Node, direct: number): WireBlastSummary | null {
+function summarizeBlast(cg: AfyxGraph, node: Node, direct: number): WireBlastSummary | null {
   let subgraph;
   try {
     subgraph = cg.getImpactRadius(node.id, BLAST_DEPTH);
@@ -494,7 +494,7 @@ function summarizeBlast(cg: CodeGraph, node: Node, direct: number): WireBlastSum
 // Drift
 // =============================================================================
 
-function driftFor(cg: CodeGraph, projectRoot: string, filePath: string): boolean {
+function driftFor(cg: AfyxGraph, projectRoot: string, filePath: string): boolean {
   const found = findIndexedFile(cg, filePath);
   if (!found) return false;
   return hasDriftedOnDisk(projectRoot, found.storedPath, found.record);

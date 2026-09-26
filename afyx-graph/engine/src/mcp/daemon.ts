@@ -1,7 +1,7 @@
 /**
  * Shared MCP daemon — issue #411.
  *
- * One detached `codegraph serve --mcp` daemon process per project root,
+ * One detached `afyx-graph serve --mcp` daemon process per project root,
  * accepting N concurrent MCP clients over a Unix-domain socket (or named pipe
  * on Windows). Each incoming connection gets its own {@link MCPSession}; all
  * sessions share a single {@link MCPEngine}, which means a single file watcher
@@ -20,7 +20,7 @@
  *     so a SIGKILL'd host still reaps its proxy promptly; the proxy's socket
  *     close then decrements the daemon's refcount.
  *   - When the last client disconnects the daemon lingers for
- *     `CODEGRAPH_DAEMON_IDLE_TIMEOUT_MS` (default 300s) so back-to-back agent
+ *     `AFYX_GRAPH_DAEMON_IDLE_TIMEOUT_MS` (default 300s) so back-to-back agent
  *     runs in the same project don't repay startup, then exits cleanly. This is
  *     what keeps a single-agent session from leaking a daemon forever (#277).
  *
@@ -28,7 +28,7 @@
  *   - Listening on the daemon socket and spawning per-connection sessions.
  *   - The handshake "hello" line that lets a proxy verify it found a
  *     same-version daemon before piping any JSON-RPC through it.
- *   - The lockfile (`.codegraph/daemon.pid`) competing daemons arbitrate
+ *   - The lockfile (`.afyx-graph/daemon.pid`) competing daemons arbitrate
  *     against — atomic `O_EXCL` create with the full record written in the same
  *     breath (no empty-file window) + cleanup on exit.
  *   - Reference counting + idle timeout.
@@ -54,7 +54,7 @@ import {
   getDaemonSocketCandidates,
   getDaemonSocketPath,
 } from './daemon-paths';
-import { CodeGraphPackageVersion } from './version';
+import { AfyxGraphPackageVersion } from './version';
 import {
   releaseWriterLock,
   tryAcquireWriterLock,
@@ -130,7 +130,7 @@ const MAX_HELLO_LINE_BYTES = 4096;
  * direct mode on mismatch rather than risk subtle wire incompatibilities.
  */
 export interface DaemonHello {
-  codegraph: string; // package version (must match the proxy's own version)
+  afyxGraph: string; // package version (must match the proxy's own version)
   pid: number;       // daemon pid (informational; for `ps` debugging)
   socketPath: string; // echoed back so the proxy can log it
   protocol: 1;       // bump if the hello shape changes
@@ -142,11 +142,11 @@ export interface DaemonHello {
  * process dies WITHOUT the socket ever signalling close (the Windows named-pipe
  * hazard behind #692). Entirely optional and fail-safe: a connection that never
  * sends it (a legacy/direct client) just falls back to the socket-close
- * lifecycle. The `codegraph_client` marker is what tells it apart from the
+ * lifecycle. The `afyx_graph_client` marker is what tells it apart from the
  * client's first JSON-RPC message.
  */
 export interface DaemonClientHello {
-  codegraph_client: 1;
+  afyx_graph_client: 1;
   pid: number;             // the proxy process's own pid
   hostPid: number | null;  // the MCP host pid (past any launcher shim), if known
 }
@@ -195,7 +195,7 @@ export class Daemon {
     // Daemon mode serves many concurrent clients on one event loop, so off-load
     // read-tool dispatch to a worker pool — otherwise concurrent explores
     // serialize and starve the MCP transport (clients time out). Direct mode
-    // (one stdio client) leaves the pool off; `CODEGRAPH_QUERY_POOL_SIZE=0`
+    // (one stdio client) leaves the pool off; `AFYX_GRAPH_QUERY_POOL_SIZE=0`
     // disables it here too.
     this.engine = new MCPEngine({ queryPool: true });
     this.engine.setProjectPathHint(projectRoot);
@@ -212,7 +212,7 @@ export class Daemon {
     const writer = tryAcquireWriterLock(this.projectRoot, 'daemon');
     if (writer.kind === 'taken') {
       const msg = writerLockHeldMessage(writer.existing, writer.pidPath);
-      process.stderr.write(`[CodeGraph daemon] ${msg}\n`);
+      process.stderr.write(`[Afyx Graph daemon] ${msg}\n`);
       this.cleanupLockfile();
       throw new Error(msg);
     }
@@ -245,7 +245,7 @@ export class Daemon {
         server.once('error', reject);
         server.listen(socketPath, () => {
           // POSIX: tighten permissions to user-only — the socket lives under
-          // `.codegraph/` (git-ignored, maybe a shared FS) or tmpdir.
+          // `.afyx-graph/` (git-ignored, maybe a shared FS) or tmpdir.
           if (process.platform !== 'win32') {
             try { fs.chmodSync(socketPath, 0o600); } catch { /* best-effort */ }
           }
@@ -258,7 +258,7 @@ export class Daemon {
       bound = await bindFirstUsableSocket(candidates, listen, {
         onRelocate: (from, to, code) =>
           process.stderr.write(
-            `[CodeGraph daemon] Socket ${from} unusable (${code}); relocating to ${to}.\n`
+            `[Afyx Graph daemon] Socket ${from} unusable (${code}); relocating to ${to}.\n`
           ),
       });
     } catch (err) {
@@ -285,7 +285,7 @@ export class Daemon {
 
     const lock: DaemonLockInfo = {
       pid: process.pid,
-      version: CodeGraphPackageVersion,
+      version: AfyxGraphPackageVersion,
       socketPath: this.socketPath,
       startedAt: Date.now(),
     };
@@ -311,12 +311,12 @@ export class Daemon {
     // can never open a second watcher or writer.
     void this.engine.ensureInitialized(this.projectRoot);
 
-    // Drop a discovery record so `codegraph list` / `stop --all` can find us.
+    // Drop a discovery record so `afyx-graph list` / `stop --all` can find us.
     // Best-effort; a missing record only means list's liveness prune covers it.
     registerDaemon({ root: this.projectRoot, ...lock });
 
     process.stderr.write(
-      `[CodeGraph daemon] Listening on ${this.socketPath} (pid ${process.pid}, v${CodeGraphPackageVersion}). Idle timeout ${this.idleTimeoutMs}ms.\n`
+      `[Afyx Graph daemon] Listening on ${this.socketPath} (pid ${process.pid}, v${AfyxGraphPackageVersion}). Idle timeout ${this.idleTimeoutMs}ms.\n`
     );
 
     // No clients yet: arm the idle timer immediately so a daemon that nobody
@@ -357,7 +357,7 @@ export class Daemon {
       clearInterval(this.clientSweepTimer);
       this.clientSweepTimer = null;
     }
-    process.stderr.write(`[CodeGraph daemon] Shutting down (${reason}; clients=${this.clients.size}).\n`);
+    process.stderr.write(`[Afyx Graph daemon] Shutting down (${reason}; clients=${this.clients.size}).\n`);
     for (const session of [...this.clients]) {
       try { session.stop(); } catch { /* best-effort */ }
     }
@@ -382,7 +382,7 @@ export class Daemon {
     // Hello first so the proxy can verify versions before piping any
     // application bytes. The proxy reads exactly one line, then forwards.
     const hello: DaemonHello = {
-      codegraph: CodeGraphPackageVersion,
+      afyxGraph: AfyxGraphPackageVersion,
       pid: process.pid,
       socketPath: this.socketPath,
       protocol: 1,
@@ -515,7 +515,7 @@ export class Daemon {
       const peers = this.clientPeers.get(session);
       if (!peers || !peerIsDead(peers, isAlive)) continue;
       process.stderr.write(
-        `[CodeGraph daemon] Reaping client with dead peer (pid ${peers.pid}); clients=${this.clients.size - 1}.\n`
+        `[Afyx Graph daemon] Reaping client with dead peer (pid ${peers.pid}); clients=${this.clients.size - 1}.\n`
       );
       try { session.stop(); } catch { /* best-effort */ }
       this.dropClient(session);
@@ -588,13 +588,13 @@ export type AcquireResult =
  */
 export function tryAcquireDaemonLock(projectRoot: string): AcquireResult {
   const pidPath = getDaemonPidPath(projectRoot);
-  // Make sure the .codegraph/ directory exists — the daemon may be the first
+  // Make sure the .afyx-graph/ directory exists — the daemon may be the first
   // thing to touch it on a fresh-clone-but-already-initialized checkout.
   fs.mkdirSync(path.dirname(pidPath), { recursive: true });
 
   const info: DaemonLockInfo = {
     pid: process.pid,
-    version: CodeGraphPackageVersion,
+    version: AfyxGraphPackageVersion,
     socketPath: getDaemonSocketPath(projectRoot),
     startedAt: Date.now(),
   };
@@ -773,7 +773,7 @@ export async function bindFirstUsableSocket(
 }
 
 function resolveIdleTimeoutMs(): number {
-  const raw = process.env.CODEGRAPH_DAEMON_IDLE_TIMEOUT_MS;
+  const raw = process.env.AFYX_GRAPH_DAEMON_IDLE_TIMEOUT_MS;
   if (raw === undefined || raw === '') return DEFAULT_IDLE_TIMEOUT_MS;
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || parsed < 0) return DEFAULT_IDLE_TIMEOUT_MS;
@@ -781,7 +781,7 @@ function resolveIdleTimeoutMs(): number {
 }
 
 function resolveMaxIdleMs(): number {
-  const raw = process.env.CODEGRAPH_DAEMON_MAX_IDLE_MS;
+  const raw = process.env.AFYX_GRAPH_DAEMON_MAX_IDLE_MS;
   if (raw === undefined || raw === '') return DEFAULT_MAX_IDLE_MS;
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || parsed < 0) return DEFAULT_MAX_IDLE_MS;
@@ -789,7 +789,7 @@ function resolveMaxIdleMs(): number {
 }
 
 function resolveClientSweepMs(): number {
-  const raw = process.env.CODEGRAPH_DAEMON_CLIENT_SWEEP_MS;
+  const raw = process.env.AFYX_GRAPH_DAEMON_CLIENT_SWEEP_MS;
   if (raw === undefined || raw === '') return DEFAULT_CLIENT_SWEEP_MS;
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || parsed < 0) return DEFAULT_CLIENT_SWEEP_MS;
@@ -798,7 +798,7 @@ function resolveClientSweepMs(): number {
 
 /**
  * Parse one client-hello line. Returns the peer pids if `line` is a well-formed
- * client-hello (carries the `codegraph_client` marker), or null otherwise — in
+ * client-hello (carries the `afyx_graph_client` marker), or null otherwise — in
  * which case the caller treats the bytes as ordinary JSON-RPC.
  */
 export function parseClientHelloLine(
@@ -808,7 +808,7 @@ export function parseClientHelloLine(
   try { parsed = JSON.parse(line); } catch { return null; }
   if (!parsed || typeof parsed !== 'object') return null;
   const o = parsed as Record<string, unknown>;
-  if (o.codegraph_client !== 1 || typeof o.pid !== 'number') return null;
+  if (o.afyx_graph_client !== 1 || typeof o.pid !== 'number') return null;
   return { pid: o.pid, hostPid: typeof o.hostPid === 'number' ? o.hostPid : null };
 }
 
@@ -864,7 +864,7 @@ function readClientHello(
       socket.removeListener('error', onEnd);
       socket.removeListener('close', onEnd);
       clearTimeout(timer);
-      if (process.env.CODEGRAPH_MCP_DEBUG) {
+      if (process.env.AFYX_GRAPH_MCP_DEBUG) {
         process.stderr.write(`[mcp-debug] clientHello finish pid=${String(peers.pid)} putBack=${putBack ? putBack.length : 0} flowing=${String(socket.readableFlowing)}\n`);
       }
       if (putBack && putBack.length > 0 && !socket.destroyed) {
