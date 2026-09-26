@@ -28,8 +28,7 @@ json_value() {
   sed -n 's/^[[:space:]]*"'"$1"'"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$METADATA" | head -n 1
 }
 
-VERSION="$(json_value afyx_graph_version)"
-ENGINE_VERSION="$(json_value codegraph_upstream_version)"
+VERSION="$(json_value product_version)"
 
 graph_state() {
   if [[ ! -e "$RUNTIME_ROOT" ]]; then printf '%s' 'NOT INSTALLED'; return; fi
@@ -49,7 +48,7 @@ graph_owned() {
 
 state="$(graph_state)"
 if [[ "$mode" == validate ]]; then
-  printf 'Product: Afyx Graph\nState: %s\nRuntimeRoot: %s\nVersion: %s\nEngineVersion: %s\n' "$state" "$RUNTIME_ROOT" "$VERSION" "$ENGINE_VERSION"
+  printf 'Product: Afyx Graph\nState: %s\nRuntimeRoot: %s\nVersion: %s\n' "$state" "$RUNTIME_ROOT" "$VERSION"
   [[ "$state" != INCOMPLETE && "$state" != INVALID ]]
   exit $?
 fi
@@ -62,7 +61,7 @@ if [[ "$mode" == uninstall ]]; then
     link_target="$(readlink "$BIN_DIR/afyx-graph")"
     case "$link_target" in "$RUNTIME_ROOT"/*) rm -f -- "$BIN_DIR/afyx-graph" ;; esac
   fi
-  printf 'Afyx Graph: removed; project .afyx-graph and .codegraph indexes were not changed.\n'
+  printf 'Afyx Graph: removed; project .afyx-graph indexes were not changed.\n'
   exit 0
 fi
 
@@ -119,10 +118,10 @@ expected_lower="$(printf '%s' "$expected" | tr '[:upper:]' '[:lower:]')"
 mkdir -p "$transaction/extract" "$transaction/prepared"
 tar -xzf "$archive_path" -C "$transaction/extract"
 bundle="$transaction/extract/afyx-graph-$target"
-for required in node bin/afyx-graph bin/codegraph metadata.json licenses/CodeGraph-MIT.txt; do
+for required in node bin/afyx-graph metadata.json licenses/THIRD_PARTY_NOTICES.md licenses/THIRD_PARTY_ENGINE_MIT.txt; do
   [[ -f "$bundle/$required" ]] || { printf 'Staged Afyx Graph bundle is incomplete: %s\n' "$required" >&2; exit 1; }
 done
-grep -q '"afyx_graph_version"[[:space:]]*:[[:space:]]*"'"$VERSION"'"' "$bundle/metadata.json" || {
+grep -q '"product_version"[[:space:]]*:[[:space:]]*"'"$VERSION"'"' "$bundle/metadata.json" || {
   printf 'Staged Afyx Graph version does not match metadata.\n' >&2; exit 1;
 }
 mv "$bundle" "$transaction/prepared/current"

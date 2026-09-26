@@ -23,24 +23,9 @@ result() {
   [[ -n "$detail" ]] && printf '[%s] %s — %s\n' "$state" "$label" "$detail" || printf '[%s] %s\n' "$state" "$label"
 }
 
-skill_ok() {
-  local name="$1" manifest="$skills_root/$1/SKILL.md"
-  [[ -f "$manifest" ]] || return 1
-  [[ -s "$manifest" ]] || return 1
-  [[ "$(head -n 1 "$manifest")" == '---' ]] || return 1
-  grep -Eq '^name:[[:space:]]*[a-z0-9-]+[[:space:]]*$' "$manifest" || return 1
-  grep -Eq '^description:[[:space:]]*[^[:space:]].*$' "$manifest" || return 1
-  if [[ "${2:-false}" == true ]]; then
-    grep -Eq '^metadata:[[:space:]]*$' "$manifest" || return 1
-    grep -Eq '^[[:space:]]+version:[[:space:]]*[^[:space:]].*$' "$manifest" || return 1
-  fi
-}
-
-refs_ok() {
-  local name="$1"; shift
-  local reference
-  for reference in "$@"; do [[ -s "$skills_root/$name/$reference" ]] || return 1; done
-}
+# One component truth: scripts/components.json, read through the shared library.
+# shellcheck source=scripts/lib/afyx-components.sh
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/scripts/lib/afyx-components.sh"
 
 mcp_configured() {
   [[ -f "$config" ]] && grep -Eq "^\\[mcp_servers\\.$1\\][[:space:]]*$" "$config"
@@ -57,28 +42,22 @@ for extension in "$HOME"/.vscode/extensions/openai.chatgpt-*; do [[ -d "$extensi
 if "$extension_detected"; then result OK 'VS Code extension' 'detected'; else result INFO 'VS Code extension' 'not detected'; fi
 if ! "$codex_detected" && ! "$extension_detected"; then core_failure=true; fi
 
-if skill_ok efficient-coding true && refs_ok efficient-coding references/investigation.md references/tool-routing.md references/token-efficiency.md; then result OK 'Efficient Coding' 'frontmatter metadata and required references valid'; else result FAIL 'Efficient Coding' 'SKILL.md metadata or required reference invalid'; core_failure=true; fi
+for component_id in efficient-coding odoo-engineering prompt-master; do
+  afyx_component_evaluate "$component_id"
+  component_name="$(afyx_component_field "$component_id" name)"
+  if [[ "$AFYX_STATE" == HEALTHY ]]; then result OK "$component_name" "$AFYX_DETAIL"
+  else result FAIL "$component_name" "$AFYX_STATE: $AFYX_DETAIL"; core_failure=true; fi
+done
 
-odoo_refs=(references/common.md references/version-detection.md)
-for version in {10..20}; do odoo_refs+=("references/odoo-$version.md"); done
-if skill_ok odoo-engineering true && refs_ok odoo-engineering "${odoo_refs[@]}" references/reference-schema.md; then result OK 'Odoo Engineering' 'frontmatter metadata and stable refs 10-20 valid'; else result FAIL 'Odoo Engineering' 'SKILL.md metadata or required reference invalid'; core_failure=true; fi
-
-if skill_ok prompt-master; then result OK 'Prompt Master' 'frontmatter valid'; else result FAIL 'Prompt Master' 'SKILL.md invalid or missing'; core_failure=true; fi
-
-if [[ ! -e "$graph_root" ]]; then result INFO 'Afyx Graph' 'not installed (optional)'
-elif [[ ! -s "$graph_root/metadata.json" || ! -x "$graph_root/current/bin/afyx-graph" ]]; then result WARN 'Afyx Graph' 'incomplete Afyx-owned runtime (optional)'
-elif grep -q '"product_name"[[:space:]]*:[[:space:]]*"Afyx Graph"' "$graph_root/metadata.json"; then
-  graph_version="$(sed -n 's/.*"afyx_graph_version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$graph_root/metadata.json")"
-  engine_version="$(sed -n 's/.*"codegraph_upstream_version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$graph_root/metadata.json")"
-  result OK 'Afyx Graph' "$graph_version (CodeGraph engine $engine_version)"
-else result WARN 'Afyx Graph' 'invalid metadata (optional)'; fi
+afyx_component_evaluate afyx-graph
+case "$AFYX_STATE" in
+  'NOT INSTALLED') result INFO 'Afyx Graph' 'not installed (optional)' ;;
+  HEALTHY) result OK 'Afyx Graph' "$AFYX_VERSION" ;;
+  INCOMPLETE) result WARN 'Afyx Graph' 'incomplete Afyx-owned runtime (optional)' ;;
+  INVALID) result WARN 'Afyx Graph' 'invalid metadata (optional)' ;;
+  *) result WARN 'Afyx Graph' "state $AFYX_STATE: $AFYX_DETAIL (optional)" ;;
+esac
 if mcp_configured afyx_graph; then result OK 'Afyx Graph MCP' 'configured explicitly'; else result INFO 'Afyx Graph MCP' 'not configured; installation does not mutate MCP config'; fi
-upstream_detected=false
-if command -v codegraph >/dev/null 2>&1; then
-  codegraph_path="$(command -v codegraph)"
-  case "$codegraph_path" in "$graph_root"/*) ;; *) upstream_detected=true ;; esac
-fi
-if "$upstream_detected" || mcp_configured codegraph; then result INFO 'Upstream CodeGraph' 'detected; externally managed and unchanged'; else result INFO 'Upstream CodeGraph' 'not detected'; fi
 headroom_cli=false; command -v headroom >/dev/null 2>&1 && headroom_cli=true
 headroom_provider=false; headroom_proxy=false
 if [[ -f "$config" ]] && grep -Eiq "^[[:space:]]*model_provider[[:space:]]*=[[:space:]]*['\"]headroom['\"][[:space:]]*$|^[[:space:]]*\[model_providers\.headroom\][[:space:]]*$" "$config"; then headroom_provider=true; fi

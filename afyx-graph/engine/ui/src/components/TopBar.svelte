@@ -5,7 +5,7 @@
   import { live } from '../lib/live.svelte';
 
   interface Props {
-    /** Indexed project name, e.g. "codegraph/". Null until stats load. */
+    /** Indexed project name, e.g. "afyx-graph/". Null until stats load. */
     project?: string | null;
     /** "13,060 symbols · 46,004 edges · 593 files indexed". Null until loaded. */
     stats?: string | null;

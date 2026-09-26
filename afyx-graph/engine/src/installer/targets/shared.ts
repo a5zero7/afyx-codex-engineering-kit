@@ -11,20 +11,21 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import {
-  CODEGRAPH_INSTRUCTIONS_BLOCK,
-  CODEGRAPH_SECTION_START,
-  CODEGRAPH_SECTION_END,
+  AFYX_GRAPH_INSTRUCTIONS_BLOCK,
+  AFYX_GRAPH_SECTION_START,
+  AFYX_GRAPH_SECTION_END,
 } from '../instructions-template';
+import { CLI_NAME } from '../../product';
 
 /**
- * The MCP-server config block codegraph injects. Same shape across
+ * The MCP-server config block afyx-graph injects. Same shape across
  * all JSON-shaped agent configs (Claude, Cursor, opencode), only the
  * surrounding wrapper differs. Codex (TOML) builds its own block.
  */
 export function getMcpServerConfig(): { type: string; command: string; args: string[] } {
   return {
     type: 'stdio',
-    command: 'codegraph',
+    command: CLI_NAME,
     args: ['serve', '--mcp'],
   };
 }
@@ -34,18 +35,18 @@ export function getMcpServerConfig(): { type: string; command: string; args: str
  * have a permissions concept can compose this list directly.
  *
  * One server-scoped wildcard rather than a per-tool list. By default only
- * `codegraph_explore` is even LISTED to the agent (see DEFAULT_MCP_TOOLS in
+ * `afyx_graph_explore` is even LISTED to the agent (see DEFAULT_MCP_TOOLS in
  * mcp/tools.ts), so in practice explore is the only tool this auto-approves —
  * but the wildcard means that if a user re-enables another tool via
- * CODEGRAPH_MCP_TOOLS, it's already pre-approved (no permission prompt, no
+ * AFYX_GRAPH_MCP_TOOLS, it's already pre-approved (no permission prompt, no
  * hand-editing settings.json), and future tools are covered too. Claude only
  * honors globs after a literal `mcp__<server>__` prefix, so this exact string
- * is the way to allow-all for one server; a bare `mcp__codegraph` or `*` is
+ * is the way to allow-all for one server; a bare `mcp__afyx_graph` or `*` is
  * ignored. The allowlist gates PROMPTING, not visibility, so a superset here
  * never makes a hidden tool appear.
  */
-export function getCodeGraphPermissions(): string[] {
-  return ['mcp__codegraph__*'];
+export function getAfyxGraphPermissions(): string[] {
+  return ['mcp__afyx_graph__*'];
 }
 
 /**
@@ -130,8 +131,8 @@ export function jsonDeepEqual(a: unknown, b: unknown): boolean {
 /**
  * Replace or append a marker-delimited section in a markdown-ish file.
  *
- * Used by Claude / Codex for the `<!-- CODEGRAPH_START --> ... <!--
- * CODEGRAPH_END -->` block. Preserves all content outside the
+ * Used by Claude / Codex for the `<!-- AFYX_GRAPH_START --> ... <!--
+ * AFYX_GRAPH_END -->` block. Preserves all content outside the
  * markers verbatim.
  *
  * Returns `created` when the file didn't exist; `updated` when
@@ -174,7 +175,7 @@ export function replaceOrAppendMarkedSection(
 }
 
 /**
- * Upsert the CodeGraph instructions block into an agent instructions
+ * Upsert the Afyx Graph instructions block into an agent instructions
  * file (CLAUDE.md / AGENTS.md / GEMINI.md). The one write shared by
  * every target: self-heals a stale pre-#529 long block (markers match →
  * replaced by the current short one), appends after existing user
@@ -186,9 +187,9 @@ export function replaceOrAppendMarkedSection(
 export function upsertInstructionsEntry(file: string): { path: string; action: 'created' | 'updated' | 'unchanged' } {
   const action = replaceOrAppendMarkedSection(
     file,
-    CODEGRAPH_INSTRUCTIONS_BLOCK,
-    CODEGRAPH_SECTION_START,
-    CODEGRAPH_SECTION_END,
+    AFYX_GRAPH_INSTRUCTIONS_BLOCK,
+    AFYX_GRAPH_SECTION_START,
+    AFYX_GRAPH_SECTION_END,
   );
   return { path: file, action: action === 'appended' ? 'updated' : action };
 }

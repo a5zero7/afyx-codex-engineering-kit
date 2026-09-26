@@ -35,12 +35,17 @@ remove_target() {
   fi
 }
 
-remove_target "$skills_root/efficient-coding"
-remove_target "$skills_root/odoo-engineering"
-if "$remove_prompt_master"; then
-  remove_target "$skills_root/prompt-master"
-fi
-graph_root="${AFYX_GRAPH_RUNTIME_ROOT:-$HOME/.afyx/graph}"
+# One component truth: scripts/components.json. Afyx-owned skills are always removed;
+# the upstream-owned skill (Prompt Master) only on explicit request.
+# shellcheck source=scripts/lib/afyx-components.sh
+. "$root/scripts/lib/afyx-components.sh"
+for component_id in $(afyx_component_ids); do
+  [[ "$(afyx_component_field "$component_id" type)" == skill ]] || continue
+  ownership="$(afyx_component_field "$component_id" ownership)"
+  if [[ "$ownership" == afyx ]] || { [[ "$ownership" == upstream ]] && "$remove_prompt_master"; }; then
+    remove_target "$(afyx_component_root "$component_id")"
+  fi
+done
 if [[ -e "$graph_root" ]]; then
   if ! "$remove_afyx_graph" && [[ -t 0 && -z "${CI:-}" ]] && ! "$dry_run"; then
     read -r -p 'Afyx Graph detected. Remove Afyx Graph? [Y/N] [N]: ' answer || answer=
@@ -50,4 +55,4 @@ if [[ -e "$graph_root" ]]; then
     if "$dry_run"; then printf '+ scripts/install-afyx-graph.sh --uninstall\n'; else "$root/scripts/install-afyx-graph.sh" --uninstall; fi
   else printf 'Afyx Graph: kept\n'; fi
 fi
-printf 'Standalone CodeGraph, project indexes, Headroom, and Codex configuration were not changed.\n'
+printf 'Project indexes, Headroom, and Codex configuration were not changed.\n'

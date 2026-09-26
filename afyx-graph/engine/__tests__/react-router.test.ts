@@ -14,7 +14,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { CodeGraph } from '../src';
+import { AfyxGraph } from '../src';
 import { initGrammars, loadAllGrammars } from '../src/extraction/grammars';
 import { buildScreens } from '../src/ui-server/api/screens';
 import { buildSteps } from '../src/ui-server/api/steps';
@@ -62,7 +62,7 @@ describe('react-router: reactRouterNavVerb', () => {
 
 describe('react-router: a routed app end to end', () => {
   let tmpDir: string;
-  let cg: CodeGraph;
+  let cg: AfyxGraph;
 
   function write(rel: string, content: string): void {
     const full = path.join(tmpDir, rel);
@@ -210,7 +210,7 @@ describe('react-router: a routed app end to end', () => {
         '  return paths\n' +
         '}\n'
     );
-    cg = CodeGraph.initSync(tmpDir);
+    cg = AfyxGraph.initSync(tmpDir);
     await cg.indexAll();
   });
 
@@ -336,7 +336,7 @@ describe('react-router: a routed app end to end', () => {
 
 describe('react-router: the shapes proshop is written in', () => {
   let tmpDir: string;
-  let cg: CodeGraph;
+  let cg: AfyxGraph;
 
   function write(rel: string, content: string): void {
     const full = path.join(tmpDir, rel);
@@ -425,7 +425,7 @@ describe('react-router: the shapes proshop is written in', () => {
       'src/screens/ProductScreen.js',
       "import React from 'react'\nconst ProductScreen = () => <div>Product</div>\nexport default ProductScreen\n"
     );
-    cg = CodeGraph.initSync(tmpDir);
+    cg = AfyxGraph.initSync(tmpDir);
     await cg.indexAll();
   });
 

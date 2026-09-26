@@ -34,6 +34,9 @@ def load_json(path: Path) -> dict:
 def verify_frozen_environment(environment: dict) -> None:
     """Abort before any model call when frozen benchmark inputs drift."""
     failures = []
+    subject = environment.get("repository", {}).get("benchmark_subject_commit")
+    if not subject:
+        failures.append("repository.benchmark_subject_commit is missing")
     for name in REPOSITORY_SKILLS:
         expected = environment["skills"].get(name, {}).get("content_sha256")
         if not expected:

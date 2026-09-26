@@ -8,10 +8,10 @@ import { ChildProcessWithoutNullStreams, spawn } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { CodeGraph } from '../src';
+import { AfyxGraph } from '../src';
 import { getWriterPidPath } from '../src/mcp/writer-lock';
 
-const BIN = path.resolve(__dirname, '../dist/bin/codegraph.js');
+const BIN = path.resolve(__dirname, '../dist/bin/afyx-graph.js');
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
@@ -44,7 +44,7 @@ describe('issue #1740 — direct-mode writer lock', () => {
     realRoot = fs.realpathSync(tempDir);
     fs.mkdirSync(path.join(realRoot, 'src'));
     fs.writeFileSync(path.join(realRoot, 'src/a.ts'), 'export function a() { return 1; }\n');
-    const cg = await CodeGraph.init(realRoot);
+    const cg = await AfyxGraph.init(realRoot);
     await cg.indexAll();
     cg.close();
   });
@@ -58,15 +58,15 @@ describe('issue #1740 — direct-mode writer lock', () => {
     try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch { /* ignore */ }
   });
 
-  it('second CODEGRAPH_NO_DAEMON serve --mcp exits with writer-lock error', async () => {
+  it('second AFYX_GRAPH_NO_DAEMON serve --mcp exits with writer-lock error', async () => {
     const env = {
-      CODEGRAPH_NO_DAEMON: '1',
-      CODEGRAPH_MCP_DEBUG: '1',
-      CODEGRAPH_NO_WATCHDOG: '1',
-      CODEGRAPH_STARTUP_HANDSHAKE_TIMEOUT_MS: '0',
+      AFYX_GRAPH_NO_DAEMON: '1',
+      AFYX_GRAPH_MCP_DEBUG: '1',
+      AFYX_GRAPH_NO_WATCHDOG: '1',
+      AFYX_GRAPH_STARTUP_HANDSHAKE_TIMEOUT_MS: '0',
       // Avoid wasm --liftoff-only re-exec so lock.pid matches the spawned pid.
-      CODEGRAPH_NO_RELAUNCH: '1',
-      CODEGRAPH_WASM_RELAUNCHED: '1',
+      AFYX_GRAPH_NO_RELAUNCH: '1',
+      AFYX_GRAPH_WASM_RELAUNCHED: '1',
     };
     const first = spawnMcp(realRoot, env);
     children.push(first.child);
@@ -92,7 +92,7 @@ describe('issue #1740 — direct-mode writer lock', () => {
 
     expect(code).toBe(1);
     expect(second.getStderr()).toMatch(/writer lock held/i);
-    expect(second.getStderr()).toMatch(/CODEGRAPH_NO_DAEMON/);
+    expect(second.getStderr()).toMatch(/AFYX_GRAPH_NO_DAEMON/);
     expect(first.child.exitCode).toBeNull();
     const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8')) as { pid: number };
     expect(lock.pid).toBe(first.child.pid);
@@ -100,11 +100,11 @@ describe('issue #1740 — direct-mode writer lock', () => {
 
   it('default daemon mode still allows two proxies to share one writer', async () => {
     const env = {
-      CODEGRAPH_MCP_LOG_ATTACH: '1',
-      CODEGRAPH_NO_WATCHDOG: '1',
-      CODEGRAPH_STARTUP_HANDSHAKE_TIMEOUT_MS: '0',
-      CODEGRAPH_NO_RELAUNCH: '1',
-      CODEGRAPH_WASM_RELAUNCHED: '1',
+      AFYX_GRAPH_MCP_LOG_ATTACH: '1',
+      AFYX_GRAPH_NO_WATCHDOG: '1',
+      AFYX_GRAPH_STARTUP_HANDSHAKE_TIMEOUT_MS: '0',
+      AFYX_GRAPH_NO_RELAUNCH: '1',
+      AFYX_GRAPH_WASM_RELAUNCHED: '1',
     };
     const a = spawnMcp(realRoot, env);
     const b = spawnMcp(realRoot, env);

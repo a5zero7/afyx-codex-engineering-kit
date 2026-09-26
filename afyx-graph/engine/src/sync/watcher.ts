@@ -38,7 +38,7 @@ import { isSourceFile, buildScopeIgnore, type ScopeIgnore } from '../extraction'
 import { loadExtensionOverrides, PROJECT_CONFIG_FILENAME } from '../project-config';
 import { logDebug, logWarn } from '../errors';
 import { normalizePath } from '../utils';
-import { isCodeGraphDataDir } from '../directory';
+import { isAfyxGraphDataDir } from '../directory';
 import { watchDisabledReason } from './watch-policy';
 
 /**
@@ -78,7 +78,7 @@ const SCOPED_SYNC_MAX_PENDING = 500;
 
 /** Actionable degrade message; both exhaustion paths share it verbatim. */
 const EXHAUSTION_REASON =
-  'OS watch/file limit exhausted; auto-sync disabled. Run `codegraph sync` ' +
+  'OS watch/file limit exhausted; auto-sync disabled. Run `afyx-graph sync` ' +
   '(or install git sync hooks) to refresh the graph after changes.';
 
 /**
@@ -92,7 +92,7 @@ const INOTIFY_LIMIT_REASON =
   'watching now covers only part of the project, so edits in unwatched ' +
   'directories will not auto-sync. Raise the limit (e.g. `sudo sysctl ' +
   'fs.inotify.max_user_watches=1048576`, persisted in /etc/sysctl.d) and ' +
-  'restart, or run `codegraph sync` (or install git sync hooks) to refresh.';
+  'restart, or run `afyx-graph sync` (or install git sync hooks) to refresh.';
 
 /**
  * True when an error is OS watch/file-descriptor exhaustion (EMFILE/ENFILE).
@@ -146,14 +146,14 @@ export function __setFsWatchForTests(fn: WatchFn | null): void {
  * Upper bound on simultaneously-watched directories on the Linux per-directory
  * path. Each is one inotify watch; the kernel's `fs.inotify.max_user_watches`
  * is the hard limit (commonly 8k–128k). We stop adding watches past this and
- * log once — partial live-watch (with `codegraph sync` as the backstop) is far
+ * log once — partial live-watch (with `afyx-graph sync` as the backstop) is far
  * better than exhausting the user's inotify budget and breaking watching
- * system-wide (#579). Tunable via CODEGRAPH_MAX_DIR_WATCHES.
+ * system-wide (#579). Tunable via AFYX_GRAPH_MAX_DIR_WATCHES.
  */
 const DEFAULT_MAX_DIR_WATCHES = 50_000;
 
 function maxDirWatches(): number {
-  const raw = process.env.CODEGRAPH_MAX_DIR_WATCHES;
+  const raw = process.env.AFYX_GRAPH_MAX_DIR_WATCHES;
   if (raw && /^\d+$/.test(raw)) {
     const n = Number(raw);
     if (n > 0) return n;
@@ -221,7 +221,7 @@ export interface WatchOptions {
  * external indexer can hit this every debounce cycle.
  */
 export class LockUnavailableError extends Error {
-  constructor(message = 'CodeGraph file lock unavailable; another process is writing') {
+  constructor(message = 'Afyx Graph file lock unavailable; another process is writing') {
     super(message);
     this.name = 'LockUnavailableError';
   }
@@ -257,7 +257,7 @@ export interface PendingFile {
  *   was the system-crashing fd leak on macOS (#644/#496/#555/#628).
  * - Debounced to avoid thrashing on rapid saves
  * - Filters to supported source files by extension
- * - Ignores .codegraph/ and .git/ regardless of .gitignore
+ * - Ignores .afyx-graph/ and .git/ regardless of .gitignore
  * - Tracks per-file pending state so MCP tools can flag stale results
  *   without blocking on a sync (issue #403)
  */
@@ -331,7 +331,7 @@ export class FileWatcher {
   private readyWaiters: Array<() => void> = [];
   // The shared scope matcher from `buildScopeIgnore` (built-in defaults +
   // root `.gitignore` + `.git/info/exclude` + `core.excludesFile` + dirs
-  // `git ls-files --exclude-standard` reports ignored + `codegraph.json`
+  // `git ls-files --exclude-standard` reports ignored + `afyx-graph.json`
   // exclude/include, with embedded child repos matched by their OWN rules —
   // #514), built at start() and REBUILT whenever one of the files it is
   // derived from changes (see `refreshScope`, #1590). Same construction the
@@ -376,7 +376,7 @@ export class FileWatcher {
     // Some environments make filesystem watching unusable — most notably
     // WSL2 /mnt/ drives, where the underlying fs.watch calls block long
     // enough to break MCP startup handshakes (issue #199). Skip watching
-    // there; callers fall back to manual `codegraph sync` or git sync hooks.
+    // there; callers fall back to manual `afyx-graph sync` or git sync hooks.
     const disabledReason = watchDisabledReason(this.projectRoot);
     if (disabledReason) {
       logDebug('File watcher disabled', { reason: disabledReason, projectRoot: this.projectRoot });
@@ -622,13 +622,13 @@ export class FileWatcher {
   }
 
   /**
-   * A scope-defining file changed (`codegraph.json`, a `.gitignore`): rebuild
+   * A scope-defining file changed (`afyx-graph.json`, a `.gitignore`): rebuild
    * the ignore matcher and make the next sync a FULL reconcile (#1590).
    *
    * The matcher used to be built once in `start()` and kept for the watcher's
-   * lifetime — in a long-lived MCP daemon that meant a `codegraph.json`
+   * lifetime — in a long-lived MCP daemon that meant a `afyx-graph.json`
    * created or edited after startup was invisible to the live watcher, while
-   * `codegraph sync` (a fresh process) honoured it immediately: the CLI
+   * `afyx-graph sync` (a fresh process) honoured it immediately: the CLI
    * removed a newly excluded file and the watcher re-added it seconds later.
    * `loadExtensionOverrides()` on the same filter line was already read live
    * (mtime-cached), so two fields of the same config file disagreed.
@@ -694,12 +694,12 @@ export class FileWatcher {
 
   /** Our own dirs are always ignored, regardless of .gitignore. */
   private isAlwaysIgnored(rel: string): boolean {
-    // First path segment. Ignore any CodeGraph data dir — the active one AND a
-    // sibling like `.codegraph-win` a second environment (Windows/WSL) created
+    // First path segment. Ignore any Afyx Graph data dir — the active one AND a
+    // sibling like `.afyx-graph-win` a second environment (Windows/WSL) created
     // in the same tree, so neither side watches the other's index (#636).
     const top = rel.split('/')[0] ?? rel;
     return (
-      isCodeGraphDataDir(top) ||
+      isAfyxGraphDataDir(top) ||
       rel === '.git' || rel.startsWith('.git/')
     );
   }
@@ -737,7 +737,7 @@ export class FileWatcher {
    * stop adding new watches for the rest of this session — every further
    * `inotify_add_watch` would fail too, so walking the rest of the tree is
    * waste. Unlike {@link degrade} this is NON-fatal: the watches already
-   * installed keep firing, and `codegraph sync` covers the unwatched remainder.
+   * installed keep firing, and `afyx-graph sync` covers the unwatched remainder.
    * The message names the kernel knob to raise (`fs.inotify.max_user_watches`).
    */
   private warnInotifyLimit(context: Record<string, unknown> = {}): void {
@@ -857,7 +857,7 @@ export class FileWatcher {
     // trailing-edge semantics either way: if more events arrive inside the
     // quick window, the reschedule sees the larger pending set and extends to
     // the full window. Never exceeds the configured debounce (a user-lowered
-    // CODEGRAPH_WATCH_DEBOUNCE_MS stays authoritative), floor 100ms.
+    // AFYX_GRAPH_WATCH_DEBOUNCE_MS stays authoritative), floor 100ms.
     const quickMs = Math.max(100, Math.min(QUICK_SYNC_QUIET_MS, this.debounceMs));
     const delay = this.pendingFiles.size <= QUICK_SYNC_MAX_PENDING ? quickMs : this.debounceMs;
     this.debounceTimer = setTimeout(() => {
@@ -942,8 +942,8 @@ export class FileWatcher {
         });
         if (this.lockRetryCount > MAX_LOCK_RETRIES) {
           this.degrade(
-            'CodeGraph file lock held by another process past the retry budget; ' +
-              'auto-sync disabled. Run `codegraph sync` once the other writer finishes ' +
+            'Afyx Graph file lock held by another process past the retry budget; ' +
+              'auto-sync disabled. Run `afyx-graph sync` once the other writer finishes ' +
               '(or install git sync hooks) to refresh the graph.',
             { pendingFiles: this.pendingFiles.size, retryCount: this.lockRetryCount }
           );
@@ -967,8 +967,8 @@ export class FileWatcher {
         // clean sync resets the streak, so a transient hiccup never degrades.
         if (this.syncFailureRetryCount > MAX_SYNC_FAILURE_RETRIES) {
           this.degrade(
-            `CodeGraph auto-sync failed ${this.syncFailureRetryCount} times in a row; ` +
-              'auto-sync disabled. Run `codegraph sync` (or install git sync hooks) to ' +
+            `Afyx Graph auto-sync failed ${this.syncFailureRetryCount} times in a row; ` +
+              'auto-sync disabled. Run `afyx-graph sync` (or install git sync hooks) to ' +
               `refresh the graph after changes. Last error: ${error.message}`,
             { error: error.message, retryCount: this.syncFailureRetryCount }
           );

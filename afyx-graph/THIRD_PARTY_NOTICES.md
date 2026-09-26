@@ -1,13 +1,8 @@
 # Third-party notices
 
-## CodeGraph
+Portions of Afyx Graph incorporate software originally authored by Colby Mchenry
+and distributed under the MIT License. The applicable copyright and license
+notice is reproduced in `LICENSES/THIRD_PARTY_ENGINE_MIT.txt`.
 
-Afyx Graph is based on CodeGraph 1.6.0 by Colby Mchenry.
-
-- Upstream: https://github.com/colbymchenry/codegraph
-- License: MIT
-- Exact upstream commit: not recorded in the bundled source snapshot
-- Vendored into Afyx Codex Engineering Kit at commit `b7a1aa2718dc1f6940e483043733f67020d9a62f`
-
-The original copyright and permission notice is reproduced in
-`LICENSES/CodeGraph-MIT.txt` and remains in `engine/LICENSE`.
+The same notice is retained in `engine/LICENSE`. Every Afyx Graph release bundle
+ships this file and the license text under `licenses/`.

@@ -14,14 +14,14 @@
  *     down — other attached clients keep working (the must-fix-2 detach: the
  *     in-process daemon used to die with its launcher's process group and
  *     orphan on host SIGKILL, regressing #277).
- *   - A stale lockfile (dead pid) is cleared; `CODEGRAPH_NO_DAEMON=1` opts out;
+ *   - A stale lockfile (dead pid) is cleared; `AFYX_GRAPH_NO_DAEMON=1` opts out;
  *     the proxy refuses to attach across a version mismatch; the daemon
  *     idle-times-out after the last client leaves (so a single session can't
  *     leak a daemon forever).
  *
- * These tests intentionally spawn real `node dist/bin/codegraph.js` processes
+ * These tests intentionally spawn real `node dist/bin/afyx-graph.js` processes
  * over real sockets/pipes — the same surface a Claude Code / Cursor / Codex
- * install exercises. The daemon logs to `.codegraph/daemon.log` (it has no
+ * install exercises. The daemon logs to `.afyx-graph/daemon.log` (it has no
  * client stderr of its own), so daemon-side assertions read that file.
  *
  * `realRoot` vs `tempDir`: processes are spawned with the (possibly symlinked)
@@ -37,11 +37,11 @@ import { ChildProcessWithoutNullStreams, spawn } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { CodeGraph } from '../src';
+import { AfyxGraph } from '../src';
 import { getDaemonSocketPath } from '../src/mcp/daemon-paths';
-import { CodeGraphPackageVersion } from '../src/mcp/version';
+import { AfyxGraphPackageVersion } from '../src/mcp/version';
 
-const BIN = path.resolve(__dirname, '../dist/bin/codegraph.js');
+const BIN = path.resolve(__dirname, '../dist/bin/afyx-graph.js');
 
 interface SpawnedServer {
   child: ChildProcessWithoutNullStreams;
@@ -54,9 +54,9 @@ function spawnServer(cwd: string, env: NodeJS.ProcessEnv = {}): SpawnedServer {
     cwd,
     stdio: ['pipe', 'pipe', 'pipe'],
     // #618: the daemon-attach log line is now off by default; opt the test
-    // harness into it (CODEGRAPH_MCP_LOG_ATTACH=1) so the attach assertions
+    // harness into it (AFYX_GRAPH_MCP_LOG_ATTACH=1) so the attach assertions
     // below can still observe a successful attach. A per-test env still wins.
-    env: { CODEGRAPH_MCP_LOG_ATTACH: '1', ...process.env, ...env },
+    env: { AFYX_GRAPH_MCP_LOG_ATTACH: '1', ...process.env, ...env },
   }) as ChildProcessWithoutNullStreams;
   // Swallow spawn/EPIPE errors so killing a child mid-write can't surface as an
   // unhandled error that crashes the vitest worker.
@@ -147,19 +147,19 @@ function isAlive(pid: number): boolean {
 
 function readLockPid(root: string): number | null {
   try {
-    const raw = fs.readFileSync(path.join(root, '.codegraph', 'daemon.pid'), 'utf8');
+    const raw = fs.readFileSync(path.join(root, '.afyx-graph', 'daemon.pid'), 'utf8');
     const info = JSON.parse(raw);
     return typeof info.pid === 'number' ? info.pid : null;
   } catch { return null; }
 }
 
 function readDaemonLog(root: string): string {
-  try { return fs.readFileSync(path.join(root, '.codegraph', 'daemon.log'), 'utf8'); }
+  try { return fs.readFileSync(path.join(root, '.afyx-graph', 'daemon.log'), 'utf8'); }
   catch { return ''; }
 }
 
 function countListeningLines(root: string): number {
-  return readDaemonLog(root).split('\n').filter((l) => l.includes('[CodeGraph daemon] Listening on')).length;
+  return readDaemonLog(root).split('\n').filter((l) => l.includes('[Afyx Graph daemon] Listening on')).length;
 }
 
 function killTree(...procs: ChildProcessWithoutNullStreams[]): void {
@@ -178,8 +178,8 @@ describe('Shared MCP daemon (issue #411)', () => {
   const servers: SpawnedServer[] = [];
 
   beforeEach(async () => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codegraph-mcp-daemon-'));
-    const cg = await CodeGraph.init(tempDir);
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-graph-mcp-daemon-'));
+    const cg = await AfyxGraph.init(tempDir);
     cg.close();
     realRoot = fs.realpathSync(tempDir);
   });
@@ -200,19 +200,19 @@ describe('Shared MCP daemon (issue #411)', () => {
   });
 
   it('two invocations share ONE detached daemon; both attach as proxies', async () => {
-    const env = { CODEGRAPH_DAEMON_IDLE_TIMEOUT_MS: '15000' };
+    const env = { AFYX_GRAPH_DAEMON_IDLE_TIMEOUT_MS: '15000' };
 
     const first = spawnServer(tempDir, env);
     servers.push(first);
     sendInitialize(first.child, `file://${tempDir}`, 1);
     const firstResp = await waitFor(() => findResponse(first.stdout, 1), 10000);
-    expect(firstResp.result.serverInfo.name).toBe('codegraph');
+    expect(firstResp.result.serverInfo.name).toBe('afyx_graph');
 
     // The launcher is a PROXY (not the daemon itself) — that's the detach fix.
     await waitFor(() => first.stderr.some((l) => l.includes('Attached to shared daemon')), 8000);
 
     // A detached daemon came up and recorded itself.
-    await waitFor(() => fs.existsSync(path.join(realRoot, '.codegraph', 'daemon.pid')), 8000);
+    await waitFor(() => fs.existsSync(path.join(realRoot, '.afyx-graph', 'daemon.pid')), 8000);
     await waitFor(() => countListeningLines(realRoot) >= 1, 8000);
     const daemonPid = readLockPid(realRoot);
     expect(daemonPid).toBeTruthy();
@@ -230,7 +230,7 @@ describe('Shared MCP daemon (issue #411)', () => {
     servers.push(second);
     sendInitialize(second.child, `file://${tempDir}`, 2);
     const secondResp = await waitFor(() => findResponse(second.stdout, 2), 10000);
-    expect(secondResp.result.serverInfo.name).toBe('codegraph');
+    expect(secondResp.result.serverInfo.name).toBe('afyx_graph');
     await waitFor(() => second.stderr.some((l) => l.includes('Attached to shared daemon')), 8000);
 
     // Exactly one daemon ever bound, and it's the same pid both attached to.
@@ -239,7 +239,7 @@ describe('Shared MCP daemon (issue #411)', () => {
   }, 40000);
 
   it('concurrent launchers converge on a single daemon (lockfile race — must-fix 1)', async () => {
-    const env = { CODEGRAPH_DAEMON_IDLE_TIMEOUT_MS: '15000' };
+    const env = { AFYX_GRAPH_DAEMON_IDLE_TIMEOUT_MS: '15000' };
 
     // Fire three launchers as close to simultaneously as possible — this is the
     // race window where the old code could end up with two daemons.
@@ -249,7 +249,7 @@ describe('Shared MCP daemon (issue #411)', () => {
     // All three get a valid initialize response...
     for (let i = 0; i < procs.length; i++) {
       const resp = await waitFor(() => findResponse(procs[i].stdout, i + 1), 12000);
-      expect(resp.result.serverInfo.name).toBe('codegraph');
+      expect(resp.result.serverInfo.name).toBe('afyx_graph');
     }
     // ...and all three attached as proxies (none fell back / wedged).
     for (const p of procs) {
@@ -267,7 +267,7 @@ describe('Shared MCP daemon (issue #411)', () => {
   it('daemon survives the first client dying; a second client keeps working (must-fix 2 / #277)', async () => {
     // Idle high so the daemon doesn't reap mid-test; poll fast so proxy 1
     // notices its dead parent quickly.
-    const env = { CODEGRAPH_DAEMON_IDLE_TIMEOUT_MS: '30000', CODEGRAPH_PPID_POLL_MS: '200' };
+    const env = { AFYX_GRAPH_DAEMON_IDLE_TIMEOUT_MS: '30000', AFYX_GRAPH_PPID_POLL_MS: '200' };
 
     const first = spawnServer(tempDir, env);
     servers.push(first);
@@ -298,22 +298,22 @@ describe('Shared MCP daemon (issue #411)', () => {
     expect(toolsResp.result.tools.length).toBeGreaterThan(0);
   }, 45000);
 
-  it('CODEGRAPH_NO_DAEMON=1 keeps each process independent (no socket/pidfile)', async () => {
-    const env = { CODEGRAPH_NO_DAEMON: '1' };
+  it('AFYX_GRAPH_NO_DAEMON=1 keeps each process independent (no socket/pidfile)', async () => {
+    const env = { AFYX_GRAPH_NO_DAEMON: '1' };
     const first = spawnServer(tempDir, env);
     servers.push(first);
     sendInitialize(first.child, `file://${tempDir}`, 1);
     await waitFor(() => findResponse(first.stdout, 1), 10000);
     // Direct mode — no daemon machinery touched.
     expect(first.stderr.some((l) => l.includes('Attached to shared daemon'))).toBe(false);
-    expect(fs.existsSync(path.join(realRoot, '.codegraph', 'daemon.pid'))).toBe(false);
-    expect(fs.existsSync(path.join(realRoot, '.codegraph', 'daemon.log'))).toBe(false);
+    expect(fs.existsSync(path.join(realRoot, '.afyx-graph', 'daemon.pid'))).toBe(false);
+    expect(fs.existsSync(path.join(realRoot, '.afyx-graph', 'daemon.log'))).toBe(false);
   }, 20000);
 
   it('clears a stale (dead-pid) lockfile and a fresh daemon takes over', async () => {
     // Plant a lockfile pointing at a definitely-dead pid + the real socket path.
     fs.writeFileSync(
-      path.join(realRoot, '.codegraph', 'daemon.pid'),
+      path.join(realRoot, '.afyx-graph', 'daemon.pid'),
       JSON.stringify({
         pid: 999_999,
         version: '0.0.0-fake',
@@ -322,14 +322,14 @@ describe('Shared MCP daemon (issue #411)', () => {
       }),
     );
 
-    const env = { CODEGRAPH_DAEMON_IDLE_TIMEOUT_MS: '15000' };
+    const env = { AFYX_GRAPH_DAEMON_IDLE_TIMEOUT_MS: '15000' };
     const server = spawnServer(tempDir, env);
     servers.push(server);
     sendInitialize(server.child, `file://${tempDir}`, 1);
     const resp = await waitFor(() => findResponse(server.stdout, 1), 10000).catch((e) => {
       throw new Error(`${(e as Error).message}\nstderr:\n${server.stderr.join('\n')}\ndaemon.log:\n${readDaemonLog(realRoot)}`);
     });
-    expect(resp.result.serverInfo.name).toBe('codegraph');
+    expect(resp.result.serverInfo.name).toBe('afyx_graph');
     await waitFor(() => countListeningLines(realRoot) >= 1, 10000);
     // The pidfile now names a live daemon, not the planted-dead 999999.
     const livePid = readLockPid(realRoot);
@@ -338,7 +338,7 @@ describe('Shared MCP daemon (issue #411)', () => {
   }, 40000);
 
   it('preserves paired daemon/writer locks when their live PID may have been reused', async () => {
-    const env = { CODEGRAPH_DAEMON_IDLE_TIMEOUT_MS: '30000' };
+    const env = { AFYX_GRAPH_DAEMON_IDLE_TIMEOUT_MS: '30000' };
     const first = spawnServer(tempDir, env);
     servers.push(first);
     sendInitialize(first.child, `file://${tempDir}`, 1);
@@ -351,11 +351,11 @@ describe('Shared MCP daemon (issue #411)', () => {
 
     // Model OS PID reuse without risking another process: the stale lock now
     // names this live vitest worker, but no daemon answers the leftover socket.
-    const daemonPath = path.join(realRoot, '.codegraph', 'daemon.pid');
-    const writerPath = path.join(realRoot, '.codegraph', 'writer.pid');
+    const daemonPath = path.join(realRoot, '.afyx-graph', 'daemon.pid');
+    const writerPath = path.join(realRoot, '.afyx-graph', 'writer.pid');
     const staleDaemonLock = JSON.stringify({
       pid: process.pid,
-      version: CodeGraphPackageVersion,
+      version: AfyxGraphPackageVersion,
       socketPath: getDaemonSocketPath(realRoot),
       startedAt: Date.now() - 60_000,
     });
@@ -371,7 +371,7 @@ describe('Shared MCP daemon (issue #411)', () => {
     servers.push(second);
     sendInitialize(second.child, `file://${tempDir}`, 2);
     const response = await waitFor(() => findResponse(second.stdout, 2), 12000);
-    expect(response.result.serverInfo.name).toBe('codegraph');
+    expect(response.result.serverInfo.name).toBe('afyx_graph');
     await waitFor(
       () => second.stderr.some((line) =>
         line.includes('Attached to shared daemon') || line.includes('Shared daemon unavailable')
@@ -391,7 +391,7 @@ describe('Shared MCP daemon (issue #411)', () => {
       jsonrpc: '2.0',
       id: 3,
       method: 'tools/call',
-      params: { name: 'codegraph_status', arguments: {} },
+      params: { name: 'afyx_graph_status', arguments: {} },
     });
     const toolResponse = await waitFor(() => findResponse(second.stdout, 3), 5000);
     expect(toolResponse).toMatchObject({
@@ -400,14 +400,14 @@ describe('Shared MCP daemon (issue #411)', () => {
   }, 50000);
 
   it('does not replace a live legacy lock with a second daemon', async () => {
-    const pidPath = path.join(realRoot, '.codegraph', 'daemon.pid');
+    const pidPath = path.join(realRoot, '.afyx-graph', 'daemon.pid');
     fs.writeFileSync(pidPath, `${process.pid}\n`);
 
-    const server = spawnServer(tempDir, { CODEGRAPH_DAEMON_IDLE_TIMEOUT_MS: '15000' });
+    const server = spawnServer(tempDir, { AFYX_GRAPH_DAEMON_IDLE_TIMEOUT_MS: '15000' });
     servers.push(server);
     sendInitialize(server.child, `file://${tempDir}`, 1);
     const response = await waitFor(() => findResponse(server.stdout, 1), 12000);
-    expect(response.result.serverInfo.name).toBe('codegraph');
+    expect(response.result.serverInfo.name).toBe('afyx_graph');
 
     await waitFor(
       () => server.stderr.some((line) =>
@@ -427,7 +427,7 @@ describe('Shared MCP daemon (issue #411)', () => {
       jsonrpc: '2.0',
       id: 2,
       method: 'tools/call',
-      params: { name: 'codegraph_status', arguments: {} },
+      params: { name: 'afyx_graph_status', arguments: {} },
     });
     const toolResponse = await waitFor(() => findResponse(server.stdout, 2), 5000);
     expect(toolResponse).toMatchObject({
@@ -436,7 +436,7 @@ describe('Shared MCP daemon (issue #411)', () => {
   }, 30000);
 
   it('does not start a fallback writer when the daemon lock is unreadable', async () => {
-    const pidPath = path.join(realRoot, '.codegraph', 'daemon.pid');
+    const pidPath = path.join(realRoot, '.afyx-graph', 'daemon.pid');
     fs.mkdirSync(pidPath);
 
     const server = spawnServer(tempDir);
@@ -453,7 +453,7 @@ describe('Shared MCP daemon (issue #411)', () => {
       jsonrpc: '2.0',
       id: 2,
       method: 'tools/call',
-      params: { name: 'codegraph_status', arguments: {} },
+      params: { name: 'afyx_graph_status', arguments: {} },
     });
     const toolResponse = await waitFor(() => findResponse(server.stdout, 2), 5000);
     expect(toolResponse).toMatchObject({
@@ -467,12 +467,12 @@ describe('Shared MCP daemon (issue #411)', () => {
     // Plant a live-pid lockfile so the launcher treats the lock as held, and a
     // mini-server that answers with a mismatched-version hello.
     fs.writeFileSync(
-      path.join(realRoot, '.codegraph', 'daemon.pid'),
+      path.join(realRoot, '.afyx-graph', 'daemon.pid'),
       JSON.stringify({ pid: process.pid, version: '0.0.0-mismatch', socketPath: sockPath, startedAt: Date.now() }),
     );
     const miniServer = net.createServer((sock) => {
       sock.write(JSON.stringify({
-        codegraph: '0.0.0-mismatch',
+        afyxGraph: '0.0.0-mismatch',
         pid: process.pid,
         socketPath: sockPath,
         protocol: 1,
@@ -488,7 +488,7 @@ describe('Shared MCP daemon (issue #411)', () => {
       // response — the proxy answers the handshake locally and, refusing to
       // attach across the version mismatch, serves the session in-process.
       const resp = await waitFor(() => findResponse(server.stdout, 1), 10000);
-      expect(resp.result.serverInfo.name).toBe('codegraph');
+      expect(resp.result.serverInfo.name).toBe('afyx_graph');
       await waitFor(
         () => server.stderr.some((l) => l.includes('serving this session in-process')),
         6000,
@@ -498,13 +498,13 @@ describe('Shared MCP daemon (issue #411)', () => {
         jsonrpc: '2.0',
         id: 2,
         method: 'tools/call',
-        params: { name: 'codegraph_status', arguments: {} },
+        params: { name: 'afyx_graph_status', arguments: {} },
       });
       const toolResponse = await waitFor(() => findResponse(server.stdout, 2), 5000);
       expect(toolResponse).toMatchObject({
         error: { message: expect.stringContaining('live daemon') },
       });
-      expect(fs.existsSync(path.join(realRoot, '.codegraph', 'writer.pid'))).toBe(false);
+      expect(fs.existsSync(path.join(realRoot, '.afyx-graph', 'writer.pid'))).toBe(false);
     } finally {
       await new Promise<void>((resolve) => miniServer.close(() => resolve()));
     }
@@ -524,7 +524,7 @@ describe('Shared MCP daemon (issue #411)', () => {
     // Backstop short, idle timeout long: with a client connected the idle timer
     // never arms, so the inactivity backstop is the only thing that could take
     // the daemon down — and it must not, because the client's peer is alive.
-    const env = { CODEGRAPH_DAEMON_MAX_IDLE_MS: '1200', CODEGRAPH_DAEMON_IDLE_TIMEOUT_MS: '60000' };
+    const env = { AFYX_GRAPH_DAEMON_MAX_IDLE_MS: '1200', AFYX_GRAPH_DAEMON_IDLE_TIMEOUT_MS: '60000' };
     const server = spawnServer(tempDir, env);
     servers.push(server);
     sendInitialize(server.child, `file://${tempDir}`, 1);
@@ -543,7 +543,7 @@ describe('Shared MCP daemon (issue #411)', () => {
   }, 30000);
 
   it('daemon idle-times-out after the last client disconnects', async () => {
-    const env = { CODEGRAPH_DAEMON_IDLE_TIMEOUT_MS: '800', CODEGRAPH_PPID_POLL_MS: '200' };
+    const env = { AFYX_GRAPH_DAEMON_IDLE_TIMEOUT_MS: '800', AFYX_GRAPH_PPID_POLL_MS: '200' };
     const server = spawnServer(tempDir, env);
     servers.push(server);
     sendInitialize(server.child, `file://${tempDir}`, 1);
@@ -556,14 +556,14 @@ describe('Shared MCP daemon (issue #411)', () => {
     server.child.stdin.end();
 
     expect(await waitProcessExit(daemonPid, 10000)).toBe(true);
-    expect(fs.existsSync(path.join(realRoot, '.codegraph', 'daemon.pid'))).toBe(false);
+    expect(fs.existsSync(path.join(realRoot, '.afyx-graph', 'daemon.pid'))).toBe(false);
   }, 30000);
 
   it('proxy survives the daemon dying mid-session and keeps serving (#662)', async () => {
     // The #662 scenario: an MCP host SIGTERM's the shared daemon while a session
-    // is live. The proxy must NOT exit (losing CodeGraph for that session) — it
+    // is live. The proxy must NOT exit (losing Afyx Graph for that session) — it
     // falls back to an in-process engine and keeps answering.
-    const env = { CODEGRAPH_DAEMON_IDLE_TIMEOUT_MS: '30000', CODEGRAPH_PPID_POLL_MS: '5000' };
+    const env = { AFYX_GRAPH_DAEMON_IDLE_TIMEOUT_MS: '30000', AFYX_GRAPH_PPID_POLL_MS: '5000' };
     const server = spawnServer(tempDir, env);
     servers.push(server);
     sendInitialize(server.child, `file://${tempDir}`, 1);
@@ -573,14 +573,14 @@ describe('Shared MCP daemon (issue #411)', () => {
     const daemonPid = readLockPid(realRoot)!;
 
     // A warm call goes through the daemon.
-    sendMessage(server.child, { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'codegraph_status', arguments: {} } });
+    sendMessage(server.child, { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'afyx_graph_status', arguments: {} } });
     try {
       await waitFor(() => findResponse(server.stdout, 2), 30000, 25, 'warm tools/call via daemon');
     } catch (e) {
       // This is the wait that historically flaked — surface WHERE the request
       // died: proxy side (stderr) or daemon side (daemon.log).
       let daemonLog = '<no daemon.log>';
-      try { daemonLog = fs.readFileSync(path.join(realRoot, '.codegraph', 'daemon.log'), 'utf8').split('\n').slice(-25).join('\n'); } catch { /* absent */ }
+      try { daemonLog = fs.readFileSync(path.join(realRoot, '.afyx-graph', 'daemon.log'), 'utf8').split('\n').slice(-25).join('\n'); } catch { /* absent */ }
       throw new Error(
         `${(e as Error).message}\ndaemonAlive=${isAlive(daemonPid)} proxyAlive=${isAlive(server.child.pid!)}\n` +
         `--- proxy stderr tail ---\n${server.stderr.slice(-15).join('')}\n--- daemon.log tail ---\n${daemonLog}`
@@ -594,7 +594,7 @@ describe('Shared MCP daemon (issue #411)', () => {
     // The proxy must still be alive and still answer — served in-process now.
     expect(isAlive(server.child.pid!)).toBe(true);
     await waitFor(() => server.stderr.some((l) => l.includes('serving this session in-process')), 8000, 25, 'in-process failover log');
-    sendMessage(server.child, { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'codegraph_status', arguments: {} } });
+    sendMessage(server.child, { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'afyx_graph_status', arguments: {} } });
     const resp = await waitFor(() => findResponse(server.stdout, 3), 15000);
     expect(resp.result !== undefined || resp.error !== undefined).toBe(true);
     expect(isAlive(server.child.pid!)).toBe(true);

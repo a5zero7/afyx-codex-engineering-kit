@@ -1,31 +1,27 @@
 /**
  * Directory Management
  *
- * Manages the .codegraph/ directory structure for CodeGraph data.
+ * Manages the .afyx-graph/ directory structure for Afyx Graph data.
  */
 
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { AFYX_GRAPH_MODE } from './product';
-
-/** The default per-project data directory name. */
-const DEFAULT_CODEGRAPH_DIR = '.codegraph';
-const DEFAULT_AFYX_GRAPH_DIR = '.afyx-graph';
+import { STATE_DIR_NAME, DATABASE_FILE_NAME } from './product';
 
 let warnedBadDirName = false;
 
 /**
- * Resolve the per-project data directory name, honoring the `CODEGRAPH_DIR`
- * environment override (default `.codegraph`). The override is a single path
+ * Resolve the per-project data directory name, honoring the `AFYX_GRAPH_DIR`
+ * environment override (default `.afyx-graph`). The override is a single path
  * segment that lives in the project root.
  *
  * Why this exists: two environments that share one working tree must NOT share
- * one `.codegraph/` — most concretely Windows-native and WSL (issue #636). The
- * daemon lockfile (`.codegraph/daemon.pid`) records a platform-specific pid and
+ * one `.afyx-graph/` — most concretely Windows-native and WSL (issue #636). The
+ * daemon lockfile (`.afyx-graph/daemon.pid`) records a platform-specific pid and
  * socket path (a Windows named pipe vs a WSL Unix socket), and SQLite file
  * locking across the WSL2 ↔ Windows filesystem boundary is unreliable, so two
- * daemons sharing one index risks corruption. Setting `CODEGRAPH_DIR=.codegraph-win`
+ * daemons sharing one index risks corruption. Setting `AFYX_GRAPH_DIR=.afyx-graph-win`
  * on one side gives each environment its own index in the same tree.
  *
  * Read live (not captured at load) so it is both process-accurate and testable.
@@ -34,9 +30,9 @@ let warnedBadDirName = false;
  * default) rather than risk writing the index outside the project or into the
  * project root itself; we warn once to stderr so the misconfiguration is seen.
  */
-export function codeGraphDirName(): string {
-  const raw = process.env.CODEGRAPH_DIR?.trim();
-  if (!raw) return AFYX_GRAPH_MODE ? DEFAULT_AFYX_GRAPH_DIR : DEFAULT_CODEGRAPH_DIR;
+export function afyxGraphDirName(): string {
+  const raw = process.env.AFYX_GRAPH_DIR?.trim();
+  if (!raw) return STATE_DIR_NAME;
   const invalid =
     raw === '.' ||
     raw.includes('..') ||
@@ -48,77 +44,76 @@ export function codeGraphDirName(): string {
       warnedBadDirName = true;
       // stderr only — stdout is the MCP protocol channel.
       console.warn(
-        `[codegraph] Ignoring invalid CODEGRAPH_DIR="${raw}" — it must be a plain ` +
-          `directory name (no path separators, no "..", not absolute). Using "${DEFAULT_CODEGRAPH_DIR}".`
+        `[afyx-graph] Ignoring invalid AFYX_GRAPH_DIR="${raw}" — it must be a plain ` +
+          `directory name (no path separators, no "..", not absolute). Using "${STATE_DIR_NAME}".`
       );
     }
-    return AFYX_GRAPH_MODE ? DEFAULT_AFYX_GRAPH_DIR : DEFAULT_CODEGRAPH_DIR;
+    return STATE_DIR_NAME;
   }
   return raw;
 }
 
 /**
- * CodeGraph directory name — a load-time snapshot of {@link codeGraphDirName}.
+ * Afyx Graph directory name — a load-time snapshot of {@link afyxGraphDirName}.
  * A running process's environment is fixed, so this equals the live value;
  * it's kept as a stable string export for backward compatibility. Internal code
- * resolves the name through {@link codeGraphDirName} / {@link getCodeGraphDir}
- * so the `CODEGRAPH_DIR` override always applies.
+ * resolves the name through {@link afyxGraphDirName} / {@link getAfyxGraphDir}
+ * so the `AFYX_GRAPH_DIR` override always applies.
  */
-export const CODEGRAPH_DIR = codeGraphDirName();
+export const AFYX_GRAPH_DIR = afyxGraphDirName();
 
 /**
- * Is `name` (a single path segment) a CodeGraph data directory? Matches the
- * default `.codegraph`, the active `CODEGRAPH_DIR` override, and any
- * `.codegraph-*` sibling. File-watching and the indexer skip ALL of these, so
+ * Is `name` (a single path segment) an Afyx Graph data directory? Matches the
+ * default `.afyx-graph`, the active `AFYX_GRAPH_DIR` override, and any
+ * `.afyx-graph-*` sibling. File-watching and the indexer skip ALL of these, so
  * when two environments share one working tree (Windows + WSL, issue #636)
  * neither indexes or watches the other's index directory.
  */
-export function isCodeGraphDataDir(name: string): boolean {
+export function isAfyxGraphDataDir(name: string): boolean {
   return (
-    name === DEFAULT_CODEGRAPH_DIR ||
-    name === DEFAULT_AFYX_GRAPH_DIR ||
-    name === codeGraphDirName() ||
-    name.startsWith(DEFAULT_CODEGRAPH_DIR + '-') ||
-    name.startsWith(DEFAULT_AFYX_GRAPH_DIR + '-')
+    name === STATE_DIR_NAME ||
+    name === afyxGraphDirName() ||
+    name.startsWith(STATE_DIR_NAME + '-')
   );
 }
 
 /**
- * Get the .codegraph directory path for a project
+ * Get the .afyx-graph directory path for a project
  */
-export function getCodeGraphDir(projectRoot: string): string {
-  const configured = process.env.CODEGRAPH_DIR?.trim();
-  if (configured || !AFYX_GRAPH_MODE) return path.join(projectRoot, codeGraphDirName());
-  const canonical = path.join(projectRoot, DEFAULT_AFYX_GRAPH_DIR);
-  const legacy = path.join(projectRoot, DEFAULT_CODEGRAPH_DIR);
-  // Prefer Afyx-owned state. An existing legacy index is adopted in place and
-  // is never renamed or deleted implicitly.
-  if (fs.existsSync(canonical) || !fs.existsSync(legacy)) return canonical;
-  return legacy;
+export function getAfyxGraphDir(projectRoot: string): string {
+  return path.join(projectRoot, afyxGraphDirName());
 }
 
 /**
- * Check if a project has been initialized with CodeGraph
- * Requires both .codegraph/ directory AND codegraph.db to exist
+ * The canonical database path for a project. The one place the state directory
+ * and database filename are joined — DB creation, the init guard, the MCP
+ * liveness watchdog and status all resolve the database through this.
+ */
+export function getDatabasePath(projectRoot: string): string {
+  return path.join(getAfyxGraphDir(projectRoot), DATABASE_FILE_NAME);
+}
+
+/**
+ * Check if a project has been initialized with Afyx Graph
+ * Requires both .afyx-graph/ directory AND afyx-graph.db to exist
  */
 export function isInitialized(projectRoot: string): boolean {
-  const codegraphDir = getCodeGraphDir(projectRoot);
-  if (!fs.existsSync(codegraphDir) || !fs.statSync(codegraphDir).isDirectory()) {
+  const afyxGraphDir = getAfyxGraphDir(projectRoot);
+  if (!fs.existsSync(afyxGraphDir) || !fs.statSync(afyxGraphDir).isDirectory()) {
     return false;
   }
-  // Must have codegraph.db, not just .codegraph folder
-  const dbPath = path.join(codegraphDir, 'codegraph.db');
-  return fs.existsSync(dbPath);
+  // Must have the Afyx Graph database, not just its state directory.
+  return fs.existsSync(getDatabasePath(projectRoot));
 }
 
 /**
- * Find the nearest parent directory containing .codegraph/
+ * Find the nearest parent directory containing .afyx-graph/
  *
- * Walks up from the given path to find a CodeGraph-initialized project,
+ * Walks up from the given path to find an Afyx Graph-initialized project,
  * similar to how git finds .git/ directories.
  *
  * @param startPath - Directory to start searching from
- * @returns The project root containing .codegraph/, or null if not found
+ * @returns The project root containing .afyx-graph/, or null if not found
  */
 /**
  * Reason a directory is unsafe to use as an index ROOT, or null when it's fine.
@@ -127,7 +122,7 @@ export function isInitialized(projectRoot: string): boolean {
  * every other project, etc. — a multi-GB index, constant file-watcher churn, and
  * (pre-1.0 on macOS) a file-descriptor blowup that exhausted `kern.maxfiles` and
  * took unrelated apps / the whole machine down (#845). The classic trigger:
- * running the installer or `codegraph init` from `$HOME`, which auto-indexes the
+ * running the installer or `afyx-graph init` from `$HOME`, which auto-indexes the
  * current directory. These are never intended project roots, so the installer
  * and `init`/`index` refuse them (overridable with `--force`).
  *
@@ -166,7 +161,7 @@ export function unsafeIndexRootReason(projectRoot: string): string | null {
   return null;
 }
 
-export function findNearestCodeGraphRoot(startPath: string): string | null {
+export function findNearestAfyxGraphRoot(startPath: string): string | null {
   let current = path.resolve(startPath);
   const root = path.parse(current).root;
 
@@ -215,7 +210,7 @@ function escapeRegExp(s: string): string {
 /**
  * Indexed sub-project roots beneath `root` (bounded breadth-first scan). For
  * the monorepo case behind #964: the index lives in a CHILD
- * (`packages/x/.codegraph/`), not at the workspace root the agent's cwd points
+ * (`packages/x/.afyx-graph/`), not at the workspace root the agent's cwd points
  * at. Descent stops at the first indexed directory on a branch (a project's
  * own sub-dirs aren't separate projects) and is bounded by depth + count so it
  * never turns into a full-tree crawl on a large repo.
@@ -281,7 +276,7 @@ function eligibleForSubprojectScan(base: string): boolean {
 
 /**
  * Resolve the project root an MCP server should serve as its DEFAULT project
- * (#1606). Up-walk first (`findNearestCodeGraphRoot` — the common case, and
+ * (#1606). Up-walk first (`findNearestAfyxGraphRoot` — the common case, and
  * cheap). When nothing is indexed at or above `searchFrom`, run the bounded
  * sub-project down-scan `planFrontload` already uses, behind the workspace
  * gate above: EXACTLY ONE indexed sub-project is unambiguous and is adopted
@@ -295,7 +290,7 @@ export function resolveServerRoot(
   searchFrom: string,
   opts: { subprojectScan?: boolean } = {},
 ): ServerRootResolution {
-  const up = findNearestCodeGraphRoot(searchFrom);
+  const up = findNearestAfyxGraphRoot(searchFrom);
   if (up) return { root: up, viaSubScan: false, candidates: [] };
   if (opts.subprojectScan === false) return { root: null, viaSubScan: false, candidates: [] };
   const base = path.resolve(searchFrom);
@@ -590,21 +585,21 @@ export function isStructuralPrompt(prompt: string): boolean {
 export const CLAUDE_CODE_INLINE_HOOK_OUTPUT_LIMIT = 10_000;
 
 /**
- * Max characters of explore text injected by `codegraph prompt-hook` before
+ * Max characters of explore text injected by `afyx-graph prompt-hook` before
  * truncation. Must stay under {@link CLAUDE_CODE_INLINE_HOOK_OUTPUT_LIMIT} so
  * the host delivers the payload inline. 9,000 leaves ~1k for the
- * `<codegraph_context>` wrapper and the `projectPath` nudge lines appended
+ * `<afyx_graph_context>` wrapper and the `projectPath` nudge lines appended
  * after the cap is applied.
  */
 export const PROMPT_HOOK_INJECTION_MAX = 9_000;
 
 /**
  * Cap explore text for the prompt-hook injection, preserving the existing
- * "call codegraph_explore for the rest" notice when truncated.
+ * "call afyx_graph_explore for the rest" notice when truncated.
  */
 export function capPromptHookInjection(text: string, max = PROMPT_HOOK_INJECTION_MAX): string {
   return text.length > max
-    ? `${text.slice(0, max)}\n…(truncated; call codegraph_explore for the rest)`
+    ? `${text.slice(0, max)}\n…(truncated; call afyx_graph_explore for the rest)`
     : text;
 }
 
@@ -622,13 +617,13 @@ export interface FrontloadPlan {
   nudgeProjects: string[];
   /** True when the plan came from scanning DOWN into sub-projects (cwd itself
    *  is not under any index) — the monorepo case, where a follow-up
-   *  `codegraph_explore` needs an explicit `projectPath`. */
+   *  `afyx_graph_explore` needs an explicit `projectPath`. */
   viaSubScan: boolean;
 }
 
 /**
  * Decide what the front-load hook injects for a `prompt` issued from `cwd`,
- * shaped by where the `.codegraph/` index(es) actually are:
+ * shaped by where the `.afyx-graph/` index(es) actually are:
  *   1. **cwd (or an ancestor) is indexed** → front-load that project. The
  *      normal single-project / nested-file case.
  *   2. **cwd isn't indexed but looks like a workspace root** → the indexes live
@@ -682,25 +677,25 @@ export function planFrontload(cwd: string, prompt: string): FrontloadPlan {
 }
 
 /**
- * Contents of `.codegraph/.gitignore`. A single wildcard ignore keeps every
+ * Contents of `.afyx-graph/.gitignore`. A single wildcard ignore keeps every
  * transient file in the index dir — the database, `daemon.pid`, the socket,
  * logs, cache, and anything future versions add — out of git, without having
  * to enumerate each name (issues #788, #492, #484). Older versions wrote an
  * explicit allowlist that never listed `daemon.pid` or the socket, so those
  * runtime files were silently committed.
  */
-const GITIGNORE_CONTENT = `# CodeGraph data files — local to each machine, not for committing.
-# Ignore everything in .codegraph/ except this file itself, so transient
+const GITIGNORE_CONTENT = `# Afyx Graph data files — local to each machine, not for committing.
+# Ignore everything in .afyx-graph/ except this file itself, so transient
 # files (the database, daemon.pid, sockets, logs) never show up in git.
 *
 !.gitignore
 `;
 
-/** Header line that prefixes every .gitignore CodeGraph has auto-generated. */
-const GITIGNORE_MARKER = '# CodeGraph data files';
+/** Header line that prefixes every .gitignore Afyx Graph has auto-generated. */
+const GITIGNORE_MARKER = '# Afyx Graph data files';
 
 /**
- * Is `content` a stale CodeGraph-generated `.gitignore` that should be
+ * Is `content` a stale Afyx Graph-generated `.gitignore` that should be
  * regenerated in place? True when it carries our header but predates the
  * wildcard ignore (it has no bare `*` line) — i.e. one of the old explicit
  * allowlists (`*.db`, `cache/`, `.dirty`, …) that never ignored `daemon.pid`
@@ -715,8 +710,8 @@ function isStaleDefaultGitignore(content: string): boolean {
 }
 
 /**
- * Write `.codegraph/.gitignore` if it's absent, or upgrade a stale
- * CodeGraph-generated default in place; a user-customized file is left alone.
+ * Write `.afyx-graph/.gitignore` if it's absent, or upgrade a stale
+ * Afyx Graph-generated default in place; a user-customized file is left alone.
  * Best-effort — returns `false` only if a needed write failed.
  */
 function ensureGitignore(gitignorePath: string): boolean {
@@ -737,62 +732,62 @@ function ensureGitignore(gitignorePath: string): boolean {
 }
 
 /**
- * Create the .codegraph directory structure
- * Note: Only throws if codegraph.db already exists, not just if .codegraph/ exists.
+ * Create the .afyx-graph directory structure
+ * Note: Only throws if afyx-graph.db already exists, not just if .afyx-graph/ exists.
  */
 export function createDirectory(projectRoot: string): void {
-  const codegraphDir = getCodeGraphDir(projectRoot);
-  const dbPath = path.join(codegraphDir, 'codegraph.db');
+  const afyxGraphDir = getAfyxGraphDir(projectRoot);
+  const dbPath = getDatabasePath(projectRoot);
 
-  // Only throw if CodeGraph is actually initialized (db exists)
-  // .codegraph/ folder alone is fine
+  // Only throw if Afyx Graph is actually initialized (db exists)
+  // .afyx-graph/ folder alone is fine
   if (fs.existsSync(dbPath)) {
-    throw new Error(`CodeGraph already initialized in ${projectRoot}`);
+    throw new Error(`Afyx Graph already initialized in ${projectRoot}`);
   }
 
   // Create main directory (if it doesn't exist)
-  fs.mkdirSync(codegraphDir, { recursive: true });
+  fs.mkdirSync(afyxGraphDir, { recursive: true });
 
-  // Write .gitignore inside .codegraph (create if absent, upgrade a stale
+  // Write .gitignore inside .afyx-graph (create if absent, upgrade a stale
   // pre-wildcard default left by an older version — issue #788).
-  ensureGitignore(path.join(codegraphDir, '.gitignore'));
+  ensureGitignore(path.join(afyxGraphDir, '.gitignore'));
 }
 
 /**
- * Remove the .codegraph directory
+ * Remove the .afyx-graph directory
  */
 export function removeDirectory(projectRoot: string): void {
-  const codegraphDir = getCodeGraphDir(projectRoot);
+  const afyxGraphDir = getAfyxGraphDir(projectRoot);
 
-  if (!fs.existsSync(codegraphDir)) {
+  if (!fs.existsSync(afyxGraphDir)) {
     return;
   }
 
-  // Verify .codegraph is a real directory, not a symlink pointing elsewhere
-  const lstat = fs.lstatSync(codegraphDir);
+  // Verify .afyx-graph is a real directory, not a symlink pointing elsewhere
+  const lstat = fs.lstatSync(afyxGraphDir);
   if (lstat.isSymbolicLink()) {
     // Only remove the symlink itself, never follow it for recursive delete
-    fs.unlinkSync(codegraphDir);
+    fs.unlinkSync(afyxGraphDir);
     return;
   }
 
   if (!lstat.isDirectory()) {
     // Not a directory - remove the single file
-    fs.unlinkSync(codegraphDir);
+    fs.unlinkSync(afyxGraphDir);
     return;
   }
 
   // Recursively remove directory
-  fs.rmSync(codegraphDir, { recursive: true, force: true });
+  fs.rmSync(afyxGraphDir, { recursive: true, force: true });
 }
 
 /**
- * Get all files in the .codegraph directory
+ * Get all files in the .afyx-graph directory
  */
 export function listDirectoryContents(projectRoot: string): string[] {
-  const codegraphDir = getCodeGraphDir(projectRoot);
+  const afyxGraphDir = getAfyxGraphDir(projectRoot);
 
-  if (!fs.existsSync(codegraphDir)) {
+  if (!fs.existsSync(afyxGraphDir)) {
     return [];
   }
 
@@ -804,7 +799,7 @@ export function listDirectoryContents(projectRoot: string): string[] {
     for (const entry of entries) {
       const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name;
 
-      // Skip symlinks to prevent following links outside .codegraph
+      // Skip symlinks to prevent following links outside .afyx-graph
       if (entry.isSymbolicLink()) {
         continue;
       }
@@ -817,17 +812,17 @@ export function listDirectoryContents(projectRoot: string): string[] {
     }
   }
 
-  walkDir(codegraphDir);
+  walkDir(afyxGraphDir);
   return files;
 }
 
 /**
- * Get the total size of the .codegraph directory in bytes
+ * Get the total size of the .afyx-graph directory in bytes
  */
 export function getDirectorySize(projectRoot: string): number {
-  const codegraphDir = getCodeGraphDir(projectRoot);
+  const afyxGraphDir = getAfyxGraphDir(projectRoot);
 
-  if (!fs.existsSync(codegraphDir)) {
+  if (!fs.existsSync(afyxGraphDir)) {
     return 0;
   }
 
@@ -837,7 +832,7 @@ export function getDirectorySize(projectRoot: string): number {
     const entries = fs.readdirSync(dir, { withFileTypes: true });
 
     for (const entry of entries) {
-      // Skip symlinks to prevent following links outside .codegraph
+      // Skip symlinks to prevent following links outside .afyx-graph
       if (entry.isSymbolicLink()) {
         continue;
       }
@@ -853,19 +848,19 @@ export function getDirectorySize(projectRoot: string): number {
     }
   }
 
-  walkDir(codegraphDir);
+  walkDir(afyxGraphDir);
   return totalSize;
 }
 
 /**
- * Ensure a subdirectory exists within .codegraph
+ * Ensure a subdirectory exists within .afyx-graph
  */
 export function ensureSubdirectory(projectRoot: string, subdirName: string): string {
   if (subdirName.includes('..') || subdirName.includes(path.sep) || subdirName.includes('/')) {
     throw new Error(`Invalid subdirectory name: ${subdirName}`);
   }
 
-  const subdirPath = path.join(getCodeGraphDir(projectRoot), subdirName);
+  const subdirPath = path.join(getAfyxGraphDir(projectRoot), subdirName);
 
   if (!fs.existsSync(subdirPath)) {
     fs.mkdirSync(subdirPath, { recursive: true });
@@ -875,34 +870,34 @@ export function ensureSubdirectory(projectRoot: string, subdirName: string): str
 }
 
 /**
- * Check if the .codegraph directory has valid structure
+ * Check if the .afyx-graph directory has valid structure
  */
 export function validateDirectory(projectRoot: string): {
   valid: boolean;
   errors: string[];
 } {
   const errors: string[] = [];
-  const codegraphDir = getCodeGraphDir(projectRoot);
+  const afyxGraphDir = getAfyxGraphDir(projectRoot);
 
-  if (!fs.existsSync(codegraphDir)) {
-    errors.push('CodeGraph directory does not exist');
+  if (!fs.existsSync(afyxGraphDir)) {
+    errors.push('Afyx Graph directory does not exist');
     return { valid: false, errors };
   }
 
-  if (!fs.statSync(codegraphDir).isDirectory()) {
-    errors.push('.codegraph exists but is not a directory');
+  if (!fs.statSync(afyxGraphDir).isDirectory()) {
+    errors.push('.afyx-graph exists but is not a directory');
     return { valid: false, errors };
   }
 
   // Auto-repair / upgrade .gitignore (non-critical file). A missing one is
   // recreated; a stale pre-wildcard default that never ignored daemon.pid is
   // regenerated in place (issue #788); a user-authored file is left alone.
-  const gitignorePath = path.join(codegraphDir, '.gitignore');
+  const gitignorePath = path.join(afyxGraphDir, '.gitignore');
   const existedBefore = fs.existsSync(gitignorePath);
   if (!ensureGitignore(gitignorePath) && !existedBefore) {
     // Only a missing-and-uncreatable file is surfaced; a failed in-place
     // upgrade of an existing file is non-fatal — the index still works.
-    errors.push('.gitignore missing in .codegraph directory and could not be created');
+    errors.push('.gitignore missing in .afyx-graph directory and could not be created');
   }
 
   return {

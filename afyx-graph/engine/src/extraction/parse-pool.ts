@@ -1,6 +1,6 @@
 /**
  * Parse worker pool — runs tree-sitter parsing across N worker threads so a full
- * `codegraph index` uses every core instead of pinning one.
+ * `afyx-graph index` uses every core instead of pinning one.
  *
  * Why this exists: `ExtractionOrchestrator.indexAll()` already reads files in
  * parallel, but it parsed them through a SINGLE worker thread, so on an
@@ -21,7 +21,7 @@
  *     silently requeued — the orchestrator owns the smarter two-stage retry
  *     (fresh worker, then comment-stripped) on a clean WASM heap.
  *   - a size-1 pool reproduces the old single-worker path exactly, which is the
- *     conservative rollback: set `CODEGRAPH_PARSE_WORKERS=1`.
+ *     conservative rollback: set `AFYX_GRAPH_PARSE_WORKERS=1`.
  *
  * Memory: peak scales with pool size (≈ size × a worker's pre-recycle heap), so
  * the default is capped and the env var lets constrained machines dial it down.
@@ -45,7 +45,7 @@ export interface ParsePoolWorker {
 }
 
 /** A single file to parse. `language` is resolved on the main thread (it holds
- *  the project's codegraph.json extension overrides) and handed to the worker. */
+ *  the project's afyx-graph.json extension overrides) and handed to the worker. */
 export interface ParseTask {
   filePath: string;
   content: string;
@@ -91,7 +91,7 @@ const MAX_CONCURRENT_SPAWN = 2;
 const CRASH_BUDGET = 100;
 
 /**
- * Resolve the pool size from the `CODEGRAPH_PARSE_WORKERS` override and the
+ * Resolve the pool size from the `AFYX_GRAPH_PARSE_WORKERS` override and the
  * machine's core count.
  *   - explicit `0` or `1` → 1 worker (the old single-worker path; the rollback).
  *   - explicit `N` → N, clamped to [1, 16].
@@ -99,7 +99,7 @@ const CRASH_BUDGET = 100;
  *     the main thread + UI; never zero — parsing always needs a worker).
  */
 /**
- * Resolve the base per-parse timeout from the `CODEGRAPH_PARSE_TIMEOUT_MS`
+ * Resolve the base per-parse timeout from the `AFYX_GRAPH_PARSE_TIMEOUT_MS`
  * override. Slow storage (HDD, network folders) can need a larger budget; a
  * non-numeric / non-positive value falls back to the default (10s).
  */
@@ -218,7 +218,7 @@ export class ParseWorkerPool {
       // only moves the cliff a deeply nested file falls off (#1581 — the
       // 8 MiB main thread still dies at 100k levels). The native kernel
       // guards its own recursion against THIS thread's real stack bounds
-      // (codegraph-kernel/src/stack.rs) and defers such a file to the wasm
+      // (afyx-graph-kernel/src/stack.rs) and defers such a file to the wasm
       // path, which catches its JS RangeError per file.
       this.createWorker = () => new Worker(scriptPath);
     } else {

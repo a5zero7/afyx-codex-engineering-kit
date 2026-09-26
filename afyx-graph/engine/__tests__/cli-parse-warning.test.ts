@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-const BIN = path.resolve(__dirname, '../dist/bin/codegraph.js');
+const BIN = path.resolve(__dirname, '../dist/bin/afyx-graph.js');
 const COLLAPSE_WARNING = 'parse produced no symbols (tree has errors)';
 const SOURCE = `const char* kTemplate = R"FILE_TEMPLATE_V1(
 struct Ignored { int v; };
@@ -19,7 +19,7 @@ describe('CLI parse warnings (#1522)', () => {
   let root: string;
 
   beforeEach(() => {
-    root = fs.mkdtempSync(path.join(os.tmpdir(), 'codegraph-parse-warning-'));
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-graph-parse-warning-'));
   });
 
   afterEach(() => {
@@ -33,9 +33,8 @@ describe('CLI parse warnings (#1522)', () => {
       timeout: 20_000,
       env: {
         ...process.env,
-        CODEGRAPH_NO_DAEMON: '1',
-        CODEGRAPH_WASM_RELAUNCHED: '1',
-        CODEGRAPH_TELEMETRY: '0',
+        AFYX_GRAPH_NO_DAEMON: '1',
+        AFYX_GRAPH_WASM_RELAUNCHED: '1',
         NO_COLOR: '1',
       },
     });

@@ -1,7 +1,7 @@
 {
   "name": "@a5zero7/afyx-graph",
   "version": "1.0.0",
-  "description": "Afyx Graph local structural code intelligence, based on CodeGraph.",
+  "description": "Afyx-owned local structural code intelligence.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/a5zero7/afyx-codex-engineering-kit.git",
@@ -10,8 +10,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "afyx-graph": "./dist/bin/codegraph.js",
-    "codegraph": "./dist/bin/codegraph.js"
+    "afyx-graph": "./dist/bin/afyx-graph.js"
   },
   "files": [
     "dist",
@@ -22,15 +21,19 @@
     "ui"
   ],
   "scripts": {
-    "build": "tsc && npm run copy-assets && npm run build:ui && node -e \"require('fs').chmodSync('dist/bin/codegraph.js', 0o755)\"",
+    "build": "tsc && npm run copy-assets && npm run build:ui && node -e \"require('fs').chmodSync('dist/bin/afyx-graph.js', 0o755)\"",
     "build:ui": "npm run build --workspace ui && node scripts/check-ui-build.mjs",
     "build:lib": "npm run build:lib --workspace ui",
     "preuninstall": "node dist/bin/uninstall.js",
     "copy-assets": "node -e \"const fs=require('fs');fs.mkdirSync('dist/db',{recursive:true});fs.copyFileSync('src/db/schema.sql','dist/db/schema.sql');fs.mkdirSync('dist/extraction/wasm',{recursive:true});fs.readdirSync('src/extraction/wasm').filter(f=>f.endsWith('.wasm')).forEach(f=>fs.copyFileSync('src/extraction/wasm/'+f,'dist/extraction/wasm/'+f))\"",
     "dev": "tsc --watch",
     "build:kernel": "bash scripts/build-kernel.sh",
-    "cli": "npm run build && node dist/bin/codegraph.js",
+    "cli": "npm run build && node dist/bin/afyx-graph.js",
+    "build:clean": "npm run clean && npm run build",
+    "pretest": "node scripts/check-dist-clean.mjs",
     "test": "vitest run",
+    "test:semantic": "node scripts/semantic-baseline.mjs",
+    "test:smoke": "node scripts/smoke-cli-mcp.mjs",
     "test:watch": "vitest",
     "test:eval": "vitest run __tests__/evaluation/",
     "eval": "npm run build && npx tsx __tests__/evaluation/runner.ts",

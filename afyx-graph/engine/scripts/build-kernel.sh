@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 #
-# Build the native extraction kernel (codegraph-kernel) and stage the .node
+# Build the native extraction kernel (afyx-graph-kernel) and stage the .node
 # where the TS loader (src/extraction/kernel/loader.ts) finds it for
 # from-source runs and tests:
 #
-#   codegraph-kernel/prebuilds/<platform>-<arch>/codegraph-kernel.node
+#   afyx-graph-kernel/prebuilds/<platform>-<arch>/afyx-graph-kernel.node
 #
 # The kernel is OPTIONAL everywhere: when the .node is absent the extraction
 # path falls back to the wasm pipeline. This script needs a Rust toolchain
@@ -19,7 +19,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-CRATE="$ROOT/codegraph-kernel"
+CRATE="$ROOT/afyx-graph-kernel"
 
 TARGET=""
 PLATFORM=""
@@ -57,7 +57,7 @@ if [ -z "$PLATFORM" ]; then
   fi
 fi
 
-echo "[kernel] building codegraph-kernel for ${PLATFORM}${TARGET:+ (target $TARGET)}"
+echo "[kernel] building afyx-graph-kernel for ${PLATFORM}${TARGET:+ (target $TARGET)}"
 cd "$CRATE"
 if [ -n "$TARGET" ]; then
   rustup target add "$TARGET" >/dev/null 2>&1 || true
@@ -68,11 +68,11 @@ else
   OUTDIR="$CRATE/target/release"
 fi
 
-# cdylib name differs per OS; the staged name is always codegraph-kernel.node.
+# cdylib name differs per OS; the staged name is always afyx-graph-kernel.node.
 case "$PLATFORM" in
-  darwin-*) LIB="$OUTDIR/libcodegraph_kernel.dylib" ;;
-  linux-*)  LIB="$OUTDIR/libcodegraph_kernel.so" ;;
-  win32-*)  LIB="$OUTDIR/codegraph_kernel.dll" ;;
+  darwin-*) LIB="$OUTDIR/libafyx_graph_kernel.dylib" ;;
+  linux-*)  LIB="$OUTDIR/libafyx_graph_kernel.so" ;;
+  win32-*)  LIB="$OUTDIR/afyx_graph_kernel.dll" ;;
 esac
 [ -f "$LIB" ] || { echo "[kernel] error: built library not found at $LIB" >&2; exit 1; }
 
@@ -82,6 +82,6 @@ mkdir -p "$DEST"
 # place leaves macOS's per-inode signature cache stale, and every process
 # that then dlopens the staged .node is SIGKILLed at load (the on-disk
 # signature still verifies, which makes it maddening to diagnose).
-rm -f "$DEST/codegraph-kernel.node"
-cp "$LIB" "$DEST/codegraph-kernel.node"
-echo "[kernel] staged $DEST/codegraph-kernel.node ($(du -h "$DEST/codegraph-kernel.node" | cut -f1))"
+rm -f "$DEST/afyx-graph-kernel.node"
+cp "$LIB" "$DEST/afyx-graph-kernel.node"
+echo "[kernel] staged $DEST/afyx-graph-kernel.node ($(du -h "$DEST/afyx-graph-kernel.node" | cut -f1))"

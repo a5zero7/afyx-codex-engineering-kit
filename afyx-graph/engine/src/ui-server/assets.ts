@@ -40,7 +40,7 @@ export class ViewerMissingError extends Error {
 /**
  * Candidate locations for the viewer, most-specific first.
  *
- * 1. The `CODEGRAPH_VIEWER_PATH` override.
+ * 1. The `AFYX_GRAPH_VIEWER_PATH` override.
  * 2. `<__dirname>/../viewer` — the shipped layout (`dist/ui-server/` →
  *    `dist/viewer/`).
  * 3. `<__dirname>/../../dist/viewer` — running the TypeScript straight out of

@@ -53,7 +53,7 @@
 
   // The key stays open until the reader closes it; the choice survives a
   // reload but is per browser — a preference, not a fact about the project.
-  const LEGEND_KEY = 'codegraph-ui:screens-legend';
+  const LEGEND_KEY = 'afyx-graph-ui:screens-legend';
   let legendOpen = $state(readLegendOpen());
   function readLegendOpen(): boolean {
     try {

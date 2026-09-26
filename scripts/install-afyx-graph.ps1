@@ -25,7 +25,6 @@ $assetName = "afyx-graph-$target.zip"
 $current = Join-Path $RuntimeRoot 'current'
 $rootMetadata = Join-Path $RuntimeRoot 'metadata.json'
 $launcher = Join-Path $current 'bin\afyx-graph.cmd'
-$legacyLauncher = Join-Path $current 'bin\codegraph.cmd'
 $publicBin = Join-Path $RuntimeRoot 'bin'
 $publicLauncher = Join-Path $publicBin 'afyx-graph.cmd'
 
@@ -52,7 +51,7 @@ function Get-State {
         -not (Test-Path -LiteralPath (Join-Path $current 'node.exe') -PathType Leaf)) { return 'INCOMPLETE' }
     try {
         $installed = Get-Content -Raw -LiteralPath $rootMetadata -Encoding utf8 | ConvertFrom-Json
-        if ($installed.product_name -ne 'Afyx Graph' -or -not $installed.afyx_graph_version) { return 'INVALID' }
+        if ($installed.product_name -ne 'Afyx Graph' -or -not $installed.product_version) { return 'INVALID' }
     } catch { return 'INVALID' }
     return 'HEALTHY'
 }
@@ -74,7 +73,7 @@ function Resolve-Archive {
     $downloadRoot = Join-Path ([System.IO.Path]::GetTempPath()) "afyx-graph-$([guid]::NewGuid().ToString('N'))"
     New-Item -ItemType Directory -Path $downloadRoot | Out-Null
     $download = Join-Path $downloadRoot $assetName
-    $tag = "afyx-graph-v$($metadata.afyx_graph_version)"
+    $tag = "afyx-graph-v$($metadata.product_version)"
     $url = "https://github.com/a5zero7/afyx-codex-engineering-kit/releases/download/$tag/$assetName"
     Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $download
     Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/a5zero7/afyx-codex-engineering-kit/releases/download/$tag/SHA256SUMS" -OutFile (Join-Path $downloadRoot 'SHA256SUMS')
@@ -92,15 +91,15 @@ function Test-ArchiveChecksum([string]$Path) {
 }
 
 function Test-StagedBundle([string]$Path) {
-    $required = @('node.exe', 'bin\afyx-graph.cmd', 'bin\codegraph.cmd', 'metadata.json', 'licenses\CodeGraph-MIT.txt')
+    $required = @('node.exe', 'bin\afyx-graph.cmd', 'metadata.json', 'licenses\THIRD_PARTY_NOTICES.md', 'licenses\THIRD_PARTY_ENGINE_MIT.txt')
     foreach ($relative in $required) {
         if (-not (Test-Path -LiteralPath (Join-Path $Path $relative) -PathType Leaf)) {
             throw "Afyx Graph staged bundle is incomplete: $relative is missing."
         }
     }
     $stagedMetadata = Get-Content -Raw -LiteralPath (Join-Path $Path 'metadata.json') -Encoding utf8 | ConvertFrom-Json
-    if ($stagedMetadata.afyx_graph_version -ne $metadata.afyx_graph_version) {
-        throw "Afyx Graph version mismatch: expected $($metadata.afyx_graph_version), got $($stagedMetadata.afyx_graph_version)."
+    if ($stagedMetadata.product_version -ne $metadata.product_version) {
+        throw "Afyx Graph version mismatch: expected $($metadata.product_version), got $($stagedMetadata.product_version)."
     }
 }
 
@@ -110,8 +109,7 @@ if ($ValidateOnly) {
         Product = 'Afyx Graph'
         State = $state
         RuntimeRoot = $RuntimeRoot
-        Version = if (Test-Path -LiteralPath $rootMetadata) { (Get-Content -Raw $rootMetadata | ConvertFrom-Json).afyx_graph_version } else { $null }
-        EngineVersion = if (Test-Path -LiteralPath $rootMetadata) { (Get-Content -Raw $rootMetadata | ConvertFrom-Json).codegraph_upstream_version } else { $null }
+        Version = if (Test-Path -LiteralPath $rootMetadata) { (Get-Content -Raw $rootMetadata | ConvertFrom-Json).product_version } else { $null }
     } | Format-List
     if ($state -in @('INCOMPLETE', 'INVALID')) { exit 1 }
     exit 0
@@ -124,7 +122,7 @@ if ($Uninstall) {
         Remove-Item -LiteralPath $RuntimeRoot -Recurse -Force
         Update-UserPath -Remove
     }
-    Write-Host 'Afyx Graph: removed; project .afyx-graph and .codegraph indexes were not changed.'
+    Write-Host 'Afyx Graph: removed; project .afyx-graph indexes were not changed.'
     exit 0
 }
 
@@ -182,6 +180,6 @@ try {
 
 Update-UserPath
 
-Write-Host "Afyx Graph $($metadata.afyx_graph_version): installed at $RuntimeRoot"
+Write-Host "Afyx Graph $($metadata.product_version): installed at $RuntimeRoot"
 Write-Host "CLI: $publicLauncher"
 Write-Host 'MCP configuration was not changed.'

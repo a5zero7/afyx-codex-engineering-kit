@@ -25,17 +25,17 @@
  * listener exists. The detached daemon must never arm this — its stdin is
  * `'ignore'` and its lifecycle is refcount/idle-based.
  *
- * Tune with `CODEGRAPH_STARTUP_HANDSHAKE_TIMEOUT_MS`; `0` disables.
+ * Tune with `AFYX_GRAPH_STARTUP_HANDSHAKE_TIMEOUT_MS`; `0` disables.
  */
 
 /** Default wait for the first byte of MCP traffic before assuming orphaned. */
 export const DEFAULT_STARTUP_HANDSHAKE_TIMEOUT_MS = 900_000; // 15 min
 
-export const STARTUP_HANDSHAKE_TIMEOUT_ENV = 'CODEGRAPH_STARTUP_HANDSHAKE_TIMEOUT_MS';
+export const STARTUP_HANDSHAKE_TIMEOUT_ENV = 'AFYX_GRAPH_STARTUP_HANDSHAKE_TIMEOUT_MS';
 
 /**
  * Parse the timeout env override. Missing/invalid → default; `<= 0` → `0`
- * (disabled), the same disable convention as `CODEGRAPH_PPID_POLL_MS`.
+ * (disabled), the same disable convention as `AFYX_GRAPH_PPID_POLL_MS`.
  */
 export function parseStartupHandshakeTimeoutMs(raw: string | undefined): number {
   if (raw === undefined || raw === '') return DEFAULT_STARTUP_HANDSHAKE_TIMEOUT_MS;

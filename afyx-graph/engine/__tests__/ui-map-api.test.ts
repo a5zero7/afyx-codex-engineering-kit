@@ -22,7 +22,7 @@ import * as http from 'http';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import CodeGraph from '../src/index';
+import AfyxGraph from '../src/index';
 import { createGraphApi, startUiServer, type GraphApi, type UiServerHandle } from '../src/ui-server';
 import {
   moduleIdFor,
@@ -79,7 +79,7 @@ function write(root: string, rel: string, body: string): void {
 }
 
 beforeAll(async () => {
-  tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codegraph-ui-map-'));
+  tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-graph-ui-map-'));
   projectRoot = path.join(tempDir, 'project');
 
   write(projectRoot, 'src/types.ts', `export interface Row {\n  id: string;\n}\n`);
@@ -202,7 +202,7 @@ export function testBoot(): string[] {
 `
   );
 
-  const cg = CodeGraph.initSync(projectRoot, {
+  const cg = AfyxGraph.initSync(projectRoot, {
     config: { include: ['src/**/*.ts', '__tests__/**/*.ts'], exclude: [] },
   });
   await cg.indexAll();

@@ -2,14 +2,14 @@
  * The read-only JSON API the viewer reads its screens from.
  *
  * Thirteen endpoints, one per screen, each answering in a single round-trip —
- * the same principle as `codegraph_explore`: return enough that the caller does
+ * the same principle as `afyx_graph_explore`: return enough that the caller does
  * not have to ask a follow-up question — plus one that does not answer at all
  * and stays open instead (`/api/events`), so a screen learns that its answer
  * went stale rather than waiting to be asked again.
  *
  * All but one are *readers* of the existing schema; nothing here indexes or
  * resolves. The exception is `/api/trails`, which saves the reader's own named
- * walks as JSON under `.codegraph/ui/trails/` — the only write the viewer makes,
+ * walks as JSON under `.afyx-graph/ui/trails/` — the only write the viewer makes,
  * to the only directory it may write to, and refused outright under
  * `--read-only`. See `./trail-store.ts`.
  *
@@ -39,7 +39,7 @@
  * obligation that remains ours is the path chokepoint, `resolveProjectFile` for
  * anything that touches the repository. Two modules here reach the filesystem
  * and no others: `source.ts` reads the project's code, and `trail-store.ts`
- * reads and writes `.codegraph/ui/trails/`.
+ * reads and writes `.afyx-graph/ui/trails/`.
  */
 
 import type { UiApiHandler, UiRequestContext } from '../index';
@@ -154,7 +154,7 @@ export interface GraphApiOptions {
    * Refuse every write, so the viewer is a pure reader again.
    *
    * The one thing it would otherwise write is a saved trail into
-   * `.codegraph/ui/trails/`. Turning this on is for a checkout that must not
+   * `.afyx-graph/ui/trails/`. Turning this on is for a checkout that must not
    * change (a review sandbox, a read-only mount, a shared machine); the viewer
    * still lists trails that are already there, and says why Save is gone.
    */

@@ -25,7 +25,7 @@ import * as http from 'http';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import CodeGraph from '../src/index';
+import AfyxGraph from '../src/index';
 import {
   buildDeadCodeReport,
   isHeaderFile,
@@ -41,7 +41,7 @@ let server: UiServerHandle;
 let api: GraphApi;
 let tempDir: string;
 let projectRoot: string;
-let cg: CodeGraph;
+let cg: AfyxGraph;
 
 function write(root: string, rel: string, body: string): void {
   const full = path.join(root, rel);
@@ -88,7 +88,7 @@ const names = (report: { entries: Array<{ node: { name: string } }> }): string[]
   report.entries.map((entry) => entry.node.name);
 
 beforeAll(async () => {
-  tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codegraph-deadcode-'));
+  tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-graph-deadcode-'));
   projectRoot = path.join(tempDir, 'project');
 
   // The one genuinely dead symbol, plus a live one beside it so the file is
@@ -259,14 +259,14 @@ export function testFacade(): string {
 `
   );
 
-  const init = CodeGraph.initSync(projectRoot, {
+  const init = AfyxGraph.initSync(projectRoot, {
     config: { include: ['src/**/*.ts', 'tests/**/*.ts'], exclude: [] },
   });
   await init.indexAll();
   init.resolveReferences();
   init.close();
 
-  cg = CodeGraph.openSync(projectRoot);
+  cg = AfyxGraph.openSync(projectRoot);
 
   const viewerDir = path.join(tempDir, 'viewer');
   fs.mkdirSync(viewerDir, { recursive: true });

@@ -1,12 +1,13 @@
 {
   "product_name": "Afyx Graph",
-  "afyx_graph_version": "1.0.0",
-  "engine_name": "CodeGraph",
-  "codegraph_upstream_version": "1.6.0",
-  "codegraph_upstream_repository": "https://github.com/colbymchenry/codegraph",
-  "codegraph_upstream_commit": null,
-  "vendored_in_kit_commit": "b7a1aa2718dc1f6940e483043733f67020d9a62f",
-  "license": "MIT",
+  "product_version": "1.0.0",
+  "package": "@a5zero7/afyx-graph",
+  "repository": "https://github.com/a5zero7/afyx-codex-engineering-kit",
+  "cli": "afyx-graph",
+  "runtime_path": "~/.afyx/graph",
+  "state_directory": ".afyx-graph",
+  "database_filename": "afyx-graph.db",
+  "mcp_server": "afyx_graph",
   "supported_platforms": [
     "win32-x64",
     "win32-arm64",
@@ -15,5 +16,5 @@
     "darwin-x64",
     "darwin-arm64"
   ],
-  "build_runtime_version": "v24.16.0"
+  "license": "MIT"
 }

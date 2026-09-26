@@ -33,14 +33,14 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import CodeGraph from '../src/index';
+import AfyxGraph from '../src/index';
 import { ToolHandler } from '../src/mcp/tools';
 
 const FIXTURE = 'tail-render-ts';
 const TARGET = 'src/lib/session-store.ts';
 
 let dir: string;
-let cg: CodeGraph;
+let cg: AfyxGraph;
 
 /** Every `<n>\t<text>` line number the response actually sent. */
 function renderedLines(response: string): Set<number> {
@@ -50,7 +50,7 @@ function renderedLines(response: string): Set<number> {
 }
 
 async function explore(query: string): Promise<string> {
-  const res = await new ToolHandler(cg).execute('codegraph_explore', { query });
+  const res = await new ToolHandler(cg).execute('afyx_graph_explore', { query });
   return res.content?.[0]?.text ?? '';
 }
 
@@ -61,10 +61,10 @@ function defLineOf(name: string): number {
 }
 
 beforeAll(async () => {
-  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codegraph-cg38-'));
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-graph-cg38-'));
   fs.cpSync(path.join(__dirname, 'fixtures', FIXTURE), dir, { recursive: true });
-  fs.rmSync(path.join(dir, '.codegraph'), { recursive: true, force: true });
-  cg = CodeGraph.initSync(dir);
+  fs.rmSync(path.join(dir, '.afyx-graph'), { recursive: true, force: true });
+  cg = AfyxGraph.initSync(dir);
   await cg.indexAll();
 }, 180_000);
 

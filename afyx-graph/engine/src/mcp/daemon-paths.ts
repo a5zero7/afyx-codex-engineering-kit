@@ -1,14 +1,14 @@
 /**
  * Daemon socket + lockfile path helpers — issue #411.
  *
- * One shared `codegraph serve --mcp` daemon per project root means we need a
+ * One shared `afyx-graph serve --mcp` daemon per project root means we need a
  * stable, project-keyed rendezvous between cooperating processes. The IPC
  * surface area is just two file paths:
  *
  *   - `daemon.sock` — Unix domain socket / named pipe the daemon listens on.
  *   - `daemon.pid` — atomic-create lockfile holding the daemon's pid + version.
  *
- * Both live under `.codegraph/` so the project-scoped uninstall (`codegraph
+ * Both live under `.afyx-graph/` so the project-scoped uninstall (`afyx-graph
  * uninit`) sweeps them up for free.
  *
  * Special-case: Unix domain socket paths have a hard length limit (~104 on
@@ -32,7 +32,7 @@ import * as crypto from 'crypto';
 import * as net from 'net';
 import * as os from 'os';
 import * as path from 'path';
-import { getCodeGraphDir } from '../directory';
+import { getAfyxGraphDir } from '../directory';
 
 /** Soft upper bound for in-project socket paths. */
 const POSIX_SOCKET_PATH_LIMIT = 100;
@@ -50,7 +50,7 @@ function projectHash(projectRoot: string): string {
  * path without talking to each other.
  */
 function tmpdirSocketPath(projectRoot: string): string {
-  return path.join(os.tmpdir(), `codegraph-${projectHash(projectRoot)}.sock`);
+  return path.join(os.tmpdir(), `afyx-graph-${projectHash(projectRoot)}.sock`);
 }
 
 /**
@@ -62,16 +62,16 @@ function tmpdirSocketPath(projectRoot: string): string {
  *
  *   - Windows: a single named pipe (lives in the kernel pipe namespace, not on
  *     the project FS, so neither the length nor the ExFAT hazard applies).
- *   - Short in-project path: `[ .codegraph/daemon.sock , <tmpdir> ]` — try the
+ *   - Short in-project path: `[ .afyx-graph/daemon.sock , <tmpdir> ]` — try the
  *     project first, fall back to tmpdir if its FS can't host a socket (#997).
  *   - Long in-project path (deep monorepos, Bazel out dirs): `[ <tmpdir> ]` only
  *     — bind would throw ENAMETOOLONG, so we skip straight to tmpdir.
  */
 export function getDaemonSocketCandidates(projectRoot: string): string[] {
   if (process.platform === 'win32') {
-    return [`\\\\.\\pipe\\codegraph-${projectHash(projectRoot)}`];
+    return [`\\\\.\\pipe\\afyx-graph-${projectHash(projectRoot)}`];
   }
-  const inProject = path.join(getCodeGraphDir(projectRoot), 'daemon.sock');
+  const inProject = path.join(getAfyxGraphDir(projectRoot), 'daemon.sock');
   const tmp = tmpdirSocketPath(projectRoot);
   if (inProject.length > POSIX_SOCKET_PATH_LIMIT) return [tmp];
   return [inProject, tmp];
@@ -91,7 +91,7 @@ export function getDaemonSocketPath(projectRoot: string): string {
 
 /** Absolute path to the daemon pid lockfile for `projectRoot`. */
 export function getDaemonPidPath(projectRoot: string): string {
-  return path.join(getCodeGraphDir(projectRoot), 'daemon.pid');
+  return path.join(getAfyxGraphDir(projectRoot), 'daemon.pid');
 }
 
 /** Structured contents of the pid lockfile. */
@@ -113,7 +113,7 @@ export function canProbeDaemonIdentity(info: DaemonLockInfo): boolean {
 }
 
 /**
- * Verify that the process named by a lockfile is the CodeGraph daemon serving
+ * Verify that the process named by a lockfile is the Afyx Graph daemon serving
  * its socket. A bare PID liveness probe is insufficient because OSes reuse PIDs
  * after an OOM/SIGKILL (#1553).
  */
@@ -150,7 +150,7 @@ export function probeDaemonIdentity(info: DaemonLockInfo, timeoutMs = 1_000): Pr
         finish(
           hello.protocol === 1 &&
           hello.pid === info.pid &&
-          (info.version === 'unknown' || hello.codegraph === info.version)
+          (info.version === 'unknown' || hello.afyxGraph === info.version)
         );
       } catch {
         finish(false);

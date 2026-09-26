@@ -14,7 +14,7 @@ import { execFileSync } from 'child_process';
 import { scanDirectory } from '../src/extraction';
 
 function createTempDir(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'codegraph-test-'));
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-graph-test-'));
 }
 
 // git < 2.36 rejects `ls-files -s --recurse-submodules` outright: the guard in
@@ -23,7 +23,7 @@ function createTempDir(): string {
 // repo has submodules — so on Ubuntu 22.04 (git 2.34.1), Debian 11 (2.30.2) and
 // older, every call threw, `getGitVisibleFiles` swallowed it, and the whole
 // git-visible path went with it: `includeIgnored`, gitlink recursion and the
-// `codegraph.json` `include` allowlist all silently stopped applying (#1549).
+// `afyx-graph.json` `include` allowlist all silently stopped applying (#1549).
 //
 // A PATH shim reproduces that on any git version, which is what makes this
 // testable in CI at all.
@@ -82,11 +82,11 @@ describe('Old git without `ls-files -s --recurse-submodules` support (#1549)', (
   it('still honours includeIgnored when `ls-files --recurse-submodules` is unsupported', () => {
     const root = path.join(tempDir, 'root');
     makeRepo(root, 'a');
-    // An embedded repo that .gitignore excludes but codegraph.json opts back in.
+    // An embedded repo that .gitignore excludes but afyx-graph.json opts back in.
     makeRepo(path.join(root, 'dir_b'), 'b');
     fs.writeFileSync(path.join(root, '.gitignore'), 'dir_b/\n');
     fs.writeFileSync(
-      path.join(root, 'codegraph.json'),
+      path.join(root, 'afyx-graph.json'),
       JSON.stringify({ includeIgnored: ['dir_b/'] }),
     );
     runGit(root, 'add', '-A');
