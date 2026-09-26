@@ -124,6 +124,28 @@ def validate_manifest(violations: list[str]) -> None:
         violations.append(f"duplicate scenario_id: {scenario_id!r}")
 
 
+def validate_environment(violations: list[str]) -> None:
+    path = EVAL_ROOT / "environment.json"
+    try:
+        environment = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        violations.append(f"environment.json is not readable JSON: {error}")
+        return
+    if environment.get("schema_version") != 2:
+        violations.append("environment.json schema_version must be 2")
+    if "afyx_commit" in environment:
+        violations.append("environment.json must not carry the ambiguous top-level afyx_commit")
+    repository = environment.get("repository")
+    if not isinstance(repository, dict):
+        violations.append("environment.json requires a repository object")
+        return
+    subject = repository.get("benchmark_subject_commit")
+    if not isinstance(subject, str) or not re.fullmatch(r"[0-9a-f]{40}", subject):
+        violations.append("repository.benchmark_subject_commit must be a full 40-hex commit SHA")
+    if not repository.get("branch"):
+        violations.append("repository.branch is required")
+
+
 def validate_odoo_headers(violations: list[str]) -> None:
     references = sorted(ODOO_REFERENCES.glob("odoo-*.md"))
     if not references:
@@ -154,6 +176,7 @@ def validate_odoo_headers(violations: list[str]) -> None:
 def main() -> int:
     violations: list[str] = []
     validate_manifest(violations)
+    validate_environment(violations)
     validate_odoo_headers(violations)
     if violations:
         print(f"Static evaluation validation failed ({len(violations)} violation(s)):")
