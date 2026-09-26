@@ -387,7 +387,11 @@ try {
     $previousCodexHome = $env:CODEX_HOME
     try {
         $env:CODEX_HOME = $codexHome
-        $skip = Invoke-TestScript $mainInstallerPath @('-SkillsRoot', (Join-Path $integrationRoot 'skills'), '-SkipUsageTracker', '-WhatIf', '-Confirm:$false') $null
+        # Hermetic Codex host: the installer refuses to run without a Codex CLI or VS Code extension, and CI runners have neither.
+        $fakeCodexBin = Join-Path $integrationRoot 'fake-codex-bin'
+        New-Item -ItemType Directory -Path $fakeCodexBin -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $fakeCodexBin 'codex.cmd') -Value '@echo off' -Encoding ascii
+        $skip = Invoke-TestScript $mainInstallerPath @('-SkillsRoot', (Join-Path $integrationRoot 'skills'), '-SkipUsageTracker', '-WhatIf', '-Confirm:$false') $null @{ PATH = ($fakeCodexBin + [IO.Path]::PathSeparator + $env:PATH) }
         Assert-Equal $skip.ExitCode 0 "Main installer skip path; stderr: $($skip.Error)"
         if ($skip.Output -notmatch 'Codex Usage Tracking: skipped') { throw 'Main installer did not report optional skip.' }
         if (-not (Test-Path -LiteralPath $installedStop -PathType Leaf)) { throw 'Declining tracker update removed an existing installation.' }
