@@ -42,6 +42,15 @@ function inodeOf(file: string): string | null {
   }
 }
 
+/** Size of a file in bytes, or 0 when it cannot be read. */
+function sizeOnDisk(file: string): number {
+  try {
+    return fs.statSync(file).size;
+  } catch {
+    return 0;
+  }
+}
+
 /** Create every schema object. Without FTS5 the full-text section is skipped and the rest still created (#1532). */
 function createSchema(db: SqliteDatabase): boolean {
   const { head, fts, tail } = splitSchema();
@@ -225,12 +234,7 @@ export class DatabaseConnection {
 
   /** Main file size in bytes (0 for in-memory or unknown); the WAL valve scales its caps with it. */
   getDbFileSizeBytes(): number {
-    if (!this.dbPath || this.dbPath === ':memory:') return 0;
-    try {
-      return fs.statSync(this.dbPath).size;
-    } catch {
-      return 0;
-    }
+    return !this.dbPath || this.dbPath === ':memory:' ? 0 : sizeOnDisk(this.dbPath);
   }
 
   /** Current `wal_autocheckpoint` interval in pages (0 = disabled). */
