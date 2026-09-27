@@ -5,6 +5,8 @@
  */
 
 import { SqliteDatabase, SqliteStatement } from './sqlite-adapter';
+import { GraphWriter } from './graph-writer';
+import { SQLITE_PARAM_CHUNK_SIZE } from './sql-limits';
 import {
   Node,
   Edge,
@@ -21,7 +23,6 @@ import { safeJsonParse } from '../utils';
 import { kindBonus, nameMatchBonus, scorePathRelevance } from '../search/query-utils';
 import { parseQuery, boundedEditDistance } from '../search/query-parser';
 import { isGeneratedFile } from '../extraction/generated-detection';
-import { splitIdentifierSegments } from '../search/identifier-segments';
 
 /**
  * Files that should not be candidates for "dominant file" detection: test/spec
@@ -52,8 +53,6 @@ function isLowValueFile(filePath: string, generated?: ReadonlySet<string>): bool
     isGeneratedFile(filePath)
   );
 }
-
-const SQLITE_PARAM_CHUNK_SIZE = 500;
 
 /**
  * A SQL predicate: is the node aliased `alias` a member an INTERFACE declares?
@@ -156,21 +155,6 @@ interface UnresolvedRefRow {
 }
 
 /**
- * Last segment of a (possibly dotted/qualified) reference name — the part a
- * new symbol's plain node name could match: 'util.greet' → 'greet',
- * 'mod::fn' → 'fn', 'greet' → 'greet'. Written to unresolved_refs.name_tail
- * when a ref is marked failed, so the #1240 retry lookup can match dotted
- * refs against newly-added node names.
- */
-function referenceNameTail(referenceName: string): string {
-  // Erlang refs carry a written arity (`f/1`, `mod::fn/2` — #1610); the tail a
-  // new symbol's plain name could match is the arity-less function name.
-  const base = referenceName.replace(/\/\d{1,3}$/, '') || referenceName;
-  const idx = Math.max(base.lastIndexOf('.'), base.lastIndexOf(':'));
-  return idx >= 0 ? base.slice(idx + 1) : base;
-}
-
-/**
  * Convert database row to Node object
  */
 function rowToNode(row: NodeRow): Node {
@@ -236,6 +220,8 @@ function rowToFileRecord(row: FileRow): FileRecord {
  */
 export class QueryBuilder {
   private db: SqliteDatabase;
+  /** Every persisted write is delegated here; this class keeps the reads and the row cache. */
+  private writer: GraphWriter;
 
   // Project-name tokens (go.mod / package.json / repo dir), normalized. A query
   // word matching one is dropped from path-relevance scoring — it names the
@@ -253,28 +239,16 @@ export class QueryBuilder {
 
   // Prepared statements (lazily initialized)
   private stmts: {
-    insertNode?: SqliteStatement;
-    updateNode?: SqliteStatement;
-    deleteNode?: SqliteStatement;
-    deleteNodesByFile?: SqliteStatement;
     getNodeById?: SqliteStatement;
     getNodesByFile?: SqliteStatement;
     getNodesByKind?: SqliteStatement;
-    insertEdge?: SqliteStatement;
-    upsertFile?: SqliteStatement;
-    deleteEdgesBySource?: SqliteStatement;
     deleteEdgesByTarget?: SqliteStatement;
     getEdgesBySource?: SqliteStatement;
     getEdgesByTarget?: SqliteStatement;
     getUnresolvedFromNode?: SqliteStatement;
     getUnresolvedInFile?: SqliteStatement;
-    insertFile?: SqliteStatement;
-    updateFile?: SqliteStatement;
-    deleteFile?: SqliteStatement;
     getFileByPath?: SqliteStatement;
     getAllFiles?: SqliteStatement;
-    insertUnresolved?: SqliteStatement;
-    deleteUnresolvedByNode?: SqliteStatement;
     getUnresolvedByName?: SqliteStatement;
     getNodesByName?: SqliteStatement;
     getNodesByNamePrefix?: SqliteStatement;
@@ -285,64 +259,24 @@ export class QueryBuilder {
     getUnresolvedBatchAfter?: SqliteStatement;
     getUnresolvedPrerequisitesAfter?: SqliteStatement;
     getUnresolvedDependentsAfter?: SqliteStatement;
-    deleteRefsByRowIdsFull?: SqliteStatement;
     getAllFilePaths?: SqliteStatement;
     getAllNodeNames?: SqliteStatement;
     getDominantFile?: SqliteStatement;
     getTopRouteFile?: SqliteStatement;
     getRoutingManifest?: SqliteStatement;
-    insertNameSegment?: SqliteStatement;
   } = {};
-
-  // Names whose segments were already written this session — skips re-splitting
-  // and re-inserting for the same-named nodes that repeat across files ("get",
-  // "render", …). Purely a write-path fast path; INSERT OR IGNORE is the
-  // correctness backstop. Bounded so a pathological repo can't grow it forever.
-  private segmentedNames: Set<string> = new Set();
-  private static readonly MAX_SEGMENTED_NAMES = 65536;
-
-  // Multi-row INSERT statements, cached per (statement kind × row count). The
-  // bulk write path decomposes N rows into a few fixed batch sizes so each
-  // size's statement is prepared once and reused — one .run() binds a whole
-  // chunk instead of one row, which is where the per-call overhead lives.
-  // Row order within and across chunks is the input order, so rowid assignment
-  // (and therefore resolution's insertion-order disambiguation) is identical
-  // to the one-row-per-run path.
-  private batchStmts: Map<string, SqliteStatement> = new Map();
-  private static readonly BATCH_SIZES: readonly number[] = [128, 32, 8, 1];
-
-  /**
-   * Run `rows` through a multi-row `INSERT` built as `head + (tuple,)*n`,
-   * decomposed greedily into the cached batch sizes. Preserves row order.
-   */
-  private runBatched(kind: string, head: string, tuple: string, rows: unknown[][]): void {
-    if (rows.length === 0) return;
-    let i = 0;
-    for (const size of QueryBuilder.BATCH_SIZES) {
-      while (rows.length - i >= size) {
-        const key = `${kind}:${size}`;
-        let stmt = this.batchStmts.get(key);
-        if (!stmt) {
-          stmt = this.db.prepare(head + new Array(size).fill(tuple).join(','));
-          this.batchStmts.set(key, stmt);
-        }
-        if (size === 1) {
-          stmt.run(...rows[i]!);
-        } else {
-          const params: unknown[] = [];
-          for (let r = 0; r < size; r++) {
-            const row = rows[i + r]!;
-            for (let c = 0; c < row.length; c++) params.push(row[c]);
-          }
-          stmt.run(...params);
-        }
-        i += size;
-      }
-    }
-  }
 
   constructor(db: SqliteDatabase) {
     this.db = db;
+    this.writer = new GraphWriter(db, {
+      forgetNode: (id) => { this.nodeCache.delete(id); },
+      forgetFile: (filePath) => {
+        for (const [id, node] of this.nodeCache) {
+          if (node.filePath === filePath) this.nodeCache.delete(id);
+        }
+      },
+      forgetAll: () => { this.nodeCache.clear(); },
+    });
     // Detect FTS5 availability once (#1532)
     try {
       db.prepare("SELECT * FROM nodes_fts LIMIT 0").get();
@@ -367,7 +301,7 @@ export class QueryBuilder {
   rebind(db: SqliteDatabase): void {
     this.db = db;
     this.stmts = {};
-    this.batchStmts.clear();
+    this.writer.rebind(db);
   }
 
   /** Set the normalized project-name tokens used to down-weight non-discriminative
@@ -404,165 +338,14 @@ export class QueryBuilder {
    * Insert a new node
    */
   insertNode(node: Node): void {
-    if (!this.stmts.insertNode) {
-      this.stmts.insertNode = this.db.prepare(`
-        INSERT OR REPLACE INTO nodes (
-          id, kind, name, qualified_name, file_path, language,
-          start_line, end_line, start_column, end_column,
-          docstring, signature, visibility,
-          is_exported, is_async, is_static, is_abstract,
-          decorators, type_parameters, return_type, updated_at
-        ) VALUES (
-          @id, @kind, @name, @qualifiedName, @filePath, @language,
-          @startLine, @endLine, @startColumn, @endColumn,
-          @docstring, @signature, @visibility,
-          @isExported, @isAsync, @isStatic, @isAbstract,
-          @decorators, @typeParameters, @returnType, @updatedAt
-        )
-      `);
-    }
-
-    // Validate required fields to prevent SQLite bind errors
-    if (!node.id || !node.kind || !node.name || !node.filePath || !node.language) {
-      console.error('[Afyx Graph] Skipping node with missing required fields:', {
-        id: node.id,
-        kind: node.kind,
-        name: node.name,
-        filePath: node.filePath,
-        language: node.language,
-      });
-      return;
-    }
-
-    // INSERT OR REPLACE may overwrite a node we have cached. Drop the
-    // stale entry so the next getNodeById sees the new row, not the old
-    // one (matches the cache-invalidation pattern used by updateNode and
-    // deleteNode below).
-    this.nodeCache.delete(node.id);
-
-    this.stmts.insertNode.run({
-      id: node.id,
-      kind: node.kind,
-      name: node.name,
-      qualifiedName: node.qualifiedName ?? node.name,
-      filePath: node.filePath,
-      language: node.language,
-      startLine: node.startLine ?? 0,
-      endLine: node.endLine ?? 0,
-      startColumn: node.startColumn ?? 0,
-      endColumn: node.endColumn ?? 0,
-      docstring: node.docstring ?? null,
-      signature: node.signature ?? null,
-      visibility: node.visibility ?? null,
-      isExported: node.isExported ? 1 : 0,
-      isAsync: node.isAsync ? 1 : 0,
-      isStatic: node.isStatic ? 1 : 0,
-      isAbstract: node.isAbstract ? 1 : 0,
-      decorators: node.decorators ? JSON.stringify(node.decorators) : null,
-      typeParameters: node.typeParameters ? JSON.stringify(node.typeParameters) : null,
-      returnType: node.returnType ?? null,
-      updatedAt: node.updatedAt ?? Date.now(),
-    });
-
-    // Segment vocabulary rides the same write path (and transaction) so it can
-    // never drift ahead of the nodes it describes. Deletes intentionally leave
-    // orphans behind — vocab rows are proposals re-verified against nodes
-    // before use, and a full index clears the table at its start. File nodes
-    // are excluded: a file's basename duplicates the symbols inside it
-    // (state-machine.ts / OrderStateMachine), which double-counts every
-    // concept and defeats the singleton-vs-cluster rarity statistics. Import
-    // nodes are excluded too (#1144): they're named after module specifiers
-    // ("external-unindexed-pkg", "./utils/helpers"), not symbols — an
-    // import-only name can never be surfaced (getSegmentMatches requires a
-    // real definition), so its rows would only inflate the rarity statistics.
-    if (this.isSegmentableKind(node.kind)) this.insertNameSegments(node.name);
-  }
-
-  /** Which node kinds contribute their name to the segment vocabulary — the
-   *  single gate shared by insertNode, updateNode, and the rebuild page query
-   *  (getDistinctNodeNames), so the write paths can't drift apart. */
-  private isSegmentableKind(kind: string): boolean {
-    return kind !== 'file' && kind !== 'import';
-  }
-
-  /** Write `name`'s segments into name_segment_vocab (idempotent). */
-  private insertNameSegments(name: string): void {
-    const rows: unknown[][] = [];
-    this.collectNameSegmentRows(name, rows);
-    this.runBatched(
-      'insertNameSegments',
-      'INSERT OR IGNORE INTO name_segment_vocab (segment, name) VALUES ',
-      '(?,?)',
-      rows
-    );
+    this.writer.nodes.insert(node);
   }
 
   /**
    * Insert multiple nodes in a transaction
    */
   insertNodes(nodes: Node[]): void {
-    this.db.transaction(() => {
-      // Bulk path: same semantics as insertNode() per row (validation, cache
-      // invalidation, segment vocab), but bound as multi-row INSERTs — the
-      // per-.run() call overhead dominates the store phase on full indexes.
-      const rows: unknown[][] = [];
-      const segmentRows: unknown[][] = [];
-      for (const node of nodes) {
-        if (!node.id || !node.kind || !node.name || !node.filePath || !node.language) {
-          console.error('[Afyx Graph] Skipping node with missing required fields:', {
-            id: node.id,
-            kind: node.kind,
-            name: node.name,
-            filePath: node.filePath,
-            language: node.language,
-          });
-          continue;
-        }
-        this.nodeCache.delete(node.id);
-        rows.push([
-          node.id,
-          node.kind,
-          node.name,
-          node.qualifiedName ?? node.name,
-          node.filePath,
-          node.language,
-          node.startLine ?? 0,
-          node.endLine ?? 0,
-          node.startColumn ?? 0,
-          node.endColumn ?? 0,
-          node.docstring ?? null,
-          node.signature ?? null,
-          node.visibility ?? null,
-          node.isExported ? 1 : 0,
-          node.isAsync ? 1 : 0,
-          node.isStatic ? 1 : 0,
-          node.isAbstract ? 1 : 0,
-          node.decorators ? JSON.stringify(node.decorators) : null,
-          node.typeParameters ? JSON.stringify(node.typeParameters) : null,
-          node.returnType ?? null,
-          node.updatedAt ?? Date.now(),
-        ]);
-        if (this.isSegmentableKind(node.kind)) this.collectNameSegmentRows(node.name, segmentRows);
-      }
-      this.runBatched(
-        'insertNodes',
-        `INSERT OR REPLACE INTO nodes (
-          id, kind, name, qualified_name, file_path, language,
-          start_line, end_line, start_column, end_column,
-          docstring, signature, visibility,
-          is_exported, is_async, is_static, is_abstract,
-          decorators, type_parameters, return_type, updated_at
-        ) VALUES `,
-        '(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-        rows
-      );
-      this.runBatched(
-        'insertNameSegments',
-        'INSERT OR IGNORE INTO name_segment_vocab (segment, name) VALUES ',
-        '(?,?)',
-        segmentRows
-      );
-    })();
+    this.writer.nodes.insertMany(nodes);
   }
 
   /**
@@ -582,145 +365,28 @@ export class QueryBuilder {
     refs: UnresolvedReference[];
     file: FileRecord;
   }): void {
-    this.db.transaction(() => {
-      this.insertNodes(bundle.nodes);
-      if (bundle.edges.length > 0) {
-        const rows: unknown[][] = [];
-        for (const edge of bundle.edges) {
-          rows.push([
-            edge.source,
-            edge.target,
-            edge.kind,
-            edge.metadata ? JSON.stringify(edge.metadata) : null,
-            edge.line ?? null,
-            edge.column ?? null,
-            edge.provenance ?? null,
-          ]);
-        }
-        this.runBatched(
-          'insertEdges',
-          'INSERT OR IGNORE INTO edges (source, target, kind, metadata, line, col, provenance) VALUES ',
-          '(?,?,?,?,?,?,?)',
-          rows
-        );
-      }
-      if (bundle.refs.length > 0) this.insertUnresolvedRefsBatch(bundle.refs);
-      this.upsertFile(bundle.file);
-    })();
-  }
-
-  /**
-   * Collect (segment, name) rows for a name, honouring the same session-dedupe
-   * semantics as insertNameSegments(). Shared by the bulk write paths.
-   */
-  private collectNameSegmentRows(name: string, out: unknown[][]): void {
-    if (this.segmentedNames.has(name)) return;
-    if (this.segmentedNames.size >= QueryBuilder.MAX_SEGMENTED_NAMES) this.segmentedNames.clear();
-    this.segmentedNames.add(name);
-    for (const segment of splitIdentifierSegments(name)) out.push([segment, name]);
+    this.writer.storeBundle(bundle);
   }
 
   /**
    * Update an existing node
    */
   updateNode(node: Node): void {
-    if (!this.stmts.updateNode) {
-      this.stmts.updateNode = this.db.prepare(`
-        UPDATE nodes SET
-          kind = @kind,
-          name = @name,
-          qualified_name = @qualifiedName,
-          file_path = @filePath,
-          language = @language,
-          start_line = @startLine,
-          end_line = @endLine,
-          start_column = @startColumn,
-          end_column = @endColumn,
-          docstring = @docstring,
-          signature = @signature,
-          visibility = @visibility,
-          is_exported = @isExported,
-          is_async = @isAsync,
-          is_static = @isStatic,
-          is_abstract = @isAbstract,
-          decorators = @decorators,
-          type_parameters = @typeParameters,
-          return_type = @returnType,
-          updated_at = @updatedAt
-        WHERE id = @id
-      `);
-    }
-
-    // Invalidate cache before update
-    this.nodeCache.delete(node.id);
-
-    // Validate required fields
-    if (!node.id || !node.kind || !node.name || !node.filePath || !node.language) {
-      console.error('[Afyx Graph] Skipping node update with missing required fields:', node.id);
-      return;
-    }
-
-    this.stmts.updateNode.run({
-      id: node.id,
-      kind: node.kind,
-      name: node.name,
-      qualifiedName: node.qualifiedName ?? node.name,
-      filePath: node.filePath,
-      language: node.language,
-      startLine: node.startLine ?? 0,
-      endLine: node.endLine ?? 0,
-      startColumn: node.startColumn ?? 0,
-      endColumn: node.endColumn ?? 0,
-      docstring: node.docstring ?? null,
-      signature: node.signature ?? null,
-      visibility: node.visibility ?? null,
-      isExported: node.isExported ? 1 : 0,
-      isAsync: node.isAsync ? 1 : 0,
-      isStatic: node.isStatic ? 1 : 0,
-      isAbstract: node.isAbstract ? 1 : 0,
-      decorators: node.decorators ? JSON.stringify(node.decorators) : null,
-      typeParameters: node.typeParameters ? JSON.stringify(node.typeParameters) : null,
-      returnType: node.returnType ?? null,
-      updatedAt: node.updatedAt ?? Date.now(),
-    });
-
-    // updateNode is a second real write path to `nodes` — framework
-    // post-extract passes rewrite names through it (NestJS route prefixing),
-    // and a renamed node's new name must reach the segment vocabulary just
-    // like an inserted one's (#1141). Without this the rename left the new
-    // name permanently unsearchable: the old name's rows became honest-gate
-    // orphans and the only backfill is gated on the vocab being EMPTY.
-    // insertNameSegments is idempotent (in-memory set + INSERT OR IGNORE),
-    // so no name-changed check is needed.
-    if (this.isSegmentableKind(node.kind)) this.insertNameSegments(node.name);
+    this.writer.nodes.update(node);
   }
 
   /**
    * Delete a node by ID
    */
   deleteNode(id: string): void {
-    if (!this.stmts.deleteNode) {
-      this.stmts.deleteNode = this.db.prepare('DELETE FROM nodes WHERE id = ?');
-    }
-    // Invalidate cache
-    this.nodeCache.delete(id);
-    this.stmts.deleteNode.run(id);
+    this.writer.nodes.delete(id);
   }
 
   /**
    * Delete all nodes for a file
    */
   deleteNodesByFile(filePath: string): void {
-    if (!this.stmts.deleteNodesByFile) {
-      this.stmts.deleteNodesByFile = this.db.prepare('DELETE FROM nodes WHERE file_path = ?');
-    }
-    // Invalidate cache for nodes in this file
-    for (const [id, node] of this.nodeCache) {
-      if (node.filePath === filePath) {
-        this.nodeCache.delete(id);
-      }
-    }
-    this.stmts.deleteNodesByFile.run(filePath);
+    this.writer.nodes.deleteByFile(filePath);
   }
 
   // ===========================================================================
@@ -731,8 +397,7 @@ export class QueryBuilder {
    *  node write path repopulates it as files (re-)index, so the end state is
    *  exactly the current names with no orphan rows. */
   clearNameSegmentVocab(): void {
-    this.db.exec('DELETE FROM name_segment_vocab');
-    this.segmentedNames.clear();
+    this.writer.vocabulary.clear();
   }
 
   /** True when the vocab has no rows — an index built before the table existed.
@@ -754,16 +419,7 @@ export class QueryBuilder {
 
   /** Insert segments for a batch of names in one transaction (vocab heal path). */
   insertNameSegmentsBatch(names: string[]): void {
-    this.db.transaction(() => {
-      const rows: unknown[][] = [];
-      for (const name of names) this.collectNameSegmentRows(name, rows);
-      this.runBatched(
-        'insertNameSegments',
-        'INSERT OR IGNORE INTO name_segment_vocab (segment, name) VALUES ',
-        '(?,?)',
-        rows
-      );
-    })();
+    this.writer.vocabulary.addAll(names);
   }
 
   /**
@@ -903,25 +559,6 @@ export class QueryBuilder {
         this.cacheNode(node);
       }
     }
-    return out;
-  }
-
-  private getExistingNodeIds(ids: readonly string[]): Set<string> {
-    const out = new Set<string>();
-    if (ids.length === 0) return out;
-
-    const uniqueIds = [...new Set(ids)];
-    for (let i = 0; i < uniqueIds.length; i += SQLITE_PARAM_CHUNK_SIZE) {
-      const chunk = uniqueIds.slice(i, i + SQLITE_PARAM_CHUNK_SIZE);
-      const placeholders = chunk.map(() => '?').join(',');
-      const rows = this.db
-        .prepare(`SELECT id FROM nodes WHERE id IN (${placeholders})`)
-        .all(...chunk) as { id: string }[];
-      for (const row of rows) {
-        out.add(row.id);
-      }
-    }
-
     return out;
   }
 
@@ -1799,70 +1436,21 @@ export class QueryBuilder {
    * Insert a new edge
    */
   insertEdge(edge: Edge): void {
-    if (!this.stmts.insertEdge) {
-      this.stmts.insertEdge = this.db.prepare(`
-        INSERT OR IGNORE INTO edges (source, target, kind, metadata, line, col, provenance)
-        VALUES (@source, @target, @kind, @metadata, @line, @col, @provenance)
-      `);
-    }
-
-    this.stmts.insertEdge.run({
-      source: edge.source,
-      target: edge.target,
-      kind: edge.kind,
-      metadata: edge.metadata ? JSON.stringify(edge.metadata) : null,
-      line: edge.line ?? null,
-      col: edge.column ?? null,
-      provenance: edge.provenance ?? null,
-    });
+    this.writer.edges.insert(edge);
   }
 
   /**
    * Insert multiple edges in a transaction
    */
   insertEdges(edges: Edge[]): void {
-    if (edges.length === 0) return;
-
-    this.db.transaction(() => {
-      const endpointIds = new Set<string>();
-      for (const edge of edges) {
-        endpointIds.add(edge.source);
-        endpointIds.add(edge.target);
-      }
-      const existingNodeIds = this.getExistingNodeIds([...endpointIds]);
-
-      const rows: unknown[][] = [];
-      for (const edge of edges) {
-        if (!existingNodeIds.has(edge.source) || !existingNodeIds.has(edge.target)) {
-          continue;
-        }
-        rows.push([
-          edge.source,
-          edge.target,
-          edge.kind,
-          edge.metadata ? JSON.stringify(edge.metadata) : null,
-          edge.line ?? null,
-          edge.column ?? null,
-          edge.provenance ?? null,
-        ]);
-      }
-      this.runBatched(
-        'insertEdges',
-        'INSERT OR IGNORE INTO edges (source, target, kind, metadata, line, col, provenance) VALUES ',
-        '(?,?,?,?,?,?,?)',
-        rows
-      );
-    })();
+    this.writer.edges.insertMany(edges);
   }
 
   /**
    * Delete all edges from a source node
    */
   deleteEdgesBySource(sourceId: string): void {
-    if (!this.stmts.deleteEdgesBySource) {
-      this.stmts.deleteEdgesBySource = this.db.prepare('DELETE FROM edges WHERE source = ?');
-    }
-    this.stmts.deleteEdgesBySource.run(sourceId);
+    this.writer.edges.deleteBySource(sourceId);
   }
 
   /**
@@ -2686,35 +2274,7 @@ export class QueryBuilder {
    * Insert or update a file record
    */
   upsertFile(file: FileRecord): void {
-    if (!this.stmts.upsertFile) {
-      this.stmts.upsertFile = this.db.prepare(`
-        INSERT INTO files (path, content_hash, language, size, modified_at, indexed_at, node_count, errors, generated)
-        VALUES (@path, @contentHash, @language, @size, @modifiedAt, @indexedAt, @nodeCount, @errors, @generated)
-        ON CONFLICT(path) DO UPDATE SET
-          content_hash = @contentHash,
-          language = @language,
-          size = @size,
-          modified_at = @modifiedAt,
-          indexed_at = @indexedAt,
-          node_count = @nodeCount,
-          errors = @errors,
-          generated = @generated
-      `);
-    }
-
-    this.stmts.upsertFile.run({
-      path: file.path,
-      contentHash: file.contentHash,
-      language: file.language,
-      size: file.size,
-      modifiedAt: file.modifiedAt,
-      indexedAt: file.indexedAt,
-      nodeCount: file.nodeCount,
-      errors: file.errors ? JSON.stringify(file.errors) : null,
-      // The upsert always REWRITES the flag: a file that loses its banner in an
-      // edit must lose the flag on the next sync, not keep a stale 1.
-      generated: file.generated ? 1 : 0,
-    });
+    this.writer.files.upsert(file);
   }
 
   /**
@@ -2892,13 +2452,7 @@ export class QueryBuilder {
    * Delete a file record and its nodes
    */
   deleteFile(filePath: string): void {
-    this.db.transaction(() => {
-      this.deleteNodesByFile(filePath);
-      if (!this.stmts.deleteFile) {
-        this.stmts.deleteFile = this.db.prepare('DELETE FROM files WHERE path = ?');
-      }
-      this.stmts.deleteFile.run(filePath);
-    })();
+    this.writer.files.delete(filePath);
   }
 
   /**
@@ -2989,64 +2543,21 @@ export class QueryBuilder {
    * Insert an unresolved reference
    */
   insertUnresolvedRef(ref: UnresolvedReference): void {
-    if (!this.stmts.insertUnresolved) {
-      this.stmts.insertUnresolved = this.db.prepare(`
-        INSERT INTO unresolved_refs (from_node_id, reference_name, reference_kind, line, col, candidates, file_path, language)
-        VALUES (@fromNodeId, @referenceName, @referenceKind, @line, @col, @candidates, @filePath, @language)
-      `);
-    }
-
-    this.stmts.insertUnresolved.run({
-      fromNodeId: ref.fromNodeId,
-      referenceName: ref.referenceName,
-      referenceKind: ref.referenceKind,
-      line: ref.line,
-      col: ref.column,
-      candidates: ref.candidates ? JSON.stringify(ref.candidates) : null,
-      filePath: ref.filePath ?? '',
-      language: ref.language ?? 'unknown',
-    });
+    this.writer.refs.insert(ref);
   }
 
   /**
    * Insert multiple unresolved references in a transaction
    */
   insertUnresolvedRefsBatch(refs: UnresolvedReference[]): void {
-    if (refs.length === 0) return;
-    const insert = this.db.transaction(() => {
-      const rows: unknown[][] = [];
-      for (const ref of refs) {
-        rows.push([
-          ref.fromNodeId,
-          ref.referenceName,
-          ref.referenceKind,
-          ref.line,
-          ref.column,
-          ref.candidates ? JSON.stringify(ref.candidates) : null,
-          ref.filePath ?? '',
-          ref.language ?? 'unknown',
-        ]);
-      }
-      this.runBatched(
-        'insertUnresolvedRefs',
-        'INSERT INTO unresolved_refs (from_node_id, reference_name, reference_kind, line, col, candidates, file_path, language) VALUES ',
-        '(?,?,?,?,?,?,?,?)',
-        rows
-      );
-    });
-    insert();
+    this.writer.refs.insertBatch(refs);
   }
 
   /**
    * Delete unresolved references from a node
    */
   deleteUnresolvedByNode(nodeId: string): void {
-    if (!this.stmts.deleteUnresolvedByNode) {
-      this.stmts.deleteUnresolvedByNode = this.db.prepare(
-        'DELETE FROM unresolved_refs WHERE from_node_id = ?'
-      );
-    }
-    this.stmts.deleteUnresolvedByNode.run(nodeId);
+    this.writer.refs.deleteByNode(nodeId);
   }
 
   /**
@@ -3252,24 +2763,14 @@ export class QueryBuilder {
    * Delete all unresolved references (after resolution)
    */
   clearUnresolvedReferences(): void {
-    this.db.exec('DELETE FROM unresolved_refs');
+    this.writer.refs.clear();
   }
 
   /**
    * Delete resolved references by their IDs
    */
   deleteResolvedReferences(fromNodeIds: string[]): void {
-    if (fromNodeIds.length === 0) return;
-    // Chunk under SQLite's parameter limit, matching every other IN-list in
-    // this file. The internal resolution path uses deleteSpecificResolvedReferences
-    // instead, but QueryBuilder is part of the public API, so a library consumer
-    // passing more ids than SQLITE_MAX_VARIABLE_NUMBER (32766 on the bundled
-    // node:sqlite) would otherwise hit "too many SQL variables". (#540, #1001)
-    for (let i = 0; i < fromNodeIds.length; i += SQLITE_PARAM_CHUNK_SIZE) {
-      const chunk = fromNodeIds.slice(i, i + SQLITE_PARAM_CHUNK_SIZE);
-      const placeholders = chunk.map(() => '?').join(',');
-      this.db.prepare(`DELETE FROM unresolved_refs WHERE from_node_id IN (${placeholders})`).run(...chunk);
-    }
+    this.writer.refs.deleteByNodes(fromNodeIds);
   }
 
   /**
@@ -3277,21 +2778,7 @@ export class QueryBuilder {
    * More precise than deleteResolvedReferences — only removes refs that were actually resolved.
    */
   deleteSpecificResolvedReferences(refs: Array<{ fromNodeId: string; referenceName: string; referenceKind: string }>): number {
-    if (refs.length === 0) return 0;
-    const stmt = this.db.prepare(
-      'DELETE FROM unresolved_refs WHERE from_node_id = ? AND reference_name = ? AND reference_kind = ?'
-    );
-    // Returns rows actually removed (SQLite `changes`, summed): the batched
-    // resolution loop's non-progress guard keys on this — zero removals from
-    // a batch that claimed work is the direct runaway signal (§7a.2).
-    let changed = 0;
-    const deleteMany = this.db.transaction((items: typeof refs) => {
-      for (const ref of items) {
-        changed += stmt.run(ref.fromNodeId, ref.referenceName, ref.referenceKind).changes;
-      }
-    });
-    deleteMany(refs);
-    return changed;
+    return this.writer.refs.deleteSpecific(refs);
   }
 
   /**
@@ -3303,32 +2790,7 @@ export class QueryBuilder {
    * created (#1269).
    */
   deleteReferencesByRowIds(rowIds: number[]): number {
-    if (rowIds.length === 0) return 0;
-    // One transaction for all chunks (each chunk was previously its own
-    // implicit transaction = its own WAL commit — measurable on 100k+-ref
-    // resolution persists), and the full-size chunk statement is cached so
-    // repeat calls skip the re-prepare; only the final partial chunk (if any)
-    // prepares ad hoc. Returns rows actually removed (summed `changes`) for
-    // the batched loop's non-progress guard (§7a.2).
-    let changed = 0;
-    this.db.transaction(() => {
-      for (let i = 0; i < rowIds.length; i += SQLITE_PARAM_CHUNK_SIZE) {
-        const chunk = rowIds.slice(i, i + SQLITE_PARAM_CHUNK_SIZE);
-        if (chunk.length === SQLITE_PARAM_CHUNK_SIZE) {
-          if (!this.stmts.deleteRefsByRowIdsFull) {
-            const placeholders = new Array(SQLITE_PARAM_CHUNK_SIZE).fill('?').join(',');
-            this.stmts.deleteRefsByRowIdsFull = this.db.prepare(
-              `DELETE FROM unresolved_refs WHERE id IN (${placeholders})`
-            );
-          }
-          changed += this.stmts.deleteRefsByRowIdsFull.run(...chunk).changes;
-        } else {
-          const placeholders = chunk.map(() => '?').join(',');
-          changed += this.db.prepare(`DELETE FROM unresolved_refs WHERE id IN (${placeholders})`).run(...chunk).changes;
-        }
-      }
-    })();
-    return changed;
+    return this.writer.refs.deleteByRowIds(rowIds);
   }
 
   /**
@@ -3341,18 +2803,7 @@ export class QueryBuilder {
    * tail the first time they're attempted.
    */
   markReferencesFailed(refs: Array<{ fromNodeId: string; referenceName: string; referenceKind: string }>): number {
-    if (refs.length === 0) return 0;
-    const stmt = this.db.prepare(
-      "UPDATE unresolved_refs SET status = 'failed', name_tail = ? WHERE from_node_id = ? AND reference_name = ? AND reference_kind = ?"
-    );
-    let changed = 0;
-    const markMany = this.db.transaction((items: typeof refs) => {
-      for (const ref of items) {
-        changed += stmt.run(referenceNameTail(ref.referenceName), ref.fromNodeId, ref.referenceName, ref.referenceKind).changes;
-      }
-    });
-    markMany(refs);
-    return changed;
+    return this.writer.refs.markFailed(refs);
   }
 
   /**
@@ -3364,18 +2815,7 @@ export class QueryBuilder {
    * so a sibling must not inherit this row's failure.
    */
   markReferencesFailedByRowIds(refs: Array<{ rowId: number; referenceName: string }>): number {
-    if (refs.length === 0) return 0;
-    const stmt = this.db.prepare(
-      "UPDATE unresolved_refs SET status = 'failed', name_tail = ? WHERE id = ?"
-    );
-    let changed = 0;
-    const markMany = this.db.transaction((items: typeof refs) => {
-      for (const ref of items) {
-        changed += stmt.run(referenceNameTail(ref.referenceName), ref.rowId).changes;
-      }
-    });
-    markMany(refs);
-    return changed;
+    return this.writer.refs.markFailedByRowIds(refs);
   }
 
   /**
@@ -3514,16 +2954,7 @@ export class QueryBuilder {
 
   /** Delete edges by primary key — the rebind pass's half of a re-resolution. */
   deleteEdgesByIds(edgeIds: number[]): number {
-    if (edgeIds.length === 0) return 0;
-    let changed = 0;
-    this.db.transaction(() => {
-      for (let i = 0; i < edgeIds.length; i += SQLITE_PARAM_CHUNK_SIZE) {
-        const chunk = edgeIds.slice(i, i + SQLITE_PARAM_CHUNK_SIZE);
-        const placeholders = chunk.map(() => '?').join(',');
-        changed += this.db.prepare(`DELETE FROM edges WHERE id IN (${placeholders})`).run(...chunk).changes;
-      }
-    })();
-    return changed;
+    return this.writer.edges.deleteByIds(edgeIds);
   }
 
   /**
@@ -3534,11 +2965,7 @@ export class QueryBuilder {
     edgeIds: number[],
     refs: UnresolvedReference[]
   ): number {
-    return this.db.transaction(() => {
-      const changed = this.deleteEdgesByIds(edgeIds);
-      this.insertUnresolvedRefsBatch(refs);
-      return changed;
-    })();
+    return this.writer.replaceResolutionEdges(edgeIds, refs);
   }
 
   /**
@@ -3668,9 +3095,7 @@ export class QueryBuilder {
    * Set a metadata key-value pair (upsert)
    */
   setMetadata(key: string, value: string): void {
-    this.db.prepare(
-      'INSERT INTO project_metadata (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at'
-    ).run(key, value, Date.now());
+    this.writer.setMetadata(key, value);
   }
 
   /**
@@ -3689,13 +3114,7 @@ export class QueryBuilder {
    * Clear all data from the database
    */
   clear(): void {
-    this.nodeCache.clear();
-    this.db.transaction(() => {
-      this.db.exec('DELETE FROM unresolved_refs');
-      this.db.exec('DELETE FROM edges');
-      this.db.exec('DELETE FROM nodes');
-      this.db.exec('DELETE FROM files');
-    })();
+    this.writer.clear();
   }
 }
 

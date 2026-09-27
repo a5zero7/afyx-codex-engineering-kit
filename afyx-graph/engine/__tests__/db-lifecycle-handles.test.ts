@@ -83,6 +83,22 @@ describe('database lifecycle and handles', () => {
     expect(() => removeDatabaseFiles(file)).not.toThrow();
   });
 
+  it('releases the file when initializing over an existing database fails', () => {
+    const file = path.join(scratch, 'init-fail', 'graph.db');
+    DatabaseConnection.initialize(file).close();
+    expect(() => DatabaseConnection.initialize(file)).toThrow(/UNIQUE constraint failed/);
+    expect(() => removeDatabaseFiles(file)).not.toThrow();
+    expect(fs.existsSync(file)).toBe(false);
+  });
+
+  it('releases the file when opening something that is not a database fails', () => {
+    const file = path.join(scratch, 'not-a-db', 'graph.db');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, 'this is not a sqlite database'.repeat(50));
+    expect(() => DatabaseConnection.open(file)).toThrow(/not a database/i);
+    expect(() => fs.rmSync(file)).not.toThrow();
+  });
+
   it('leaves no WAL sidecars behind after a clean close (POSIX and Windows)', () => {
     const file = path.join(scratch, 'sidecar', 'graph.db');
     const conn = DatabaseConnection.initialize(file);
