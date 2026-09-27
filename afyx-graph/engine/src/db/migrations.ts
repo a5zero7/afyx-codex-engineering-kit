@@ -1,32 +1,34 @@
 /**
- * Database Migrations
+ * Schema versioning and migrations.
  *
- * Schema versioning and migration support.
+ * Version 1 is `schema.sql`. A brand-new database is created from the current script and
+ * stamped with `CURRENT_SCHEMA_VERSION`; an older file is brought forward by applying
+ * every later migration, each in its own transaction together with the row that records it.
+ *
+ * A migration's `description` is stored in `schema_versions`, so the wording below is part
+ * of the persisted format, as is the SQL: it must keep producing the schema `schema.sql`
+ * produces.
  */
 
 import { SqliteDatabase } from './sqlite-adapter';
 
-/**
- * Current schema version
- */
+/** The schema version this build writes and expects. */
 export const CURRENT_SCHEMA_VERSION = 9;
 
-/**
- * Migration definition
- */
+/** One schema step from `version - 1` to `version`. */
 interface Migration {
   version: number;
   description: string;
   up: (db: SqliteDatabase) => void;
 }
 
-/**
- * All migrations in order
- *
- * Note: Version 1 is the initial schema, handled by schema.sql
- * Future migrations go here.
- */
-const migrations: Migration[] = [
+/** Column names of a table, for migrations that must be safe to re-run. */
+function columnsOf(db: SqliteDatabase, table: string): Set<string> {
+  const rows = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+  return new Set(rows.map((row) => row.name));
+}
+
+const MIGRATIONS: Migration[] = [
   {
     version: 2,
     description: 'Add project metadata, provenance tracking, and unresolved ref context',
@@ -49,46 +51,33 @@ const migrations: Migration[] = [
     version: 3,
     description: 'Add lower(name) expression index for memory-efficient case-insensitive lookups',
     up: (db) => {
-      db.exec(`
-        CREATE INDEX IF NOT EXISTS idx_nodes_lower_name ON nodes(lower(name));
-      `);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_nodes_lower_name ON nodes(lower(name));');
     },
   },
   {
     version: 4,
-    description:
-      'Drop redundant idx_edges_source / idx_edges_target (covered by source_kind / target_kind composites)',
+    description: 'Drop redundant idx_edges_source / idx_edges_target (covered by source_kind / target_kind composites)',
     up: (db) => {
-      db.exec(`
-        DROP INDEX IF EXISTS idx_edges_source;
-        DROP INDEX IF EXISTS idx_edges_target;
-      `);
+      db.exec('DROP INDEX IF EXISTS idx_edges_source; DROP INDEX IF EXISTS idx_edges_target;');
     },
   },
   {
     version: 5,
-    description:
-      'Add nodes.return_type — normalized return/result type for receiver-type inference (C++ singletons/factories, #645)',
+    description: 'Add nodes.return_type — normalized return/result type for receiver-type inference (C++ singletons/factories, #645)',
     up: (db) => {
-      db.exec(`
-        ALTER TABLE nodes ADD COLUMN return_type TEXT;
-      `);
+      db.exec('ALTER TABLE nodes ADD COLUMN return_type TEXT;');
     },
   },
   {
     version: 6,
-    description:
-      'Dedup duplicate edge rows and add a UNIQUE identity index so INSERT OR IGNORE actually dedups (#1034)',
+    description: 'Dedup duplicate edge rows and add a UNIQUE identity index so INSERT OR IGNORE actually dedups (#1034)',
     up: (db) => {
-      // `insertEdge` has always used `INSERT OR IGNORE`, but the edges table had
-      // no UNIQUE constraint, so nothing conflicted and byte-identical rows
-      // accumulated whenever two passes emitted the same edge. Collapse each
-      // identity group to its lowest id, then add the constraint that makes
-      // `OR IGNORE` keep its promise. IFNULL folds nullable line/col so
-      // coordinate-less edges dedup too (SQLite treats each NULL as distinct) —
-      // and it MUST match the GROUP BY exactly, or the index creation would
-      // fail on a pair the DELETE left behind. Idempotent: the index is
-      // `IF NOT EXISTS` and the DELETE is a no-op once the table is unique.
+      // `OR IGNORE` only dedups against something UNIQUE, and edges had no such constraint,
+      // so identical rows piled up whenever two passes emitted the same edge. Keep the
+      // lowest id of each identity group, then add the constraint. IFNULL folds the nullable
+      // line/col (SQLite treats each NULL as distinct) and must match the GROUP BY exactly, or
+      // the index build would fail on a pair the DELETE left behind. Re-runnable: the index is
+      // IF NOT EXISTS and the DELETE finds nothing once the table is unique.
       db.exec(`
         DELETE FROM edges
         WHERE id NOT IN (
@@ -102,14 +91,11 @@ const migrations: Migration[] = [
   },
   {
     version: 7,
-    description:
-      'Add name_segment_vocab — prose-word → symbol-name lookup for the prompt hook’s graph-derived gate',
+    description: 'Add name_segment_vocab — prose-word → symbol-name lookup for the prompt hook’s graph-derived gate',
     up: (db) => {
-      // DDL only — instant on any size database (the row-churn hazards of #1067
-      // don't apply). The table starts EMPTY on migrated databases; `sync`
-      // detects that over a populated graph and backfills batched+yielding
-      // (AfyxGraph.rebuildNameSegmentVocab), and any full index rebuilds it
-      // from scratch. Keep the definition in lockstep with schema.sql.
+      // DDL only, so instant at any size. The table starts empty on a migrated database;
+      // `sync` notices an empty vocabulary over a populated graph and backfills it in batches,
+      // and any full index rebuilds it. Keep in lockstep with schema.sql.
       db.exec(`
         CREATE TABLE IF NOT EXISTS name_segment_vocab (
           segment TEXT NOT NULL,
@@ -121,29 +107,17 @@ const migrations: Migration[] = [
   },
   {
     version: 8,
-    description:
-      'Track attempted-but-unresolvable refs as status=failed so sync can retry them when a changed file adds a matching symbol (#1240)',
+    description: 'Track attempted-but-unresolvable refs as status=failed so sync can retry them when a changed file adds a matching symbol (#1240)',
     up: (db) => {
-      // DDL only — instant on any size database. No backfill needed: rows are
-      // only ever queried by name_tail once they carry status='failed', and
-      // both fields are written together by markReferencesFailed. Legacy rows
-      // (all 'pending' after this migration) are orphans from interrupted runs
-      // that the #1187 sweep grinds down on the next sync, marking survivors
-      // failed with their tails as it goes. The tail index is partial: on a
-      // healthy index the pending set is empty and the failed set is the only
-      // population worth indexing. Keep the definitions in lockstep with
-      // schema.sql. ALTER TABLE has no IF NOT EXISTS, so guard each column for
-      // idempotency — a database created from current schema.sql already has
-      // both (matters when migrations are re-run from an older recorded
-      // version, as the v6 regression test does).
-      const cols = db.prepare('PRAGMA table_info(unresolved_refs)').all() as Array<{ name: string }>;
-      const hasColumn = (name: string) => cols.some((c) => c.name === name);
-      if (!hasColumn('status')) {
-        db.exec("ALTER TABLE unresolved_refs ADD COLUMN status TEXT NOT NULL DEFAULT 'pending'");
-      }
-      if (!hasColumn('name_tail')) {
-        db.exec("ALTER TABLE unresolved_refs ADD COLUMN name_tail TEXT NOT NULL DEFAULT ''");
-      }
+      // DDL only, no backfill: rows are queried by name_tail only once they carry
+      // status='failed', and both columns are written together when a ref is marked failed.
+      // Legacy rows stay 'pending'; the #1187 sweep grinds them down on the next sync. The tail
+      // index is partial because on a healthy index only the failed set is worth indexing.
+      // ALTER TABLE has no IF NOT EXISTS, so each column is guarded: a database built from the
+      // current schema.sql already has both. Keep in lockstep with schema.sql.
+      const existing = columnsOf(db, 'unresolved_refs');
+      if (!existing.has('status')) db.exec("ALTER TABLE unresolved_refs ADD COLUMN status TEXT NOT NULL DEFAULT 'pending'");
+      if (!existing.has('name_tail')) db.exec("ALTER TABLE unresolved_refs ADD COLUMN name_tail TEXT NOT NULL DEFAULT ''");
       db.exec(`
         CREATE INDEX IF NOT EXISTS idx_unresolved_status ON unresolved_refs(status);
         CREATE INDEX IF NOT EXISTS idx_unresolved_failed_tail ON unresolved_refs(name_tail) WHERE status = 'failed';
@@ -152,110 +126,63 @@ const migrations: Migration[] = [
   },
   {
     version: 9,
-    description:
-      'Add files.generated — index-time content-header generated-file detection for ranking (#1500)',
+    description: 'Add files.generated — index-time content-header generated-file detection for ranking (#1500)',
     up: (db) => {
-      // DDL only — instant on any size database, and NO backfill: the flag is
-      // derived from file CONTENT, which this migration has no access to (the
-      // files table stores a hash, not the bytes). Migrated rows therefore stay
-      // 0 until the next full index re-extracts them, and every reader unions
-      // the flag with the path-only check, so an un-backfilled database keeps
-      // exactly the pre-#1500 behavior instead of regressing. `sync` heals it
-      // file-by-file as files change. This is why the CHANGELOG entry says a
-      // re-index is required to pick up the new detection.
-      //
-      // ALTER TABLE has no IF NOT EXISTS, so guard for idempotency — a database
-      // created from current schema.sql already has the column (matters when
-      // migrations are re-run from an older recorded version, as the v6
-      // regression test does). Keep in lockstep with schema.sql.
-      const cols = db.prepare('PRAGMA table_info(files)').all() as Array<{ name: string }>;
-      if (!cols.some((c) => c.name === 'generated')) {
+      // DDL only and NO backfill: the flag comes from file CONTENT, which the files table
+      // (a hash, not the bytes) cannot supply. Migrated rows stay 0 until a full index
+      // re-extracts them, and every reader unions the flag with the path-only check, so an
+      // un-backfilled database keeps its old behavior; `sync` heals it file by file. Guarded
+      // like v8 because a database built from the current schema.sql already has the column.
+      if (!columnsOf(db, 'files').has('generated')) {
         db.exec('ALTER TABLE files ADD COLUMN generated INTEGER NOT NULL DEFAULT 0');
       }
-      db.exec(
-        'CREATE INDEX IF NOT EXISTS idx_files_generated ON files(path) WHERE generated = 1'
-      );
+      db.exec('CREATE INDEX IF NOT EXISTS idx_files_generated ON files(path) WHERE generated = 1');
     },
   },
 ];
 
-/**
- * Get the current schema version from the database
- */
+/** The highest applied schema version, or 0 when the version table is missing or empty. */
 export function getCurrentVersion(db: SqliteDatabase): number {
   try {
-    const row = db
-      .prepare('SELECT MAX(version) as version FROM schema_versions')
-      .get() as { version: number | null } | undefined;
+    const row = db.prepare('SELECT MAX(version) as version FROM schema_versions').get() as { version: number | null } | undefined;
     return row?.version ?? 0;
   } catch {
-    // Table doesn't exist yet
-    return 0;
+    return 0; // the table does not exist yet
   }
 }
 
-/**
- * Record a migration as applied
- */
-function recordMigration(db: SqliteDatabase, version: number, description: string): void {
-  db.prepare(
-    'INSERT INTO schema_versions (version, applied_at, description) VALUES (?, ?, ?)'
-  ).run(version, Date.now(), description);
+/** Migrations newer than `version`, oldest first. */
+function migrationsAfter(version: number): Migration[] {
+  return MIGRATIONS.filter((migration) => migration.version > version).sort((a, b) => a.version - b.version);
 }
 
-/**
- * Run all pending migrations
- */
+/** Apply every migration newer than `fromVersion`, each in its own transaction with its history row. */
 export function runMigrations(db: SqliteDatabase, fromVersion: number): void {
-  const pending = migrations.filter((m) => m.version > fromVersion);
-
-  if (pending.length === 0) {
-    return;
-  }
-
-  // Sort by version
-  pending.sort((a, b) => a.version - b.version);
-
-  // Run each migration in a transaction
-  for (const migration of pending) {
+  for (const migration of migrationsAfter(fromVersion)) {
     db.transaction(() => {
       migration.up(db);
-      recordMigration(db, migration.version, migration.description);
+      db.prepare('INSERT INTO schema_versions (version, applied_at, description) VALUES (?, ?, ?)')
+        .run(migration.version, Date.now(), migration.description);
     })();
   }
 }
 
-/**
- * Check if the database needs migration
- */
+/** Whether the database is behind `CURRENT_SCHEMA_VERSION`. */
 export function needsMigration(db: SqliteDatabase): boolean {
-  const current = getCurrentVersion(db);
-  return current < CURRENT_SCHEMA_VERSION;
+  return getCurrentVersion(db) < CURRENT_SCHEMA_VERSION;
 }
 
-/**
- * Get list of pending migrations
- */
+/** The migrations `runMigrations` would apply to this database, oldest first. */
 export function getPendingMigrations(db: SqliteDatabase): Migration[] {
-  const current = getCurrentVersion(db);
-  return migrations
-    .filter((m) => m.version > current)
-    .sort((a, b) => a.version - b.version);
+  return migrationsAfter(getCurrentVersion(db));
 }
 
-/**
- * Get migration history from database
- */
+/** Applied migrations as recorded in the database, oldest first. */
 export function getMigrationHistory(
   db: SqliteDatabase
 ): Array<{ version: number; appliedAt: number; description: string | null }> {
   const rows = db
     .prepare('SELECT version, applied_at, description FROM schema_versions ORDER BY version')
     .all() as Array<{ version: number; applied_at: number; description: string | null }>;
-
-  return rows.map((row) => ({
-    version: row.version,
-    appliedAt: row.applied_at,
-    description: row.description,
-  }));
+  return rows.map((row) => ({ version: row.version, appliedAt: row.applied_at, description: row.description }));
 }

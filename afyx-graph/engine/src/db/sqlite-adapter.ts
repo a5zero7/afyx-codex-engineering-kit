@@ -1,13 +1,13 @@
 /**
- * SQLite Adapter
+ * SQLite adapter.
  *
- * Thin wrapper over Node's built-in `node:sqlite` (`DatabaseSync`), exposed
- * through a small better-sqlite3-shaped interface so the rest of the codebase
- * is storage-agnostic.
+ * The storage engine is Node's built-in `node:sqlite`. This module puts a small,
+ * storage-agnostic surface in front of it — statements, pragmas, transactions,
+ * idempotent close — so nothing above it depends on the driver's own API shape.
  *
- * Afyx Graph ships with a bundled Node runtime, so `node:sqlite` (real SQLite,
- * with WAL + FTS5) is always available — there is no native build step and no
- * wasm fallback. When run from source instead, it requires Node >= 22.5.
+ * Afyx Graph ships with a bundled Node runtime, so `node:sqlite` (real SQLite with WAL
+ * and FTS5) is always present: there is no native build step and no fallback backend.
+ * Running from source needs Node >= 22.5.
  */
 
 export interface SqliteStatement {
@@ -15,10 +15,9 @@ export interface SqliteStatement {
   get(...params: any[]): any;
   all(...params: any[]): any[];
   /**
-   * Lazily yield result rows one at a time instead of materializing the whole
-   * set with `all()`. Use for unbounded scans (e.g. every function/method node)
-   * so memory stays O(1) in the row count rather than O(rows) — see #610, where
-   * `all()`-ing every symbol on a dense project spiked the heap into an OOM.
+   * Yield rows one at a time instead of materializing the whole result. Unbounded
+   * scans (every function node of a dense project) use this so memory stays flat in
+   * the row count — see #610, where `all()` on such a scan ran the heap out.
    */
   iterate(...params: any[]): IterableIterator<any>;
 }
@@ -33,134 +32,125 @@ export interface SqliteDatabase {
 }
 
 /**
- * The active SQLite backend. Only one now (`node:sqlite`); kept as a named type
- * so `afyx-graph status` and the per-instance reporting have a stable shape.
+ * The backend serving a connection. There is exactly one today; the name stays a type so
+ * status output and per-connection reporting keep a stable shape.
  */
 export type SqliteBackend = 'node-sqlite';
 
+/** Bind a driver statement to the engine's statement shape. */
+function wrapStatement(native: any): SqliteStatement {
+  return {
+    run(...params: any[]) {
+      const outcome = native.run(...params);
+      return { changes: Number(outcome?.changes ?? 0), lastInsertRowid: outcome?.lastInsertRowid ?? 0 };
+    },
+    get: (...params: any[]) => native.get(...params),
+    all: (...params: any[]) => native.all(...params),
+    iterate: (...params: any[]) => native.iterate(...params),
+  };
+}
+
 /**
- * Wraps Node's built-in `node:sqlite` (`DatabaseSync`) to match the
- * better-sqlite3 interface the rest of the code expects.
+ * Adapter over `node:sqlite`'s `DatabaseSync`.
  *
- * node:sqlite is real SQLite compiled into Node, so it supports WAL, FTS5,
- * mmap, and `@named` params natively — the only shims needed are the
- * better-sqlite3 conveniences node:sqlite omits: a `.pragma()` helper, a
- * `.transaction()` helper, and `open` (node:sqlite exposes `isOpen`).
+ * `node:sqlite` already speaks positional and `@named` parameters and every pragma, so
+ * statements pass straight through; the adapter adds only what the driver leaves out —
+ * a pragma helper, transactions that flatten when nested, an `open` flag, and a close
+ * that may be called more than once.
  */
 class NodeSqliteAdapter implements SqliteDatabase {
-  private _db: any;
-  private _txDepth = 0;
+  private readonly native: any;
+  /** How many `transaction()` bodies are currently running on this connection. */
+  private transactionDepth = 0;
 
   constructor(dbPath: string, opts?: { readOnly?: boolean }) {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { DatabaseSync } = require('node:sqlite');
-    this._db = opts?.readOnly ? new DatabaseSync(dbPath, { readOnly: true }) : new DatabaseSync(dbPath);
+    // The driver rejects an explicit `undefined` options argument, so only pass one when needed.
+    const args: [string, ...object[]] = opts?.readOnly ? [dbPath, { readOnly: true }] : [dbPath];
+    this.native = new DatabaseSync(...args);
   }
 
   get open(): boolean {
-    return this._db.isOpen;
+    return this.native.isOpen;
   }
 
   prepare(sql: string): SqliteStatement {
-    // node:sqlite matches better-sqlite3's calling convention (variadic
-    // positional args, or a single object for @named params), so params forward
-    // through unchanged.
-    const stmt = this._db.prepare(sql);
-    return {
-      run(...params: any[]) {
-        const r = stmt.run(...params);
-        return {
-          changes: Number(r?.changes ?? 0),
-          lastInsertRowid: r?.lastInsertRowid ?? 0,
-        };
-      },
-      get(...params: any[]) {
-        return stmt.get(...params);
-      },
-      all(...params: any[]) {
-        return stmt.all(...params);
-      },
-      iterate(...params: any[]) {
-        return stmt.iterate(...params);
-      },
-    };
+    return wrapStatement(this.native.prepare(sql));
   }
 
   exec(sql: string): void {
-    this._db.exec(sql);
+    this.native.exec(sql);
   }
 
+  /**
+   * `"name = value"` applies the pragma and returns nothing; a bare `"name"` reads it —
+   * the row object by default, just the single column with `{ simple: true }`.
+   */
   pragma(str: string, options?: { simple?: boolean }): any {
-    const trimmed = str.trim();
-    // Write pragma ("key = value"): node:sqlite is real SQLite, so every pragma
-    // (WAL, mmap, synchronous, …) applies as-is.
-    if (trimmed.includes('=')) {
-      this._db.exec(`PRAGMA ${trimmed}`);
+    const text = str.trim();
+    if (text.includes('=')) {
+      this.native.exec(`PRAGMA ${text}`);
       return;
     }
-    // Read pragma. Default: the row object (e.g. { journal_mode: 'wal' }).
-    // `{ simple: true }` returns just the single column value, like better-sqlite3.
-    const row = this._db.prepare(`PRAGMA ${trimmed}`).get();
-    if (options?.simple) {
-      return row && typeof row === 'object' ? Object.values(row)[0] : row;
-    }
+    const row = this.native.prepare(`PRAGMA ${text}`).get();
+    if (options?.simple) return row && typeof row === 'object' ? Object.values(row)[0] : row;
     return row;
   }
 
+  /**
+   * Wrap `fn` so each call runs as one transaction. A call made while another
+   * transaction is running joins it — there is no nested rollback granularity, and no
+   * caller has ever relied on any (`BEGIN` inside a transaction would simply throw).
+   */
   transaction<T>(fn: (...args: any[]) => T): (...args: any[]) => T {
-    return (...args: any[]) => {
-      // Nested call (a transaction()-wrapped helper invoked from inside another
-      // transaction): run the body directly inside the enclosing transaction.
-      // BEGIN would throw "cannot start a transaction within a transaction",
-      // so no existing caller ever relied on nested rollback granularity —
-      // flattening is behavior-preserving and free.
-      if (this._txDepth > 0) {
-        this._txDepth++;
+    return (...args: any[]): T => {
+      if (this.transactionDepth > 0) {
+        this.transactionDepth++;
         try {
           return fn(...args);
         } finally {
-          this._txDepth--;
+          this.transactionDepth--;
         }
       }
-      this._db.exec('BEGIN');
-      this._txDepth = 1;
+      this.native.exec('BEGIN');
+      this.transactionDepth = 1;
       try {
-        const result = fn(...args);
-        this._db.exec('COMMIT');
-        this._txDepth = 0;
-        return result;
+        const value = fn(...args);
+        this.native.exec('COMMIT');
+        this.transactionDepth = 0;
+        return value;
       } catch (error) {
-        this._db.exec('ROLLBACK');
-        this._txDepth = 0;
+        this.native.exec('ROLLBACK');
+        this.transactionDepth = 0;
         throw error;
       }
     };
   }
 
+  /** `DatabaseSync.close()` throws when already closed; callers close defensively, so it must not. */
   close(): void {
-    // node:sqlite's DatabaseSync.close() throws if already closed; make it
-    // idempotent to match better-sqlite3 (callers may close more than once).
-    if (this._db.isOpen) this._db.close();
+    if (this.native.isOpen) this.native.close();
   }
 }
 
 /**
- * Create a database connection backed by `node:sqlite`.
+ * Open a database file with `node:sqlite`.
  *
- * Returns the active backend alongside the db so each `DatabaseConnection` can
- * report it per-instance — MCP can open multiple project DBs in one process, so
- * a process-global would race.
+ * The backend is returned with the handle so each `DatabaseConnection` reports its own:
+ * MCP can hold several project databases in one process, and a process-wide value
+ * would race.
  */
 export function createDatabase(dbPath: string, opts?: { readOnly?: boolean }): { db: SqliteDatabase; backend: SqliteBackend } {
   try {
     return { db: new NodeSqliteAdapter(dbPath, opts), backend: 'node-sqlite' };
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
+    const cause = error instanceof Error ? error.message : String(error);
     throw new Error(
       'Failed to open SQLite via the built-in node:sqlite module.\n' +
       'Afyx Graph requires node:sqlite (Node.js 22.5+). Install the self-contained\n' +
       'Afyx Graph release (it bundles a compatible Node), or run on Node 22.5+.\n' +
-      `Underlying error: ${msg}`
+      `Underlying error: ${cause}`
     );
   }
 }
