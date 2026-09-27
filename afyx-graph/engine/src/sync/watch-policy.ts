@@ -1,66 +1,66 @@
 /**
  * Watch Policy
  *
- * Decides whether the live file watcher should run for a given project.
+ * Decides whether the live file watcher should run for a given project, and
+ * why not when it shouldn't. Centralized so the watcher itself, the MCP
+ * server (diagnostics), and the installer all reach the same conclusion.
  *
- * Native recursive `fs.watch` is pathologically slow on WSL2 `/mnt/*`
- * drives (NTFS exposed over the 9p/drvfs bridge): setting up the recursive
- * watch walks the directory tree, and every readdir/stat crosses the
- * Windows boundary. Inside an MCP server this stalls the event loop during
- * startup long enough to blow past host handshake timeouts (opencode's 30s),
- * so the tools never appear. See issue #199.
- *
- * This module centralizes the on/off decision so the watcher, the MCP
- * server (for diagnostics), and the installer all agree.
+ * The WSL2 carve-out exists because native recursive `fs.watch` is
+ * pathologically slow on `/mnt/*` drives (NTFS exposed over the 9p/drvfs
+ * bridge): installing the recursive watch walks the whole tree, and every
+ * readdir/stat crosses the Windows boundary. Inside an MCP server this stalls
+ * the event loop during startup long enough to blow past host handshake
+ * timeouts (opencode's 30s), so the tools never appear (issue #199).
  */
 
 import * as fs from 'fs';
 import { normalizePath } from '../utils';
 
-let wslChecked = false;
-let wslValue = false;
+type WslCache = { checked: boolean; value: boolean };
+let wslCache: WslCache = { checked: false, value: false };
 
 /**
  * Detect whether the current process is running under WSL (Windows
- * Subsystem for Linux). Result is cached after the first call.
- *
- * Checks the WSL-specific env vars first (no I/O), then falls back to
- * `/proc/version`, which contains "microsoft" on WSL kernels.
+ * Subsystem for Linux). Cached after the first call.
  */
 export function detectWsl(): boolean {
-  if (wslChecked) return wslValue;
-  wslChecked = true;
+  if (wslCache.checked) return wslCache.value;
 
-  if (process.platform !== 'linux') {
-    wslValue = false;
-    return wslValue;
-  }
-  if (process.env.WSL_DISTRO_NAME || process.env.WSL_INTEROP) {
-    wslValue = true;
-    return wslValue;
-  }
+  const value = computeWslDetection();
+  wslCache = { checked: true, value };
+  return value;
+}
+
+function computeWslDetection(): boolean {
+  if (process.platform !== 'linux') return false;
+  if (hasWslEnvMarkers(process.env)) return true;
+  return procVersionMentionsWsl();
+}
+
+function hasWslEnvMarkers(env: NodeJS.ProcessEnv): boolean {
+  return Boolean(env.WSL_DISTRO_NAME || env.WSL_INTEROP);
+}
+
+function procVersionMentionsWsl(): boolean {
   try {
     const version = fs.readFileSync('/proc/version', 'utf8').toLowerCase();
-    wslValue = version.includes('microsoft') || version.includes('wsl');
+    return version.includes('microsoft') || version.includes('wsl');
   } catch {
-    wslValue = false;
+    return false;
   }
-  return wslValue;
 }
 
 /**
- * True for WSL Windows-drive mounts like `/mnt/c` or `/mnt/d/project`.
- * Deliberately matches only single-letter drive mounts, so genuinely fast
- * Linux mounts such as `/mnt/wsl/...` are not flagged.
+ * True for a WSL Windows-drive mount like `/mnt/c` or `/mnt/d/project`. Only
+ * a single-letter drive segment right after `/mnt/` counts, so a genuinely
+ * fast Linux mount such as `/mnt/wsl/...` is never flagged.
  */
 function isWindowsDriveMount(projectRoot: string): boolean {
-  return /^\/mnt\/[a-z](\/|$)/i.test(normalizePath(projectRoot));
+  const DRIVE_MOUNT_PATTERN = /^\/mnt\/[a-z](\/|$)/i;
+  return DRIVE_MOUNT_PATTERN.test(normalizePath(projectRoot));
 }
 
-/**
- * Inputs that can be overridden in tests so the decision is deterministic
- * without touching real env vars or `/proc/version`.
- */
+/** Inputs a test can override so the decision is deterministic. */
 export interface WatchProbe {
   /** Defaults to `process.env`. */
   env?: NodeJS.ProcessEnv;
@@ -68,37 +68,44 @@ export interface WatchProbe {
   isWsl?: boolean;
 }
 
+type PolicyDecision = { disabled: true; reason: string } | { disabled: false };
+
 /**
- * Decide whether the file watcher should be disabled for a project, and why.
- *
- * Returns a short human-readable reason when watching should be skipped, or
- * `null` when it should run normally.
- *
- * Precedence (first match wins):
- *  1. `AFYX_GRAPH_NO_WATCH=1`    → off  (explicit opt-out always wins)
- *  2. `AFYX_GRAPH_FORCE_WATCH=1` → on   (overrides auto-detection)
- *  3. WSL2 + `/mnt/*` drive     → off  (recursive fs.watch is too slow; #199)
+ * Precedence, first match wins:
+ *  1. `AFYX_GRAPH_NO_WATCH=1`    -> off  (explicit opt-out always wins)
+ *  2. `AFYX_GRAPH_FORCE_WATCH=1` -> on   (overrides auto-detection)
+ *  3. WSL2 + `/mnt/*` drive     -> off  (recursive fs.watch is too slow; #199)
  */
-export function watchDisabledReason(projectRoot: string, probe: WatchProbe = {}): string | null {
+function decide(projectRoot: string, probe: WatchProbe): PolicyDecision {
   const env = probe.env ?? process.env;
 
   if (env.AFYX_GRAPH_NO_WATCH === '1') {
-    return 'AFYX_GRAPH_NO_WATCH=1 is set';
+    return { disabled: true, reason: 'AFYX_GRAPH_NO_WATCH=1 is set' };
   }
   if (env.AFYX_GRAPH_FORCE_WATCH === '1') {
-    return null;
+    return { disabled: false };
   }
-
   const isWsl = probe.isWsl ?? detectWsl();
   if (isWsl && isWindowsDriveMount(projectRoot)) {
-    return 'project is on a WSL2 /mnt/ drive, where recursive fs.watch is too slow to be reliable';
+    return {
+      disabled: true,
+      reason: 'project is on a WSL2 /mnt/ drive, where recursive fs.watch is too slow to be reliable',
+    };
   }
+  return { disabled: false };
+}
 
-  return null;
+/**
+ * Whether the file watcher should be disabled for a project, and why.
+ * Returns a short human-readable reason when watching should be skipped, or
+ * `null` when it should run normally.
+ */
+export function watchDisabledReason(projectRoot: string, probe: WatchProbe = {}): string | null {
+  const decision = decide(projectRoot, probe);
+  return decision.disabled ? decision.reason : null;
 }
 
 /** Test-only: reset the cached WSL detection. */
 export function __resetWslCacheForTests(): void {
-  wslChecked = false;
-  wslValue = false;
+  wslCache = { checked: false, value: false };
 }
