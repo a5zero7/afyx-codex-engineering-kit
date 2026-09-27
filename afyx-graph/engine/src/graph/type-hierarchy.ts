@@ -1,82 +1,48 @@
 /**
- * The type hierarchy — one derivation of "what is above this type, what is
- * below it, and what a call through it can land on".
+ * Type hierarchy: the supertypes above a type, the subtypes below it, and how many
+ * implementations a call through it can reach.
  *
- * Three surfaces ask that question. The viewer draws it as a tree above the
- * members outline (design spec §3.10). `afyx_graph_explore` announces it as an
- * interface-dispatch boundary ("`execute` → runtime dispatch to **611** types
- * implementing `INodeType`"). `afyx_graph_node` shows the same relations as
- * chips. Three derivations would eventually disagree about the ONE number that
- * matters — how many implementations a call can reach — and a reader holding
- * two of them has no way to tell which is lying. So the walk lives here once,
- * and each caller renders it: `src/ui-server/api/node.ts` turns it into
- * `WireHierarchy`, `ToolHandler.buildPolymorphicBoundaries` into prose.
+ * The viewer's hierarchy block, `afyx_graph_explore`'s interface-dispatch boundary and
+ * `afyx_graph_node`'s relation chips all need the same answer, so it is derived here
+ * once and each surface only renders it.
  *
- * Everything here is query-time and read-only. No edge is invented: the tree is
- * exactly the `extends`/`implements` edges the graph holds, and the one thing
- * that is *derived* — which members override an ancestor's — is derived by name
- * within a chain the graph already links, and is labelled as a match rather
- * than as an `overrides` edge (nothing in the engine emits one).
+ * Everything is query-time and read-only, built from the `extends` / `implements` edges
+ * the graph holds. The one derived fact — which members redeclare an ancestor's — is a
+ * by-name match along a chain the graph already links, reported as a match rather than
+ * as an edge (no extractor emits an `overrides` edge).
  *
- * ## Why the fan is the interesting direction
- *
- * Ancestors are a fact about the code you are reading: `class X extends Y` is
- * written on line 1. Descendants are a fact you cannot get from the file at
- * all — the implementations of an interface live anywhere in the repo, and they
- * are precisely what a call through that interface dispatches to. Go makes this
- * sharpest: `System` and `Fixed` satisfy `Clock` without either file naming the
- * other, and the `implements` edge that links them is synthesized by the
- * resolver (`synthesizedBy: 'go-implements'`). So the fan carries its own
- * provenance and the caller draws a synthesized hop differently — the same
- * honesty rule the Flow strip's dashed connectors follow.
+ * Downward walks matter more than upward ones: ancestors are written in the file being
+ * read, while implementations can live anywhere. Synthesized links (for example Go's
+ * implicit interface satisfaction) carry their provenance so callers can draw them
+ * differently.
  */
 
-import type AfyxGraph from '../index';
 import type { Edge, EdgeKind, Node, NodeKind } from '../types';
 
-/** The two edge kinds that make a type hierarchy. Nothing else is a subtype. */
+/** The two edge kinds that make a type hierarchy. */
 export const HIERARCHY_EDGE_KINDS: readonly EdgeKind[] = ['extends', 'implements'];
 
 /**
- * Kinds that can sit in a type hierarchy.
- *
- * `type_alias` is in deliberately — TypeScript's `interface A extends B` and
- * Rust's associated types both land here, and an alias with subtypes is a real
- * hierarchy however it was spelled. `enum` is in for Java/Kotlin/Swift, where an
- * enum implements interfaces.
+ * Node kinds that can sit in a type hierarchy. `type_alias` is included because an
+ * aliased type with subtypes is a real hierarchy however it was spelled, and `enum`
+ * because Java, Kotlin and Swift enums implement interfaces.
  */
 export const HIERARCHY_KINDS: ReadonlySet<NodeKind> = new Set<NodeKind>([
-  'class',
-  'interface',
-  'struct',
-  'trait',
-  'protocol',
-  'enum',
-  'type_alias',
-  'union',
+  'class', 'interface', 'struct', 'trait', 'protocol', 'enum', 'type_alias', 'union',
 ]);
 
 /** Member kinds an override can be declared on. */
-const OVERRIDABLE_KINDS: ReadonlySet<NodeKind> = new Set<NodeKind>([
-  'method',
-  'function',
-  'property',
-  'field',
-]);
+const OVERRIDABLE_KINDS: ReadonlySet<NodeKind> = new Set<NodeKind>(['method', 'function', 'property', 'field']);
 
-/** Levels walked upward. A chain deeper than this is a generated-code artefact. */
+/** Levels walked upward; a longer chain is a generated-code artefact. */
 export const MAX_ANCESTOR_DEPTH = 8;
 
-/** Levels walked downward. Depth, not breadth — the fan itself is capped separately. */
+/** Levels walked downward. Depth only — the fan itself is capped separately. */
 export const MAX_DESCENDANT_DEPTH = 6;
 
 /**
- * Subtypes returned across the whole downward walk.
- *
- * A framework base class can have thousands, and the caller caps again for
- * display; this bound is what stops the *query* from walking them. When it
- * bites, {@link TypeHierarchy.bounded} says so — a fan that quietly stopped at
- * 400 would read as a complete answer.
+ * Subtypes returned over the whole downward walk. When it bites, `bounded` says so, so a
+ * fan that stopped early never reads as a complete answer.
  */
 export const MAX_DESCENDANTS = 400;
 
@@ -85,14 +51,9 @@ const MAX_OVERRIDE_ANCESTORS = 12;
 
 /**
  * Implementations at or above which a call through the type cannot be resolved
- * statically at all — the same threshold `afyx_graph_explore` uses before it
- * announces an interface-dispatch boundary.
+ * statically — the threshold `afyx_graph_explore` uses to announce a dispatch boundary.
  */
 export const DISPATCH_MIN_IMPLEMENTERS = 8;
-
-// =============================================================================
-// Shapes
-// =============================================================================
 
 /** How a subtype is tied to the type above it. */
 export type HierarchyRelation = 'extends' | 'implements';
@@ -102,20 +63,14 @@ export interface HierarchyEntry {
   node: Node;
   /** Steps from the focus. 1 = declared directly on the focus (either way). */
   depth: number;
-  /**
-   * The entry one step NEARER the focus — the row this one hangs off when the
-   * tree is drawn. The focus's own id for a depth-1 entry.
-   */
+  /** The entry one step nearer the focus (the focus's own id at depth 1). */
   parentId: string;
   relation: HierarchyRelation;
-  /** The edge itself, always oriented subtype → supertype as the code declares it. */
+  /** The edge, oriented subtype → supertype as the code declares it. */
   edge: Edge;
-  /**
-   * The edge was synthesized rather than parsed — Go's implicit interface
-   * satisfaction, a framework registry. Drawn dashed, with its wiring site.
-   */
+  /** The edge was synthesized rather than parsed. */
   synthesized: boolean;
-  /** Direct subtypes this entry has that are NOT in the returned set. */
+  /** Direct subtypes this entry has that are not in the returned set. */
   hiddenSubtypes: number;
 }
 
@@ -125,7 +80,7 @@ export interface OverrideMatch {
   memberId: string;
   /** The member it redeclares. */
   baseId: string;
-  /** The ancestor type that declares {@link baseId}. */
+  /** The ancestor type that declares `baseId`. */
   baseTypeId: string;
   baseTypeName: string;
   /** How the focus reaches that ancestor — `implements` reads as "satisfies". */
@@ -135,210 +90,77 @@ export interface OverrideMatch {
 /** What is above a type, what is below it, and what a call through it reaches. */
 export interface TypeHierarchy {
   focus: Node;
-  /** Supertypes, nearest first. Ordered so the focus's own parents lead. */
+  /** Supertypes, nearest first, the focus's own parents leading. */
   ancestors: HierarchyEntry[];
-  /** Subtypes, breadth-first, so depth 1 is complete before depth 2 begins. */
+  /** Subtypes, level by level, so depth 1 is complete before depth 2 begins. */
   descendants: HierarchyEntry[];
-  /** True number of DIRECT subtypes, whatever `descendants` was capped to. */
+  /** True number of direct subtypes, whatever `descendants` was capped to. */
   directSubtypes: number;
-  /** Of {@link directSubtypes}, the ones tied by `implements`. */
+  /** Of `directSubtypes`, the ones tied by `implements`. */
   directImplementers: number;
-  /**
-   * The downward walk hit {@link MAX_DESCENDANTS} or {@link MAX_DESCENDANT_DEPTH}
-   * — subtypes exist that are not in `descendants`.
-   */
+  /** The downward walk hit `MAX_DESCENDANTS` or `MAX_DESCENDANT_DEPTH`. */
   bounded: boolean;
-  /**
-   * A call through this type dispatches at runtime rather than to one target.
-   * `directImplementers >= DISPATCH_MIN_IMPLEMENTERS`.
-   */
+  /** A call through this type dispatches at runtime (`directImplementers >= DISPATCH_MIN_IMPLEMENTERS`). */
   polymorphic: boolean;
   /** Members of the focus that redeclare an ancestor's, keyed by member id. */
   overrides: Map<string, OverrideMatch>;
 }
 
-// =============================================================================
-// The walk
-// =============================================================================
+/** The lookups the hierarchy walk needs; the engine facade provides all of them. */
+export interface HierarchySource {
+  getNodesByIds(ids: readonly string[]): Map<string, Node>;
+  getOutgoingEdgesFrom(nodeIds: readonly string[], kinds?: EdgeKind[]): Edge[];
+  getIncomingEdgesTo(nodeIds: readonly string[], kinds?: EdgeKind[]): Edge[];
+}
 
-/**
- * Whether a node could have a hierarchy at all.
- *
- * Cheap enough to gate on before doing any work: a function never has one, and
- * the overwhelming majority of symbols a reader opens are functions.
- */
+/** Whether a node could have a hierarchy at all — a cheap gate before doing any work. */
 export function canHaveHierarchy(node: Node): boolean {
   return HIERARCHY_KINDS.has(node.kind);
 }
 
 /**
- * The whole hierarchy of one type.
+ * The whole hierarchy of one type: one batched edge read per level in each direction
+ * plus one batched member read, never a read per node.
  *
- * Cost is one query per level in each direction plus one batched member read,
- * never one per node — a base class with 400 subtypes is 2–3 queries, not 400.
- *
- * Returns `null` when the node cannot have a hierarchy or has no
- * `extends`/`implements` edge in either direction, so a caller can gate on the
- * return value rather than on the emptiness of three lists.
+ * Returns `null` when the node cannot have a hierarchy or has no `extends`/`implements`
+ * edge in either direction, so callers can gate on the result.
  */
 export function buildTypeHierarchy(
-  cg: AfyxGraph,
+  source: HierarchySource,
   focus: Node,
   options: { overrides?: boolean } = {}
 ): TypeHierarchy | null {
   if (!canHaveHierarchy(focus)) return null;
 
-  const ancestors = walkAncestors(cg, focus);
-  const down = walkDescendants(cg, focus);
-  if (ancestors.length === 0 && down.entries.length === 0) return null;
+  const ancestors = climbSupertypes(source, focus);
+  const fan = spreadSubtypes(source, focus);
+  if (ancestors.length === 0 && fan.rows.length === 0) return null;
 
   return {
     focus,
     ancestors,
-    descendants: down.entries,
-    directSubtypes: down.directTotal,
-    directImplementers: down.directImplementers,
-    bounded: down.bounded,
-    polymorphic: down.directImplementers >= DISPATCH_MIN_IMPLEMENTERS,
-    overrides: options.overrides === false ? new Map() : matchOverrides(cg, focus, ancestors),
+    descendants: fan.rows,
+    directSubtypes: fan.directTotal,
+    directImplementers: fan.directImplementers,
+    bounded: fan.bounded,
+    polymorphic: fan.directImplementers >= DISPATCH_MIN_IMPLEMENTERS,
+    overrides: options.overrides === false ? new Map() : findOverrides(source, focus, ancestors),
   };
 }
 
-/**
- * Walk up. Multiple direct parents are normal (a class extends one and
- * implements three), so this is a BFS rather than a chain, ordered nearest
- * first and — within a level — `extends` before `implements`, because the one
- * that carries the implementation is the one a reader wants adjacent.
- */
-function walkAncestors(cg: AfyxGraph, focus: Node): HierarchyEntry[] {
-  const out: HierarchyEntry[] = [];
-  const seen = new Set<string>([focus.id]);
-  let frontier = [focus.id];
-
-  for (let depth = 1; depth <= MAX_ANCESTOR_DEPTH && frontier.length > 0; depth++) {
-    const edges = hierarchyEdges(cg, frontier, 'up');
-    if (edges.length === 0) break;
-    const nodes = cg.getNodesByIds(edges.map((e) => e.target));
-
-    const level: HierarchyEntry[] = [];
-    for (const edge of edges) {
-      const node = nodes.get(edge.target);
-      if (!node || seen.has(node.id)) continue;
-      seen.add(node.id);
-      level.push(toEntry(node, depth, edge.source, edge));
-    }
-    sortLevel(level);
-    out.push(...level);
-    frontier = level.map((e) => e.node.id);
-  }
-
-  return out;
-}
-
-/**
- * Walk down — the fan. Breadth-first so the cap always trims the deepest,
- * least-relevant end: a reader looking at an interface wants its direct
- * implementations complete before a subclass of a subclass appears at all.
- */
-function walkDescendants(cg: AfyxGraph, focus: Node): {
-  entries: HierarchyEntry[];
-  directTotal: number;
-  directImplementers: number;
-  bounded: boolean;
-} {
-  const entries: HierarchyEntry[] = [];
-  const byId = new Map<string, HierarchyEntry>();
-  const seen = new Set<string>([focus.id]);
-  let frontier = [focus.id];
-  let directTotal = 0;
-  let directImplementers = 0;
-  let bounded = false;
-
-  for (let depth = 1; depth <= MAX_DESCENDANT_DEPTH && frontier.length > 0; depth++) {
-    const edges = hierarchyEdges(cg, frontier, 'down');
-    if (edges.length === 0) break;
-    const nodes = cg.getNodesByIds(edges.map((e) => e.source));
-
-    // One row per subtype, not per edge: a class tied to its supertype by both
-    // a parsed `extends` and a synthesized `implements` is ONE implementation.
-    // `extends` wins the relation because it is the one written in the file.
-    const level: HierarchyEntry[] = [];
-    const overflow = new Map<string, number>();
-    const levelSeen = new Set<string>();
-    for (const edge of edges) {
-      const node = nodes.get(edge.source);
-      if (!node || seen.has(node.id)) continue;
-      const existing = levelSeen.has(node.id)
-        ? level.find((e) => e.node.id === node.id)
-        : undefined;
-      if (existing) {
-        if (existing.relation === 'implements' && edge.kind === 'extends') {
-          existing.relation = 'extends';
-          existing.edge = edge;
-          existing.synthesized = edge.provenance === 'heuristic';
-        }
-        continue;
-      }
-      if (depth === 1) {
-        directTotal++;
-        if (edge.kind === 'implements') directImplementers++;
-      }
-      if (entries.length + level.length >= MAX_DESCENDANTS) {
-        // Stop materialising rows, but keep counting depth 1 so
-        // `directSubtypes` stays the true number.
-        bounded = true;
-        overflow.set(edge.target, (overflow.get(edge.target) ?? 0) + 1);
-        levelSeen.add(node.id);
-        continue;
-      }
-      levelSeen.add(node.id);
-      level.push(toEntry(node, depth, edge.target, edge));
-    }
-    for (const entry of level) seen.add(entry.node.id);
-    sortLevel(level);
-    for (const entry of level) {
-      entries.push(entry);
-      byId.set(entry.node.id, entry);
-    }
-    for (const [parentId, count] of overflow) {
-      const parent = byId.get(parentId);
-      if (parent) parent.hiddenSubtypes += count;
-    }
-    if (bounded) break;
-
-    frontier = level.map((e) => e.node.id);
-    if (depth === MAX_DESCENDANT_DEPTH && frontier.length > 0) {
-      // A level exists below the one we are about to stop at. Say so rather
-      // than letting the deepest row read as a leaf.
-      for (const edge of hierarchyEdges(cg, frontier, 'down')) {
-        if (seen.has(edge.source)) continue;
-        bounded = true;
-        const parent = byId.get(edge.target);
-        if (parent) parent.hiddenSubtypes++;
-      }
-    }
-  }
-
-  return { entries, directTotal, directImplementers, bounded };
-}
-
-/** One batched edge read per level, filtered to the two hierarchy kinds. */
-function hierarchyEdges(cg: AfyxGraph, ids: readonly string[], direction: 'up' | 'down'): Edge[] {
+/** One batched read of hierarchy edges for a whole level; a failing read is an empty level. */
+function levelEdges(source: HierarchySource, ids: readonly string[], direction: 'up' | 'down'): Edge[] {
   const kinds = [...HIERARCHY_EDGE_KINDS];
   try {
-    const edges =
-      direction === 'up'
-        ? cg.getOutgoingEdgesFrom(ids, kinds)
-        : cg.getIncomingEdgesTo(ids, kinds);
-    // Belt and braces: the kind filter is applied in SQL, but a caller reading
-    // `entry.relation` must never see a third value.
-    return edges.filter((e) => e.kind === 'extends' || e.kind === 'implements');
+    const edges = direction === 'up' ? source.getOutgoingEdgesFrom(ids, kinds) : source.getIncomingEdgesTo(ids, kinds);
+    // The kind filter runs in the store, but `relation` must never take a third value.
+    return edges.filter((edge) => edge.kind === 'extends' || edge.kind === 'implements');
   } catch {
     return [];
   }
 }
 
-function toEntry(node: Node, depth: number, parentId: string, edge: Edge): HierarchyEntry {
+function rowFor(node: Node, depth: number, parentId: string, edge: Edge): HierarchyEntry {
   return {
     node,
     depth,
@@ -351,73 +173,174 @@ function toEntry(node: Node, depth: number, parentId: string, edge: Edge): Hiera
 }
 
 /**
- * Deterministic order within one level: `extends` first, then by name, then by
- * file. Never by insertion — two runs against the same index must draw the same
- * tree, and SQLite's row order is not a promise.
+ * Order within one level: `extends` before `implements` (the one that carries the
+ * implementation), then by name, file and line. Never by insertion order, so two runs
+ * against one index draw the same tree.
  */
-function sortLevel(level: HierarchyEntry[]): void {
+function orderLevel(level: HierarchyEntry[]): void {
+  const rank = (row: HierarchyEntry): number => (row.relation === 'extends' ? 0 : 1);
   level.sort(
     (a, b) =>
-      (a.relation === b.relation ? 0 : a.relation === 'extends' ? -1 : 1) ||
+      rank(a) - rank(b) ||
       a.node.name.localeCompare(b.node.name) ||
       a.node.filePath.localeCompare(b.node.filePath) ||
       a.node.startLine - b.node.startLine
   );
 }
 
-// =============================================================================
-// Overrides
-// =============================================================================
+/**
+ * Supertypes level by level, nearest first. A class commonly has several direct parents
+ * (one `extends`, some `implements`), so this is a breadth-first climb, not a chain.
+ */
+function climbSupertypes(source: HierarchySource, focus: Node): HierarchyEntry[] {
+  const rows: HierarchyEntry[] = [];
+  const met = new Set<string>([focus.id]);
+  let frontier = [focus.id];
+
+  for (let depth = 1; depth <= MAX_ANCESTOR_DEPTH && frontier.length > 0; depth++) {
+    const edges = levelEdges(source, frontier, 'up');
+    if (edges.length === 0) break;
+    const parents = source.getNodesByIds(edges.map((edge) => edge.target));
+
+    const level: HierarchyEntry[] = [];
+    for (const edge of edges) {
+      const parent = parents.get(edge.target);
+      if (!parent || met.has(parent.id)) continue;
+      met.add(parent.id);
+      level.push(rowFor(parent, depth, edge.source, edge));
+    }
+    orderLevel(level);
+    rows.push(...level);
+    frontier = level.map((row) => row.node.id);
+  }
+  return rows;
+}
+
+interface Fan {
+  rows: HierarchyEntry[];
+  directTotal: number;
+  directImplementers: number;
+  bounded: boolean;
+}
 
 /**
- * Which of the focus's members redeclare an ancestor's.
+ * Subtypes level by level, so the cap always trims the deepest, least relevant end.
  *
- * Nothing in the engine emits an `overrides` edge (the kind exists in the
- * schema and no extractor writes one), so this is a NAME match — but a name
- * match inside a chain the graph already established, which is exactly what
- * every language's dispatch rule is. It is reported as a match against a named
- * base member the reader can open, never as an edge, and it is deliberately
- * blind to signatures: an overload set would need type resolution the graph
- * does not have, and claiming "overrides" for the wrong overload is worse than
- * saying which type also declares this name.
- *
- * Two batched queries total, whatever the ancestor count.
+ * A subtype gets one row however many edges tie it to its supertype: a parsed `extends`
+ * plus a synthesized `implements` is one implementation, and `extends` wins the
+ * relation because it is the one written in the file. Once the cap is reached rows stop
+ * being created, but direct subtypes keep being counted so `directTotal` stays true.
  */
-function matchOverrides(
-  cg: AfyxGraph,
+function spreadSubtypes(source: HierarchySource, focus: Node): Fan {
+  const rows: HierarchyEntry[] = [];
+  const rowById = new Map<string, HierarchyEntry>();
+  const met = new Set<string>([focus.id]);
+  let frontier = [focus.id];
+  let directTotal = 0;
+  let directImplementers = 0;
+  let bounded = false;
+
+  for (let depth = 1; depth <= MAX_DESCENDANT_DEPTH && frontier.length > 0; depth++) {
+    const edges = levelEdges(source, frontier, 'down');
+    if (edges.length === 0) break;
+    const children = source.getNodesByIds(edges.map((edge) => edge.source));
+
+    const level: HierarchyEntry[] = [];
+    const levelRows = new Map<string, HierarchyEntry>();
+    const withheld = new Map<string, number>();
+    for (const edge of edges) {
+      const child = children.get(edge.source);
+      if (!child || met.has(child.id)) continue;
+
+      const row = levelRows.get(child.id);
+      if (row) {
+        if (row.relation === 'implements' && edge.kind === 'extends') {
+          row.relation = 'extends';
+          row.edge = edge;
+          row.synthesized = edge.provenance === 'heuristic';
+        }
+        continue;
+      }
+
+      if (depth === 1) {
+        directTotal++;
+        if (edge.kind === 'implements') directImplementers++;
+      }
+      if (rows.length + level.length >= MAX_DESCENDANTS) {
+        bounded = true;
+        withheld.set(edge.target, (withheld.get(edge.target) ?? 0) + 1);
+        continue;
+      }
+      const created = rowFor(child, depth, edge.target, edge);
+      level.push(created);
+      levelRows.set(child.id, created);
+    }
+
+    for (const row of level) met.add(row.node.id);
+    orderLevel(level);
+    for (const row of level) {
+      rows.push(row);
+      rowById.set(row.node.id, row);
+    }
+    for (const [parentId, count] of withheld) {
+      const parent = rowById.get(parentId);
+      if (parent) parent.hiddenSubtypes += count;
+    }
+    if (bounded) break;
+
+    frontier = level.map((row) => row.node.id);
+    if (depth === MAX_DESCENDANT_DEPTH && frontier.length > 0) {
+      // Something sits below the last level walked: mark those rows so they do not read as leaves.
+      for (const edge of levelEdges(source, frontier, 'down')) {
+        if (met.has(edge.source)) continue;
+        bounded = true;
+        const parent = rowById.get(edge.target);
+        if (parent) parent.hiddenSubtypes++;
+      }
+    }
+  }
+  return { rows, directTotal, directImplementers, bounded };
+}
+
+/**
+ * Members of the focus that redeclare a member of an ancestor.
+ *
+ * It is a name match inside a chain the graph already established — which is what every
+ * language's dispatch rule is — and is deliberately blind to signatures: claiming an
+ * override for the wrong overload is worse than naming the type that also declares the
+ * name. Two batched reads in total, whatever the ancestor count.
+ */
+function findOverrides(
+  source: HierarchySource,
   focus: Node,
   ancestors: readonly HierarchyEntry[]
 ): Map<string, OverrideMatch> {
-  const result = new Map<string, OverrideMatch>();
-  if (ancestors.length === 0) return result;
+  const matches = new Map<string, OverrideMatch>();
+  if (ancestors.length === 0) return matches;
 
-  const ownMembers = membersOf(cg, [focus.id]);
-  if (ownMembers.length === 0) return result;
+  const own = memberRows(source, [focus.id]);
+  if (own.length === 0) return matches;
 
-  // Nearest ancestors win: a method redeclared two levels up is still reported
-  // against the type the reader would actually look in.
+  // Nearest ancestors win: a method redeclared two levels up is reported against the
+  // type the reader would actually look in.
   const chain = ancestors.slice(0, MAX_OVERRIDE_ANCESTORS);
-  const baseMembers = membersOf(
-    cg,
-    chain.map((a) => a.node.id)
-  );
-  if (baseMembers.length === 0) return result;
+  const inherited = memberRows(source, chain.map((row) => row.node.id));
+  if (inherited.length === 0) return matches;
 
-  const ancestorById = new Map(chain.map((a) => [a.node.id, a] as const));
-  const byName = new Map<string, { member: Node; ownerId: string }>();
-  // `chain` is nearest-first and `membersOf` preserves the order of the ids it
-  // was given, so the first entry for a name is the nearest declaration.
-  for (const { member, ownerId } of baseMembers) {
-    if (!byName.has(member.name)) byName.set(member.name, { member, ownerId });
+  const chainRow = new Map(chain.map((row) => [row.node.id, row] as const));
+  // Member rows follow the order of the ids given, so the first row per name is the nearest.
+  const declaredBy = new Map<string, { member: Node; ownerId: string }>();
+  for (const row of inherited) {
+    if (!declaredBy.has(row.member.name)) declaredBy.set(row.member.name, row);
   }
 
-  for (const { member } of ownMembers) {
+  for (const { member } of own) {
     if (!OVERRIDABLE_KINDS.has(member.kind)) continue;
-    const base = byName.get(member.name);
+    const base = declaredBy.get(member.name);
     if (!base || base.member.id === member.id) continue;
-    const owner = ancestorById.get(base.ownerId);
+    const owner = chainRow.get(base.ownerId);
     if (!owner) continue;
-    result.set(member.id, {
+    matches.set(member.id, {
       memberId: member.id,
       baseId: base.member.id,
       baseTypeId: owner.node.id,
@@ -425,57 +348,46 @@ function matchOverrides(
       relation: owner.relation,
     });
   }
-
-  return result;
+  return matches;
 }
 
-/** Direct `contains` children of the given containers, in the containers' order. */
-function membersOf(
-  cg: AfyxGraph,
+/** Direct `contains` members of the given containers, grouped in the containers' order, then by line. */
+function memberRows(
+  source: HierarchySource,
   containerIds: readonly string[]
 ): Array<{ member: Node; ownerId: string }> {
   if (containerIds.length === 0) return [];
   let edges: Edge[];
   try {
-    edges = cg.getOutgoingEdgesFrom(containerIds, ['contains']);
+    edges = source.getOutgoingEdgesFrom(containerIds, ['contains']);
   } catch {
     return [];
   }
   if (edges.length === 0) return [];
-  const nodes = cg.getNodesByIds(edges.map((e) => e.target));
+  const found = source.getNodesByIds(edges.map((edge) => edge.target));
 
-  const rank = new Map(containerIds.map((id, i) => [id, i] as const));
-  const out: Array<{ member: Node; ownerId: string }> = [];
+  const position = new Map(containerIds.map((id, index) => [id, index] as const));
+  const rows: Array<{ member: Node; ownerId: string }> = [];
   for (const edge of edges) {
-    const member = nodes.get(edge.target);
-    if (member) out.push({ member, ownerId: edge.source });
+    const member = found.get(edge.target);
+    if (member) rows.push({ member, ownerId: edge.source });
   }
-  out.sort(
+  return rows.sort(
     (a, b) =>
-      (rank.get(a.ownerId) ?? 0) - (rank.get(b.ownerId) ?? 0) ||
-      a.member.startLine - b.member.startLine
+      (position.get(a.ownerId) ?? 0) - (position.get(b.ownerId) ?? 0) || a.member.startLine - b.member.startLine
   );
-  return out;
 }
-
-// =============================================================================
-// The fan, on its own
-// =============================================================================
 
 /**
  * How many distinct types extend or implement this one — the number
- * `afyx_graph_explore` prints when it announces an interface dispatch and the
- * number the viewer's fan draws.
- *
- * DISTINCT types, not edges: a class tied to a supertype by both an `extends`
- * and a synthesized `implements` edge is one implementation, and a count that
- * disagrees with the length of the list beside it is the bug this function
- * exists to prevent.
+ * `afyx_graph_explore` prints for a dispatch boundary and the viewer's fan draws.
+ * Distinct types, not edges: one class tied by both `extends` and a synthesized
+ * `implements` is one implementation.
  */
-export function countImplementers(cg: AfyxGraph, typeId: string): number {
+export function countImplementers(source: HierarchySource, typeId: string): number {
   try {
-    const edges = cg.getIncomingEdgesTo([typeId], [...HIERARCHY_EDGE_KINDS]);
-    return new Set(edges.map((e) => e.source)).size;
+    const edges = source.getIncomingEdgesTo([typeId], [...HIERARCHY_EDGE_KINDS]);
+    return new Set(edges.map((edge) => edge.source)).size;
   } catch {
     return 0;
   }
