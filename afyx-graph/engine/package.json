@@ -36,6 +36,7 @@
     "bench": "node scripts/benchmark.mjs",
     "bench:context": "node scripts/benchmark-context.mjs",
     "bench:graph": "node scripts/benchmark-graph.mjs",
+    "bench:db": "node scripts/benchmark-db.mjs",
     "test:watch": "vitest",
     "test:eval": "vitest run __tests__/evaluation/",
     "eval": "npm run build && npx tsx __tests__/evaluation/runner.ts",
