@@ -60,8 +60,8 @@ import { EXTRACTION_VERSION } from '../extraction/extraction-version';
 import { BROWSER_ENV, DEFAULT_UI_PORT } from '../ui-server/constants';
 import type { UiServerHandle } from '../ui-server';
 import { lookupSymbolNodes, describeSymbolNode, groupDefinitions } from '../graph/symbol-lookup';
+import { mergeSymbolImpact, computeAffectedTests } from '../impact';
 import type { Node, Edge } from '../types';
-import { isTestPath } from '../search/query-utils';
 
 // Decided once, before `--color`/`--no-color` are stripped from argv below
 // (#1281). Piped/redirected stdout, NO_COLOR, or --no-color -> plain output.
@@ -2289,14 +2289,10 @@ program
           ? `no definition of "${symbol}" matches file "${options.file}" — showing all definitions instead.`
           : undefined;
         const collected = groups.map((group) => {
-          const nodes = new Map<string, Node>();
+          const merged = mergeSymbolImpact(cg, group, depth, 'last-seen');
           const edges = new Map<string, Edge>();
-          for (const target of group) {
-            const impact = cg.getImpactRadius(target.id, depth);
-            for (const [id, node] of impact.nodes) nodes.set(id, node);
-            for (const edge of impact.edges) edges.set(`${edge.source}->${edge.target}:${edge.kind}`, edge);
-          }
-          return { group, nodes, edges };
+          for (const edge of merged.edges) edges.set(`${edge.source}->${edge.target}:${edge.kind}`, edge);
+          return { group, nodes: merged.nodes, edges };
         });
 
         if (options.json) {
@@ -2419,7 +2415,7 @@ program
       const maxDepth = parseInt(options.depth || '5', 10);
 
       // Custom filter pattern
-      let customFilter: RegExp | null = null;
+      let customFilter: RegExp | undefined;
       if (options.filter) {
         // Convert glob to regex: ** → .+, * → [^/]*, . → \.
         const regex = options.filter
@@ -2434,55 +2430,19 @@ program
       // its own six regexes here, which knew `.test.` and `/tests/` but not Go's
       // `_test.go`, Python's `test_x.py` or the JVM's `FooTest.kt` — so
       // `affected` reported "no tests" for whole ecosystems while `search` and
-      // the MCP tools counted those very files as tests.
-      function isTestFile(filePath: string): boolean {
-        if (customFilter) return customFilter.test(filePath);
-        return isTestPath(filePath);
-      }
-
-      // BFS to find all transitive dependents of changed files, filtered to test files
-      const affectedTests = new Set<string>();
-      const allDependents = new Set<string>();
-
-      for (const file of changedFiles) {
-        // If the changed file is itself a test file, include it
-        if (isTestFile(file)) {
-          affectedTests.add(file);
-          continue;
-        }
-
-        // BFS through dependents
-        const queue: Array<{ file: string; depth: number }> = [{ file, depth: 0 }];
-        const visited = new Set<string>();
-        visited.add(file);
-
-        while (queue.length > 0) {
-          const current = queue.shift()!;
-          if (current.depth >= maxDepth) continue;
-
-          const dependents = cg.getFileDependents(current.file);
-          for (const dep of dependents) {
-            if (visited.has(dep)) continue;
-            visited.add(dep);
-            allDependents.add(dep);
-
-            if (isTestFile(dep)) {
-              affectedTests.add(dep);
-            } else {
-              queue.push({ file: dep, depth: current.depth + 1 });
-            }
-          }
-        }
-      }
-
-      const sortedTests = Array.from(affectedTests).sort();
+      // the MCP tools counted those very files as tests. Shared with `search`/MCP via
+      // `isTestPath`, unless `--filter` replaces it entirely.
+      const { affectedTests: sortedTests, totalDependentsTraversed } = computeAffectedTests(cg, changedFiles, {
+        maxDepth,
+        customFilter,
+      });
 
       // Output
       if (options.json) {
         console.log(JSON.stringify({
           changedFiles,
           affectedTests: sortedTests,
-          totalDependentsTraversed: allDependents.size,
+          totalDependentsTraversed,
         }, null, 2));
       } else if (options.quiet) {
         for (const t of sortedTests) console.log(t);

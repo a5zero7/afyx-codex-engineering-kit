@@ -33,6 +33,7 @@ import type { PendingFile } from '../sync';
 import type { Node, Edge, SearchResult, Subgraph, NodeKind } from '../types';
 import { isTestFile, normalizeNameToken } from '../search/query-utils';
 import { groupDefinitions, lastQualifierPart, matchesSymbol } from '../graph/symbol-lookup';
+import { mergeSymbolImpact } from '../impact';
 import { extractQueryPaths, queryMightContainPaths } from '../search/query-paths';
 import {
   existsSync,
@@ -2546,25 +2547,7 @@ export class ToolHandler {
       ? `\n\n> **Note:** no definition of "${symbol}" matches file "${fileFilter}" — showing all definitions instead.`
       : '';
 
-    const impactOf = (defNodes: Node[]) => {
-      const mergedNodes = new Map<string, Node>();
-      const mergedEdges: Edge[] = [];
-      const seenEdges = new Set<string>();
-      for (const node of defNodes) {
-        const impact = cg.getImpactRadius(node.id, depth);
-        for (const [id, n] of impact.nodes) {
-          mergedNodes.set(id, n);
-        }
-        for (const e of impact.edges) {
-          const key = `${e.source}->${e.target}:${e.kind}`;
-          if (!seenEdges.has(key)) {
-            seenEdges.add(key);
-            mergedEdges.push(e);
-          }
-        }
-      }
-      return { nodes: mergedNodes, edges: mergedEdges, roots: defNodes.map((n) => n.id) };
-    };
+    const impactOf = (defNodes: Node[]) => mergeSymbolImpact(cg, defNodes, depth, 'first-seen');
 
     // Single definition (or same-file overloads): the familiar merged report.
     if (groups.length === 1) {
