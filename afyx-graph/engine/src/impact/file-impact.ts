@@ -1,18 +1,13 @@
 /**
- * Transitive file-dependency impact: repeatedly follow 1-hop file dependents (Graph's own
- * `getFileDependents`, untouched — see `graph/queries.ts`/`db/dependency-reader.ts`) to
- * find every file that transitively depends on a starting set, bounded by a hop count.
- *
- * Deliberately classification-agnostic (#1507-adjacent, Phase 3B.5 architecture): "what is
- * affected" (this module) is kept separate from "is this file a test" (the caller's
- * `isTerminal` predicate) so a test-file classifier change never has to touch traversal
- * code, and this same traversal is reusable for any "stop expanding once you've found a
- * file matching X" query, not just tests.
+ * Transitive file-dependency impact: Impact's policy layer over Graph's own generic
+ * file-dependents walk (`graph/file-graph.ts::walkFileDependents`) — this module owns no
+ * traversal queue, visited set or depth propagation of its own; it only names the result
+ * the way Impact/Affected callers expect (`allDependents`/`terminals` instead of Graph's
+ * generic `reached`/`stopped`).
  */
+import { walkFileDependents, type FileDependentsSource } from '../graph/file-graph';
 
-export interface FileImpactHost {
-  getFileDependents(filePath: string): string[];
-}
+export type FileImpactHost = FileDependentsSource;
 
 export interface TransitiveFileImpactOptions {
   /** Hop count following file-dependency edges; a starting file itself is hop 0. */
@@ -32,51 +27,14 @@ export interface TransitiveFileImpactResult {
   terminals: Set<string>;
 }
 
-/**
- * BFS over file-dependency edges from every file in `startFiles`, one independent search
- * per start file (a dependent reachable from two different start files is still recorded
- * once — both `allDependents` and `terminals` are shared, deduping sets — but is walked
- * again from each root, exactly as the pre-rewrite implementation did).
- *
- * A start file matching `isTerminal` is recorded immediately and never expanded. A
- * terminal reached during expansion stops that branch: its own dependents are never
- * visited, so a chain of two terminals only ever reports the first one reached.
- */
 export function transitiveFileImpact(
   host: FileImpactHost,
   startFiles: string[],
   options: TransitiveFileImpactOptions
 ): TransitiveFileImpactResult {
-  const { maxDepth, isTerminal } = options;
-  const allDependents = new Set<string>();
-  const terminals = new Set<string>();
-
-  for (const file of startFiles) {
-    if (isTerminal?.(file)) {
-      terminals.add(file);
-      continue;
-    }
-
-    const queue: Array<{ file: string; depth: number }> = [{ file, depth: 0 }];
-    const visited = new Set<string>([file]);
-
-    while (queue.length > 0) {
-      const current = queue.shift()!;
-      if (current.depth >= maxDepth) continue;
-
-      for (const dep of host.getFileDependents(current.file)) {
-        if (visited.has(dep)) continue;
-        visited.add(dep);
-        allDependents.add(dep);
-
-        if (isTerminal?.(dep)) {
-          terminals.add(dep);
-        } else {
-          queue.push({ file: dep, depth: current.depth + 1 });
-        }
-      }
-    }
-  }
-
-  return { allDependents, terminals };
+  const { reached, stopped } = walkFileDependents(host, startFiles, {
+    maxDepth: options.maxDepth,
+    stopAt: options.isTerminal,
+  });
+  return { allDependents: reached, terminals: stopped };
 }
