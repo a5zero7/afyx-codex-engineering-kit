@@ -306,6 +306,7 @@ export function mutationScenarios(api, dbPath) {
     q.replaceResolutionEdgesWithUnresolvedRefs(ids, [ref('m:run', 'restoredOk', 'calls', 2, { filePath: 'src/main.ts', language: 'typescript' })]);
     q.deleteEdgesByIds(conn.getDb().prepare("SELECT id FROM edges WHERE kind = 'contains' ORDER BY id LIMIT 1").all().map((r) => r.id));
   });
+  step('delete refs of one node', () => { q.deleteUnresolvedByNode('m:run'); });
   step('delete file cascade', () => { q.deleteFile('src/kinds/class.ts'); q.deleteNode('m:stop'); });
   conn.close();
   return steps;
@@ -514,6 +515,124 @@ export function adapterRecord(api, dir) {
   return rec;
 }
 
+/** How many transactions each public write starts when called on its own: the atomic boundaries. */
+export function transactionCounts(api, dir) {
+  const p = path.join(dir, 'tx-counts', 'graph.db');
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  const conn = api.DatabaseConnection.initialize(p);
+  const db = conn.getDb();
+  const q = new api.QueryBuilder(db);
+  const { nodes, edges, refs, files } = fixtureData();
+  q.insertNodes(nodes.slice(0, 30));
+  q.insertEdges(edges.filter((e) => nodes.slice(0, 30).some((n) => n.id === e.source) && nodes.slice(0, 30).some((n) => n.id === e.target)).slice(0, 4));
+  q.insertUnresolvedRefsBatch(refs.slice(0, 3));
+  q.upsertFile(files[0]);
+  let count = 0;
+  const original = db.transaction.bind(db);
+  db.transaction = (fn) => { count++; return original(fn); };
+  const counts = {};
+  const measure = (name, fn) => { count = 0; try { fn(); } catch { /* counted anyway */ } counts[name] = count; };
+  const N = (id) => node(id, 'function', id, 'src/tx.ts');
+  const key = (r) => ({ fromNodeId: r.fromNodeId, referenceName: r.referenceName, referenceKind: r.referenceKind });
+  measure('insertNode', () => q.insertNode(N('t1')));
+  measure('insertNodes', () => q.insertNodes([N('t2'), N('t3')]));
+  measure('insertNodes empty', () => q.insertNodes([]));
+  measure('updateNode', () => q.updateNode(N('t1')));
+  measure('deleteNode', () => q.deleteNode('t3'));
+  measure('deleteNodesByFile', () => q.deleteNodesByFile('src/nothing.ts'));
+  measure('insertEdge', () => q.insertEdge(edge('t1', 't2', 'calls', { line: 1, column: 0 })));
+  measure('insertEdges', () => q.insertEdges([edge('t2', 't1', 'calls', { line: 2, column: 0 })]));
+  measure('insertEdges empty', () => q.insertEdges([]));
+  measure('deleteEdgesBySource', () => q.deleteEdgesBySource('t1'));
+  measure('deleteEdgesByIds', () => q.deleteEdgesByIds([1, 2, 3]));
+  measure('deleteEdgesByIds empty', () => q.deleteEdgesByIds([]));
+  measure('upsertFile', () => q.upsertFile(fileRecord('src/tx.ts')));
+  measure('deleteFile', () => q.deleteFile('src/tx.ts'));
+  measure('insertUnresolvedRef', () => q.insertUnresolvedRef(ref('t1', 'x', 'calls', 1)));
+  measure('insertUnresolvedRefsBatch', () => q.insertUnresolvedRefsBatch([ref('t1', 'y', 'calls', 2)]));
+  measure('insertUnresolvedRefsBatch empty', () => q.insertUnresolvedRefsBatch([]));
+  measure('deleteUnresolvedByNode', () => q.deleteUnresolvedByNode('t1'));
+  measure('deleteResolvedReferences', () => q.deleteResolvedReferences(['t1', 't2']));
+  measure('deleteSpecificResolvedReferences', () => q.deleteSpecificResolvedReferences([key(ref('t1', 'x', 'calls', 1))]));
+  measure('deleteReferencesByRowIds', () => q.deleteReferencesByRowIds([1, 2]));
+  measure('markReferencesFailed', () => q.markReferencesFailed([key(ref('t1', 'x', 'calls', 1))]));
+  measure('markReferencesFailedByRowIds', () => q.markReferencesFailedByRowIds([{ rowId: 1, referenceName: 'x' }]));
+  measure('replaceResolutionEdges', () => q.replaceResolutionEdgesWithUnresolvedRefs([1], [ref('t1', 'z', 'calls', 3)]));
+  measure('storeFileBundle', () => q.storeFileBundle({ nodes: [N('t4')], edges: [], refs: [ref('t4', 'w', 'calls', 1)], file: fileRecord('src/tx4.ts') }));
+  measure('insertNameSegmentsBatch', () => q.insertNameSegmentsBatch(['someName', 'otherName']));
+  measure('clearNameSegmentVocab', () => q.clearNameSegmentVocab());
+  measure('setMetadata', () => q.setMetadata('k', 'v'));
+  measure('clear', () => q.clear());
+  measure('connection.transaction', () => conn.transaction(() => 1));
+  db.transaction = original;
+  conn.close();
+  return counts;
+}
+
+/** The read cache must never serve a row a write has changed or removed. */
+export function cacheRecord(api, dir) {
+  const p = path.join(dir, 'cache', 'graph.db');
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  const conn = api.DatabaseConnection.initialize(p);
+  const q = new api.QueryBuilder(conn.getDb());
+  const rec = {};
+  const name = (id) => q.getNodeById(id)?.name ?? null;
+  q.insertNodes([node('c1', 'function', 'first', 'src/c.ts'), node('c2', 'function', 'second', 'src/c.ts'), node('c3', 'function', 'third', 'src/d.ts'), node('c4', 'function', 'fourth', 'src/d.ts')]);
+  ['c1', 'c2', 'c3', 'c4'].forEach((id) => name(id)); // warm the cache
+  q.updateNode(node('c1', 'function', 'first-updated', 'src/c.ts'));
+  rec.afterUpdate = name('c1');
+  q.insertNode(node('c2', 'function', 'second-replaced', 'src/c.ts'));
+  rec.afterReplaceOne = name('c2');
+  q.insertNodes([node('c3', 'function', 'third-replaced', 'src/d.ts')]);
+  rec.afterReplaceMany = name('c3');
+  q.deleteNode('c1');
+  rec.afterDelete = name('c1');
+  q.deleteNodesByFile('src/c.ts');
+  rec.afterDeleteFile = [name('c2'), name('c3')];
+  q.updateNode({ id: 'c4', kind: 'function', name: '', filePath: 'src/d.ts', language: 'typescript' }); // rejected, but the cache entry is dropped
+  rec.afterRejectedUpdate = name('c4');
+  q.storeFileBundle({ nodes: [node('c5', 'function', 'bundled', 'src/e.ts')], edges: [], refs: [], file: fileRecord('src/e.ts') });
+  name('c5');
+  q.deleteFile('src/e.ts');
+  rec.afterDeleteFileRecord = name('c5');
+  name('c3'); name('c4');
+  q.clear();
+  rec.afterClear = [name('c3'), name('c4')];
+  rec.byIdsAfterClear = [...q.getNodesByIds(['c3', 'c4']).keys()];
+  conn.close();
+  return rec;
+}
+
+/** Bulk windows and WAL upkeep, which are asynchronous. */
+export async function asyncRecord(api, dir) {
+  const p = path.join(dir, 'async', 'graph.db');
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  const conn = api.DatabaseConnection.initialize(p);
+  const db = conn.getDb();
+  const names = (type) => db.prepare(`SELECT name FROM sqlite_master WHERE type = '${type}' AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' ORDER BY name`).all().map((r) => r.name);
+  const rec = { initial: names('index') };
+  conn.beginBulkParseLoad();
+  rec.parseWindow = names('index');
+  await conn.endBulkParseLoad();
+  rec.afterParse = names('index');
+  conn.beginBulkRefLoad();
+  rec.refWindow = names('index');
+  await conn.endBulkRefLoad();
+  rec.afterRef = names('index');
+  conn.beginBulkEdgeLoad();
+  rec.edgeWindow = names('index');
+  await conn.endBulkEdgeLoad();
+  rec.afterEdge = names('index');
+  rec.schemaIntact = (({ sql }) => sql)(db.prepare("SELECT sql FROM sqlite_master WHERE name = 'idx_files_generated'").get());
+  const passive = await conn.checkpointWalPassive();
+  const truncate = await conn.checkpointWalTruncate();
+  rec.checkpointShapes = [passive, truncate].map((r) => (r === null ? null : ['busy', 'log', 'checkpointed'].map((k) => typeof r[k])));
+  rec.maintenance = await conn.runMaintenance().then(() => 'done');
+  rec.heal = await conn.healOversizedWal().then((r) => ({ healed: r.healed, sameSize: r.beforeBytes === r.afterBytes }));
+  conn.close();
+  return rec;
+}
+
 /** Everything the contract compares, in one deterministic structure. */
 export function computeDbContract(api, dir) {
   const out = {};
@@ -529,6 +648,8 @@ export function computeDbContract(api, dir) {
   out.lifecycle = lifecycleRecord(api, dir);
   out.migration = migrationRecord(api, dir);
   out.adapter = adapterRecord(api, dir);
+  out.transactions = transactionCounts(api, dir);
+  out.cache = cacheRecord(api, dir);
   return out;
 }
 

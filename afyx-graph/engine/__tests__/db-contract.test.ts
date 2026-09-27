@@ -14,7 +14,7 @@ import { describe, expect, it, afterAll } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { computeDbContract, pathEquivalence } from './db-contract/scenarios.mjs';
+import { asyncRecord, computeDbContract, pathEquivalence } from './db-contract/scenarios.mjs';
 import { srcApi } from './db-contract/api';
 
 const GOLDEN_PATH = path.join(__dirname, 'fixtures', 'db-contract.golden.json');
@@ -26,8 +26,10 @@ afterAll(() => {
 // Scratch paths appear in a few messages; keep the golden machine independent.
 const scrub = (value: unknown): unknown => JSON.parse(JSON.stringify(value, (_k, v) => (typeof v === 'string' ? v.split(scratch).join('<scratch>').replace(/\\/g, '/') : v)));
 
+const asyncPart = await asyncRecord(srcApi, scratch);
+
 describe('persistence contract', () => {
-  const actual = scrub({ ...computeDbContract(srcApi, scratch), equivalence: pathEquivalence(srcApi, scratch) }) as Record<string, any>;
+  const actual = scrub({ ...computeDbContract(srcApi, scratch), async: asyncPart, equivalence: pathEquivalence(srcApi, scratch) }) as Record<string, any>;
 
   if (process.env.AFYX_DB_CONTRACT_WRITE === '1') {
     it('records the golden', () => {
