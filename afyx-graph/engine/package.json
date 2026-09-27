@@ -38,6 +38,7 @@
     "bench:graph": "node scripts/benchmark-graph.mjs",
     "bench:db": "node scripts/benchmark-db.mjs",
     "bench:db-query": "node scripts/benchmark-db-query.mjs",
+    "bench:wal": "node scripts/benchmark-wal-policy.mjs",
     "test:watch": "vitest",
     "test:eval": "vitest run __tests__/evaluation/",
     "eval": "npm run build && npx tsx __tests__/evaluation/runner.ts",
