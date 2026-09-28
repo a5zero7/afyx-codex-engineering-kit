@@ -49,17 +49,17 @@ describe('resolution ground truth', () => {
       .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
   }
 
-  function canonicalResolutionState(): string {
-    const files = graph.getFiles().map((file) => file.path).sort();
+  function canonicalResolutionState(candidateGraph = graph): string {
+    const files = candidateGraph.getFiles().map((file) => file.path).sort();
     const semanticNodes = files
-      .flatMap((filePath) => graph.getNodesInFile(filePath))
+      .flatMap((filePath) => candidateGraph.getNodesInFile(filePath))
       .map((entry) => ({
         id: entry.id,
         semantic: `${entry.filePath}:${entry.kind}:${entry.qualifiedName ?? entry.name}:${entry.startLine}`,
       }));
     const semanticById = new Map(semanticNodes.map((entry) => [entry.id, entry.semantic]));
     const edges = semanticNodes
-      .flatMap((entry) => graph.getOutgoingEdges(entry.id))
+      .flatMap((entry) => candidateGraph.getOutgoingEdges(entry.id))
       .map((edge) => ({
         source: semanticById.get(edge.source),
         target: semanticById.get(edge.target),
@@ -68,7 +68,7 @@ describe('resolution ground truth', () => {
       }))
       .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
     const unresolved = files
-      .flatMap((filePath) => graph.getUnresolvedReferencesInFile(filePath))
+      .flatMap((filePath) => candidateGraph.getUnresolvedReferencesInFile(filePath))
       .map((ref) => ({
         filePath: ref.filePath,
         from: semanticById.get(ref.fromNodeId),
@@ -111,6 +111,12 @@ describe('resolution ground truth', () => {
         .getUnresolvedReferencesInFile('ts/consumer.ts')
         .some((ref) => ref.referenceName === 'missingTarget' && ref.referenceKind === 'calls')
     ).toBe(true);
+  });
+
+  it('preserves the deterministic first-candidate tie-break for equal ambiguous targets', () => {
+    expect(targetsFrom('ts/ambiguity-consumer.ts', 'ambiguousCaller', 'calls')).toEqual([
+      { filePath: 'ts/ambiguity-a.ts', name: 'ambiguousTarget', kind: 'function' },
+    ]);
   });
 
   it('resolves a Python imported symbol to its source module, not a same-name competitor', () => {
@@ -157,5 +163,18 @@ describe('resolution ground truth', () => {
     const second = canonicalResolutionState();
     expect(repeated.stats.resolved).toBe(0);
     expect(second).toBe(first);
+  });
+
+  it('produces the same canonical resolution state from an equivalent fresh project', async () => {
+    const otherRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-resolution-ground-truth-repeat-'));
+    fs.cpSync(FIXTURE, otherRoot, { recursive: true });
+    const otherGraph = AfyxGraph.initSync(otherRoot);
+    try {
+      await otherGraph.indexAll();
+      expect(canonicalResolutionState(otherGraph)).toBe(canonicalResolutionState(graph));
+    } finally {
+      otherGraph.destroy();
+      fs.rmSync(otherRoot, { recursive: true, force: true });
+    }
   });
 });
