@@ -1,31 +1,35 @@
 /**
- * Daemon socket + lockfile path helpers — issue #411.
+ * Path and identity helpers for the shared daemon's IPC surface (issue #411).
  *
- * One shared `afyx-graph serve --mcp` daemon per project root means we need a
- * stable, project-keyed rendezvous between cooperating processes. The IPC
- * surface area is just two file paths:
+ * One daemon per project root means every cooperating process needs a
+ * stable, project-keyed way to find it. That surface is exactly two paths:
  *
- *   - `daemon.sock` — Unix domain socket / named pipe the daemon listens on.
- *   - `daemon.pid` — atomic-create lockfile holding the daemon's pid + version.
+ *   - `daemon.sock` — the Unix-domain socket (a named pipe on Windows) the
+ *     daemon listens on.
+ *   - `daemon.pid` — the atomically-created lockfile holding its pid and version.
  *
- * Both live under `.afyx-graph/` so the project-scoped uninstall (`afyx-graph
- * uninit`) sweeps them up for free.
+ * Both live under `.afyx-graph/`, so a project-scoped `afyx-graph uninit`
+ * sweeps them up for free, with no special-casing needed.
  *
- * Special-case: Unix domain socket paths have a hard length limit (~104 on
- * macOS, ~108 on Linux); when the in-project path exceeds it we fall back to
- * an absolute-path hash under `os.tmpdir()`. The pidfile always stays in the
- * project (it doesn't have a length limit) — and acts as the authoritative
- * pointer to the socket path the daemon chose.
+ * Two platform hazards complicate the socket path specifically:
  *
- * Second special-case (#997, #974): some filesystems can't host an AF_UNIX node
- * AT ALL — ExFAT/FAT external volumes, certain network mounts, WSL2 DrvFs — so
- * `listen()` throws ENOTSUP/EACCES regardless of path length. We can't cheaply
- * tell those apart from a normal volume up front, so instead of guessing we
- * expose an ORDERED candidate list (`getDaemonSocketCandidates`): the in-project
- * path first, the deterministic tmpdir path as the fallback of last resort. The
- * daemon binds the first that works (relocating past a capability error); the
- * proxy connects the first that answers. Both walk the SAME list, so they still
- * converge on whichever the daemon bound with zero coordination.
+ *   1. Unix-domain socket paths have a hard length ceiling (roughly 104 bytes
+ *      on macOS, 108 on Linux). When the in-project path would exceed it,
+ *      binding falls back to a hashed path under `os.tmpdir()` instead. The
+ *      pidfile has no such limit and always stays in the project, acting as
+ *      the authoritative record of whichever socket path the daemon actually
+ *      chose.
+ *   2. Some filesystems can't host an AF_UNIX node at all — ExFAT/FAT
+ *      external volumes, some network mounts, WSL2 DrvFs — and `listen()`
+ *      there throws ENOTSUP/EACCES regardless of path length (#997, #974).
+ *      Telling those apart from an ordinary volume ahead of time isn't
+ *      cheap, so rather than guess, {@link getDaemonSocketCandidates}
+ *      exposes an ORDERED list: the in-project path first, the deterministic
+ *      tmpdir path as the last resort. The daemon binds the first candidate
+ *      that works, relocating past anything that fails for a capability
+ *      reason; the proxy connects to the first one that answers. Both walk
+ *      the exact same list, so they converge on whichever the daemon
+ *      actually bound with no coordination between them at all.
  */
 
 import * as crypto from 'crypto';
@@ -34,67 +38,77 @@ import * as os from 'os';
 import * as path from 'path';
 import { getAfyxGraphDir } from '../directory';
 
-/** Soft upper bound for in-project socket paths. */
+/** Soft ceiling for an in-project socket path before it's considered too long to risk. */
 const POSIX_SOCKET_PATH_LIMIT = 100;
 
-/** Short stable identifier for a project root — used in tmpdir/pipe names. */
+/** Short, stable, project-scoped identifier — the basis for both the tmpdir path and the Windows pipe name. */
 function projectHash(projectRoot: string): string {
   return crypto.createHash('sha256').update(path.resolve(projectRoot)).digest('hex').slice(0, 16);
 }
 
+function windowsPipeName(projectRoot: string): string {
+  return `\\\\.\\pipe\\afyx-graph-${projectHash(projectRoot)}`;
+}
+
 /**
- * The deterministic tmpdir socket path for `projectRoot` — the fallback used
- * when the in-project location can't host a socket (too long, or an FS that
- * doesn't support AF_UNIX). Hash keeps it project-scoped, and being purely a
- * function of the root means the daemon and the proxy compute the identical
- * path without talking to each other.
+ * The deterministic tmpdir socket path for `projectRoot` — the fallback for
+ * an in-project location that can't host a socket (too long a path, or a
+ * filesystem without AF_UNIX support). Being a pure function of the project
+ * root, purely hash-derived, means the daemon and every proxy compute the
+ * identical path independently, without ever needing to tell each other
+ * what they picked.
  */
 function tmpdirSocketPath(projectRoot: string): string {
   return path.join(os.tmpdir(), `afyx-graph-${projectHash(projectRoot)}.sock`);
 }
 
-/**
- * Ordered socket / named-pipe path candidates the daemon should try to bind (and
- * the proxy should try to connect) for `projectRoot`, most-preferred first.
- * Deterministic given a project root, so independent processes converge without
- * coordination — even when the preferred candidate is unusable and both fall
- * through to the same fallback.
- *
- *   - Windows: a single named pipe (lives in the kernel pipe namespace, not on
- *     the project FS, so neither the length nor the ExFAT hazard applies).
- *   - Short in-project path: `[ .afyx-graph/daemon.sock , <tmpdir> ]` — try the
- *     project first, fall back to tmpdir if its FS can't host a socket (#997).
- *   - Long in-project path (deep monorepos, Bazel out dirs): `[ <tmpdir> ]` only
- *     — bind would throw ENAMETOOLONG, so we skip straight to tmpdir.
- */
-export function getDaemonSocketCandidates(projectRoot: string): string[] {
-  if (process.platform === 'win32') {
-    return [`\\\\.\\pipe\\afyx-graph-${projectHash(projectRoot)}`];
-  }
-  const inProject = path.join(getAfyxGraphDir(projectRoot), 'daemon.sock');
-  const tmp = tmpdirSocketPath(projectRoot);
-  if (inProject.length > POSIX_SOCKET_PATH_LIMIT) return [tmp];
-  return [inProject, tmp];
+function inProjectSocketPath(projectRoot: string): string {
+  return path.join(getAfyxGraphDir(projectRoot), 'daemon.sock');
 }
 
 /**
- * The PREFERRED (primary) socket path — candidate 0. Use this only where a
- * single representative path is wanted (the lockfile's informational
- * `socketPath` field, status display). For binding/connecting, walk the full
- * {@link getDaemonSocketCandidates} list — the daemon may bind a fallback when
- * candidate 0 is unusable.
+ * The ordered list of socket (or named-pipe) paths the daemon should try to
+ * bind, and the proxy should try to connect, for `projectRoot` — most
+ * preferred first. A pure function of the root, so independent processes
+ * converge on the same choice with no coordination, even when the preferred
+ * candidate turns out to be unusable and both fall through to the same
+ * fallback:
+ *
+ *   - **Windows** gets exactly one candidate: a named pipe. It lives in the
+ *     kernel's own pipe namespace rather than on the project's filesystem,
+ *     so neither the length limit nor the ExFAT hazard below applies to it.
+ *   - A **short in-project path** yields `[daemon.sock, <tmpdir path>]` — try
+ *     the project location first, fall back to tmpdir only if that
+ *     filesystem can't host a socket at all (#997).
+ *   - A **long in-project path** (deep monorepos, Bazel-style out dirs)
+ *     yields `[<tmpdir path>]` alone — binding it would throw ENAMETOOLONG,
+ *     so candidates skip straight to tmpdir instead of trying and failing first.
+ */
+export function getDaemonSocketCandidates(projectRoot: string): string[] {
+  if (process.platform === 'win32') return [windowsPipeName(projectRoot)];
+  const inProject = inProjectSocketPath(projectRoot);
+  if (inProject.length > POSIX_SOCKET_PATH_LIMIT) return [tmpdirSocketPath(projectRoot)];
+  return [inProject, tmpdirSocketPath(projectRoot)];
+}
+
+/**
+ * The single PREFERRED socket path — candidate 0 — for callers that only
+ * want one representative path (the lockfile's informational `socketPath`
+ * field, a status display). Binding or connecting should instead walk the
+ * full {@link getDaemonSocketCandidates} list, since the daemon may have
+ * bound a fallback candidate when this one turned out to be unusable.
  */
 export function getDaemonSocketPath(projectRoot: string): string {
-  // The candidate list is never empty (≥1 on every platform), so [0] is safe.
+  // The candidate list is never empty on any platform, so index 0 is safe.
   return getDaemonSocketCandidates(projectRoot)[0]!;
 }
 
-/** Absolute path to the daemon pid lockfile for `projectRoot`. */
+/** Absolute path to the daemon's pid lockfile for `projectRoot`. */
 export function getDaemonPidPath(projectRoot: string): string {
   return path.join(getAfyxGraphDir(projectRoot), 'daemon.pid');
 }
 
-/** Structured contents of the pid lockfile. */
+/** The structured contents of the pid lockfile. */
 export interface DaemonLockInfo {
   pid: number;
   version: string;
@@ -102,36 +116,57 @@ export interface DaemonLockInfo {
   startedAt: number;
 }
 
-/** Whether a lock record contains enough identity data for a socket hello. */
+/** Whether a lock record carries enough identity information to attempt a socket-hello probe at all. */
 export function canProbeDaemonIdentity(info: DaemonLockInfo): boolean {
-  return (
-    Number.isInteger(info.pid) &&
-    info.pid > 0 &&
-    typeof info.socketPath === 'string' &&
-    info.socketPath.length > 0
-  );
+  return Number.isInteger(info.pid) && info.pid > 0 && typeof info.socketPath === 'string' && info.socketPath.length > 0;
+}
+
+const IDENTITY_PROBE_TIMEOUT_MS = 1_000;
+const IDENTITY_PROBE_MAX_HELLO_BYTES = 4096;
+
+function helloMatchesLockRecord(hello: Record<string, unknown>, info: DaemonLockInfo): boolean {
+  return hello.protocol === 1
+    && hello.pid === info.pid
+    && (info.version === 'unknown' || hello.afyxGraph === info.version);
 }
 
 /**
- * Verify that the process named by a lockfile is the Afyx Graph daemon serving
- * its socket. A bare PID liveness probe is insufficient because OSes reuse PIDs
- * after an OOM/SIGKILL (#1553).
+ * Confirm that the process a lockfile names is actually the Afyx Graph
+ * daemon serving the socket it claims to. A bare pid-liveness check can't
+ * establish this on its own — the OS can and does reuse pids after an
+ * OOM-kill or SIGKILL (#1553), so only a real socket hello proves identity.
  */
-export function probeDaemonIdentity(info: DaemonLockInfo, timeoutMs = 1_000): Promise<boolean> {
+export function probeDaemonIdentity(info: DaemonLockInfo, timeoutMs = IDENTITY_PROBE_TIMEOUT_MS): Promise<boolean> {
   if (!canProbeDaemonIdentity(info)) return Promise.resolve(false);
+
   return new Promise<boolean>((resolve) => {
+    let settled = false;
+    let received = '';
     let socket: net.Socket;
-    let buffer = '';
-    let done = false;
-    const finish = (ok: boolean) => {
-      if (done) return;
-      done = true;
+
+    const settle = (matched: boolean): void => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
       socket.destroy();
-      resolve(ok);
+      resolve(matched);
     };
-    const timer = setTimeout(() => finish(false), timeoutMs);
+
+    const onData = (chunk: string): void => {
+      received += chunk;
+      if (received.length > IDENTITY_PROBE_MAX_HELLO_BYTES) return settle(false);
+      const newlineAt = received.indexOf('\n');
+      if (newlineAt < 0) return;
+      try {
+        settle(helloMatchesLockRecord(JSON.parse(received.slice(0, newlineAt)) as Record<string, unknown>, info));
+      } catch {
+        settle(false);
+      }
+    };
+
+    const timer = setTimeout(() => settle(false), timeoutMs);
     timer.unref?.();
+
     try {
       socket = net.createConnection(info.socketPath);
     } catch {
@@ -140,61 +175,65 @@ export function probeDaemonIdentity(info: DaemonLockInfo, timeoutMs = 1_000): Pr
       return;
     }
     socket.setEncoding('utf8');
-    socket.on('data', (chunk) => {
-      buffer += String(chunk);
-      if (buffer.length > 4096) return finish(false);
-      const newline = buffer.indexOf('\n');
-      if (newline < 0) return;
-      try {
-        const hello = JSON.parse(buffer.slice(0, newline)) as Record<string, unknown>;
-        finish(
-          hello.protocol === 1 &&
-          hello.pid === info.pid &&
-          (info.version === 'unknown' || hello.afyxGraph === info.version)
-        );
-      } catch {
-        finish(false);
-      }
-    });
-    socket.on('error', () => finish(false));
-    socket.on('close', () => finish(false));
+    socket.on('data', onData);
+    socket.on('error', () => settle(false));
+    socket.on('close', () => settle(false));
   });
 }
 
 /**
- * Serialize a {@link DaemonLockInfo} for writing to the pidfile. JSON for
- * human readability — operators occasionally `cat` this when debugging.
+ * Serialize a {@link DaemonLockInfo} for the pidfile. Pretty-printed JSON —
+ * an operator occasionally `cat`s this file directly while debugging, and
+ * readability there costs nothing.
  */
 export function encodeLockInfo(info: DaemonLockInfo): string {
   return JSON.stringify(info, null, 2) + '\n';
 }
 
+function decodeStructuredLockInfo(parsed: unknown): DaemonLockInfo | null {
+  if (
+    parsed &&
+    typeof (parsed as Record<string, unknown>).pid === 'number' &&
+    typeof (parsed as Record<string, unknown>).version === 'string' &&
+    typeof (parsed as Record<string, unknown>).socketPath === 'string' &&
+    typeof (parsed as Record<string, unknown>).startedAt === 'number'
+  ) {
+    return parsed as DaemonLockInfo;
+  }
+  return null;
+}
+
+/** A bare positive decimal integer — the shape of a pre-#411 plain-pid lockfile, e.g. `"12345"`. */
+const LEGACY_PLAIN_PID_PATTERN = /^[1-9]\d*$/;
+
+function decodeLegacyPlainPidLockInfo(trimmed: string): DaemonLockInfo | null {
+  if (!LEGACY_PLAIN_PID_PATTERN.test(trimmed)) return null;
+  const pid = Number(trimmed);
+  if (!Number.isSafeInteger(pid)) return null;
+  return { pid, version: 'unknown', socketPath: '', startedAt: 0 };
+}
+
 /**
- * Parse a pidfile body. Tolerant of old-format pidfiles (plain decimal pid) so
- * a 0.10.x daemon doesn't trip over a 0.9.x lockfile if that ever happens —
- * we treat such a lockfile as "process is unknown version, refuse to share."
+ * Parse a pidfile's contents, tolerating the old plain-decimal-pid format so
+ * a newer daemon never trips over a lockfile an older one left behind — such
+ * a record decodes as "an unknown-version process", which the caller treats
+ * as not safe to share.
+ *
+ * The legacy parser runs whenever the structured decode comes back null,
+ * which happens for two different reasons: the text isn't valid JSON at all,
+ * OR it parses fine but isn't shaped like a lock record. That second case
+ * matters because a bare `"42"` IS valid JSON — it parses to the number 42
+ * without throwing — so the fallback has to trigger on a failed shape match
+ * too, not only on a parse exception.
  */
 export function decodeLockInfo(raw: string): DaemonLockInfo | null {
   const trimmed = raw.trim();
   if (!trimmed) return null;
+  let structured: DaemonLockInfo | null = null;
   try {
-    const parsed = JSON.parse(trimmed);
-    if (
-      parsed &&
-      typeof parsed.pid === 'number' &&
-      typeof parsed.version === 'string' &&
-      typeof parsed.socketPath === 'string' &&
-      typeof parsed.startedAt === 'number'
-    ) {
-      return parsed as DaemonLockInfo;
-    }
+    structured = decodeStructuredLockInfo(JSON.parse(trimmed));
   } catch {
-    // Fall through to legacy plain-pid handling.
+    structured = null;
   }
-  if (!/^[1-9]\d*$/.test(trimmed)) return null;
-  const pid = Number(trimmed);
-  if (Number.isSafeInteger(pid)) {
-    return { pid, version: 'unknown', socketPath: '', startedAt: 0 };
-  }
-  return null;
+  return structured ?? decodeLegacyPlainPidLockInfo(trimmed);
 }

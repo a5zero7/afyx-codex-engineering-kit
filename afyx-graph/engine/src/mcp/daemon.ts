@@ -1,48 +1,41 @@
 /**
- * Shared MCP daemon — issue #411.
+ * Shared MCP daemon (issue #411).
  *
- * One detached `afyx-graph serve --mcp` daemon process per project root,
- * accepting N concurrent MCP clients over a Unix-domain socket (or named pipe
- * on Windows). Each incoming connection gets its own {@link MCPSession}; all
- * sessions share a single {@link MCPEngine}, which means a single file watcher
- * (one inotify set), a single SQLite connection (one WAL writer), and a single
- * tree-sitter warm-up — paid once, amortized across every agent talking to the
- * project.
+ * A project gets exactly one detached `afyx-graph serve --mcp` daemon, and
+ * every concurrent MCP client attaches to it over a Unix-domain socket (a
+ * named pipe on Windows). Each accepted connection becomes its own
+ * {@link MCPSession}, but all sessions on a given daemon share one
+ * {@link MCPEngine} — one file watcher, one SQLite WAL writer, one
+ * tree-sitter warm-up, paid once and amortized across every attached agent.
  *
- * Lifecycle (see also `./index.ts` and `./proxy.ts`):
- *   - The daemon is spawned **detached** (its own session/process group, stdio
- *     decoupled) by the first launcher that finds no daemon running. It is NOT
- *     a child of any MCP host, so closing one terminal / Ctrl-C'ing one session
- *     can't take it down and sever the others. That's why this process has no
- *     PPID watchdog: it deliberately outlives every individual client.
- *   - Every MCP host talks to the daemon through a thin `proxy` process (the
- *     thing the host actually spawned). The proxy keeps the #277 PPID watchdog,
- *     so a SIGKILL'd host still reaps its proxy promptly; the proxy's socket
- *     close then decrements the daemon's refcount.
- *   - When the last client disconnects the daemon lingers for
- *     `AFYX_GRAPH_DAEMON_IDLE_TIMEOUT_MS` (default 300s) so back-to-back agent
- *     runs in the same project don't repay startup, then exits cleanly. This is
- *     what keeps a single-agent session from leaking a daemon forever (#277).
+ * Lifecycle notes (the fuller picture lives in `./index.ts` and `./proxy.ts`):
+ *   - Spawned **detached**: its own session/process group, stdio decoupled,
+ *     by whichever launcher first finds nothing listening. It is not a child
+ *     of any MCP host, so one terminal closing (or one session's Ctrl-C)
+ *     can't sever the others — which is also why this process runs with no
+ *     PPID watchdog of its own: outliving every individual client is the point.
+ *   - Hosts never talk to this process directly; they talk to a thin `proxy`
+ *     that pipes to it. The proxy keeps the #277 PPID watchdog, so a
+ *     SIGKILL'd host still gets reaped promptly, and that proxy's socket
+ *     close decrements this daemon's connected-client count.
+ *   - Once the last client leaves, the daemon lingers for
+ *     `AFYX_GRAPH_DAEMON_IDLE_TIMEOUT_MS` (300s by default) before exiting —
+ *     long enough that back-to-back agent runs in the same project reuse a
+ *     warm engine instead of repaying startup, short enough that a
+ *     single abandoned session doesn't leak a daemon forever (#277).
  *
- * What this file owns:
- *   - Listening on the daemon socket and spawning per-connection sessions.
- *   - The handshake "hello" line that lets a proxy verify it found a
- *     same-version daemon before piping any JSON-RPC through it.
- *   - The lockfile (`.afyx-graph/daemon.pid`) competing daemons arbitrate
- *     against — atomic `O_EXCL` create with the full record written in the same
- *     breath (no empty-file window) + cleanup on exit.
- *   - Reference counting + idle timeout.
- *   - Graceful shutdown on SIGTERM/SIGINT and idle exit.
+ * Owned here: the listening socket and per-connection session spawn, the
+ * version-gated hello handshake, the `.afyx-graph/daemon.pid` lockfile
+ * (atomic create, no empty-file window, cleanup on exit), the connected-client
+ * refcount and idle/inactivity timeout, and graceful shutdown on SIGTERM/SIGINT.
  *
- * What this file does NOT own:
- *   - The proxy side (`./proxy.ts`).
- *   - The decision of *whether* to run as daemon at all — that's `MCPServer`.
- *   - The MCP protocol state machine — that's `./session.ts`.
+ * NOT owned here: the proxy side (`./proxy.ts`), the decision of whether to
+ * run as a daemon at all (`MCPServer` in `./index.ts`), and the MCP protocol
+ * state machine itself (`./session.ts`).
  */
 
 import * as fs from 'fs';
 import * as net from 'net';
-import * as path from 'path';
 import { MCPEngine } from './engine';
 import { MCPSession } from './session';
 import { SocketTransport } from './transport';
@@ -61,124 +54,119 @@ import {
   writerLockHeldMessage,
 } from './writer-lock';
 import { registerDaemon, deregisterDaemon } from './daemon-registry';
-
-/** Default idle linger after the last client disconnects. */
-const DEFAULT_IDLE_TIMEOUT_MS = 300_000;
+import { isProcessAlive } from './process-liveness';
+import { acquireAtomicLockfile, acquireExclusiveFile } from './atomic-lockfile';
+import {
+  ActivityTimers,
+  resolveIdleTimeoutMs,
+  resolveMaxIdleMs,
+  resolveClientSweepMs,
+} from './activity-policy';
+import { parseClientHelloLine, peerIsDead, type ClientPeerInfo } from './client-registry';
+import { bindFirstUsableSocket } from './socket-bind';
 
 /**
- * Hard ceiling on how long the daemon stays up with clients connected but no
- * inbound traffic. A backstop (#692): if a client's socket-close is never
- * delivered (a Windows named-pipe hazard) it stays counted forever and the
- * normal idle timer — which only arms at zero clients — never fires. A phantom
- * client sends no traffic, so bounding on inactivity reaps the daemon anyway.
- * Set generously so a real but momentarily-idle session isn't reaped mid-use.
+ * Grace period for a Windows-only shutdown hazard: calling `process.exit()`
+ * while a recursive `fs.watch` handle is still tearing down aborts the
+ * process with a libuv `UV_HANDLE_CLOSING` assertion (`0xC0000409`) — hit
+ * reliably whenever the watched tree contains a nested repo (a submodule or
+ * embedded clone keeps a watch active right through shutdown). The fix lets
+ * the loop drain so libuv finishes closing those handles before exiting
+ * naturally; this timer is only the backstop for a stray handle that would
+ * otherwise hang shutdown indefinitely, so it stays short. See
+ * {@link finalizeDaemonExit}.
  */
-const DEFAULT_MAX_IDLE_MS = 1_800_000; // 30 min
+const WINDOWS_EXIT_DRAIN_GRACE_MS = 2_000;
 
 /**
- * Windows-only shutdown backstop. On Windows, calling `process.exit()` while a
- * recursive `fs.watch` handle is still tearing down aborts the process with a
- * libuv `UV_HANDLE_CLOSING` assertion (`0xC0000409`) — reproducible whenever the
- * watched tree contains a nested repo (submodule / embedded clone), since that's
- * what keeps a watch active at shutdown. The fix is to let the event loop drain
- * so libuv finishes closing those handles, then exit naturally; this timer only
- * force-exits if some unexpected handle keeps the loop alive past the grace
- * window. Kept short so shutdown stays snappy in that fallback. See
- * `finalizeDaemonExit`.
- */
-const DAEMON_SHUTDOWN_BACKSTOP_MS = 2_000;
-
-/**
- * Finalize daemon shutdown. On POSIX, exit immediately — it's clean and fast.
- * On Windows, do NOT force an exit while watchers may still be closing (that
- * trips the libuv assertion above); instead mark success and let the loop drain
- * to a natural exit, with an UNREF'd backstop that force-exits only if a stray
- * handle would otherwise hang shutdown. Pure and platform-injected so both
- * branches are unit-testable off-Windows. Returns the backstop timer (Windows)
- * so callers/tests can clear it.
+ * Finalize daemon shutdown. Exits immediately on POSIX — nothing there needs
+ * a drain. On Windows, exiting is deferred to a natural loop drain instead of
+ * forced (see {@link WINDOWS_EXIT_DRAIN_GRACE_MS}), with an unref'd backstop
+ * that only fires if some other handle is still keeping the process alive.
+ * Pure and platform/exit-injected so both branches are unit-testable off of
+ * an actual Windows box; returns the backstop timer (or null on POSIX) so a
+ * caller/test can clear it.
  */
 export function finalizeDaemonExit(
   platform: NodeJS.Platform,
   exit: (code: number) => void,
 ): NodeJS.Timeout | null {
-  if (platform === 'win32') {
-    process.exitCode = 0;
-    const backstop = setTimeout(() => exit(0), DAEMON_SHUTDOWN_BACKSTOP_MS);
-    // Unref so it never keeps the loop alive: a natural drain (watchers closed,
-    // nothing else pending) exits before it fires; it only fires when some other
-    // handle is keeping the loop running, which is exactly when we need it.
-    backstop.unref?.();
-    return backstop;
+  if (platform !== 'win32') {
+    exit(0);
+    return null;
   }
-  exit(0);
-  return null;
+  process.exitCode = 0;
+  const backstop = setTimeout(() => exit(0), WINDOWS_EXIT_DRAIN_GRACE_MS);
+  // Unref so a clean drain (handles closed, nothing else pending) exits on
+  // its own well before this fires; it only matters when something else is
+  // keeping the loop alive, which is exactly the case it exists to catch.
+  backstop.unref?.();
+  return backstop;
 }
 
-/** How often the daemon sweeps connected clients for a dead peer process (#692). */
-const DEFAULT_CLIENT_SWEEP_MS = 30_000;
-
-/** How long the daemon waits for the optional client-hello before proceeding without it. */
+/** How long a connection gets to send its optional client-hello before the daemon gives up waiting. */
 const CLIENT_HELLO_TIMEOUT_MS = 3_000;
 
-/** Bytes/parse-window for an oversized hello line — bounded against a malicious peer. */
+/** Ceiling on an unterminated hello line — bounds memory against a hostile or broken peer. */
 const MAX_HELLO_LINE_BYTES = 4096;
 
 /**
- * Wire format for the one-shot hello line the daemon emits on every new
- * connection. Versioned with the package's own semver so a 0.9.x proxy never
- * pipes through a 0.10.x daemon (or vice-versa) — the proxy falls back to
- * direct mode on mismatch rather than risk subtle wire incompatibilities.
+ * The one-shot line the daemon writes to every freshly-accepted connection,
+ * before any application byte. Carries the package's own semver so a 0.9.x
+ * proxy can refuse to pipe through a 0.10.x daemon (and vice versa) rather
+ * than risk a subtle wire mismatch — the proxy falls back to direct mode
+ * instead.
  */
 export interface DaemonHello {
-  afyxGraph: string; // package version (must match the proxy's own version)
-  pid: number;       // daemon pid (informational; for `ps` debugging)
-  socketPath: string; // echoed back so the proxy can log it
-  protocol: 1;       // bump if the hello shape changes
+  afyxGraph: string; // this daemon's package version; must equal the proxy's own
+  pid: number;       // informational — useful when eyeballing `ps` output
+  socketPath: string; // echoed back purely so the proxy can log where it attached
+  protocol: 1;       // bump on any wire-shape change
 }
 
 /**
- * Optional reverse-handshake line a proxy sends right after it verifies the
- * daemon hello, carrying its own pids so the daemon can reap the client if its
- * process dies WITHOUT the socket ever signalling close (the Windows named-pipe
- * hazard behind #692). Entirely optional and fail-safe: a connection that never
- * sends it (a legacy/direct client) just falls back to the socket-close
- * lifecycle. The `afyx_graph_client` marker is what tells it apart from the
- * client's first JSON-RPC message.
+ * The optional reverse handshake a proxy sends right after accepting the
+ * daemon's hello, giving the daemon the proxy's own pids so it can notice
+ * that connection's peer dying even when the socket itself never signals
+ * close (the Windows named-pipe hazard behind #692). A connection that skips
+ * this (a legacy or direct client) just falls back to socket-close lifecycle
+ * — nothing here is load-bearing for a well-behaved modern client. The
+ * `afyx_graph_client` marker distinguishes it from an ordinary first
+ * JSON-RPC message.
  */
 export interface DaemonClientHello {
   afyx_graph_client: 1;
-  pid: number;             // the proxy process's own pid
-  hostPid: number | null;  // the MCP host pid (past any launcher shim), if known
+  pid: number;             // the proxy process itself
+  hostPid: number | null;  // the MCP host, past any launcher shim, if known
 }
 
 export interface DaemonStartResult {
-  /** Always-non-null for a successfully-started daemon. */
+  /** Never null once `start()` has resolved successfully. */
   socketPath: string;
-  /** Lockfile contents as written. */
+  /** The lockfile record as written. */
   lock: DaemonLockInfo;
 }
 
 /**
- * Run as the shared daemon for `projectRoot`. Resolves once the socket is
- * listening. The Daemon owns the socket, the engine, and the lockfile until
- * `stop()` is called or it exits on idle/signal.
+ * The shared daemon for one project root. `start()` resolves once the socket
+ * is bound; from then on the instance owns the socket, the engine, and the
+ * lockfile until either `stop()` runs or an idle/signal exit fires.
  *
- * Race-safe: callers must first call `tryAcquireDaemonLock(projectRoot)` and
- * only construct a Daemon if they got the lock (`kind: 'acquired'`). The atomic
- * create/link inside the acquire helper elects one candidate. The project
- * writer lock then fences bind/ownership refresh against stale-artifact cleanup.
+ * Callers must win {@link tryAcquireDaemonLock} for `projectRoot` BEFORE
+ * constructing one of these — the atomic create/link inside that helper is
+ * what elects a single daemon among racing candidates. The project writer
+ * lock (acquired in `start()`) then fences the bind/ownership-refresh window
+ * against a concurrent stale-artifact sweep.
  */
 export class Daemon {
   private server: net.Server | null = null;
   private clients = new Set<MCPSession>();
-  /** Per-client peer pids from the optional client-hello, for the liveness sweep. */
-  private clientPeers = new Map<MCPSession, { pid: number | null; hostPid: number | null }>();
-  private idleTimer: NodeJS.Timeout | null = null;
-  private idleTimeoutMs: number;
-  private maxIdleMs: number;
+  /** Per-client peer pids from that connection's optional client-hello, for the liveness sweep. */
+  private clientPeers = new Map<MCPSession, ClientPeerInfo>();
   private lastActivityAt = Date.now();
-  private maxIdleTimer: NodeJS.Timeout | null = null;
-  private clientSweepTimer: NodeJS.Timeout | null = null;
+  private readonly activityTimers: ActivityTimers;
+  private readonly idleTimeoutMs: number;
+  private readonly maxIdleMs: number;
   private engine: MCPEngine;
   private stopping = false;
   private socketPath: string;
@@ -192,23 +180,71 @@ export class Daemon {
     this.pidPath = getDaemonPidPath(projectRoot);
     this.idleTimeoutMs = opts.idleTimeoutMs ?? resolveIdleTimeoutMs();
     this.maxIdleMs = opts.maxIdleMs ?? resolveMaxIdleMs();
-    // Daemon mode serves many concurrent clients on one event loop, so off-load
-    // read-tool dispatch to a worker pool — otherwise concurrent explores
-    // serialize and starve the MCP transport (clients time out). Direct mode
-    // (one stdio client) leaves the pool off; `AFYX_GRAPH_QUERY_POOL_SIZE=0`
-    // disables it here too.
+    this.activityTimers = new ActivityTimers({
+      idleTimeoutMs: this.idleTimeoutMs,
+      maxIdleMs: this.maxIdleMs,
+      clientSweepMs: resolveClientSweepMs(),
+    });
+    // A daemon serves many concurrent clients on one event loop, so read-tool
+    // dispatch is off-loaded to a worker pool here — without it, concurrent
+    // explores serialize and starve the transport until clients time out.
+    // Direct mode (a single stdio client) leaves the pool off; setting
+    // `AFYX_GRAPH_QUERY_POOL_SIZE=0` disables it here too.
     this.engine = new MCPEngine({ queryPool: true });
     this.engine.setProjectPathHint(projectRoot);
   }
 
   /**
-   * Bind the socket, refresh the ownership record, kick off engine init, and
-   * register signal handlers. The promise resolves once the server is listening
-   * — the daemon then sticks around until idle/shutdown.
+   * Claim the writer lock, bind the socket, refresh the lockfile with the
+   * bound path, background engine init, and register the signal handlers.
+   * Resolves once listening; the instance then runs until idle or shutdown.
    */
   async start(): Promise<DaemonStartResult> {
-    // #1740: claim the project writer lock before opening/watching so a
-    // concurrent direct-mode serve --mcp cannot start a second watcher.
+    const initialLockContents = this.claimWriterLockAndOwnLockfile();
+    const bound = await this.bindSocket();
+    this.server = bound.server;
+    // Adopt whichever path actually got bound — it may be the tmpdir fallback
+    // past an unusable in-project location. Lockfile, registry, permissions,
+    // cleanup and status all key off this real path from here on, never the
+    // original preferred guess.
+    this.socketPath = bound.socketPath;
+
+    const lock = this.refreshLockfileAfterBind(bound.server, initialLockContents);
+
+    // Backgrounded (see #172): only starts after bind + ownership refresh, so
+    // a delayed daemon that already lost the election can never open a
+    // second watcher or writer.
+    void this.engine.ensureInitialized(this.projectRoot);
+
+    // Best-effort discovery record for `afyx-graph list` / `stop --all`; a
+    // missed write only means list's own liveness prune covers it later.
+    registerDaemon({ root: this.projectRoot, ...lock });
+
+    process.stderr.write(
+      `[Afyx Graph daemon] Listening on ${this.socketPath} (pid ${process.pid}, v${AfyxGraphPackageVersion}). Idle timeout ${this.idleTimeoutMs}ms.\n`
+    );
+
+    // No clients yet: arm the idle timer right away so a daemon nobody ever
+    // connects to (spawned, then abandoned because its launcher died) can't
+    // pin resources forever.
+    this.armIdleTimer();
+    this.startLivenessTimers();
+
+    process.on('SIGINT', () => this.stop('SIGINT'));
+    process.on('SIGTERM', () => this.stop('SIGTERM'));
+
+    return { socketPath: this.socketPath, lock };
+  }
+
+  /**
+   * #1740: claim the project writer lock before opening/watching, so a
+   * concurrent direct-mode `serve --mcp` can't start a second watcher, then
+   * confirm the daemon lockfile this process already holds (from
+   * `tryAcquireDaemonLock`, run by the caller before construction) is still
+   * intact. Returns that lockfile's raw bytes, needed later as the exact
+   * compare-and-swap snapshot for the post-bind refresh.
+   */
+  private claimWriterLockAndOwnLockfile(): string {
     const writer = tryAcquireWriterLock(this.projectRoot, 'daemon');
     if (writer.kind === 'taken') {
       const msg = writerLockHeldMessage(writer.existing, writer.pidPath);
@@ -216,58 +252,38 @@ export class Daemon {
       this.cleanupLockfile();
       throw new Error(msg);
     }
-
-    let initialLockContents: string;
     try {
-      initialLockContents = fs.readFileSync(this.pidPath, 'utf8');
-      if (decodeLockInfo(initialLockContents)?.pid !== process.pid) {
+      const raw = fs.readFileSync(this.pidPath, 'utf8');
+      if (decodeLockInfo(raw)?.pid !== process.pid) {
         throw new Error('daemon lock belongs to another process');
       }
+      return raw;
     } catch {
       releaseWriterLock(this.projectRoot);
       throw new Error('Lost daemon lock ownership before startup.');
     }
+  }
 
-    // Walk the ordered socket candidates and bind the first that works. The
-    // in-project path comes first; the deterministic tmpdir path is the fallback
-    // for a filesystem that can't host an AF_UNIX node at all (ExFAT/FAT external
-    // volumes, some network mounts, WSL2 DrvFs → ENOTSUP/EACCES; #997, #974). The
-    // `listen` closure clears a stale socket (left by a SIGKILL'd previous daemon)
-    // before each attempt — safe because we hold the lockfile, so no live daemon
-    // owns it; without it `listen` would wedge on EADDRINUSE.
+  /**
+   * Walk the ordered socket candidates (see `daemon-paths.ts`) and bind the
+   * first one that works, relocating past anything that can't host an
+   * AF_UNIX node at all (ExFAT/FAT external volumes, some network mounts,
+   * WSL2 DrvFs → ENOTSUP/EACCES; #997, #974). On total failure this releases
+   * the lockfile and every partial socket before rethrowing, so the caller
+   * (the bin's own try/catch) exits this detached daemon cleanly and every
+   * launcher falls back to direct mode (#974) instead of spinning against a
+   * lock that points at our now-dead pid.
+   */
+  private async bindSocket(): Promise<{ server: net.Server; socketPath: string }> {
     const candidates = getDaemonSocketCandidates(this.projectRoot);
-    const listen = (socketPath: string): Promise<net.Server> =>
-      new Promise<net.Server>((resolve, reject) => {
-        if (process.platform !== 'win32') {
-          try { fs.unlinkSync(socketPath); } catch { /* not-exists is fine */ }
-        }
-        const server = net.createServer((socket) => this.handleConnection(socket));
-        server.once('error', reject);
-        server.listen(socketPath, () => {
-          // POSIX: tighten permissions to user-only — the socket lives under
-          // `.afyx-graph/` (git-ignored, maybe a shared FS) or tmpdir.
-          if (process.platform !== 'win32') {
-            try { fs.chmodSync(socketPath, 0o600); } catch { /* best-effort */ }
-          }
-          resolve(server);
-        });
-      });
-
-    let bound: { server: net.Server; socketPath: string };
     try {
-      bound = await bindFirstUsableSocket(candidates, listen, {
+      return await bindFirstUsableSocket(candidates, (socketPath) => this.listenOn(socketPath), {
         onRelocate: (from, to, code) =>
           process.stderr.write(
             `[Afyx Graph daemon] Socket ${from} unusable (${code}); relocating to ${to}.\n`
           ),
       });
     } catch (err) {
-      // Every candidate failed (the last one, or a non-relocatable error like a
-      // racing EADDRINUSE). We already hold the lockfile `tryAcquireDaemonLock`
-      // wrote; release it and any partial sockets so the NEXT launcher doesn't
-      // spin respawning us on a stale lock pointing at our now-dying pid. Then
-      // re-throw so the caller (the bin's try/catch) exits this detached daemon
-      // cleanly and every launcher falls back to direct mode (#974).
       this.cleanupLockfile();
       if (process.platform !== 'win32') {
         for (const candidate of candidates) {
@@ -276,59 +292,59 @@ export class Daemon {
       }
       throw err;
     }
+  }
 
-    this.server = bound.server;
-    // Adopt the path we ACTUALLY bound — it may be a tmpdir fallback past an
-    // unusable in-project location. Everything downstream (lockfile, registry,
-    // chmod, cleanup, status) keys off this real path, not the preferred guess.
-    this.socketPath = bound.socketPath;
+  /**
+   * Bind one candidate path. Clears a stale socket left by a SIGKILL'd
+   * predecessor first — safe because holding the lockfile means no live
+   * daemon can own it, and skipping this clear would wedge `listen()` on
+   * EADDRINUSE. POSIX permissions are tightened to user-only once bound,
+   * since the socket lives under a possibly-shared `.afyx-graph/` or tmpdir.
+   */
+  private listenOn(socketPath: string): Promise<net.Server> {
+    return new Promise<net.Server>((resolve, reject) => {
+      if (process.platform !== 'win32') {
+        try { fs.unlinkSync(socketPath); } catch { /* not-exists is fine */ }
+      }
+      const server = net.createServer((socket) => this.handleConnection(socket));
+      server.once('error', reject);
+      server.listen(socketPath, () => {
+        if (process.platform !== 'win32') {
+          try { fs.chmodSync(socketPath, 0o600); } catch { /* best-effort */ }
+        }
+        resolve(server);
+      });
+    });
+  }
 
+  /**
+   * Rewrite the lockfile with the socket path actually bound (which may be a
+   * relocated fallback). Refreshed on every successful bind, not only a
+   * relocation. The writer lock already fences this against a concurrent
+   * stale-artifact sweep; comparing against the exact snapshot read before
+   * binding catches the rarer case of a replacement record appearing in
+   * between, so this refresh never clobbers someone else's win.
+   */
+  private refreshLockfileAfterBind(server: net.Server, expectedPriorContents: string): DaemonLockInfo {
     const lock: DaemonLockInfo = {
       pid: process.pid,
       version: AfyxGraphPackageVersion,
       socketPath: this.socketPath,
       startedAt: Date.now(),
     };
-
-    // Refresh the lock on every successful bind, not only relocation. The
-    // writer lock prevents stale-artifact cleanup from racing this ownership
-    // check, and the exact snapshot prevents overwriting a replacement record.
     try {
-      if (fs.readFileSync(this.pidPath, 'utf8') !== initialLockContents) {
+      if (fs.readFileSync(this.pidPath, 'utf8') !== expectedPriorContents) {
         throw new Error('Lost daemon lock ownership after binding.');
       }
-      const tmpPid = `${this.pidPath}.${process.pid}.bound`;
-      fs.writeFileSync(tmpPid, encodeLockInfo(lock), { mode: 0o600 });
-      fs.renameSync(tmpPid, this.pidPath);
+      const tempPath = `${this.pidPath}.${process.pid}.bound`;
+      fs.writeFileSync(tempPath, encodeLockInfo(lock), { mode: 0o600 });
+      fs.renameSync(tempPath, this.pidPath);
+      return lock;
     } catch (err) {
-      try { bound.server.close(); } catch { /* best-effort */ }
+      try { server.close(); } catch { /* best-effort */ }
       this.cleanupLockfile();
       throw err;
     }
-
-    // Engine init is deliberately backgrounded — see #172. It starts only
-    // after bind and ownership refresh, so a delayed daemon that lost election
-    // can never open a second watcher or writer.
-    void this.engine.ensureInitialized(this.projectRoot);
-
-    // Drop a discovery record so `afyx-graph list` / `stop --all` can find us.
-    // Best-effort; a missing record only means list's liveness prune covers it.
-    registerDaemon({ root: this.projectRoot, ...lock });
-
-    process.stderr.write(
-      `[Afyx Graph daemon] Listening on ${this.socketPath} (pid ${process.pid}, v${AfyxGraphPackageVersion}). Idle timeout ${this.idleTimeoutMs}ms.\n`
-    );
-
-    // No clients yet: arm the idle timer immediately so a daemon that nobody
-    // ever connects to (e.g. spawned then abandoned because the launcher died)
-    // doesn't pin resources forever.
-    this.armIdleTimer();
-    this.startLivenessTimers();
-
-    process.on('SIGINT', () => this.stop('SIGINT'));
-    process.on('SIGTERM', () => this.stop('SIGTERM'));
-
-    return { socketPath: this.socketPath, lock };
   }
 
   /** Currently-connected client count. Exposed for tests / status output. */
@@ -341,46 +357,41 @@ export class Daemon {
     return this.socketPath;
   }
 
-  /** Graceful shutdown: close all sessions, the engine, and clean up the lock. */
+  /** Graceful shutdown: stop every session, close the engine, and clear ownership. */
   async stop(reason: string = 'stop'): Promise<void> {
     if (this.stopping) return;
     this.stopping = true;
-    if (this.idleTimer) {
-      clearTimeout(this.idleTimer);
-      this.idleTimer = null;
-    }
-    if (this.maxIdleTimer) {
-      clearInterval(this.maxIdleTimer);
-      this.maxIdleTimer = null;
-    }
-    if (this.clientSweepTimer) {
-      clearInterval(this.clientSweepTimer);
-      this.clientSweepTimer = null;
-    }
+    this.activityTimers.stopAll();
     process.stderr.write(`[Afyx Graph daemon] Shutting down (${reason}; clients=${this.clients.size}).\n`);
+
+    // Snapshot before stopping: a session's own teardown must never be able
+    // to mutate the Set this loop is iterating.
     for (const session of [...this.clients]) {
       try { session.stop(); } catch { /* best-effort */ }
     }
     this.clients.clear();
+
     if (this.server) {
-      await new Promise<void>((resolve) => this.server!.close(() => resolve()));
+      const server = this.server;
       this.server = null;
+      await new Promise<void>((resolve) => server.close(() => resolve()));
     }
+
     this.engine.stop();
     this.cleanupLockfile();
     deregisterDaemon(this.projectRoot);
     if (process.platform !== 'win32') {
       try { fs.unlinkSync(this.socketPath); } catch { /* may already be gone */ }
     }
-    // POSIX exits here; Windows drains first (engine.stop() above began closing
-    // the file watcher, and exiting mid-teardown aborts the process). See
-    // finalizeDaemonExit / DAEMON_SHUTDOWN_BACKSTOP_MS.
+    // POSIX exits right here. Windows drains first — `engine.stop()` above
+    // already began tearing down the file watcher, and exiting mid-teardown
+    // is exactly the hazard `finalizeDaemonExit` exists to avoid.
     finalizeDaemonExit(process.platform, (code) => process.exit(code));
   }
 
   private handleConnection(socket: net.Socket): void {
-    // Hello first so the proxy can verify versions before piping any
-    // application bytes. The proxy reads exactly one line, then forwards.
+    // Hello goes out before anything else, so the proxy can verify versions
+    // ahead of any application byte — it reads exactly one line, then forwards.
     const hello: DaemonHello = {
       afyxGraph: AfyxGraphPackageVersion,
       pid: process.pid,
@@ -389,25 +400,30 @@ export class Daemon {
     };
     socket.write(JSON.stringify(hello) + '\n');
 
-    // Read the optional client-hello (proxy → daemon) to learn the client's
-    // peer pids, then hand the socket to the session. Fail-safe: any problem —
-    // timeout, a non-hello first line, an early close — yields null pids and we
-    // fall back to the socket-close lifecycle exactly as before (#692).
-    void readClientHello(socket).then((peers) => {
-      const transport = new SocketTransport(socket);
-      const session = new MCPSession(transport, this.engine, {
-        explicitProjectPath: this.projectRoot,
-      });
-      transport.onClose(() => this.dropClient(session));
-      this.clients.add(session);
-      this.clientPeers.set(session, peers);
-      this.disarmIdleTimer();
-      session.start();
-      // Observe inbound bytes purely to feed the inactivity backstop — a second
-      // 'data' listener that reads nothing, added AFTER the transport's so the
-      // unshifted client-hello tail reaches the transport intact.
-      socket.on('data', () => { this.lastActivityAt = Date.now(); });
+    void readClientHello(socket).then((peers) => this.acceptSession(socket, peers));
+  }
+
+  /**
+   * Hand a connection, past its optional client-hello, to a fresh session.
+   * Fail-safe by construction: `readClientHello` never rejects, so a timeout,
+   * an early close, or a non-hello first line all just arrive here as null
+   * pids, which falls back to the plain socket-close lifecycle (#692).
+   */
+  private acceptSession(socket: net.Socket, peers: ClientPeerInfo): void {
+    const transport = new SocketTransport(socket);
+    const session = new MCPSession(transport, this.engine, {
+      explicitProjectPath: this.projectRoot,
     });
+    transport.onClose(() => this.dropClient(session));
+    this.clients.add(session);
+    this.clientPeers.set(session, peers);
+    this.disarmIdleTimer();
+    session.start();
+    // A second 'data' listener, added after the transport's own, that reads
+    // nothing — it exists purely to feed the inactivity backstop's clock.
+    // Attaching it after the transport's listener means the unshifted
+    // client-hello tail still reaches the transport intact.
+    socket.on('data', () => { this.lastActivityAt = Date.now(); });
   }
 
   private dropClient(session: MCPSession): void {
@@ -417,181 +433,165 @@ export class Daemon {
   }
 
   private armIdleTimer(): void {
-    if (this.idleTimer || this.stopping) return;
-    if (this.idleTimeoutMs <= 0) return; // 0 = never idle-exit
-    this.idleTimer = setTimeout(() => {
-      this.idleTimer = null;
-      // Last-second sanity check: if a connection landed between the timer
-      // firing and now, don't exit. (setImmediate-ordering is the only way
-      // this races; cheap to defend against.)
+    this.activityTimers.armIdle(this.stopping, () => {
+      // Last-second sanity check: a connection landing between the timer
+      // firing and now (the only way this races is setImmediate ordering)
+      // must not be exited out from under.
       if (this.clients.size > 0) {
         this.armIdleTimer();
         return;
       }
       void this.stop('idle timeout');
-    }, this.idleTimeoutMs);
-    // Don't keep the event loop alive just for this — the net.Server keeps the
-    // loop alive while listening, so the timer still fires; once we stop() the
-    // loop should drain naturally.
-    this.idleTimer.unref?.();
+    });
   }
 
   private disarmIdleTimer(): void {
-    if (!this.idleTimer) return;
-    clearTimeout(this.idleTimer);
-    this.idleTimer = null;
+    this.activityTimers.disarmIdle();
   }
 
   /**
-   * Defense-in-depth against a daemon that outlives its clients (#692), for the
-   * cases the refcount + idle timer miss because a socket close never arrives:
-   *   - **Inactivity backstop:** after `maxIdleMs` with no inbound traffic, reap
-   *     the daemon — but ONLY if no connected client can be proven alive (see
-   *     {@link backstopShouldExit}). This is the sole phantom class the sweep
-   *     below can't catch: a client whose client-hello never arrived, so we have
-   *     no pid to check.
-   *   - **Liveness sweep:** drop any client whose peer process has died (per the
-   *     client-hello pids), which re-arms the idle timer once the last real
-   *     client is gone. Catches a dead peer within one sweep instead of waiting
-   *     out the whole backstop.
-   * Both timers are unref'd — the listening server keeps the loop alive, and
-   * neither should hold it open on its own.
+   * Defense-in-depth against a daemon outliving its clients (#692), covering
+   * the cases the plain refcount + idle timer miss because a socket close
+   * never arrives:
+   *   - **Inactivity backstop** — after `maxIdleMs` of no inbound traffic,
+   *     reap the daemon, but only when no connected client can be PROVEN
+   *     alive (see {@link backstopShouldExit}); this is the one phantom class
+   *     the sweep below can't catch on its own, a connection whose
+   *     client-hello never arrived at all, so there is no pid to check.
+   *   - **Liveness sweep** — drop any client whose peer process has died
+   *     (per its client-hello pids), which re-arms the idle timer the moment
+   *     the last real client is gone; this catches a dead peer within one
+   *     sweep interval instead of waiting out the whole backstop window.
+   * Both timers are unref'd: the listening server is what keeps the loop
+   * alive, and neither timer should hold it open by itself.
    */
   private startLivenessTimers(): void {
-    if (this.maxIdleMs > 0) {
-      const tick = Math.min(this.maxIdleMs, 60_000);
-      this.maxIdleTimer = setInterval(() => {
+    this.activityTimers.startLiveness(
+      () => {
         if (this.backstopShouldExit(isProcessAlive)) void this.stop('inactivity backstop');
-      }, tick);
-      this.maxIdleTimer.unref?.();
-    }
-    const sweepMs = resolveClientSweepMs();
-    if (sweepMs > 0) {
-      this.clientSweepTimer = setInterval(() => this.reapDeadClients(isProcessAlive), sweepMs);
-      this.clientSweepTimer.unref?.();
-    }
+      },
+      () => this.reapDeadClients(isProcessAlive),
+    );
   }
 
   /**
    * Decide whether the inactivity backstop should reap the daemon right now.
-   * Public + `isAlive`-injected for deterministic tests; the timer calls it each
-   * tick with the real liveness probe.
+   * `isAlive` is injected so tests can drive this deterministically; the live
+   * timer calls it every tick with the real liveness probe.
    *
-   * The backstop exists ONLY to catch a **phantom** client (#692) — one counted
-   * but actually gone, whose socket-close was never delivered. It must never
-   * reap a **live-but-quiet** session (connected, alive peer, just not querying):
-   * doing so silently severed the shared daemon and degraded that session — and
-   * any others sharing it — to an in-process engine. `lastActivityAt` only tracks
-   * inbound query bytes, and MCP has no keepalive, so a genuinely-live session
-   * trips the raw inactivity window after ~30 min of not being queried.
+   * This backstop exists ONLY for a **phantom** client (#692) — one still
+   * counted but actually gone, whose socket close was never delivered. It
+   * must never reap a **live-but-quiet** session (connected, peer alive,
+   * simply not issuing queries right now): doing so would silently sever the
+   * shared daemon out from under that session — and any others sharing it —
+   * degrading them all to an in-process engine. `lastActivityAt` only tracks
+   * inbound query bytes, and MCP itself has no keepalive, so a perfectly
+   * healthy but quiet session does trip the raw inactivity window eventually
+   * (~30 minutes by default).
    *
-   * So: once the inactivity window elapses, drop provably-dead peers (the same
-   * check the periodic sweep runs), then reap the daemon only when NOT ONE
-   * remaining client can be proven alive — i.e. every client left is an
-   * unknown-pid connection the sweep can't verify. A single provably-alive
-   * client keeps the daemon up. Has the sweep's side effect (drops dead peers).
+   * So: once that window has elapsed, first drop every provably-dead peer
+   * (the same check the periodic sweep runs — a real side effect, not just a
+   * probe), then reap the daemon only if NOT ONE remaining client can be
+   * proven alive, i.e. every survivor is an unknown-pid connection the sweep
+   * has no way to verify. A single provably-alive client is enough to keep
+   * the daemon up.
    */
   backstopShouldExit(isAlive: (pid: number) => boolean): boolean {
-    if (this.stopping || this.clients.size === 0) return false; // idle timer owns the no-client case
-    if (Date.now() - this.lastActivityAt < this.maxIdleMs) return false; // still within the window
+    if (this.stopping || this.clients.size === 0) return false; // the idle timer owns the no-client case
+    if (Date.now() - this.lastActivityAt < this.maxIdleMs) return false; // still inside the window
+
     this.reapDeadClients(isAlive);
-    if (this.clients.size === 0) return false; // sweep cleared them — idle timer takes over
-    const anyProvablyAlive = [...this.clients].some((session) => {
+    if (this.clients.size === 0) return false; // the sweep just emptied it — idle timer takes over
+
+    for (const session of this.clients) {
       const peers = this.clientPeers.get(session);
-      return peers != null && peers.pid !== null && !peerIsDead(peers, isAlive);
-    });
-    return !anyProvablyAlive;
+      if (peers != null && peers.pid !== null && !peerIsDead(peers, isAlive)) return false; // one alive client is enough
+    }
+    return true;
   }
 
   /**
-   * Drop every connected client whose peer process is gone. Returns the count
-   * reaped. `isAlive` is injected for testing. Clients with unknown pids (no
-   * client-hello) are skipped — they rely on the socket-close path.
+   * Drop every connected client whose peer process is confirmed gone.
+   * `isAlive` is injected for deterministic tests. A client with no known pid
+   * (its client-hello never arrived) is left alone here — it depends on the
+   * plain socket-close path instead. Returns how many were reaped.
    */
   reapDeadClients(isAlive: (pid: number) => boolean): number {
     if (this.clients.size === 0) return 0;
-    let reaped = 0;
-    for (const session of [...this.clients]) {
+    const dead: MCPSession[] = [];
+    for (const session of this.clients) {
       const peers = this.clientPeers.get(session);
-      if (!peers || !peerIsDead(peers, isAlive)) continue;
+      if (peers && peerIsDead(peers, isAlive)) dead.push(session);
+    }
+    for (const session of dead) {
+      const peers = this.clientPeers.get(session)!;
       process.stderr.write(
         `[Afyx Graph daemon] Reaping client with dead peer (pid ${peers.pid}); clients=${this.clients.size - 1}.\n`
       );
       try { session.stop(); } catch { /* best-effort */ }
       this.dropClient(session);
-      reaped++;
     }
-    return reaped;
+    return dead.length;
   }
 
   private cleanupLockfile(): void {
     releaseWriterLock(this.projectRoot);
     try {
-      if (fs.existsSync(this.pidPath)) {
-        // Only remove if it still belongs to us — another daemon may have
-        // already taken over while we were shutting down (extremely rare).
-        const raw = fs.readFileSync(this.pidPath, 'utf8');
-        const info = decodeLockInfo(raw);
-        if (info && info.pid === process.pid) {
-          fs.unlinkSync(this.pidPath);
-        }
-      }
-    } catch { /* best-effort; we're exiting anyway */ }
+      if (!fs.existsSync(this.pidPath)) return;
+      // Only remove the lockfile if it still names us — a rare race where
+      // another daemon already took over mid-shutdown must not lose its record.
+      const info = decodeLockInfo(fs.readFileSync(this.pidPath, 'utf8'));
+      if (info && info.pid === process.pid) fs.unlinkSync(this.pidPath);
+    } catch { /* best-effort; the process is exiting regardless */ }
   }
 }
 
 /**
- * Result of `tryAcquireDaemonLock`. Either we got the lockfile (caller becomes
- * the daemon), or it already existed (caller should connect to the existing
- * daemon as a proxy, or — if the holder is dead — clear it and retry).
+ * Outcome of {@link tryAcquireDaemonLock}: either the lockfile was won (the
+ * caller is now the daemon-elect, free to construct a {@link Daemon}), or it
+ * was already held (the caller should proxy to whatever holds it, or — if
+ * that holder is dead — clear the lock and retry).
  */
 export type AcquireResult =
   | { kind: 'acquired'; pidPath: string; info: DaemonLockInfo }
   | {
       kind: 'taken';
       existing: DaemonLockInfo | null;
-      /** Exact record read after losing acquisition; null when it was unreadable. */
+      /** The exact bytes read after losing the race; null when unreadable. */
       lockContents: string | null;
       pidPath: string;
     };
 
 /**
- * Atomically create the daemon pidfile with its full record already in place.
- * Returns either an `acquired` result (the caller is the daemon-elect and may
- * construct a {@link Daemon}) or a `taken` result.
+ * Atomically create the daemon lockfile with its full record already
+ * in place — one candidate wins outright ({@link AcquireResult} `acquired`),
+ * everyone else reads back a complete record and gets `taken`.
  *
- * must-fix 1 (issue #411 review): the lockfile must appear in ONE atomic step,
- * already complete — never empty, even momentarily. The first attempt at this
- * (`O_EXCL` create then a separate `writeSync`) left a microsecond window where
- * the file existed but was empty; under concurrent daemon startup a third
- * candidate could read that empty file, decode it as `null`, and `unlink` the
- * winner's lock → two daemons (two watchers, two writers). The window was
- * normally too small to hit, but the file watcher's extra startup time made
- * concurrent daemons overlap enough to reproduce it reliably.
+ * The original naive approach (`O_EXCL` create, then a separate `writeSync`)
+ * left a microsecond window where the file existed but was still empty;
+ * under concurrent daemon startup a third candidate could read that empty
+ * file, decode it as nothing, and unlink the actual winner's lock — the
+ * result being two daemons, two watchers, two writers. That window was
+ * ordinarily too narrow to hit, until the file watcher's own startup cost
+ * widened it enough to reproduce reliably (issue #411 review, must-fix 1).
  *
- * The fix writes the complete record to a private temp file, then hard-links it
- * into place: `link()` is atomic AND exclusive (EEXIST if the target exists), so
- * the pidfile becomes visible in one step already containing a full record.
- * Whoever links first wins; everyone else gets EEXIST and reads a complete file.
- * There is no empty-file window at all.
+ * The fix (now shared as {@link acquireAtomicLockfile}) writes the complete
+ * record to a private temp file first, then hard-links it into place —
+ * `link()` is atomic AND exclusive (EEXIST when the target already exists),
+ * so the target becomes visible in one step, already holding a full record.
+ * There is no empty-file window left to hit.
  *
- * Filesystems without hard links (#997): ExFAT/FAT external volumes and some
- * network mounts can't `link()` at all — it throws ENOTSUP/EPERM, which would
- * otherwise kill the daemon before it ever reaches the socket bind. There we
- * fall back to an O_EXCL create (`acquireLockViaExclusiveOpen`): still exclusive
- * ("first writer wins"), but the full record is written through the fd in a
- * second step, so the empty-file window the link approach removed is reopened —
- * only on these filesystems, only for the microseconds between create and write
- * (far narrower than the original bug, which the file watcher's startup latency
- * widened). The race's worst case is two daemons briefly; on a single external
- * drive that's strictly better than the daemon never starting at all.
+ * Filesystems without hard links (#997) — ExFAT/FAT external volumes, some
+ * network mounts — can't `link()` at all (ENOTSUP/EPERM), which would
+ * otherwise kill the daemon before it ever reached the socket bind.
+ * {@link acquireAtomicLockfile} falls back there to an O_EXCL create (still
+ * "first writer wins", but the record lands through the fd in a second step,
+ * reopening a narrower empty-file window only on those filesystems, only for
+ * the few microseconds between create and write). The worst case there is
+ * two daemons briefly — strictly better than the daemon never starting.
  */
 export function tryAcquireDaemonLock(projectRoot: string): AcquireResult {
   const pidPath = getDaemonPidPath(projectRoot);
-  // Make sure the .afyx-graph/ directory exists — the daemon may be the first
-  // thing to touch it on a fresh-clone-but-already-initialized checkout.
-  fs.mkdirSync(path.dirname(pidPath), { recursive: true });
-
   const info: DaemonLockInfo = {
     pid: process.pid,
     version: AfyxGraphPackageVersion,
@@ -599,82 +599,44 @@ export function tryAcquireDaemonLock(projectRoot: string): AcquireResult {
     startedAt: Date.now(),
   };
 
-  // Temp name is pid-scoped so racing candidates never collide on it.
-  const tmp = `${pidPath}.${process.pid}.tmp`;
-  let acquired = false;
-  try {
-    fs.writeFileSync(tmp, encodeLockInfo(info), { mode: 0o600 });
-    try {
-      fs.linkSync(tmp, pidPath); // atomic + exclusive (race-free; see must-fix 1)
-      acquired = true;
-    } catch (err: unknown) {
-      if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
-        // Lost the race — another candidate already holds it. Fall through to read.
-      } else {
-        // link() failed for a non-conflict reason — nearly always "this filesystem
-        // has no hard links" (ExFAT/FAT external volumes, some network mounts),
-        // which surfaces as a DIFFERENT errno on every OS: ENOTSUP on macOS, EPERM
-        // on Linux, EISDIR on Windows (#997). Enumerating them is whack-a-mole and
-        // unnecessary: the `tmp` write above already proved this directory is
-        // writable, so an O_EXCL create is a valid atomic+exclusive substitute. If
-        // IT fails too, that's a genuine error and propagates. EEXIST ⇒ taken.
-        acquired = acquireLockViaExclusiveOpen(pidPath, info);
-      }
-    }
-  } finally {
-    try { fs.unlinkSync(tmp); } catch { /* temp already gone */ }
-  }
+  const result = acquireAtomicLockfile(pidPath, encodeLockInfo(info));
+  if (result.acquired) return { kind: 'acquired', pidPath, info };
 
-  if (acquired) return { kind: 'acquired', pidPath, info };
-
-  // Taken. Because the pidfile was link'd atomically it always holds a complete
-  // record — `existing` is null only for a genuinely corrupt leftover, never a
-  // mid-write race.
-  let existing: DaemonLockInfo | null = null;
-  let lockContents: string | null = null;
-  try {
-    lockContents = fs.readFileSync(pidPath, 'utf8');
-    existing = decodeLockInfo(lockContents);
-  } catch { /* unreadable lockfile — treat as malformed */ }
+  // Lost the race. Because the winning write was atomic and link'd whole,
+  // the file always holds a complete record here — `existing` comes back
+  // null only for a genuinely corrupt leftover, never a mid-write straggler.
+  const lockContents = result.existingContents;
+  const existing = lockContents !== null ? decodeLockInfo(lockContents) : null;
   return { kind: 'taken', existing, lockContents, pidPath };
 }
 
 /**
- * Exclusive-create the pidfile (O_CREAT|O_EXCL via the `wx` flag) and write the
- * full record through the same fd — the hard-link-free fallback used by
- * {@link tryAcquireDaemonLock} on filesystems without `link()`. Returns true if
- * we created it (acquired the lock), false on EEXIST (another candidate holds
- * it). Any other error propagates. Still exclusive, so "first writer wins" holds
- * exactly as the link path does; the only difference is the brief empty-file
- * window between create and write. Exported for testing.
+ * Exclusive-create the lockfile (`O_CREAT|O_EXCL`) and write the full record
+ * through that same fd — the hard-link-free fallback {@link
+ * tryAcquireDaemonLock} uses via {@link acquireAtomicLockfile} on filesystems
+ * without `link()`. True means this call won the race and created it; false
+ * means EEXIST, another candidate already holds it. Any other error
+ * propagates. Exclusivity ("first writer wins") is identical to the link
+ * path; the only difference is the brief empty-file window between create
+ * and write. Exported so the fallback itself is directly testable.
  */
 export function acquireLockViaExclusiveOpen(pidPath: string, info: DaemonLockInfo): boolean {
-  let fd: number;
-  try {
-    fd = fs.openSync(pidPath, 'wx', 0o600); // O_CREAT | O_EXCL | O_WRONLY
-  } catch (err: unknown) {
-    if ((err as NodeJS.ErrnoException).code === 'EEXIST') return false;
-    throw err;
-  }
-  try {
-    fs.writeSync(fd, encodeLockInfo(info));
-  } finally {
-    fs.closeSync(fd);
-  }
-  return true;
+  return acquireExclusiveFile(pidPath, encodeLockInfo(info));
 }
 
 /**
- * Remove a stale pidfile. Re-reads the file immediately before unlinking so a
- * different daemon that acquired the lock in the meantime is never disturbed.
+ * Remove a stale lockfile — but only after re-reading it immediately before
+ * the unlink, so a different daemon that won the lock in the meantime is
+ * never disturbed.
  *
- * must-fix 1 (issue #411 review): the original unconditionally `unlink`'d,
- * which let a racing candidate delete a healthy daemon's lock. Passing
- * `expectedDeadPid` (the pid the caller believed was dead) makes the clear a
- * compare-and-delete: bail if the file now holds a different pid. By default a
- * live pid is also preserved; `allowLivePid` is reserved for callers that have
- * already disproved daemon identity with the socket hello (#1553). Returns true
- * when the stale lock is gone (or was already gone).
+ * The original version of this unconditionally unlinked, which let a racing
+ * candidate delete a perfectly healthy daemon's lock (issue #411 review,
+ * must-fix 1). Passing `expectedDeadPid` (the pid the caller believed dead)
+ * turns the clear into a compare-and-delete: it bails if the file now names
+ * a different pid. A live pid is preserved by default too; `allowLivePid` is
+ * reserved for a caller that has already disproved daemon identity via the
+ * socket hello (#1553), not for ordinary staleness checks. Returns true once
+ * the stale lock is confirmed gone (including "was already gone").
  */
 export function clearStaleDaemonLock(
   pidPath: string,
@@ -683,186 +645,63 @@ export function clearStaleDaemonLock(
 ): boolean {
   try {
     const raw = fs.readFileSync(pidPath, 'utf8');
-    // The identity record changed after the caller inspected it. Even the same
-    // PID may now advertise a newly-bound socket, so this snapshot was never
-    // disproved and must not be deleted.
+    // The record changed since the caller inspected it — even a same-pid
+    // record may now advertise a newly-bound socket, so this snapshot was
+    // never actually disproved and must not be deleted.
     if (opts.expectedLockContents !== undefined && raw !== opts.expectedLockContents) return false;
+
     const info = decodeLockInfo(raw);
     if (info) {
-      // A different pid took over since we read it — not ours to clear.
-      if (expectedDeadPid !== undefined && info.pid !== expectedDeadPid) return false;
-      // PID liveness is normally sufficient. The takeover caller may override
-      // it only after a failed identity handshake proves PID reuse.
-      if (!opts.allowLivePid && info.pid > 0 && isProcessAlive(info.pid)) return false;
+      if (expectedDeadPid !== undefined && info.pid !== expectedDeadPid) return false; // someone else took over
+      if (!opts.allowLivePid && info.pid > 0 && isProcessAlive(info.pid)) return false; // liveness alone is normally decisive
     }
     fs.unlinkSync(pidPath);
     return true;
-  } catch (err: unknown) {
-    const e = err as NodeJS.ErrnoException;
-    if (e.code === 'ENOENT') return true; // already gone
-    return false;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === 'ENOENT'; // already gone counts as success
   }
 }
 
-/**
- * Probe whether `pid` is currently alive (signal-0). Treats EPERM as alive on
- * every platform (the process exists, it's just not ours to signal) so we never
- * mistake a live daemon for a dead one and clear its lock.
- */
-export function isProcessAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (err: unknown) {
-    const e = err as NodeJS.ErrnoException;
-    if (e.code === 'EPERM') return true; // exists, just not ours to signal
-    return false;
-  }
-}
+// Re-exported so the existing whitebox tests (`daemon-socket-fallback.test.ts`,
+// `daemon-client-liveness.test.ts`) keep resolving these straight from
+// `./daemon` — their actual homes are `./socket-bind` and `./client-registry`.
+export { bindFirstUsableSocket } from './socket-bind';
+export { parseClientHelloLine, peerIsDead } from './client-registry';
 
 /**
- * The one `listen()` error we must NOT relocate past. EADDRINUSE means the path
- * is genuinely occupied — a racing daemon that legitimately owns it, or a
- * leftover node we couldn't clear (the #974 planted-dir case) — so relocating
- * would abandon a path another daemon owns; the caller instead releases its lock
- * and falls back to direct mode. EVERY OTHER bind error just means "this path
- * didn't work," almost always a filesystem that can't host an AF_UNIX node at all
- * (ExFAT/FAT, network mounts, WSL2 DrvFs), which reports a DIFFERENT errno per OS
- * (ENOTSUP macOS, EPERM Linux; #997). Enumerating the "unsupported" codes is
- * whack-a-mole, so we relocate on anything-but-conflict instead — robust and
- * self-correcting: if the deterministic tmpdir fallback ALSO fails, that error
- * propagates from the last candidate. (ENAMETOOLONG never reaches here — the
- * candidate list already routes over-long paths straight to tmpdir.)
+ * Read the optional client-hello line a proxy sends right after the daemon's
+ * own hello. Never rejects — every accepted connection funnels through here,
+ * so any failure mode (timeout, an early close, a first line that isn't a
+ * hello) resolves with null pids instead, falling back to the ordinary
+ * socket-close lifecycle. Whatever bytes were already read past the hello
+ * line are unshifted back onto the socket so the session transport sees them
+ * as its own first message(s); buffering happens on raw Buffers and the
+ * newline search is byte-based specifically so a UTF-8 sequence straddling a
+ * chunk boundary in that unshifted tail can never be corrupted.
  */
-const SOCKET_BIND_CONFLICT_CODE = 'EADDRINUSE';
-
-/**
- * Bind the first usable socket from an ordered candidate list, relocating past
- * any path that fails to bind for a non-conflict reason (see {@link
- * SOCKET_BIND_CONFLICT_CODE}). The injected `listen` does the real
- * `net.Server.listen` (and stale-socket clear); abstracted so the relocation
- * policy is unit-testable without a real unsupported filesystem. Returns the
- * server plus the path actually bound. An EADDRINUSE, or any error on the LAST
- * candidate, propagates — the caller releases the lockfile and falls back to
- * direct mode (#974). Exported for testing.
- */
-export async function bindFirstUsableSocket(
-  candidates: string[],
-  listen: (socketPath: string) => Promise<net.Server>,
-  opts: { onRelocate?: (from: string, to: string, code: string) => void } = {},
-): Promise<{ server: net.Server; socketPath: string }> {
-  let lastErr: unknown;
-  for (let i = 0; i < candidates.length; i++) {
-    const socketPath = candidates[i]!; // i < length, so always defined
-    const isLast = i === candidates.length - 1;
-    try {
-      const server = await listen(socketPath);
-      return { server, socketPath };
-    } catch (err) {
-      lastErr = err;
-      const code = (err as NodeJS.ErrnoException).code;
-      if (!isLast && code !== SOCKET_BIND_CONFLICT_CODE) {
-        opts.onRelocate?.(socketPath, candidates[i + 1]!, code ?? ''); // !isLast ⇒ i+1 in range
-        continue;
-      }
-      throw err;
-    }
-  }
-  // Only reachable with an empty candidate list — a programmer error.
-  throw lastErr ?? new Error('no socket candidates to bind');
-}
-
-function resolveIdleTimeoutMs(): number {
-  const raw = process.env.AFYX_GRAPH_DAEMON_IDLE_TIMEOUT_MS;
-  if (raw === undefined || raw === '') return DEFAULT_IDLE_TIMEOUT_MS;
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed < 0) return DEFAULT_IDLE_TIMEOUT_MS;
-  return Math.floor(parsed);
-}
-
-function resolveMaxIdleMs(): number {
-  const raw = process.env.AFYX_GRAPH_DAEMON_MAX_IDLE_MS;
-  if (raw === undefined || raw === '') return DEFAULT_MAX_IDLE_MS;
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed < 0) return DEFAULT_MAX_IDLE_MS;
-  return Math.floor(parsed); // 0 disables the backstop
-}
-
-function resolveClientSweepMs(): number {
-  const raw = process.env.AFYX_GRAPH_DAEMON_CLIENT_SWEEP_MS;
-  if (raw === undefined || raw === '') return DEFAULT_CLIENT_SWEEP_MS;
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed < 0) return DEFAULT_CLIENT_SWEEP_MS;
-  return Math.floor(parsed); // 0 disables the sweep
-}
-
-/**
- * Parse one client-hello line. Returns the peer pids if `line` is a well-formed
- * client-hello (carries the `afyx_graph_client` marker), or null otherwise — in
- * which case the caller treats the bytes as ordinary JSON-RPC.
- */
-export function parseClientHelloLine(
-  line: string,
-): { pid: number; hostPid: number | null } | null {
-  let parsed: unknown;
-  try { parsed = JSON.parse(line); } catch { return null; }
-  if (!parsed || typeof parsed !== 'object') return null;
-  const o = parsed as Record<string, unknown>;
-  if (o.afyx_graph_client !== 1 || typeof o.pid !== 'number') return null;
-  return { pid: o.pid, hostPid: typeof o.hostPid === 'number' ? o.hostPid : null };
-}
-
-/**
- * A client's peer is dead when its proxy process is gone, or when its known
- * host process is gone. Unknown pid (no client-hello) is never "dead" on this
- * basis — those clients rely on the socket-close path. Exported for testing.
- */
-export function peerIsDead(
-  peers: { pid: number | null; hostPid: number | null },
-  isAlive: (pid: number) => boolean,
-): boolean {
-  if (peers.pid === null) return false;
-  if (!isAlive(peers.pid)) return true;
-  if (peers.hostPid !== null && !isAlive(peers.hostPid)) return true;
-  return false;
-}
-
-/**
- * Read the optional client-hello line a proxy sends after the daemon hello.
- * Always resolves (never rejects) — fail-safe by design, since every connection
- * funnels through here. Resolves with the peer pids when the first line is a
- * client-hello; otherwise resolves with null pids and unshifts the already-read
- * bytes so the transport parses them as the client's first JSON-RPC message(s).
- * Accumulates as Buffers and splits on the newline byte so a UTF-8 sequence
- * straddling a chunk boundary in the unshifted tail is never corrupted.
- */
-function readClientHello(
-  socket: net.Socket,
-): Promise<{ pid: number | null; hostPid: number | null }> {
+function readClientHello(socket: net.Socket): Promise<ClientPeerInfo> {
   return new Promise((resolve) => {
-    let chunks: Buffer[] = [];
-    let total = 0;
+    let buffered: Buffer[] = [];
+    let bufferedLength = 0;
     let settled = false;
-    const finish = (
-      peers: { pid: number | null; hostPid: number | null },
-      putBack?: Buffer,
-    ) => {
+
+    const settle = (peers: ClientPeerInfo, putBack?: Buffer) => {
       if (settled) return;
       settled = true;
-      // PAUSE before detaching: removing the last 'data' listener does NOT
-      // stop a flowing stream, so bytes arriving (or unshifted) in the gap
-      // between this handler and the session transport attaching were emitted
-      // to zero listeners and silently DISCARDED — and the listener swap left
-      // the socket's flow state wedged, never delivering to the new listener.
-      // A proxy whose client-hello arrived glued to the initialize hit this
-      // ~1-in-5 under load: the daemon answered nothing for the whole session
-      // (the #662 test flake, and real dead sessions behind it). Paused, the
-      // unshifted tail and any new bytes buffer; SocketTransport.start()
-      // resumes explicitly.
+      // Pause BEFORE detaching: dropping the last 'data' listener does not
+      // stop a flowing stream, so anything arriving (or unshifted) in the gap
+      // before the session transport's own listener attaches was previously
+      // emitted to zero listeners and silently lost — and left the stream's
+      // flow state wedged, never delivering to the next listener either. A
+      // proxy whose client-hello landed glued to its initialize hit this
+      // roughly 1-in-5 under load: the daemon then answered nothing for the
+      // whole session (the #662 flake, and real dead sessions behind it).
+      // Pausing here means the unshifted tail and any new bytes just queue;
+      // `SocketTransport.start()` resumes the flow explicitly afterward.
       try { socket.pause(); } catch { /* stream already gone */ }
       socket.removeListener('data', onData);
-      socket.removeListener('error', onEnd);
-      socket.removeListener('close', onEnd);
+      socket.removeListener('error', onSocketGone);
+      socket.removeListener('close', onSocketGone);
       clearTimeout(timer);
       if (process.env.AFYX_GRAPH_MCP_DEBUG) {
         process.stderr.write(`[mcp-debug] clientHello finish pid=${String(peers.pid)} putBack=${putBack ? putBack.length : 0} flowing=${String(socket.readableFlowing)}\n`);
@@ -872,40 +711,47 @@ function readClientHello(
       }
       resolve(peers);
     };
+
     const onData = (chunk: Buffer | string) => {
-      const buf = typeof chunk === 'string' ? Buffer.from(chunk, 'utf8') : chunk;
-      chunks.push(buf);
-      total += buf.length;
-      const all = chunks.length === 1 ? buf : Buffer.concat(chunks, total);
-      const nl = all.indexOf(0x0a); // '\n'
-      if (nl === -1) {
-        // No newline yet. If it's already too long to be a hello, it isn't one —
-        // hand the bytes back as data; otherwise keep accumulating.
-        if (total > MAX_HELLO_LINE_BYTES) finish({ pid: null, hostPid: null }, all);
-        else chunks = [all];
+      const piece = typeof chunk === 'string' ? Buffer.from(chunk, 'utf8') : chunk;
+      buffered.push(piece);
+      bufferedLength += piece.length;
+      const accumulated = buffered.length === 1 ? piece : Buffer.concat(buffered, bufferedLength);
+      const newlineAt = accumulated.indexOf(0x0a);
+      if (newlineAt === -1) {
+        // Still no newline. Past the size bound this can't be a hello at
+        // all — hand it all back as data; otherwise keep accumulating.
+        if (bufferedLength > MAX_HELLO_LINE_BYTES) settle({ pid: null, hostPid: null }, accumulated);
+        else buffered = [accumulated];
         return;
       }
-      const peers = parseClientHelloLine(all.subarray(0, nl).toString('utf8'));
-      if (peers) {
-        const tail = all.subarray(nl + 1);
-        finish(peers, tail.length > 0 ? tail : undefined);
-      } else {
-        // First line is not a client-hello (legacy/direct client) — hand the
-        // whole buffer back so the transport sees the message verbatim.
-        finish({ pid: null, hostPid: null }, all);
+      const peers = parseClientHelloLine(accumulated.subarray(0, newlineAt).toString('utf8'));
+      if (!peers) {
+        // Not a hello (a legacy or direct client) — return the whole buffer
+        // untouched so the transport parses it as the real first message.
+        settle({ pid: null, hostPid: null }, accumulated);
+        return;
       }
+      const tail = accumulated.subarray(newlineAt + 1);
+      settle(peers, tail.length > 0 ? tail : undefined);
     };
-    const onEnd = () => finish({ pid: null, hostPid: null });
-    // On timeout, hand back whatever partial bytes accumulated — discarding
-    // them would tear the first message the transport parses.
+
+    const onSocketGone = () => settle({ pid: null, hostPid: null });
+
+    // Whatever partial bytes accumulated by the deadline are handed back
+    // rather than discarded — dropping them would tear the first message the
+    // transport is about to parse.
     const timer = setTimeout(() => {
-      const partial = chunks.length === 0 ? undefined : (chunks.length === 1 ? chunks[0] : Buffer.concat(chunks, total));
-      finish({ pid: null, hostPid: null }, partial);
+      const partial = buffered.length === 0
+        ? undefined
+        : (buffered.length === 1 ? buffered[0] : Buffer.concat(buffered, bufferedLength));
+      settle({ pid: null, hostPid: null }, partial);
     }, CLIENT_HELLO_TIMEOUT_MS);
     timer.unref?.();
+
     socket.on('data', onData);
-    socket.on('error', onEnd);
-    socket.on('close', onEnd);
+    socket.on('error', onSocketGone);
+    socket.on('close', onSocketGone);
   });
 }
 
