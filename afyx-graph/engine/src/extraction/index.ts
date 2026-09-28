@@ -8,7 +8,6 @@ import * as fs from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
-import * as crypto from 'crypto';
 import { execFileSync } from 'child_process';
 import {
   Language,
@@ -21,7 +20,6 @@ import {
   ReferenceKind,
 } from '../types';
 import { QueryBuilder } from '../db/queries';
-import { extractFromSource } from './tree-sitter';
 import { ParseWorkerPool, resolveParsePoolSize, resolveParseTimeoutMs } from './parse-pool';
 import { StoreWriter, StoreBundle, finalizeStoreBundle } from './store-writer';
 import { materializeKernelResult } from './kernel';
@@ -35,6 +33,11 @@ import ignore, { Ignore } from 'ignore';
 import { detectFrameworks } from '../resolution/frameworks';
 import type { ResolutionContext } from '../resolution/types';
 import { createYielder, type MaybeYield } from '../resolution/cooperative-yield';
+import { hashContent } from './content-hash';
+import { ExtractorRegistry } from './extractor-registry';
+import { definitionDelta, reconcileSources } from './reconciliation';
+
+export { hashContent } from './content-hash';
 
 /**
  * Number of files to read in parallel during indexing.
@@ -142,13 +145,6 @@ export interface SyncResult {
    * nothing downstream.
    */
   definitionDelta?: string[];
-}
-
-/**
- * Calculate SHA256 hash of file contents
- */
-export function hashContent(content: string): string {
-  return crypto.createHash('sha256').update(content).digest('hex');
 }
 
 /**
@@ -1964,6 +1960,7 @@ export class ExtractionOrchestrator {
     this.detectedFrameworkNames = null;
     const tFw = Date.now();
     const frameworkNames = this.ensureDetectedFrameworks(files);
+    const extractorRegistry = new ExtractorRegistry(overrides, frameworkNames);
     if (process.env.AFYX_GRAPH_SYNTH_TIMINGS) console.error(`[phase-timing] framework-detect: ${Date.now() - tFw}ms`);
 
     if (signal?.aborted) {
@@ -2065,8 +2062,8 @@ export class ExtractionOrchestrator {
      * here on the main thread, where the afyx-graph.json overrides are loaded.
      */
     const parseFile = (filePath: string, content: string): Promise<ExtractionResult> => {
-      const language = detectLanguage(filePath, content, overrides);
-      if (!pool) return Promise.resolve(extractFromSource(filePath, content, language, frameworkNames));
+      const language = extractorRegistry.languageFor(filePath, content);
+      if (!pool) return Promise.resolve(extractorRegistry.extract(filePath, content));
       return pool.requestParse({ filePath, content, language, frameworkNames });
     };
 
@@ -2112,7 +2109,7 @@ export class ExtractionOrchestrator {
       // Store: on the writer thread when active (fresh DB — bundles applied
       // in the same file order this chain dispatches them), else on the main
       // thread (SQLite connections are per-thread).
-      const language = detectLanguage(filePath, content, overrides);
+      const language = extractorRegistry.languageFor(filePath, content);
       if (storeWriter) {
         if (result.kernelBuffers) {
           // Buffers go to the writer as-is; the worker decodes + finalizes.
@@ -2150,7 +2147,7 @@ export class ExtractionOrchestrator {
         // Files with no symbols but no errors (yaml, twig, properties) are
         // tracked at the file level — count them as indexed so the CLI doesn't
         // misleadingly report "No files found to index".
-        const lang = detectLanguage(filePath, content, overrides);
+        const lang = extractorRegistry.languageFor(filePath, content);
         if (isFileLevelOnlyLanguage(lang)) {
           filesIndexed++;
         } else {
@@ -2411,7 +2408,7 @@ export class ExtractionOrchestrator {
         // so decode here — otherwise a kernel-language retry passes the gate
         // below via `errors.length === 0`, stores nothing, and the file is
         // permanently recorded as "(0 symbols)" with the error erased (#1541).
-        const language = detectLanguage(filePath, content, overrides);
+        const language = extractorRegistry.languageFor(filePath, content);
         result = materializeKernelResult(result, filePath, language);
 
         if (result.nodes.length > 0 || result.errors.length === 0) {
@@ -2464,7 +2461,7 @@ export class ExtractionOrchestrator {
           }
 
           // Same undecoded-transport hazard as the first retry pass (#1541).
-          const language = detectLanguage(filePath, fullContent, overrides);
+          const language = extractorRegistry.languageFor(filePath, fullContent);
           result = materializeKernelResult(result, filePath, language);
 
           if (result.nodes.length > 0 || result.errors.length === 0) {
@@ -2618,7 +2615,9 @@ export class ExtractionOrchestrator {
       };
     }
 
-    const language = detectLanguage(relativePath, content, loadExtensionOverrides(this.rootDir));
+    const extensionOverrides = loadExtensionOverrides(this.rootDir);
+    const languageRegistry = new ExtractorRegistry(extensionOverrides);
+    const language = languageRegistry.languageFor(relativePath, content);
 
     // Check file size
     if (stats.size > MAX_FILE_SIZE) {
@@ -2651,11 +2650,11 @@ export class ExtractionOrchestrator {
       };
     }
 
-    // Extract from source. Use cached framework names if indexAll has run,
-    // otherwise detect on the spot so single-file re-index paths still emit
-    // route nodes / middleware / etc.
-    const frameworkNames = this.ensureDetectedFrameworks();
-    const result = extractFromSource(relativePath, content, language, frameworkNames);
+    // Extract through the same registry used by bulk indexing. Framework names
+    // are cached by the orchestrator, so the single-file path preserves the
+    // established on-demand detection behavior.
+    const registry = new ExtractorRegistry(extensionOverrides, this.ensureDetectedFrameworks());
+    const result = registry.extract(relativePath, content);
 
     // Store in database
     await this.storeExtractionResult(relativePath, content, language, stats, result, createYielder());
@@ -3113,97 +3112,48 @@ export class ExtractionOrchestrator {
       trackedFiles = this.queries.getAllFiles();
       if (process.env.AFYX_GRAPH_SYNTH_TIMINGS) console.error(`[phase-timing] sync-tracked-load: ${Date.now() - tTracked}ms (${trackedFiles.length} tracked)`);
     }
-    const currentSet = new Set(currentFiles);
-    const trackedMap = new Map<string, FileRecord>();
-    for (const f of trackedFiles) {
-      trackedMap.set(f.path, f);
-    }
-
-    // Removals: tracked in the DB but no longer a present source file. Check the
-    // filesystem directly — `scanDirectory` (via `git ls-files`) still lists a
-    // file deleted from disk but not yet staged, so set membership alone misses it.
-    // `reconcileChecks` drives the cooperative yield shared with the adds/mods loop
-    // below (see SYNC_RECONCILE_YIELD_INTERVAL / issue #905).
-    let reconcileChecks = 0;
-    for (const tracked of trackedFiles) {
-      if (!currentSet.has(tracked.path) || !fs.existsSync(path.join(this.rootDir, tracked.path))) {
-        // Before the cascade deletes them, resurrect incoming cross-file
-        // resolution edges as their original refs (#1240 removal case): the
-        // callers live in files this sync will NOT revisit, so this is their
-        // only chance to rebind to an alternative definition — or to park as
-        // failed until the symbol reappears somewhere. (A deleted file whose
-        // CALLERS are also being deleted is fine: their nodes cascade later
-        // in this loop and take the resurrected rows with them.)
-        // Every name this file defined is about to stop existing here, which
-        // narrows the candidate set for that name repo-wide (CG-33).
+    const reconciliation = await reconcileSources({
+      currentFiles,
+      trackedFiles,
+      filesChecked,
+      io: {
+        exists: (filePath) => fs.existsSync(path.join(this.rootDir, filePath)),
+        stat: (filePath) => fs.statSync(path.join(this.rootDir, filePath)),
+        read: (filePath) => fs.readFileSync(path.join(this.rootDir, filePath), 'utf-8'),
+      },
+      hash: hashContent,
+      yieldEvery: SYNC_RECONCILE_YIELD_INTERVAL,
+      yieldControl: () => new Promise<void>((resolve) => setImmediate(resolve)),
+      onReadFailure: (filePath, operation, error) => {
+        logDebug(
+          operation === 'stat'
+            ? 'Skipping unstattable file during sync'
+            : 'Skipping unreadable file during sync',
+          { filePath, error: String(error) },
+        );
+      },
+      onRemove: (tracked) => {
+        // Persistence/resolution compatibility boundary: the native reconciler
+        // decides WHAT disappeared; the established DB APIs retain ownership of
+        // cascading removal and recoverable incoming-reference handoff.
         for (const pair of this.queries.getNodeNamePairsByFiles([tracked.path])) pairsBefore.add(pair);
         const incoming = this.queries.getCrossFileIncomingEdgesWithTarget(tracked.path);
         if (incoming.length > 0) {
           const resurrected = incoming
-            .map((e) => resurrectRefFromDroppedEdge(e))
-            .filter((r): r is UnresolvedReference => r !== null);
-          if (resurrected.length > 0) {
-            this.queries.insertUnresolvedRefsBatch(resurrected);
-          }
+            .map((edge) => resurrectRefFromDroppedEdge(edge))
+            .filter((ref): ref is UnresolvedReference => ref !== null);
+          if (resurrected.length > 0) this.queries.insertUnresolvedRefsBatch(resurrected);
         }
         this.queries.deleteFile(tracked.path);
-        filesRemoved++;
-      }
-      if (++reconcileChecks % SYNC_RECONCILE_YIELD_INTERVAL === 0) {
-        await new Promise<void>((resolve) => setImmediate(resolve));
-      }
-    }
-
-    // Adds / modifications.
-    for (const filePath of currentFiles) {
-      // Same cooperative yield as the removals loop — this is the other O(files)
-      // synchronous-stat loop that wedges the main thread on a large repo (#905).
-      // Yield at the top of the body so the `continue` fast-paths below still hit it.
-      if (++reconcileChecks % SYNC_RECONCILE_YIELD_INTERVAL === 0) {
-        await new Promise<void>((resolve) => setImmediate(resolve));
-      }
-      const fullPath = path.join(this.rootDir, filePath);
-      const tracked = trackedMap.get(filePath);
-
-      // Cheap pre-filter: an already-indexed file whose size AND mtime both match
-      // the DB is unchanged — skip it without reading or hashing. (A content
-      // change that preserves both exactly is the blind spot every mtime-based
-      // incremental tool accepts; `index --force` is the escape hatch. Git bumps
-      // mtime on every file it writes during checkout/merge, so pulls are caught.)
-      if (tracked) {
-        try {
-          const stat = fs.statSync(fullPath);
-          if (stat.size === tracked.size && Math.floor(stat.mtimeMs) === Math.floor(tracked.modifiedAt)) {
-            continue;
-          }
-        } catch (error) {
-          logDebug('Skipping unstattable file during sync', { filePath, error: String(error) });
-          failedFilePaths.push(filePath);
-          continue;
-        }
-      }
-
-      // New, or size/mtime changed — read + hash to confirm a real content change.
-      let content: string;
-      try {
-        content = fs.readFileSync(fullPath, 'utf-8');
-      } catch (error) {
-        logDebug('Skipping unreadable file during sync', { filePath, error: String(error) });
-        failedFilePaths.push(filePath);
-        continue;
-      }
-      const contentHash = hashContent(content);
-
-      if (!tracked) {
-        filesToIndex.push(filePath);
-        changedFilePaths.push(filePath);
-        filesAdded++;
-      } else if (tracked.contentHash !== contentHash) {
-        filesToIndex.push(filePath);
-        changedFilePaths.push(filePath);
-        filesModified++;
-      }
-    }
+      },
+    });
+    filesChecked = reconciliation.filesChecked;
+    filesAdded = reconciliation.filesAdded;
+    filesModified = reconciliation.filesModified;
+    filesRemoved = reconciliation.filesRemoved;
+    filesToIndex.push(...reconciliation.filesToIndex);
+    changedFilePaths.push(...reconciliation.changedFilePaths);
+    failedFilePaths.push(...reconciliation.failedFilePaths);
 
     // Sampled here — after the add/modify classification, before any file is
     // re-extracted — because `storeExtractionResult` deletes a file's nodes
@@ -3251,11 +3201,7 @@ export class ExtractionOrchestrator {
     // exactly that case out. That miss left the largest residual class in the
     // first measurement of this fix.
     const pairsAfter = this.queries.getNodeNamePairsByFiles(filesToIndex);
-    const deltaNames = new Set<string>();
-    const nameOf = (pair: string) => pair.slice(pair.indexOf('\0') + 1);
-    for (const pair of pairsBefore) if (!pairsAfter.has(pair)) deltaNames.add(nameOf(pair));
-    for (const pair of pairsAfter) if (!pairsBefore.has(pair)) deltaNames.add(nameOf(pair));
-    const definitionDelta = [...deltaNames];
+    const changedDefinitions = definitionDelta(pairsBefore, pairsAfter);
 
     return {
       filesChecked,
@@ -3266,7 +3212,7 @@ export class ExtractionOrchestrator {
       durationMs: Date.now() - startTime,
       changedFilePaths: changedFilePaths.length > 0 ? changedFilePaths : undefined,
       ...(failedFilePaths.length > 0 ? { failedFilePaths } : {}),
-      definitionDelta: definitionDelta.length > 0 ? definitionDelta : undefined,
+      definitionDelta: changedDefinitions.length > 0 ? changedDefinitions : undefined,
     };
   }
 
