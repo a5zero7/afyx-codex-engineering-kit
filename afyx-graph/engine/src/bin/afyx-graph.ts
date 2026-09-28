@@ -54,6 +54,22 @@ import { installFatalHandlers } from './fatal-handler';
 import { relaunchWithWasmRuntimeFlagsIfNeeded } from '../extraction/wasm-runtime-flags';
 import { installCommandSupervision } from './command-supervision';
 import { EXTRACTION_VERSION } from '../extraction/extraction-version';
+import {
+  assertCliCatalog,
+  cliAliases,
+  cliCommand,
+  cliCommandOptions,
+  prepareCliInvocation,
+} from './cli-registry';
+import { resolveCliProjectPath as resolveProjectPath } from './cli-path';
+import {
+  cliDefinition,
+  cliNode,
+  createCliPresentation,
+  formatCliDuration as formatDuration,
+  formatCliNumber as formatNumber,
+  formatCliSymbolNotFound as formatSymbolNotFound,
+} from './cli-presentation';
 // Value import, but dependency-free by design so `--help` text can name the
 // default port without dragging node:http into every other subcommand; the
 // server itself is loaded lazily inside the `ui` action. See ui-server/constants.
@@ -157,8 +173,8 @@ const packageJson = JSON.parse(
 // is the capital `-V`, and its parser rejects a multi-character single-dash
 // flag.) The bare `afyx-graph version` subcommand is registered further down so
 // the affordance also shows up in `afyx-graph --help`.
-const firstArg = process.argv[2];
-if (firstArg === '-v' || firstArg === '-version') {
+const invocation = prepareCliInvocation(process.argv);
+if (invocation.versionShortcut) {
   console.log(packageJson.version);
   return;
 }
@@ -170,45 +186,9 @@ if (firstArg === '-v' || firstArg === '-version') {
 // `--color` / `--no-color` are global and position-independent — they were
 // already read by ansiColorsEnabled() at module load, so strip them before
 // commander parses (a subcommand would otherwise reject the unknown flag).
-process.argv = process.argv.filter((a) => a !== '--color' && a !== '--no-color');
+process.argv = invocation.argv;
 
-const colors = COLORS_ENABLED
-  ? {
-      reset: '\x1b[0m',
-      bold: '\x1b[1m',
-      dim: '\x1b[2m',
-      red: '\x1b[31m',
-      green: '\x1b[32m',
-      yellow: '\x1b[33m',
-      blue: '\x1b[34m',
-      cyan: '\x1b[36m',
-      white: '\x1b[37m',
-      gray: '\x1b[90m',
-    }
-  : {
-      reset: '',
-      bold: '',
-      dim: '',
-      red: '',
-      green: '',
-      yellow: '',
-      blue: '',
-      cyan: '',
-      white: '',
-      gray: '',
-    };
-
-const chalk = {
-  bold: (s: string) => `${colors.bold}${s}${colors.reset}`,
-  dim: (s: string) => `${colors.dim}${s}${colors.reset}`,
-  red: (s: string) => `${colors.red}${s}${colors.reset}`,
-  green: (s: string) => `${colors.green}${s}${colors.reset}`,
-  yellow: (s: string) => `${colors.yellow}${s}${colors.reset}`,
-  blue: (s: string) => `${colors.blue}${s}${colors.reset}`,
-  cyan: (s: string) => `${colors.cyan}${s}${colors.reset}`,
-  white: (s: string) => `${colors.white}${s}${colors.reset}`,
-  gray: (s: string) => `${colors.gray}${s}${colors.reset}`,
-};
+const { colors, chalk, success, error, info, warn } = createCliPresentation(COLORS_ENABLED);
 
 program
   .name(CLI_NAME)
@@ -223,61 +203,6 @@ program
 // =============================================================================
 // Helper Functions
 // =============================================================================
-
-/**
- * Resolve project path from argument or current directory
- * Walks up parent directories to find nearest initialized Afyx Graph project
- * (must have .afyx-graph/afyx-graph.db, not just .afyx-graph/lessons.db)
- */
-function resolveProjectPath(pathArg?: string): string {
-  const absolutePath = path.resolve(pathArg || process.cwd());
-
-  // If exact path is initialized (has afyx-graph.db), use it
-  if (isInitialized(absolutePath)) {
-    return absolutePath;
-  }
-
-  // Walk up to find nearest parent with Afyx Graph initialized
-  // Note: findNearestAfyxGraphRoot finds any .afyx-graph folder, but we need one with afyx-graph.db
-  let current = absolutePath;
-  const root = path.parse(current).root;
-
-  while (current !== root) {
-    const parent = path.dirname(current);
-    if (parent === current) break;
-    current = parent;
-
-    if (isInitialized(current)) {
-      return current;
-    }
-  }
-
-  // Not found - return original path (will fail later with helpful error)
-  return absolutePath;
-}
-
-/**
- * Format a number with commas
- */
-function formatNumber(n: number): string {
-  return n.toLocaleString();
-}
-
-/**
- * Format duration in milliseconds to human readable
- */
-function formatDuration(ms: number): string {
-  if (ms < 1000) {
-    return `${ms}ms`;
-  }
-  const seconds = ms / 1000;
-  if (seconds < 60) {
-    return `${seconds.toFixed(1)}s`;
-  }
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
-  return `${minutes}m ${remainingSeconds.toFixed(0)}s`;
-}
 
 // Shimmer progress renderer (runs in a worker thread for smooth animation)
 // Imported at top of file from '../ui/shimmer-progress'
@@ -313,55 +238,6 @@ function createVerboseProgress(): (progress: { phase: string; current: number; t
         console.log(`[${elapsed}s]   ${formatNumber(progress.current)} files found`);
       }
     }
-  };
-}
-
-/**
- * Print success message
- */
-function success(message: string): void {
-  console.log(chalk.green(getGlyphs().ok) + ' ' + message);
-}
-
-/**
- * Print error message
- */
-function error(message: string): void {
-  console.error(chalk.red(getGlyphs().err) + ' ' + message);
-}
-
-/**
- * Print info message
- */
-function info(message: string): void {
-  console.log(chalk.blue(getGlyphs().info) + ' ' + message);
-}
-
-/**
- * Print warning message
- */
-function warn(message: string): void {
-  console.log(chalk.yellow(getGlyphs().warn) + ' ' + message);
-}
-
-/** "not found" (+ optional did-you-mean) when no exact symbol matches. */
-function formatSymbolNotFound(symbol: string, fuzzyNames: string[]): string {
-  const suggestions = [...new Set(fuzzyNames.filter((n) => n !== symbol))].slice(0, 3);
-  if (suggestions.length === 0) return `Symbol "${symbol}" not found`;
-  return `Symbol "${symbol}" not found — did you mean: ${suggestions.join(', ')}?`;
-}
-
-/** Compact node shape retained by the CLI's existing JSON lists. */
-function cliNode(node: Node) {
-  return { name: node.name, kind: node.kind, filePath: node.filePath, startLine: node.startLine };
-}
-
-/** Attribute a group's edges to every overload of this definition. */
-function cliDefinition(group: Node[]) {
-  const head = group[0]!;
-  return {
-    definition: { ...cliNode(head), id: head.id, qualifiedName: head.qualifiedName, language: head.language },
-    roots: group.map((node) => node.id),
   };
 }
 
@@ -720,7 +596,7 @@ async function runInit(
  * afyx-graph init [path]
  */
 program
-  .command('init [path]')
+  .command(cliCommand('init', '[path]'))
   .description(`Initialize ${PRODUCT_NAME} in a project directory and build the initial index`)
   .option('-i, --index', 'Deprecated: indexing now runs by default; flag accepted for backward compatibility')
   .option('-f, --force', 'Initialize even if the path looks like your home directory or a filesystem root')
@@ -734,7 +610,7 @@ program
  * afyx-graph uninit [path]
  */
 program
-  .command('uninit [path]')
+  .command(cliCommand('uninit', '[path]'))
   .description('Remove Afyx Graph from a project (deletes .afyx-graph/ directory)')
   .option('-f, --force', 'Skip confirmation prompt')
   .action(async (pathArg: string | undefined, options: { force?: boolean }) => {
@@ -789,7 +665,7 @@ program
  * afyx-graph index [path]
  */
 program
-  .command('index [path]')
+  .command(cliCommand('index', '[path]'))
   .description('Rebuild the full index from scratch (same result as a fresh init)')
   .option('-f, --force', 'Index even if the path looks like your home directory or a filesystem root')
   .option('-q, --quiet', 'Suppress progress output')
@@ -896,7 +772,7 @@ program
  * afyx-graph sync [path]
  */
 program
-  .command('sync [path]')
+  .command(cliCommand('sync', '[path]'))
   .description('Sync changes since last index')
   .option('-q, --quiet', 'Suppress output (for git hooks)')
   .action(async (pathArg: string | undefined, options: { quiet?: boolean }) => {
@@ -958,7 +834,7 @@ program
  * afyx-graph status [path]
  */
 program
-  .command('status [path]')
+  .command(cliCommand('status', '[path]'))
   .description('Show index status and statistics')
   .option('-j, --json', 'Output as JSON')
   .action(async (pathArg: string | undefined, options: { json?: boolean }) => {
@@ -1163,7 +1039,7 @@ program
  * afyx-graph query <search>
  */
 program
-  .command('query <search>')
+  .command(cliCommand('query', '<search>'))
   .description('Search for symbols in the codebase')
   .option('-p, --path <path>', 'Project path')
   .option('-l, --limit <number>', 'Maximum results', '10')
@@ -1251,7 +1127,7 @@ program
  * can reach the graph through a plain shell command.
  */
 program
-  .command('explore <query...>')
+  .command(cliCommand('explore', '<query...>'))
   .description('Explore an area: relevant symbols\' source + call paths in one shot (same output as the afyx_graph_explore MCP tool)')
   .option('-p, --path <path>', 'Project path')
   .option('--max-files <number>', 'Maximum number of files to include source from')
@@ -1292,7 +1168,7 @@ program
  * `afyx-graph context --path <root> --format json --max-nodes 8 --no-code <task>`.
  */
 program
-  .command('context <task...>')
+  .command(cliCommand('context', '<task...>'))
   .description('Build context for a task: relevant symbols, relationships, and code blocks')
   .option('-p, --path <path>', 'Project path')
   .option('-f, --format <format>', 'Output format: markdown or json', 'markdown')
@@ -1356,7 +1232,7 @@ program
  * output. The only effect is additive context when it can confidently provide it.
  */
 program
-  .command('prompt-hook', { hidden: true })
+  .command(cliCommand('prompt-hook'), cliCommandOptions('prompt-hook'))
   .description(`Claude UserPromptSubmit hook: inject ${PRODUCT_NAME} context for structural prompts (reads {prompt,cwd} JSON on stdin)`)
   .action(async () => {
     try {
@@ -1503,7 +1379,7 @@ program
  * a required `<name>` made `afyx-graph node -f <file>` unreachable (#1044).
  */
 program
-  .command('node [name]')
+  .command(cliCommand('node', '[name]'))
   .description('One symbol\'s source + caller/callee trail, or read a file with line numbers + dependents (same output as the afyx_graph_node MCP tool)')
   .option('-p, --path <path>', 'Project path')
   .option('-f, --file <file>', 'Treat as file mode (or disambiguate a symbol to this file)')
@@ -1573,7 +1449,7 @@ program
  * afyx-graph files [path]
  */
 program
-  .command('files')
+  .command(cliCommand('files'))
   .description('Show project file structure from the index')
   .option('-p, --path <path>', 'Project path')
   .option('--filter <dir>', 'Filter to files under this directory')
@@ -1799,8 +1675,8 @@ function printFileTree(
  * enter to stop it. Falls back to a plain list when output isn't a TTY.
  */
 program
-  .command('daemon')
-  .aliases(['daemons'])
+  .command(cliCommand('daemon'))
+  .aliases([...cliAliases('daemon')])
   .description(`Manage running ${PRODUCT_NAME} background daemons — pick one and press enter to stop it`)
   .action(async () => {
     const { listVerifiedDaemons, stopDaemonAt, stopAllDaemons } = await import('../mcp/daemon-registry');
@@ -1875,8 +1751,8 @@ function printNoIndexGuidance(projectPath: string): void {
  * `--read-only` turns even that off.
  */
 program
-  .command('ui [path]')
-  .alias('web')
+  .command(cliCommand('ui', '[path]'))
+  .aliases([...cliAliases('ui')])
   .description(`Open the ${PRODUCT_NAME} viewer in your browser — read your indexed project as a graph`)
   .option('--port <number>', `Port to listen on (default: ${DEFAULT_UI_PORT}, or the next free one)`)
   .option('--no-open', 'Print the URL instead of opening a browser')
@@ -2030,7 +1906,7 @@ program
   // agent's MCP config), not a command a human runs. It still works when
   // invoked — hiding only removes it from the listing. See the interactive-TTY
   // guard below, which explains this to anyone who runs it by hand.
-  .command('serve', { hidden: true })
+  .command(cliCommand('serve'), cliCommandOptions('serve'))
   .description(`Start ${PRODUCT_NAME} as an MCP server for AI assistants`)
   .option('-p, --path <path>', 'Project path (optional for MCP mode, uses rootUri from client)')
   .option('--mcp', 'Run as MCP server (stdio transport)')
@@ -2103,7 +1979,7 @@ program
  * afyx-graph unlock [path]
  */
 program
-  .command('unlock [path]')
+  .command(cliCommand('unlock', '[path]'))
   .description('Remove a stale lock file that is blocking indexing')
   .action(async (pathArg: string | undefined) => {
     const projectPath = resolveProjectPath(pathArg);
@@ -2138,7 +2014,7 @@ program
 for (const direction of ['callers', 'callees'] as const) {
   const title = direction === 'callers' ? 'Callers' : 'Callees';
   program
-    .command(`${direction} <symbol>`)
+    .command(cliCommand(direction, '<symbol>'))
     .description(direction === 'callers'
       ? 'Find all functions/methods that call a specific symbol'
       : 'Find all functions/methods called by a specific symbol')
@@ -2258,7 +2134,7 @@ for (const direction of ['callers', 'callees'] as const) {
  * afyx-graph impact <symbol> — one blast radius per distinct definition.
  */
 program
-  .command('impact <symbol>')
+  .command(cliCommand('impact', '<symbol>'))
   .description('Analyze what code is affected by changing a symbol')
   .option('-p, --path <path>', 'Project path')
   .option('-f, --file <path>', 'Narrow definitions by file path or suffix (no match: show all with a note)')
@@ -2371,7 +2247,7 @@ program
  *   afyx-graph affected src/lib/components/Editor.svelte src/routes/+page.svelte
  */
 program
-  .command('affected [files...]')
+  .command(cliCommand('affected', '[files...]'))
   .description('Find test files affected by changed source files')
   .option('-p, --path <path>', 'Project path')
   .option('--stdin', 'Read file list from stdin (one per line)')
@@ -2469,7 +2345,7 @@ program
  * afyx-graph install
  */
 program
-  .command('install')
+  .command(cliCommand('install'))
   .description('Install afyx-graph MCP server into one or more agents (Claude Code, Cursor, Codex CLI, opencode, Hermes Agent, Gemini CLI, Antigravity IDE, Kiro, GitHub Copilot)')
   .option('-t, --target <ids>', 'Target agent(s): comma-separated ids, or "auto"|"all"|"none". Default: prompt')
   .option('-l, --location <where>', 'Install location: "global" or "local". Default: prompt')
@@ -2583,7 +2459,7 @@ program
  * delete the `.afyx-graph/` index — that's `afyx-graph uninit`.
  */
 program
-  .command('uninstall')
+  .command(cliCommand('uninstall'))
   .description('Remove afyx-graph from your agents (Claude Code, Cursor, Codex CLI, opencode, Hermes Agent, Gemini CLI, Antigravity IDE, Kiro, GitHub Copilot)')
   .option('-t, --target <ids>', 'Target agent(s): comma-separated ids, or "all". Default: all')
   .option('-l, --location <where>', 'Uninstall location: "global" or "local". Default: prompt')
@@ -2618,7 +2494,7 @@ program
  * version and how to update it.
  */
 program
-  .command('upgrade [version]')
+  .command(cliCommand('upgrade', '[version]'))
   .description(`Show how to update ${PRODUCT_NAME} (updates are managed by the Afyx Codex Engineering Kit)`)
   .option('--check', 'Print the installed version and update instructions (no network access)')
   .option('-f, --force', 'Accepted for compatibility; nothing is reinstalled by this command')
@@ -2641,13 +2517,14 @@ program
  * the version affordance in `afyx-graph --help`.
  */
 program
-  .command('version')
+  .command(cliCommand('version'))
   .description(`Print the installed ${PRODUCT_NAME} version (also: -v, --version)`)
   .action(() => {
     console.log(packageJson.version);
   });
 
 // Parse and run
+assertCliCatalog(program);
 program.parse();
 
 } // end main()

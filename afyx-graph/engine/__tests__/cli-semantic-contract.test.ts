@@ -6,6 +6,7 @@ import * as path from 'path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AfyxGraph } from '../src';
 import { buildNode25BlockBanner, buildNodeTooOldBanner, MIN_NODE_MAJOR } from '../src/bin/node-version-check';
+import { CLI_COMMANDS, prepareCliInvocation } from '../src/bin/cli-registry';
 
 const BIN = path.resolve(__dirname, '../dist/bin/afyx-graph.js');
 const PACKAGE_VERSION = JSON.parse(
@@ -85,6 +86,27 @@ describe('CLI public semantic contract', () => {
   afterAll(() => {
     fs.rmSync(project, { recursive: true, force: true });
     fs.rmSync(isolatedHome, { recursive: true, force: true });
+  });
+
+  it('keeps the Afyx-native command registry and global invocation semantics explicit', () => {
+    expect(CLI_COMMANDS.map(({ name }) => name)).toEqual([
+      'init', 'uninit', 'index', 'sync', 'status', 'query', 'explore', 'context',
+      'prompt-hook', 'node', 'files', 'daemon', 'ui', 'serve', 'unlock', 'callers',
+      'callees', 'impact', 'affected', 'install', 'uninstall', 'upgrade', 'version',
+    ]);
+    expect(CLI_COMMANDS.find(({ name }) => name === 'daemon')?.aliases).toEqual(['daemons']);
+    expect(CLI_COMMANDS.find(({ name }) => name === 'ui')?.aliases).toEqual(['web']);
+    expect(CLI_COMMANDS.filter(({ hidden }) => hidden).map(({ name }) => name)).toEqual([
+      'prompt-hook', 'serve',
+    ]);
+    expect(prepareCliInvocation(['node', 'afyx-graph', '-v', '--color'])).toEqual({
+      argv: ['node', 'afyx-graph', '-v'],
+      versionShortcut: true,
+    });
+    expect(prepareCliInvocation(['node', 'afyx-graph', 'index', '-v', '--no-color'])).toEqual({
+      argv: ['node', 'afyx-graph', 'index', '-v'],
+      versionShortcut: false,
+    });
   });
 
   it('freezes root help, visible commands, aliases, and hidden internal commands', () => {
