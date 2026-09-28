@@ -1,33 +1,27 @@
 /**
- * Project writer lock (#1740).
+ * The project writer lock (#1740).
  *
- * At most one long-lived MCP *writer* (shared daemon OR direct-mode /
- * in-process engine that owns the FileWatcher) may serve a given project.
- * The shared daemon already multiplexes N stdio proxies onto one writer; this
- * lock closes the same-OS gap where two direct-mode `serve --mcp` processes
- * (via `AFYX_GRAPH_NO_DAEMON=1` or proxy→in-process fallback) each start a
- * watcher, contend on `afyx-graph.lock`, and degrade auto-sync.
+ * A given project may have at most one long-lived MCP *writer* — either the
+ * shared daemon, or a direct-mode / in-process engine that owns the
+ * FileWatcher. The shared daemon already multiplexes many stdio proxies onto
+ * one writer on its own; this lock closes the remaining same-machine gap,
+ * where two direct-mode `serve --mcp` processes (reached via
+ * `AFYX_GRAPH_NO_DAEMON=1`, or a proxy's own in-process fallback) could each
+ * start a watcher, fight over `afyx-graph.lock`, and degrade auto-sync for
+ * both.
  *
- * Deliberately separate from `daemon.pid`: proxies probe the daemon socket
- * and may clear a live pid that has no socket. A direct-mode holder must not
- * look like a daemon. `writer.pid` is only about "who owns live auto-sync".
+ * Kept deliberately separate from `daemon.pid`: a proxy probes the daemon
+ * socket directly and may clear a live pid that answers no socket at all, so
+ * a direct-mode holder must never be mistaken for a daemon. `writer.pid`
+ * answers exactly one question — who currently owns live auto-sync — and
+ * nothing else.
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
 import { getAfyxGraphDir } from '../directory';
-/** Signal-0 liveness (EPERM ⇒ alive). Local copy to avoid a daemon↔writer cycle. */
-function isProcessAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (err: unknown) {
-    const e = err as NodeJS.ErrnoException;
-    if (e.code === 'EPERM') return true;
-    return false;
-  }
-}
-
+import { isProcessAlive } from './process-liveness';
+import { acquireAtomicLockfile } from './atomic-lockfile';
 
 /** Absolute path to the writer pid lockfile for `projectRoot`. */
 export function getWriterPidPath(projectRoot: string): string {
@@ -66,84 +60,61 @@ export function decodeWriterLockInfo(raw: string): WriterLockInfo | null {
   }
 }
 
+/** A holder counts as stale — safe to clear — when its record can't be read/decoded, or its pid isn't alive. */
+function isStaleHolder(holder: WriterLockInfo | null): boolean {
+  return !holder || holder.pid <= 0 || !isProcessAlive(holder.pid);
+}
+
 /**
- * Atomically create `writer.pid` (link-into-place, O_EXCL fallback). If held
- * by a dead PID, clear and retry once. Does not steal from a live holder.
+ * Compare-and-delete the lockfile: re-read it immediately before unlinking,
+ * so a different process that has since acquired it is never disturbed.
+ * Bails out both if the current record no longer names the pid believed
+ * stale, and if that fresh read shows it isn't actually stale after all — a
+ * new, genuinely live holder could have raced in since the very first read.
+ */
+function clearIfStillStale(pidPath: string, believedStalePid: number | undefined): void {
+  try {
+    const current = decodeWriterLockInfo(fs.readFileSync(pidPath, 'utf8'));
+    if (current && current.pid !== believedStalePid) return; // someone else's lock now
+    if (isStaleHolder(current)) fs.unlinkSync(pidPath);
+  } catch {
+    /* ENOENT is fine — already gone */
+  }
+}
+
+function attemptAcquire(pidPath: string, info: WriterLockInfo): WriterAcquireResult {
+  const result = acquireAtomicLockfile(pidPath, encode(info));
+  if (result.acquired) return { kind: 'acquired', pidPath, info };
+  const existing = result.existingContents ? decodeWriterLockInfo(result.existingContents) : null;
+  return { kind: 'taken', existing, pidPath };
+}
+
+/**
+ * Atomically create `writer.pid` (link-into-place, falling back to O_EXCL).
+ * A holder whose pid has died gets cleared and the acquire retried once;
+ * a genuinely live holder is never stolen from.
  */
 export function tryAcquireWriterLock(
   projectRoot: string,
   mode: string,
 ): WriterAcquireResult {
   const pidPath = getWriterPidPath(projectRoot);
-  fs.mkdirSync(path.dirname(pidPath), { recursive: true });
+  const info: WriterLockInfo = { pid: process.pid, mode, startedAt: Date.now() };
 
-  const info: WriterLockInfo = {
-    pid: process.pid,
-    mode,
-    startedAt: Date.now(),
-  };
+  const first = attemptAcquire(pidPath, info);
+  if (first.kind === 'acquired') return first;
 
-  const attempt = (): WriterAcquireResult => {
-    const tmp = `${pidPath}.${process.pid}.tmp`;
-    let acquired = false;
-    try {
-      fs.writeFileSync(tmp, encode(info), { mode: 0o600 });
-      try {
-        fs.linkSync(tmp, pidPath);
-        acquired = true;
-      } catch (err: unknown) {
-        if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
-          // taken
-        } else {
-          // No hard links — O_EXCL create.
-          try {
-            const fd = fs.openSync(pidPath, 'wx', 0o600);
-            try {
-              fs.writeSync(fd, encode(info));
-              acquired = true;
-            } finally {
-              fs.closeSync(fd);
-            }
-          } catch (e2: unknown) {
-            if ((e2 as NodeJS.ErrnoException).code !== 'EEXIST') throw e2;
-          }
-        }
-      }
-    } finally {
-      try { fs.unlinkSync(tmp); } catch { /* ignore */ }
-    }
-
-    if (acquired) return { kind: 'acquired', pidPath, info };
-
-    let existing: WriterLockInfo | null = null;
-    try {
-      existing = decodeWriterLockInfo(fs.readFileSync(pidPath, 'utf8'));
-    } catch { /* unreadable */ }
-    return { kind: 'taken', existing, pidPath };
-  };
-
-  let result = attempt();
-  if (result.kind === 'taken' && result.existing && result.existing.pid === process.pid) {
-    // Same process already holds it (daemon acquired before engine watch).
-    return { kind: 'acquired', pidPath: result.pidPath, info: result.existing };
+  // This same process already holds it — e.g. the daemon acquired it before
+  // the engine's own watch() call reaches this point and re-acquires. Treat
+  // that as ours already, not as contention.
+  if (first.existing && first.existing.pid === process.pid) {
+    return { kind: 'acquired', pidPath: first.pidPath, info: first.existing };
   }
-  if (result.kind === 'taken') {
-    const existing = result.existing;
-    if (!existing || existing.pid <= 0 || !isProcessAlive(existing.pid)) {
-      // Stale — clear (pid-verified) and retry once.
-      try {
-        const raw = fs.readFileSync(pidPath, 'utf8');
-        const cur = decodeWriterLockInfo(raw);
-        if (!cur || cur.pid === existing?.pid) {
-          if (!cur || cur.pid <= 0 || !isProcessAlive(cur.pid)) {
-            fs.unlinkSync(pidPath);
-          }
-        }
-      } catch { /* ENOENT ok */ }
-      result = attempt();
-    }
-  }
-  return result;
+
+  if (!isStaleHolder(first.existing)) return first;
+
+  clearIfStillStale(pidPath, first.existing?.pid);
+  return attemptAcquire(pidPath, info);
 }
 
 /** Release if we still own the lock (pid match). */

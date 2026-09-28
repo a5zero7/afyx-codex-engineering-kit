@@ -1,15 +1,17 @@
 /**
- * Interactive daemon manager — the logic behind `afyx-graph daemon` / `daemons`.
+ * Interactive picker driving `afyx-graph daemon` / `daemons`: list the running
+ * daemons, let the operator choose one (or "stop all"), stop it, and loop
+ * until nothing is left or the operator backs out.
  *
- * Kept separate from the CLI (which owns the @clack/prompts wiring) so the
- * selection/stop loop is unit-testable with a fake `select`: no TTY, no clack,
- * no real daemons. The CLI passes the real clack `select`/`isCancel` plus the
- * registry's list/stop functions.
+ * The CLI owns the real `@clack/prompts` wiring (the actual TTY select box);
+ * everything here takes that behind a small injected interface instead, so
+ * the whole selection/stop loop runs against a fake `select` in tests — no
+ * TTY, no clack, no real daemon processes.
  */
 import * as path from 'path';
 import type { DaemonRecord, StopResult } from './daemon-registry';
 
-/** Sentinel option values (not real roots, so they can't collide with a project path). */
+/** Picker option values that aren't real project roots, so a real root can never collide with them. */
 export const STOP_ALL = '__stop_all__';
 export const CANCEL = '__cancel__';
 
@@ -19,45 +21,53 @@ export interface PickItem {
   hint?: string;
 }
 
-/** Compact uptime: `45s`, `12m`, `3h 5m`. */
+const SECONDS_PER_MINUTE = 60;
+const MINUTES_PER_HOUR = 60;
+
+/** Compact uptime, coarsest useful unit only: `45s`, `12m`, `3h 5m`. */
 export function formatUptime(ms: number): string {
-  const s = Math.max(0, Math.floor(ms / 1000));
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m`;
-  const h = Math.floor(m / 60);
-  return `${h}h ${m % 60}m`;
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  if (totalSeconds < SECONDS_PER_MINUTE) return `${totalSeconds}s`;
+  const totalMinutes = Math.floor(totalSeconds / SECONDS_PER_MINUTE);
+  if (totalMinutes < MINUTES_PER_HOUR) return `${totalMinutes}m`;
+  const hours = Math.floor(totalMinutes / MINUTES_PER_HOUR);
+  const remainderMinutes = totalMinutes % MINUTES_PER_HOUR;
+  return `${hours}h ${remainderMinutes}m`;
+}
+
+/** Ranks a daemon for the picker's ordering: the cwd's own daemon first, then newest-started first. */
+function pickerRank(daemon: DaemonRecord, cwd: string | null): [boolean, number] {
+  const isCurrentProject = cwd !== null && path.resolve(daemon.root) === cwd;
+  return [isCurrentProject, daemon.startedAt];
 }
 
 /**
- * Build the ordered, UI-ready option list: the current project's daemon first
- * (so it's the auto-selected default), the rest newest-first, then "Stop all"
- * (only when there's more than one) and "Cancel".
+ * Build the ordered, UI-ready option list: the current project's daemon
+ * first (so it's the auto-selected default), the rest newest-first, then
+ * "Stop all" (only past a single daemon) and "Cancel".
  */
 export function buildPickItems(daemons: DaemonRecord[], cwdRoot: string | null, now: number): PickItem[] {
-  const cwd = cwdRoot != null ? path.resolve(cwdRoot) : null;
+  const cwd = cwdRoot !== null ? path.resolve(cwdRoot) : null;
+
   const ordered = [...daemons].sort((a, b) => {
-    if (cwd) {
-      const aCur = path.resolve(a.root) === cwd;
-      const bCur = path.resolve(b.root) === cwd;
-      if (aCur && !bCur) return -1;
-      if (bCur && !aCur) return 1;
-    }
-    return b.startedAt - a.startedAt; // newest first
+    const [aCurrent, aStartedAt] = pickerRank(a, cwd);
+    const [bCurrent, bStartedAt] = pickerRank(b, cwd);
+    if (aCurrent !== bCurrent) return aCurrent ? -1 : 1;
+    return bStartedAt - aStartedAt;
   });
 
-  const items: PickItem[] = ordered.map((d) => {
-    const current = cwd != null && path.resolve(d.root) === cwd;
-    return {
-      value: d.root,
-      label: current ? `${d.root}  (current project)` : d.root,
-      hint: `pid ${d.pid} · up ${formatUptime(now - d.startedAt)} · Running`,
-    };
+  const daemonItems: PickItem[] = ordered.map((daemon) => {
+    const isCurrentProject = cwd !== null && path.resolve(daemon.root) === cwd;
+    const label = isCurrentProject ? `${daemon.root}  (current project)` : daemon.root;
+    const uptime = formatUptime(now - daemon.startedAt);
+    return { value: daemon.root, label, hint: `pid ${daemon.pid} · up ${uptime} · Running` };
   });
 
-  if (items.length > 1) items.push({ value: STOP_ALL, label: 'Stop all', hint: '' });
-  items.push({ value: CANCEL, label: 'Cancel', hint: '' });
-  return items;
+  const trailingItems: PickItem[] = [];
+  if (daemonItems.length > 1) trailingItems.push({ value: STOP_ALL, label: 'Stop all', hint: '' });
+  trailingItems.push({ value: CANCEL, label: 'Cancel', hint: '' });
+
+  return [...daemonItems, ...trailingItems];
 }
 
 export interface PickerDeps {
@@ -67,7 +77,7 @@ export interface PickerDeps {
   /** Realpath'd root of the current project's daemon, or null. */
   cwdRoot: string | null;
   now: () => number;
-  /** Render the picker; returns the chosen value or a cancel sentinel. */
+  /** Render the picker; resolves to the chosen value or a cancel sentinel. */
   select: (opts: { message: string; options: PickItem[]; initialValue: string }) => Promise<unknown>;
   isCancel: (v: unknown) => boolean;
   /** Per-action note (e.g. "Stopped daemon …"). */
@@ -76,12 +86,29 @@ export interface PickerDeps {
   done: (msg: string) => void;
 }
 
+/** One line describing a single-daemon stop outcome, matching `choice` for context. */
+function describeStopOutcome(result: StopResult, choice: string): string {
+  switch (result.outcome) {
+    case 'unverified':
+      return `Could not verify daemon (pid ${result.pid}); left it running with its artifacts intact — ${choice}`;
+    case 'not-running':
+      return `Daemon was no longer running; removed stale artifacts — ${choice}`;
+    case 'no-daemon':
+      return `No daemon was found — ${choice}`;
+    case 'term':
+    case 'kill': {
+      const forced = result.outcome === 'kill' ? ', forced' : '';
+      return `Stopped daemon (pid ${result.pid}${forced}) — ${choice}`;
+    }
+  }
+}
+
 /**
- * Pick a daemon → stop it → re-prompt with what's left, until the user cancels
- * (Esc / Ctrl-C / "Cancel"), picks "Stop all", or nothing remains.
+ * Pick a daemon → stop it → re-prompt with what's left, until the operator
+ * cancels (Esc / Ctrl-C / "Cancel"), picks "Stop all", or nothing remains.
  */
 export async function runDaemonPicker(deps: PickerDeps): Promise<void> {
-  for (;;) {
+  while (true) {
     const daemons = await deps.list();
     if (daemons.length === 0) {
       deps.done('All daemons stopped.');
@@ -89,10 +116,11 @@ export async function runDaemonPicker(deps: PickerDeps): Promise<void> {
     }
 
     const items = buildPickItems(daemons, deps.cwdRoot, deps.now());
+    const defaultChoice = items[0]?.value ?? CANCEL; // daemons.length > 0 here, so items[0] is a daemon
     const choice = await deps.select({
       message: 'Select a daemon to stop',
       options: items,
-      initialValue: items[0]?.value ?? CANCEL, // daemons.length > 0 here, so items[0] is a daemon
+      initialValue: defaultChoice,
     });
 
     if (deps.isCancel(choice) || choice === CANCEL) {
@@ -102,30 +130,16 @@ export async function runDaemonPicker(deps: PickerDeps): Promise<void> {
 
     if (choice === STOP_ALL) {
       const results = await deps.stopAll();
-      const n = results.filter((r) => r.outcome === 'term' || r.outcome === 'kill').length;
-      deps.note(`Stopped ${n} daemon${n === 1 ? '' : 's'}.`);
+      const stoppedCount = results.filter((r) => r.outcome === 'term' || r.outcome === 'kill').length;
+      deps.note(`Stopped ${stoppedCount} daemon${stoppedCount === 1 ? '' : 's'}.`);
       deps.done('Done.');
       return;
     }
 
-    const result = await deps.stop(String(choice));
-    if (result.outcome === 'unverified') {
-      deps.note(
-        `Could not verify daemon (pid ${result.pid}); left it running with its artifacts intact — ${choice}`
-      );
-      continue;
-    }
-    if (result.outcome === 'not-running') {
-      deps.note(`Daemon was no longer running; removed stale artifacts — ${choice}`);
-      continue;
-    }
-    if (result.outcome === 'no-daemon') {
-      deps.note(`No daemon was found — ${choice}`);
-      continue;
-    }
-    const forced = result.outcome === 'kill' ? ', forced' : '';
-    deps.note(`Stopped daemon (pid ${result.pid}${forced}) — ${choice}`);
-    // Loop: the next iteration re-lists; if more remain it re-prompts, otherwise
-    // the top-of-loop empty check prints "All daemons stopped."
+    const root = String(choice);
+    const result = await deps.stop(root);
+    deps.note(describeStopOutcome(result, root));
+    // Every outcome loops back the same way: the next iteration re-lists, and
+    // either re-prompts with what's left or, once empty, reports done above.
   }
 }

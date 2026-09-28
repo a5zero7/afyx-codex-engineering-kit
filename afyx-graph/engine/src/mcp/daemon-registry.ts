@@ -1,22 +1,25 @@
 /**
- * Global daemon registry + stop/list control — the discovery layer behind
- * `afyx-graph list` and `afyx-graph stop [--all]`.
+ * Cross-project daemon directory — the discovery layer `afyx-graph list` and
+ * `afyx-graph stop [--all]` read from.
  *
- * Every per-project daemon already writes an authoritative lockfile at
- * `<root>/.afyx-graph/daemon.pid`. That's enough to stop ONE daemon you can name,
- * but there's no central place to find them ALL — which `list` and `stop --all`
- * need. So each daemon also drops a tiny record under `~/.afyx-graph/daemons/` on
- * start and removes it on graceful shutdown.
+ * A daemon's OWN lockfile at `<root>/.afyx-graph/daemon.pid` is authoritative
+ * for that one project, but there's nowhere central to enumerate every daemon
+ * across every project, which is exactly what `list`/`stop --all` need. So
+ * every daemon additionally drops a small record under
+ * `~/.afyx-graph/daemons/` when it binds, and removes it again on a graceful
+ * exit.
  *
- * The registry is a DISCOVERY index, never a source of truth: the live pid is.
- * A SIGKILL'd daemon can't remove its own record, so readers prune any record
- * whose pid is dead (`isProcessAlive`). Every write/read is best-effort — a
- * registry hiccup must never break the daemon or a command; worst case `list`
- * momentarily misses or over-lists one, which the next liveness prune corrects.
+ * This directory is discovery-only, never authoritative — a live pid always
+ * wins. A daemon killed with SIGKILL never gets to remove its own record, so
+ * every reader prunes any entry whose pid has died. All reads and writes here
+ * are best-effort by design: a registry hiccup must never take down the
+ * daemon or a CLI command over it; the worst case is `list` briefly missing
+ * or over-reporting one entry, self-correcting on the next liveness sweep.
  *
- * Cross-platform by construction: only files + `process.kill(pid, signal)`,
- * which behave consistently on macOS/Linux (real signals) and Windows (mapped to
- * TerminateProcess). Validated live on all three.
+ * Portable by construction — nothing here beyond plain files and
+ * `process.kill(pid, signal)`, which behaves the same in spirit on
+ * macOS/Linux (a real signal) and Windows (mapped internally to
+ * TerminateProcess). Exercised live on all three platforms.
  */
 import * as fs from 'fs';
 import * as os from 'os';
@@ -31,6 +34,7 @@ import {
   type DaemonLockInfo,
 } from './daemon-paths';
 import { readWriterLock, releaseWriterLock, tryAcquireWriterLock } from './writer-lock';
+import { isValidPidAlive } from './process-liveness';
 
 export interface DaemonRecord {
   /** Realpath'd project root the daemon serves. */
@@ -43,8 +47,9 @@ export interface DaemonRecord {
 }
 
 /**
- * `~/.afyx-graph/daemons` — GLOBAL, keyed off the home install dir. (The
- * `AFYX_GRAPH_DIR` env var only renames the per-project index dir, not this.)
+ * The registry directory itself, `~/.afyx-graph/daemons`, keyed off the home
+ * directory — genuinely global, unlike the per-project index dir: setting
+ * `AFYX_GRAPH_DIR` renames that one, but has no effect here.
  */
 export function getRegistryDir(): string {
   return path.join(os.homedir(), '.afyx-graph', 'daemons');
@@ -56,31 +61,25 @@ function recordPath(root: string): string {
 }
 
 /**
- * Is `pid` a live process? `kill(pid, 0)` sends no signal — it just probes:
- * ESRCH ⇒ dead, EPERM ⇒ alive but not ours (still alive). Same liveness check
- * the PPID watchdog (#277) and daemon lock arbitration use.
+ * Liveness check for a pid pulled out of a registry record. Guards against a
+ * non-positive or non-integer value outright: a record here is parsed
+ * straight from on-disk JSON with nothing else validating it, so a corrupt
+ * or hand-edited entry must read as dead (and get pruned) rather than alive.
+ * The same probe backs the PPID watchdog (#277) and daemon-lock arbitration.
  */
-export function isProcessAlive(pid: number): boolean {
-  if (!Number.isInteger(pid) || pid <= 0) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (err) {
-    return (err as NodeJS.ErrnoException).code === 'EPERM';
-  }
-}
+export const isProcessAlive = isValidPidAlive;
 
-/** Best-effort: record this daemon so `list`/`stop --all` can find it. */
+/** Drop a discovery record for this daemon so `list`/`stop --all` can find it. Best-effort. */
 export function registerDaemon(rec: DaemonRecord): void {
   try {
     fs.mkdirSync(getRegistryDir(), { recursive: true });
     fs.writeFileSync(recordPath(rec.root), JSON.stringify(rec, null, 2) + '\n', { mode: 0o600 });
   } catch {
-    /* best-effort — list's liveness prune tolerates a missing record */
+    /* a missing record is fine — the next liveness prune just won't see it */
   }
 }
 
-/** Best-effort: drop this daemon's record on graceful shutdown. */
+/** Remove this daemon's discovery record on a graceful shutdown. Best-effort. */
 export function deregisterDaemon(root: string): void {
   try {
     fs.unlinkSync(recordPath(root));
@@ -89,9 +88,19 @@ export function deregisterDaemon(root: string): void {
   }
 }
 
+function readRegistryFile(fullPath: string): DaemonRecord | null {
+  try {
+    const rec = JSON.parse(fs.readFileSync(fullPath, 'utf8')) as DaemonRecord;
+    return typeof rec.pid === 'number' && typeof rec.root === 'string' ? rec : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
- * All registered daemons whose process is still alive, newest first. Dead/garbage
- * records are deleted as a side effect (self-healing) unless `prune` is false.
+ * Every registered daemon whose process is still alive, newest first. As a
+ * side effect (unless `prune` is false) this deletes any dead or garbage
+ * record it finds along the way, keeping the registry self-healing.
  */
 export function listDaemons(opts: { prune?: boolean } = {}): DaemonRecord[] {
   const prune = opts.prune ?? true;
@@ -106,15 +115,9 @@ export function listDaemons(opts: { prune?: boolean } = {}): DaemonRecord[] {
   const live: DaemonRecord[] = [];
   for (const file of files) {
     const full = path.join(dir, file);
-    let rec: DaemonRecord | null = null;
-    try {
-      rec = JSON.parse(fs.readFileSync(full, 'utf8')) as DaemonRecord;
-    } catch {
-      rec = null;
-    }
-    const valid = rec && typeof rec.pid === 'number' && typeof rec.root === 'string';
-    if (valid && isProcessAlive(rec!.pid)) {
-      live.push(rec!);
+    const rec = readRegistryFile(full);
+    if (rec && isProcessAlive(rec.pid)) {
+      live.push(rec);
     } else if (prune) {
       try { fs.unlinkSync(full); } catch { /* ignore */ }
     }
@@ -123,9 +126,10 @@ export function listDaemons(opts: { prune?: boolean } = {}): DaemonRecord[] {
 }
 
 /**
- * Registry entries whose socket hello proves the recorded process is the
- * daemon. Used by every user-facing list/stop-all path so a reused PID cannot
- * appear as a phantom running daemon (#1553).
+ * Registered daemons narrowed to the ones whose socket hello actually proves
+ * the recorded process is a real daemon, not just a pid that happens to be
+ * alive. Every user-facing list/stop-all path goes through this, so a reused
+ * pid can never masquerade as a phantom running daemon (#1553).
  */
 export async function listVerifiedDaemons(opts: { prune?: boolean } = {}): Promise<DaemonRecord[]> {
   const prune = opts.prune ?? true;
@@ -142,15 +146,25 @@ export async function listVerifiedDaemons(opts: { prune?: boolean } = {}): Promi
   return verified;
 }
 
-/** Remove stale artifacts while holding the project writer slot exclusively. */
+/** Remove every socket-candidate file for `root`. POSIX only — a Windows named pipe disappears with its process on its own. */
+function unlinkSocketCandidates(root: string): void {
+  if (process.platform === 'win32') return;
+  for (const candidate of getDaemonSocketCandidates(root)) {
+    try { fs.unlinkSync(candidate); } catch { /* gone */ }
+  }
+}
+
+/**
+ * Sweep stale artifacts while holding the project's writer slot exclusively.
+ * A daemon claims writer.pid before it ever binds or relocates its socket, so
+ * holding that same slot here freezes every legitimate artifact writer for
+ * the duration of this compare-and-clean.
+ */
 function cleanupDaemonArtifacts(
   root: string,
   expectedLockContents: string | null,
 ): boolean {
   const pidPath = getDaemonPidPath(root);
-  // A daemon owns writer.pid before binding or relocating its socket. Claiming
-  // the writer slot therefore freezes every legitimate daemon artifact writer
-  // while we compare the inspected lock snapshot and clean it up.
   if (readWriterLock(root)?.pid === process.pid) return false;
   const claim = tryAcquireWriterLock(root, 'cleanup');
   if (claim.kind === 'taken') return false;
@@ -165,14 +179,10 @@ function cleanupDaemonArtifacts(
         return false;
       }
     }
-    // POSIX sockets are real files; Windows named pipes vanish with the process.
-    // Sweep every candidate before releasing daemon.pid, so no successor can
-    // acquire the lock and bind a socket that this cleanup then removes.
-    if (process.platform !== 'win32') {
-      for (const candidate of getDaemonSocketCandidates(root)) {
-        try { fs.unlinkSync(candidate); } catch { /* gone */ }
-      }
-    }
+    // Socket candidates go first, daemon.pid last — a successor electing
+    // itself mid-sweep must never be able to bind a socket that this same
+    // cleanup then rips out from under it.
+    unlinkSocketCandidates(root);
     deregisterDaemon(root);
     try { fs.unlinkSync(pidPath); } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== 'ENOENT') return false;
@@ -183,24 +193,32 @@ function cleanupDaemonArtifacts(
   }
 }
 
-/** Remove daemon artifacts only when no matching daemon answers the socket hello. */
+/** Whether a live, non-probeable legacy lock holder should be preserved rather than treated as ambiguous. */
+async function isLiveUnprovenLegacyHolder(info: DaemonLockInfo): Promise<boolean> {
+  if (!isProcessAlive(info.pid)) return false;
+  // A legacy record carries no socket path at all, so there's nothing to
+  // probe — inconclusive, not proof of PID reuse, so its lock is preserved
+  // rather than risk a second writer on a guess.
+  if (!canProbeDaemonIdentity(info)) return true;
+  return probeDaemonIdentity(info);
+}
+
+/** Remove daemon artifacts, but only once confirming no matching daemon actually answers the socket hello. */
 export async function clearStaleDaemonArtifacts(root: string): Promise<boolean> {
   const pidPath = getDaemonPidPath(root);
   const hadArtifacts = fs.existsSync(pidPath) || (
     process.platform !== 'win32' && getDaemonSocketCandidates(root).some((p) => fs.existsSync(p))
   );
   if (!hadArtifacts) return false;
+
   let info: DaemonLockInfo | null = null;
   let lockContents: string | null = null;
   try {
     lockContents = fs.readFileSync(pidPath, 'utf8');
     info = decodeLockInfo(lockContents);
   } catch { /* missing/corrupt */ }
-  if (info && isProcessAlive(info.pid)) {
-    // A live legacy holder has no socket path to probe. That is inconclusive,
-    // not proof of PID reuse, so preserve its lock rather than risk two writers.
-    if (!canProbeDaemonIdentity(info) || await probeDaemonIdentity(info)) return false;
-  }
+
+  if (info && await isLiveUnprovenLegacyHolder(info)) return false;
   return cleanupDaemonArtifacts(root, lockContents);
 }
 
@@ -222,30 +240,49 @@ export interface StopResult {
   outcome: 'term' | 'kill' | 'not-running' | 'no-daemon' | 'unverified';
 }
 
+interface ResolvedDaemonIdentity {
+  pid: number | null;
+  identity: DaemonLockInfo | null;
+  lockContents: string | null;
+}
+
 /**
- * Stop the daemon serving `root`: SIGTERM, wait, then SIGKILL if it won't go,
- * then sweep its artifacts. `root` must be realpath'd (match how the daemon
- * keys its socket/lockfile). Resolves the pid from the authoritative lockfile,
- * falling back to the registry.
+ * Resolve `root`'s daemon pid/identity, preferring its lockfile and falling
+ * back to the registry whenever the lockfile yields no pid — whether that's
+ * because the file is missing or unreadable, or because it read fine but
+ * failed to decode. Either way, `lockContents` stays exactly whatever that
+ * lockfile read produced (possibly garbled text, possibly null); a registry
+ * fallback never resets it, since callers rely on it as the untouched
+ * compare-and-delete snapshot.
  */
-export async function stopDaemonAt(root: string): Promise<StopResult> {
-  let pid: number | null = null;
+function resolveDaemonIdentity(root: string): ResolvedDaemonIdentity {
   let identity: DaemonLockInfo | null = null;
   let lockContents: string | null = null;
   try {
     lockContents = fs.readFileSync(getDaemonPidPath(root), 'utf8');
     identity = decodeLockInfo(lockContents);
-    pid = identity?.pid ?? null;
   } catch {
     /* no lockfile */
   }
+  let pid = identity?.pid ?? null;
+
   if (pid == null) {
-    const rec = listDaemons({ prune: false }).find(
-      (r) => path.resolve(r.root) === path.resolve(root)
-    );
+    const rec = listDaemons({ prune: false }).find((r) => path.resolve(r.root) === path.resolve(root));
     pid = rec?.pid ?? null;
     if (rec) identity = rec;
   }
+
+  return { pid, identity, lockContents };
+}
+
+/**
+ * Stop the daemon serving `root` — SIGTERM, wait, escalate to SIGKILL if
+ * needed, then sweep its artifacts. `root` must already be realpath'd so it
+ * matches how the daemon itself keyed its socket and lockfile. The pid comes
+ * from that lockfile when possible, the registry otherwise.
+ */
+export async function stopDaemonAt(root: string): Promise<StopResult> {
+  const { pid, identity, lockContents } = resolveDaemonIdentity(root);
 
   if (pid == null) {
     cleanupDaemonArtifacts(root, lockContents);
@@ -255,8 +292,9 @@ export async function stopDaemonAt(root: string): Promise<StopResult> {
     const removed = cleanupDaemonArtifacts(root, lockContents);
     return { root, pid, outcome: removed ? 'not-running' : 'unverified' };
   }
-  // Never signal a process merely because it reused a stale daemon PID. The
-  // daemon's immediate hello is the process-identity proof (#1553).
+  // A live pid alone is never enough to justify signaling it — it could be an
+  // unrelated process that inherited a reused pid. The socket hello is what
+  // actually proves this pid is our daemon (#1553).
   if (!identity || !canProbeDaemonIdentity(identity)) {
     return { root, pid, outcome: 'unverified' };
   }
@@ -265,8 +303,9 @@ export async function stopDaemonAt(root: string): Promise<StopResult> {
     return { root, pid, outcome: removed ? 'not-running' : 'unverified' };
   }
 
-  // POSIX: SIGTERM runs the daemon's graceful shutdown. Windows: TerminateProcess
-  // (no graceful path), so we always sweep artifacts ourselves below.
+  // SIGTERM drives the daemon's own graceful shutdown on POSIX. Windows maps
+  // it to TerminateProcess instead (no graceful path there), so the artifact
+  // sweep below always runs itself rather than trust the daemon to have done it.
   try { process.kill(pid, 'SIGTERM'); } catch { /* raced to exit */ }
   let outcome: StopResult['outcome'] = 'term';
   if (!(await waitForDeath(pid, 3000))) {
