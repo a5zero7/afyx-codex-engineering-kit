@@ -1727,6 +1727,14 @@ export function resolveViaImport(
             // constant edge below rather than fabricating a wrong one.
             const instanceMember = resolveImportedInstanceMember(targetNode, ref, imp.localName, context);
             if (instanceMember) return instanceMember;
+
+            // A Python named import binds the root value, not arbitrary members
+            // accessed through it. If none of the validated member paths above
+            // found the requested member, keep the full member reference
+            // unresolved instead of collapsing `root.member()` onto `root`.
+            // Bare `root()` references never enter this branch and retain the
+            // explicit imported-symbol resolution above.
+            if (ref.language === 'python') return null;
           }
 
           return {

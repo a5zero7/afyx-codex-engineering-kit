@@ -151,6 +151,19 @@ describe('resolution ground truth', () => {
     ]);
   });
 
+  it('does not collapse an unvalidated member call onto its imported root function', () => {
+    expect(targetsFrom('python/member_consumer.py', 'invoke_unvalidated_member', 'calls')).toEqual([]);
+    expect(
+      graph
+        .getUnresolvedReferencesInFile('python/member_consumer.py')
+        .some(
+          (ref) =>
+            ref.referenceName === 'pay.some_member' &&
+            ref.referenceKind === 'calls'
+        )
+    ).toBe(true);
+  });
+
   it('resolves a qualified Go package call to the imported package', () => {
     expect(targetsFrom('go/main/main.go', 'Run', 'calls')).toEqual([
       { filePath: 'go/helper/helper.go', name: 'Do', kind: 'function' },
