@@ -46,6 +46,11 @@ describe('AFYX_GRAPH_MCP_TOOLS allowlist', () => {
     expect(listed()).toEqual(['afyx_graph_explore']);
   });
 
+  it('keeps a non-empty unknown allowlist as an intentionally empty surface', () => {
+    process.env[ENV] = 'not-a-tool';
+    expect(listed()).toEqual([]);
+  });
+
   it('rejects a disabled tool on execute (defense in depth)', async () => {
     process.env[ENV] = 'node';
     const res = await new ToolHandler(null).execute('afyx_graph_explore', {});

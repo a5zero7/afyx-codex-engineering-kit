@@ -15,7 +15,7 @@
 import * as path from 'path';
 import { JsonRpcRequest, JsonRpcNotification, JsonRpcTransport, ErrorCodes } from './transport';
 import { MCPEngine } from './engine';
-import { tools } from './tools';
+import { parseToolCallParams } from './tool-registry';
 import { SERVER_INSTRUCTIONS, SERVER_INSTRUCTIONS_NO_ROOT_INDEX } from './server-instructions';
 import { AfyxGraphPackageVersion } from './version';
 import { resolveServerRoot } from '../directory';
@@ -252,28 +252,12 @@ export class MCPSession {
   }
 
   private async handleToolsCall(request: JsonRpcRequest): Promise<void> {
-    const params = request.params as {
-      name: string;
-      arguments?: Record<string, unknown>;
-    };
-
-    if (!params || !params.name) {
-      this.transport.sendError(request.id, ErrorCodes.InvalidParams, 'Missing tool name');
+    const parsed = parseToolCallParams(request.params);
+    if (!parsed.ok) {
+      this.transport.sendError(request.id, ErrorCodes.InvalidParams, parsed.message);
       return;
     }
-
-    const toolName = params.name;
-    const toolArgs = params.arguments || {};
-
-    const tool = tools.find((t) => t.name === toolName);
-    if (!tool) {
-      this.transport.sendError(
-        request.id,
-        ErrorCodes.InvalidParams,
-        `Unknown tool: ${toolName}`,
-      );
-      return;
-    }
+    const { name: toolName, args: toolArgs } = parsed.call;
 
     if (process.env.AFYX_GRAPH_MCP_DEBUG) process.stderr.write(`[mcp-debug] toolsCall ${toolName} id=${String(request.id)} pre-init\n`);
     await this.retryInitIfNeeded();
