@@ -12,6 +12,7 @@ const PACKAGE_VERSION = JSON.parse(
   fs.readFileSync(path.resolve(__dirname, '../package.json'), 'utf8'),
 ).version as string;
 const ROOT_HELP_SHA256 = 'c37f1c94b207601e524ee591056da18238df1e5b7cc2b1e55eab0a015db23168';
+const QUERY_HELP_SHA256 = '0ce2d5d2c93401f903871589a0db50b588e969524eb405253488bc81618b8bcd';
 
 interface CliRun {
   code: number;
@@ -71,6 +72,11 @@ describe('CLI public semantic contract', () => {
       path.join(project, 'src', 'contract.ts'),
       'export function cliContractNeedle(value: number): number { return value + 1; }\n',
     );
+    fs.writeFileSync(
+      path.join(project, 'src', 'contract.test.ts'),
+      "import { cliContractNeedle } from './contract';\n" +
+        'export const cliContractResult = cliContractNeedle(1);\n',
+    );
     const graph = AfyxGraph.initSync(project);
     await graph.indexAll();
     graph.close();
@@ -90,6 +96,11 @@ describe('CLI public semantic contract', () => {
     expect(result.stdout).toContain('ui|web');
     expect(result.stdout).not.toMatch(/^\s+(?:serve|prompt-hook)\b/m);
     expect(result.stdout.endsWith('\n')).toBe(true);
+
+    const queryHelp = runCli(['query', '--help']);
+    expect(queryHelp.code).toBe(0);
+    expect(queryHelp.stderr).toBe('');
+    expect(createHash('sha256').update(queryHelp.stdout).digest('hex')).toBe(QUERY_HELP_SHA256);
   });
 
   it('keeps every version spelling stdout-only with exit zero', () => {
@@ -142,9 +153,16 @@ describe('CLI public semantic contract', () => {
   it('preserves human output and JSON purity for an absolute path containing spaces', () => {
     const human = runCli(['query', 'cliContractNeedle', '--path', project, '--limit', '3']);
     expect(human.code).toBe(0);
+    expect(human.stdout).toContain('Search Results for "cliContractNeedle"');
     expect(human.stdout).toContain('cliContractNeedle');
     expect(human.stdout).not.toMatch(/\x1b\[/);
     expect(human.stdout.endsWith('\n')).toBe(true);
+
+    const positionedColors = runCli([
+      'query', 'cliContractNeedle', '--path', project, '--color', '--no-color',
+    ]);
+    expect(positionedColors.code).toBe(0);
+    expect(positionedColors.stdout).not.toMatch(/\x1b\[/);
 
     const machine = runCli(['query', 'cliContractNeedle', '--path', project, '--limit', '3', '--json']);
     expect(machine.code).toBe(0);
@@ -153,9 +171,15 @@ describe('CLI public semantic contract', () => {
     expect(typeof parsed[0]?.score).toBe('number');
   });
 
-  it('handles closed empty stdin deterministically for affected --stdin', () => {
-    const result = runCli(['affected', '--stdin', '--quiet', '--path', project], { input: '' });
-    expect(result.code).toBe(0);
-    expect(result.stdout).toBe('');
+  it('handles valid and closed empty stdin deterministically for affected --stdin', () => {
+    const valid = runCli(['affected', '--stdin', '--quiet', '--path', project], {
+      input: 'src/contract.ts\n',
+    });
+    expect(valid.code).toBe(0);
+    expect(valid.stdout).toBe('src/contract.test.ts\n');
+
+    const empty = runCli(['affected', '--stdin', '--quiet', '--path', project], { input: '' });
+    expect(empty.code).toBe(0);
+    expect(empty.stdout).toBe('');
   });
 });
