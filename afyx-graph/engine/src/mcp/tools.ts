@@ -70,6 +70,20 @@ import {
   servedRangesForFile,
   symbolsInSpans,
 } from './explore-dedup';
+import {
+  isToolEnabled,
+  requireProjectPath,
+  resolveToolRoute,
+  selectToolDefinitions,
+} from './tool-registry';
+import {
+  NotIndexedError,
+  classifyToolFailure,
+  errorToolResult,
+  textToolResult,
+} from './tool-results';
+
+export { NotIndexedError } from './tool-results';
 
 /**
  * An expected, recoverable "afyx-graph can't serve this" condition — most
@@ -82,8 +96,6 @@ import {
  * cases: security refusals ({@link PathRefusalError}) and genuine
  * malfunctions.
  */
-export class NotIndexedError extends Error {}
-
 /**
  * A security refusal (sensitive system path). Stays `isError: true` WITHOUT
  * retry guidance — abandoning this path is the desired agent reaction.
@@ -114,12 +126,6 @@ const MAX_INPUT_LENGTH = 10_000;
  * never legitimate and signal abuse or a bug upstream.
  */
 const MAX_PATH_LENGTH = 4_096;
-
-/** Return the operator-facing suffix of an Afyx Graph MCP tool name. */
-function toolShortName(name: string): string {
-  return name.replace(/^afyx_graph_/, '');
-}
-
 
 /**
  * Node kinds that contain other symbols. For these, `afyx_graph_node` with
@@ -1421,18 +1427,6 @@ export const tools: ToolDefinition[] = [
  * explore's `['query']` becomes `['query', 'projectPath']`, and a tool with no
  * `required` list (status/files) gains `['projectPath']`.
  */
-function withRequiredProjectPath(defs: ToolDefinition[]): ToolDefinition[] {
-  return defs.map((tool) => {
-    if (!tool.inputSchema.properties.projectPath) return tool;
-    const required = tool.inputSchema.required ?? [];
-    if (required.includes('projectPath')) return tool;
-    return {
-      ...tool,
-      inputSchema: { ...tool.inputSchema, required: [...required, 'projectPath'] },
-    };
-  });
-}
-
 /**
  * Allowlist-filtered tool definitions WITHOUT an engine — the static surface the
  * proxy answers `tools/list` with before any project is open. Mirrors
@@ -1440,12 +1434,7 @@ function withRequiredProjectPath(defs: ToolDefinition[]): ToolDefinition[] {
  * note in a description only adds once `cg` is loaded; the schemas are static).
  */
 export function getStaticTools(): ToolDefinition[] {
-  const raw = process.env.AFYX_GRAPH_MCP_TOOLS;
-  if (!raw || !raw.trim()) {
-    return tools.filter(t => DEFAULT_MCP_TOOLS.has(toolShortName(t.name)));
-  }
-  const allow = new Set(raw.split(',').map(s => toolShortName(s.trim())).filter(Boolean));
-  return allow.size ? tools.filter(t => allow.has(toolShortName(t.name))) : tools;
+  return selectToolDefinitions(tools, process.env.AFYX_GRAPH_MCP_TOOLS);
 }
 
 /**
@@ -1459,8 +1448,6 @@ export function getStaticTools(): ToolDefinition[] {
  * status) remain fully functional — handlers stay, the library API and CLI are
  * untouched, and `AFYX_GRAPH_MCP_TOOLS=explore,node,...` re-enables any of them.
  */
-const DEFAULT_MCP_TOOLS = new Set(['explore']);
-
 /**
  * Tool handler that executes tools against an Afyx Graph instance
  *
@@ -1605,26 +1592,9 @@ export class ToolHandler {
     return this.cg !== null;
   }
 
-  /**
-   * Optional allowlist of exposed tools, parsed from the AFYX_GRAPH_MCP_TOOLS
-   * env var (comma-separated short names, e.g. "trace,search,node,context").
-   * Unset/empty → every tool is exposed. Lets an operator (or an A/B harness)
-   * trim the tool surface without rebuilding the client config; the ablated
-   * tool is then truly absent from ListTools rather than merely denied on call.
-   * Matching is on the short form, so "node" and "afyx_graph_node" both work.
-   */
-  private toolAllowlist(): Set<string> | null {
-    const raw = process.env.AFYX_GRAPH_MCP_TOOLS;
-    if (!raw || !raw.trim()) return null;
-    const short = (s: string) => toolShortName(s.trim());
-    const set = new Set(raw.split(',').map(short).filter(Boolean));
-    return set.size ? set : null;
-  }
-
   /** Whether a tool name passes the AFYX_GRAPH_MCP_TOOLS allowlist (if any). */
   private isToolAllowed(name: string): boolean {
-    const allow = this.toolAllowlist();
-    return !allow || allow.has(toolShortName(name));
+    return isToolEnabled(name, process.env.AFYX_GRAPH_MCP_TOOLS);
   }
 
   /**
@@ -1634,13 +1604,7 @@ export class ToolHandler {
    * allowlist so a trimmed surface is reflected in ListTools.
    */
   getTools(): ToolDefinition[] {
-    const allow = this.toolAllowlist();
-    // No explicit allowlist → the default 4-tool surface (see
-    // DEFAULT_MCP_TOOLS for the evidence). An allowlist replaces the
-    // default entirely, so any defined tool can be re-enabled.
-    let visible = allow
-      ? tools.filter(t => allow.has(toolShortName(t.name)))
-      : tools.filter(t => DEFAULT_MCP_TOOLS.has(toolShortName(t.name)));
+    let visible = selectToolDefinitions(tools, process.env.AFYX_GRAPH_MCP_TOOLS);
     // No default project loaded → no-root-index case (#993): a gateway server
     // started outside any repo, or a monorepo root whose indexes live in
     // sub-projects. With nothing to fall back to, EVERY call needs an explicit
@@ -1651,7 +1615,7 @@ export class ToolHandler {
     // null here means "genuinely no default", not a startup race. When a default
     // IS open we leave projectPath optional (below): a bare call falls back to
     // it, exactly as in the common single-project launch.
-    if (!this.cg) return withRequiredProjectPath(visible);
+    if (!this.cg) return requireProjectPath(visible);
 
     try {
       const stats = this.cg.getStats();
@@ -2153,7 +2117,7 @@ export class ToolHandler {
       // thread against the watched default instance, so it is NEVER off-loaded to
       // a worker (whose read connection has no watcher). It also skips the
       // auto-banner wrapper to avoid duplicating its own pending-files section.
-      if (toolName === 'afyx_graph_status') {
+      if (resolveToolRoute(toolName) === 'status') {
         return await this.handleStatus(args);
       }
 
@@ -2188,21 +2152,7 @@ export class ToolHandler {
       const withWorktree = this.withWorktreeNotice(result, args.projectPath as string | undefined);
       return this.withStalenessNotice(withWorktree, args.projectPath as string | undefined);
     } catch (err) {
-      // Expected condition, not a malfunction: answer as a SUCCESS so the
-      // agent keeps trusting the toolset for projects that ARE indexed.
-      // (An isError here teaches session-long abandonment — see NotIndexedError.)
-      if (err instanceof NotIndexedError) {
-        return this.textResult(err.message);
-      }
-      // Security refusal: a clean error, no retry encouragement.
-      if (err instanceof PathRefusalError) {
-        return this.errorResult(err.message);
-      }
-      return this.errorResult(
-        `Tool execution failed: ${err instanceof Error ? err.message : String(err)}. ` +
-        'This is an internal afyx-graph error — retry the call once; if it persists, ' +
-        'continue without afyx-graph for this task.'
-      );
+      return classifyToolFailure(err);
     }
   }
 
@@ -2274,17 +2224,7 @@ export class ToolHandler {
     try {
       return await this.dispatchTool(toolName, args);
     } catch (err) {
-      if (err instanceof NotIndexedError) {
-        return this.textResult(err.message);
-      }
-      if (err instanceof PathRefusalError) {
-        return this.errorResult(err.message);
-      }
-      return this.errorResult(
-        `Tool execution failed: ${err instanceof Error ? err.message : String(err)}. ` +
-        'This is an internal afyx-graph error — retry the call once; if it persists, ' +
-        'continue without afyx-graph for this task.'
-      );
+      return classifyToolFailure(err);
     }
   }
 
@@ -2295,14 +2235,14 @@ export class ToolHandler {
    * NotIndexed/PathRefusal, which {@link executeReadTool} classifies.
    */
   private async dispatchTool(toolName: string, args: Record<string, unknown>): Promise<ToolResult> {
-    switch (toolName) {
-      case 'afyx_graph_search': return await this.handleSearch(args);
-      case 'afyx_graph_callers': return await this.handleCallers(args);
-      case 'afyx_graph_callees': return await this.handleCallees(args);
-      case 'afyx_graph_impact': return await this.handleImpact(args);
-      case 'afyx_graph_explore': return await this.handleExplore(args);
-      case 'afyx_graph_node': return await this.handleNode(args);
-      case 'afyx_graph_files': return await this.handleFiles(args);
+    switch (resolveToolRoute(toolName)) {
+      case 'search': return await this.handleSearch(args);
+      case 'callers': return await this.handleCallers(args);
+      case 'callees': return await this.handleCallees(args);
+      case 'impact': return await this.handleImpact(args);
+      case 'explore': return await this.handleExplore(args);
+      case 'node': return await this.handleNode(args);
+      case 'files': return await this.handleFiles(args);
       default: return this.errorResult(`Unknown tool: ${toolName}`);
     }
   }
@@ -7043,15 +6983,10 @@ export class ToolHandler {
   }
 
   private textResult(text: string): ToolResult {
-    return {
-      content: [{ type: 'text', text }],
-    };
+    return textToolResult(text);
   }
 
   private errorResult(message: string): ToolResult {
-    return {
-      content: [{ type: 'text', text: `Error: ${message}` }],
-      isError: true,
-    };
+    return errorToolResult(message);
   }
 }

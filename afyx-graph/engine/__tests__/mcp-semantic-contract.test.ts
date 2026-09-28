@@ -11,6 +11,11 @@ import {
   type MessageHandler,
 } from '../src/mcp/transport';
 import type { MCPEngine } from '../src/mcp/engine';
+import {
+  REGISTERED_TOOL_NAMES,
+  catalogMatchesRegistry,
+  parseToolCallParams,
+} from '../src/mcp/tool-registry';
 
 const MCP_TOOLS_ENV = 'AFYX_GRAPH_MCP_TOOLS';
 const EXPECTED_TOOL_NAMES = [
@@ -75,11 +80,22 @@ describe('MCP public semantic contract', () => {
 
   it('freezes the complete tool catalog, schemas, descriptions, annotations, and metadata', () => {
     expect(tools.map((tool) => tool.name)).toEqual(EXPECTED_TOOL_NAMES);
+    expect(REGISTERED_TOOL_NAMES).toEqual(EXPECTED_TOOL_NAMES);
+    expect(catalogMatchesRegistry(tools)).toBe(true);
     expect(createHash('sha256').update(JSON.stringify(tools)).digest('hex'))
       .toBe('4eaa5a29a1f93bcee7d6b9a77605aa221f53c5767ba26cf0c6d150a0b43d6b3a');
 
     delete process.env[MCP_TOOLS_ENV];
     expect(getStaticTools().map((tool) => tool.name)).toEqual(['afyx_graph_explore']);
+  });
+
+  it('parses call envelopes without widening or inventing schema behavior', () => {
+    expect(parseToolCallParams(undefined)).toEqual({ ok: false, message: 'Missing tool name' });
+    expect(parseToolCallParams({ name: 42 })).toEqual({ ok: false, message: 'Unknown tool: 42' });
+    expect(parseToolCallParams({ name: 'afyx_graph_status', arguments: null })).toEqual({
+      ok: true,
+      call: { name: 'afyx_graph_status', route: 'status', args: {} },
+    });
   });
 
   it('returns the negotiated server identity and tool capability on initialize', async () => {
