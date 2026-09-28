@@ -41,6 +41,7 @@
     "bench:wal": "node scripts/benchmark-wal-policy.mjs",
     "bench:impact": "node scripts/benchmark-impact.mjs",
     "bench:sync": "node scripts/benchmark-watcher-policy.mjs",
+    "bench:daemon": "node scripts/benchmark-daemon.mjs",
     "test:watch": "vitest",
     "test:eval": "vitest run __tests__/evaluation/",
     "eval": "npm run build && npx tsx __tests__/evaluation/runner.ts",
