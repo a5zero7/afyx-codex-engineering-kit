@@ -399,9 +399,9 @@ behavior. Large subsystem labels never authorize a batch rewrite.
   (`Glyphs`, `IndexProgress`, and `ShimmerProgress`), not private control flow.
 - **Validation/gaps:** focused terminal/CLI tests, build/type checking, semantic
   baseline, CLI+MCP smoke, real-repository smoke, and local Windows lifecycle
-  checks pass. Cross-platform confirmation remains the PR CI gate. The next
-  recommended bounded slice remains IND-C02; this result does not claim
-  repository-wide independence.
+  checks pass. PR #20 confirms all seven Linux/macOS/Windows/Rust CI gates.
+  The next recommended bounded slice remains IND-C02; this result does not
+  claim repository-wide independence.
 
 ### IND-C02 — packaging and distribution helpers
 
