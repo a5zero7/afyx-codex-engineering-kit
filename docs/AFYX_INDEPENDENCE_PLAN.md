@@ -578,9 +578,10 @@ behavior. Large subsystem labels never authorize a batch rewrite.
   schema shapes, stable error/diagnostic contracts, worker/SQLite protocol, and
   standard API idioms; this is a technical classification, not a legal conclusion.
 - **Classification and gaps:** `IND_C04_COMPLETE_WITH_KNOWN_GAPS`. Local Windows
-  evidence is complete; Linux/macOS/Windows/Rust CI remains required before merge.
-  The next bounded persistence follow-up is one domain-reader family from the
-  residual DB inventory; IND-C05 must not absorb that work.
+  evidence is complete; PR #23 passes all seven normal jobs (Linux 2/2, macOS
+  2/2, Windows 2/2, and Rust kernel 1/1). The next bounded persistence follow-up
+  is one domain-reader family from the residual DB inventory; IND-C05 must not
+  absorb that work.
 
 ### IND-C05 — Graph legacy hosts
 
