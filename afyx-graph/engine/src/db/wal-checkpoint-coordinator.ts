@@ -46,6 +46,7 @@
  */
 
 import type { DatabaseConnection } from './index';
+import type { CheckpointResult } from './wal-maintenance';
 import { WalPressure, resolveWalValveMb } from './wal-pressure';
 import { WalValveAbortError } from './wal-valve-errors';
 
@@ -83,6 +84,7 @@ export class WalCheckpointCoordinator {
   }
 
   private readonly log: (msg: string) => void;
+  private ticks = 0;
 
   private mb(n: number): string {
     return `${Math.round(n / 1024 / 1024)}MB`;
@@ -97,14 +99,16 @@ export class WalCheckpointCoordinator {
     if (process.env.AFYX_GRAPH_SYNTH_TIMINGS || process.env.AFYX_GRAPH_WAL_VALVE_DEBUG) {
       console.error(`[wal-valve] armed soft=${this.mb(this.pressure.softBytes)} hard=${this.mb(this.pressure.hardBytes)} wal=${this.mb(this.pressure.walBytes())}`);
     }
-    let ticks = 0;
-    this.timer = setInterval(() => {
-      if ((++ticks % 15) === 0) {
-        this.log(`alive: wal=${this.mb(this.pressure.walBytes())} baseline=${this.mb(this.pressure.baseline)} inflight=${this.inflight ? 'y' : 'n'} paused=${this.pause ? 'y' : 'n'}`);
-      }
-      this.check();
-    }, this.intervalMs);
+    this.timer = setInterval(() => this.onTimer(), this.intervalMs);
     this.timer.unref?.();
+  }
+
+  private onTimer(): void {
+    this.ticks += 1;
+    if (this.ticks % 15 === 0) {
+      this.log(`alive: wal=${this.mb(this.pressure.walBytes())} baseline=${this.mb(this.pressure.baseline)} inflight=${this.inflight ? 'y' : 'n'} paused=${this.pause ? 'y' : 'n'}`);
+    }
+    this.check();
   }
 
   /** Stop watching. Any in-flight checkpoint keeps running — await drain(). */
@@ -133,10 +137,10 @@ export class WalCheckpointCoordinator {
     // `WalPressure.withinCaps` for the two independent triggers.
     if (this.pressure.withinCaps()) return null;
     this.log(`backpressure: wal=${this.mb(this.pressure.walBytes())} baseline=${this.mb(this.pressure.baseline)} — pausing writer for full backfill`);
-    const t0 = Date.now();
+    const startedAt = Date.now();
     this.pause = this.backfillFully().finally(() => {
       this.pause = null;
-      this.log(`backpressure released after ${Date.now() - t0}ms: wal=${this.mb(this.pressure.walBytes())} baseline=${this.mb(this.pressure.baseline)}`);
+      this.log(`backpressure released after ${Date.now() - startedAt}ms: wal=${this.mb(this.pressure.walBytes())} baseline=${this.mb(this.pressure.baseline)}`);
     });
     return this.pause;
   }
@@ -165,6 +169,18 @@ export class WalCheckpointCoordinator {
     await this.pause;
   }
 
+  private isFullBackfill(result: CheckpointResult): boolean {
+    return result.busy === 0 && result.log === result.checkpointed;
+  }
+
+  private pressureAbort(message: string, walBytes: number): WalValveAbortError {
+    return new WalValveAbortError(message, {
+      walBytes,
+      fileCapBytes: this.pressure.fileCapBytes,
+      hardBytes: this.pressure.hardBytes,
+    });
+  }
+
   /**
    * With the writer parked on the returned promise, loop passive passes until
    * one reports the entire WAL backfilled (typically the second: the first
@@ -175,7 +191,8 @@ export class WalCheckpointCoordinator {
    * reserved for foldNow on a modest backlog that could not complete.
    */
   private async backfillFully(): Promise<void> {
-    for (let i = 0; i < MAX_PAUSED_BACKFILL_PASSES; i++) {
+    let pass = 0;
+    while (pass < MAX_PAUSED_BACKFILL_PASSES) {
       if (this.inflight) await this.inflight; // fold in the stale in-flight pass first
       const res = await this.db.checkpointWalPassive();
       if (!res) {
@@ -184,17 +201,18 @@ export class WalCheckpointCoordinator {
         const walBytes = this.pressure.walBytes();
         const growth = this.pressure.growthBytes();
         if (walBytes > this.pressure.fileCapBytes || growth > this.pressure.hardBytes) {
-          throw new WalValveAbortError(
+          throw this.pressureAbort(
             `WAL checkpoint machinery unavailable while over the documented cap ` +
               `(wal=${this.mb(walBytes)}, fileCap=${this.mb(this.pressure.fileCapBytes)}). ` +
               `Aborting to avoid unbounded disk growth.`,
-            { walBytes, fileCapBytes: this.pressure.fileCapBytes, hardBytes: this.pressure.hardBytes }
+            walBytes
           );
         }
         return;
       }
-      this.log(`backfill pass ${i + 1}: busy=${res.busy} log=${res.log} checkpointed=${res.checkpointed} wal=${this.mb(this.pressure.walBytes())}`);
-      if (res.busy === 0 && res.log === res.checkpointed) {
+      pass += 1;
+      this.log(`backfill pass ${pass}: busy=${res.busy} log=${res.log} checkpointed=${res.checkpointed} wal=${this.mb(this.pressure.walBytes())}`);
+      if (this.isFullBackfill(res)) {
         // Backfill complete AND we are at a parked barrier (backfillFully only
         // runs under a writer pause): the no-reader window is guaranteed, so
         // chop the FILE too — a fully-backfilled WAL otherwise keeps growing
@@ -226,21 +244,21 @@ export class WalCheckpointCoordinator {
     // when checkpoints cannot progress. The old futility latch disabled
     // parking for 60s and allowed unbounded growth (64 GiB observed).
     if (walBytes > this.pressure.fileCapBytes || growth > this.pressure.hardBytes) {
-      throw new WalValveAbortError(
+      throw this.pressureAbort(
         `WAL checkpoint cannot progress while a reader pins frames ` +
           `(wal=${this.mb(walBytes)}, growth=${this.mb(growth)}, ` +
           `fileCap=${this.mb(this.pressure.fileCapBytes)}, hard=${this.mb(this.pressure.hardBytes)}, ` +
           `give-ups=${this.consecutiveGiveUps}). Aborting to avoid unbounded disk growth. ` +
           `Close concurrent readers (for example the MCP query pool) and retry, ` +
           `or raise AFYX_GRAPH_WAL_VALVE_MB if the threshold is too tight for this project.`,
-        { walBytes, fileCapBytes: this.pressure.fileCapBytes, hardBytes: this.pressure.hardBytes }
+        walBytes
       );
     }
   }
 
   private fire(): void {
     this.log(`fire: wal=${this.mb(this.pressure.walBytes())} baseline=${this.mb(this.pressure.baseline)}`);
-    const p = this.db
+    const operation = this.db
       .checkpointWalPassive()
       .then((res) => {
         this.log(`timer pass: ${res ? `busy=${res.busy} log=${res.log} checkpointed=${res.checkpointed}` : 'null (machinery unavailable)'} wal=${this.mb(this.pressure.walBytes())}`);
@@ -250,7 +268,7 @@ export class WalCheckpointCoordinator {
         // read transaction pinned frames) leaves the baseline alone, so the
         // next tick fires again and copies the remainder. In non-WAL mode
         // SQLite reports log = checkpointed = -1, which is harmless here.
-        if (res && res.busy === 0 && res.log === res.checkpointed) {
+        if (res && this.isFullBackfill(res)) {
           this.pressure.noteFullBackfill();
           // NO truncate here. A truncate checkpoint that starts against an
           // ACTIVE writer wins the lock race and then blocks that writer for
@@ -262,10 +280,10 @@ export class WalCheckpointCoordinator {
           // construction and cannot collide.
         }
       })
-      .catch(() => { /* best-effort */ })
+      .catch(() => { /* best effort */ })
       .finally(() => {
-        if (this.inflight === p) this.inflight = null;
+        if (this.inflight === operation) this.inflight = null;
       });
-    this.inflight = p;
+    this.inflight = operation;
   }
 }

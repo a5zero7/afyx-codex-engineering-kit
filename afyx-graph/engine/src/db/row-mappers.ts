@@ -68,6 +68,13 @@ export interface UnresolvedRefRow {
   name_tail: string;
 }
 
+const present = <T>(value: T | null): T | undefined => value ?? undefined;
+const enabled = (value: number): boolean => value === 1;
+
+function decodedJson<T>(value: string | null): T | undefined {
+  return value === null ? undefined : safeJsonParse(value, undefined);
+}
+
 export function rowToNode(row: NodeRow): Node {
   return {
     id: row.id,
@@ -80,16 +87,16 @@ export function rowToNode(row: NodeRow): Node {
     endLine: row.end_line,
     startColumn: row.start_column,
     endColumn: row.end_column,
-    docstring: row.docstring ?? undefined,
-    signature: row.signature ?? undefined,
+    docstring: present(row.docstring),
+    signature: present(row.signature),
     visibility: row.visibility as Node['visibility'],
-    isExported: row.is_exported === 1,
-    isAsync: row.is_async === 1,
-    isStatic: row.is_static === 1,
-    isAbstract: row.is_abstract === 1,
-    decorators: row.decorators ? safeJsonParse(row.decorators, undefined) : undefined,
-    typeParameters: row.type_parameters ? safeJsonParse(row.type_parameters, undefined) : undefined,
-    returnType: row.return_type ?? undefined,
+    isExported: enabled(row.is_exported),
+    isAsync: enabled(row.is_async),
+    isStatic: enabled(row.is_static),
+    isAbstract: enabled(row.is_abstract),
+    decorators: decodedJson(row.decorators),
+    typeParameters: decodedJson(row.type_parameters),
+    returnType: present(row.return_type),
     updatedAt: row.updated_at,
   };
 }
@@ -99,9 +106,9 @@ export function rowToEdge(row: EdgeRow): Edge {
     source: row.source,
     target: row.target,
     kind: row.kind as EdgeKind,
-    metadata: row.metadata ? safeJsonParse(row.metadata, undefined) : undefined,
-    line: row.line ?? undefined,
-    column: row.col ?? undefined,
+    metadata: decodedJson(row.metadata),
+    line: present(row.line),
+    column: present(row.col),
     provenance: row.provenance as Edge['provenance'],
   };
 }
@@ -115,8 +122,8 @@ export function rowToFileRecord(row: FileRow): FileRecord {
     modifiedAt: row.modified_at,
     indexedAt: row.indexed_at,
     nodeCount: row.node_count,
-    errors: row.errors ? safeJsonParse(row.errors, undefined) : undefined,
-    generated: row.generated === 1,
+    errors: decodedJson(row.errors),
+    generated: enabled(row.generated ?? 0),
   };
 }
 
@@ -127,7 +134,7 @@ export function rowToUnresolvedRef(row: UnresolvedRefRow): UnresolvedReference {
     referenceKind: row.reference_kind as EdgeKind,
     line: row.line,
     column: row.col,
-    candidates: row.candidates ? safeJsonParse(row.candidates, undefined) : undefined,
+    candidates: decodedJson(row.candidates),
     filePath: row.file_path,
     language: row.language as Language,
     rowId: row.id,
