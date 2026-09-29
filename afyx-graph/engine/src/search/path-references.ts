@@ -94,68 +94,61 @@ function isUnambiguouslyPath(normalized: string): boolean {
 }
 
 interface Resolution { matches: string[]; ambiguous: boolean }
-const NO_MATCH: Resolution = { matches: [], ambiguous: false };
 
-/**
- * Lowercase view of the indexed paths with lazily built lookups: the exact path and
- * the stems of hyphenated basenames (last extension dropped) for extension-less
- * kebab names. Suffix resolution scans the exact-path map directly: it usually
- * succeeds on the first try, and measurement showed a grouped index costs more to
- * build per call than one scan costs.
- */
-class PathIndex {
-  private exactPaths: Map<string, string> | null = null;
-  private kebabStems: Map<string, string[]> | null = null;
+interface PathCatalog {
+  resolve(span: string, limit: number): Resolution;
+  byStem(stem: string): readonly string[] | undefined;
+}
 
-  constructor(private readonly paths: readonly string[]) {}
+/** Construct query-local lookup policy without exposing it as search state. */
+function createPathCatalog(paths: readonly string[]): PathCatalog {
+  let folded: Map<string, string> | undefined;
+  let stems: Map<string, string[]> | undefined;
 
-  /** Built on first use: most queries never reach a span that needs it. */
-  private get exact(): Map<string, string> {
-    if (this.exactPaths === null) {
-      this.exactPaths = new Map();
-      // Later duplicates of a case-insensitive key replace the value but keep the first position.
-      for (const path of this.paths) this.exactPaths.set(path.toLowerCase(), path);
-    }
-    return this.exactPaths;
-  }
+  const foldedPaths = (): Map<string, string> => {
+    if (folded) return folded;
+    folded = new Map();
+    for (const file of paths) folded.set(file.toLowerCase(), file);
+    return folded;
+  };
 
-  /** Exact match, else the longest segment-aligned suffix that matches anything. */
-  resolve(lowerSpan: string, limit: number): Resolution {
-    const hit = this.exact.get(lowerSpan);
-    if (hit !== undefined) return { matches: [hit], ambiguous: false };
+  return {
+    resolve(span, limit) {
+      const available = foldedPaths();
+      const exact = available.get(span);
+      if (exact !== undefined) return { matches: [exact], ambiguous: false };
 
-    const segments = lowerSpan.split('/').filter(Boolean);
-    const drops = Math.min(segments.length, MAX_SUFFIX_DROPS);
-    for (let drop = 0; drop < drops; drop++) {
-      const suffix = segments.slice(drop).join('/');
-      if (!suffix) break;
-      const tail = `/${suffix}`;
-      const matches: string[] = [];
-      for (const [lower, original] of this.exact) {
-        if (lower !== suffix && !lower.endsWith(tail)) continue;
-        matches.push(original);
-        if (matches.length > limit) return { matches: [], ambiguous: true };
+      const segments = span.split('/').filter(Boolean);
+      for (let removed = 0; removed < Math.min(segments.length, MAX_SUFFIX_DROPS); removed++) {
+        const suffix = segments.slice(removed).join('/');
+        if (!suffix) break;
+        const ending = `/${suffix}`;
+        const matches: string[] = [];
+        for (const [foldedPath, original] of available) {
+          if (foldedPath !== suffix && !foldedPath.endsWith(ending)) continue;
+          matches.push(original);
+          if (matches.length > limit) return { matches: [], ambiguous: true };
+        }
+        if (matches.length) return { matches, ambiguous: false };
       }
-      if (matches.length > 0) return { matches, ambiguous: false };
-    }
-    return NO_MATCH;
-  }
-
-  stemMatches(stem: string): string[] | undefined {
-    if (this.kebabStems === null) {
-      this.kebabStems = new Map();
-      for (const path of this.paths) {
-        const base = path.slice(Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\')) + 1);
-        if (!base.includes('-')) continue;
-        const key = base.replace(FINAL_EXTENSION, '').toLowerCase();
-        if (!key) continue;
-        const bucket = this.kebabStems.get(key);
-        if (bucket) bucket.push(path);
-        else this.kebabStems.set(key, [path]);
+      return { matches: [], ambiguous: false };
+    },
+    byStem(stem) {
+      if (!stems) {
+        stems = new Map();
+        for (const file of paths) {
+          const basename = file.slice(Math.max(file.lastIndexOf('/'), file.lastIndexOf('\\')) + 1);
+          if (!basename.includes('-')) continue;
+          const key = basename.replace(FINAL_EXTENSION, '').toLowerCase();
+          if (!key) continue;
+          const matches = stems.get(key);
+          if (matches) matches.push(file);
+          else stems.set(key, [file]);
+        }
       }
-    }
-    return this.kebabStems.get(stem);
-  }
+      return stems.get(stem);
+    },
+  };
 }
 
 export function extractQueryPaths(
@@ -168,15 +161,16 @@ export function extractQueryPaths(
   const untouched = (): QueryPathExtraction => ({ strippedQuery: query, pinnedFiles: [], unresolvedPathSpans: [] });
   if (!query.trim() || indexedPaths.length === 0) return untouched();
 
-  const index = new PathIndex(indexedPaths);
+  const catalog = createPathCatalog(indexedPaths);
   const tokens = query.split(/\s+/).filter(Boolean);
   const consumed = new Set<number>();
   const pinned: string[] = [];
   const unresolved: string[] = [];
   const pinnedSet = new Set<string>();
-  const pin = (matches: readonly string[]): void => {
-    for (const file of matches) {
-      if (pinnedSet.has(file) || pinned.length >= maxPins) continue;
+  const pin = (files: readonly string[]): void => {
+    for (const file of files) {
+      if (pinned.length >= maxPins) return;
+      if (pinnedSet.has(file)) continue;
       pinnedSet.add(file);
       pinned.push(file);
     }
@@ -192,7 +186,7 @@ export function extractQueryPaths(
     if (!normalized) continue;
     examined++;
 
-    const { matches, ambiguous } = index.resolve(normalized.toLowerCase(), maxMatches);
+    const { matches, ambiguous } = catalog.resolve(normalized.toLowerCase(), maxMatches);
     if (matches.length > 0) {
       consumed.add(at);
       pin(matches);
@@ -209,7 +203,7 @@ export function extractQueryPaths(
     if (consumed.has(at)) continue;
     const span = unwrap(tokens[at]!);
     if (span.length < MIN_SPAN_LENGTH || !KEBAB_BASENAME.test(span)) continue;
-    const matches = index.stemMatches(span.toLowerCase());
+    const matches = catalog.byStem(span.toLowerCase());
     if (!matches || matches.length > maxMatches) continue;
     consumed.add(at);
     pin(matches);

@@ -459,20 +459,50 @@ behavior. Large subsystem labels never authorize a batch rewrite.
 
 ### IND-C03 — Search and Context residual hosts
 
-- **Scope/ownership:** seven Search and five Context Scope C hosts, one small
-  contract at a time; Afyx query/context architecture.
-- **Contract/evidence:** current parsing/ranking/budgets/path/render results;
-  search/context tests, benchmark scripts, acceptance deterministic queries and
-  real-repository outputs.
-- **Mutation plan:** query parsing/path ambiguity, stable tie order, budget,
-  expansion and render truncation mutants. Historical differential remains an
-  oracle; corrected Afyx behavior wins.
-- **Downstream/performance:** CLI, MCP, UI thin adapter; interleaved search/
-  context benchmarks including result/token size and p95.
-- **Provenance/expected files:** independent private algorithms in selected
-  hosts only; split contracts/data before replacing internals.
-- **Frozen/stop:** Graph/DB and known ranking backlog are frozen; stop on
-  unexplained ordering/result/token delta or material latency regression.
+- **Completed bounded scope:** private implementation was replaced only in
+  `search/filters.ts`, `search/path-references.ts`,
+  `search/project-names.ts`, `context/renderers.ts`, and
+  `context/source-reader.ts`. Search/Context facades, native ranking, budgets,
+  expansion, traversal, Graph/DB, CLI/MCP schemas, and UI adapters were not
+  changed.
+- **Contracts and mutation evidence:** OLD and NEW each pass the same 180/180
+  focused assertions (22 Search contract and 77 Context contract assertions
+  included). Five observable mutants on each side are killed: field-filter
+  bypass, path-candidate omission, project-token omission, generated-last
+  rendering inversion, and source-range corruption. Ranking/tie/limit and
+  seed/budget/expansion/call-path mutation categories remain owned by unchanged
+  Afyx-native modules and are not attributed to this slice.
+- **Differential and real repository:** all synthetic golden results are
+  identical. Six real-repository `query`, `context`, and `explore` CLI cases
+  have identical exit codes, ordered output, hashes, and byte counts; five NEW
+  repetitions per case are deterministic. Search and Context each have
+  `UNEXPLAINED = 0`. The representative structured Context result remains five
+  nodes, seven edges, five code blocks, one related file, 3,676 source bytes,
+  and 13,050 serialized bytes. Provider token accounting is unavailable, so
+  `TOKEN_BENCHMARK_INCONCLUSIVE` remains the only token claim.
+- **Performance and downstream gates:** three Search and six final Context
+  OLD/NEW interleaved repetitions preserve every semantic digest and payload
+  size. Search cases range from
+  -6.05% to +4.72%, except the parser microcase (+4.81 microseconds per full
+  batch, +125.92% relative); Context cases range from -3.69% to +3.84%.
+  Focused Search/Context/Graph-consumer regression is 325/325, focused CLI is
+  26/26, focused MCP is 42 passed with one intentional skip, semantic baseline
+  is 6/6 fixtures, and CLI/MCP smoke is 21/21 checks.
+- **Provenance:** established Phase 3B normalization reproduces the frozen OLD
+  measurements. Search A moves 13.49% to 13.27% substantive, 22.86% to 23.12%
+  comments, and 0.62% to 0.61% shingles (longest block 7, no block >=8);
+  Search B is unchanged at 8.45% / 21.80% / 0.61%; Search C moves 21.51% to
+  20.62%, 24.68% to 25.76%, and 0.64% to 0.59% (7 / 0). Context A moves
+  11.85% to 9.58%, 26.69% to 26.80%, and 2.00% to 1.12% (14 / 1 to 11 / 1);
+  Context B is unchanged at 6.59% / 26.21% / 0.40%; Context C moves 31.90% to
+  21.12%, 28.89% to 29.55%, and 8.57% to 4.13% (14 / 1 to 11 / 1). The one
+  remaining 11-line block is the stable public JSON code-block/result shape,
+  not private ranking, traversal, or source-selection control flow.
+- **Classification and retained gaps:** `IND_C03_COMPLETE_WITH_KNOWN_GAPS`.
+  Exact-query mode, known Context ranking omissions, why-this-result
+  presentation, formal token accounting, and whole-repository implementation
+  closure remain separate backlog items. No license or attribution record was
+  changed.
 
 ### IND-C04 — DB and WAL residual hosts
 
@@ -644,7 +674,6 @@ Current `TECHNICAL_INDEPENDENCE_STATUS` is
 `OPERATIONALLY_INDEPENDENT_BUT_IMPLEMENTATION_CLOSURE_REQUIRED`.
 Current `ATTRIBUTION_REVIEW_STATUS` is `OPEN_RETAIN_ALL_NOTICES`.
 
-The exact next task is **IND-C03 only**: close the bounded Search and Context
-residual hosts one contract at a time, with mutation, semantic differential,
-real-repository evidence, performance, and downstream gates. Do not combine it
-with DB/WAL, Graph, lifecycle, MCP, CLI, installer, or browser UI work.
+The exact next bounded closure task is **IND-C04 only**: DB/WAL residual hosts,
+with schema and public API frozen. Do not combine it with Graph, lifecycle,
+MCP, CLI, installer, or browser UI work.

@@ -29,50 +29,71 @@ export interface ParsedQuery {
   nameFilters: string[];
 }
 
-const KINDS: ReadonlySet<string> = new Set<string>(NODE_KINDS);
-const LANGUAGE_IDS: ReadonlySet<string> = new Set<string>(LANGUAGES);
+const KINDS: ReadonlySet<string> = new Set(NODE_KINDS);
+const LANGUAGE_IDS: ReadonlySet<string> = new Set(LANGUAGES);
 
-/** A token is plain characters and complete "quoted spans"; a lone quote runs to the end of input. */
-const TOKEN = /(?:[^\s"]|"[^"]*")+(?:"[\s\S]*)?|"[\s\S]*/g;
+/** Split on whitespace except while a double-quoted span is open. */
+function queryTokens(raw: string): string[] {
+  const tokens: string[] = [];
+  let start = -1;
+  let quoted = false;
+  for (let index = 0; index < raw.length; index++) {
+    const char = raw[index]!;
+    if (char === '"') quoted = !quoted;
+    if (/\s/.test(char) && !quoted) {
+      if (start >= 0) tokens.push(raw.slice(start, index));
+      start = -1;
+    } else if (start < 0) {
+      start = index;
+    }
+  }
+  if (start >= 0) tokens.push(raw.slice(start));
+  return tokens;
+}
 
-const stripQuotes = (value: string): string =>
-  value.length >= 2 && value.startsWith('"') && value.endsWith('"') ? value.slice(1, -1) : value;
+function fieldValue(token: string, colon: number): string {
+  const value = token.slice(colon + 1);
+  return value.length >= 2 && value[0] === '"' && value[value.length - 1] === '"'
+    ? value.slice(1, -1)
+    : value;
+}
 
-/** Applies one field filter; returns false when the token should stay free text. */
-type FieldHandler = (value: string, into: ParsedQuery) => boolean;
-
-const kindHandler: FieldHandler = (value, into) => {
-  if (!KINDS.has(value)) return false;
-  into.kinds.push(value as NodeKind);
-  return true;
-};
-
-const languageHandler: FieldHandler = (value, into) => {
-  const id = value.toLowerCase();
-  if (!LANGUAGE_IDS.has(id)) return false;
-  into.languages.push(id as Language);
-  return true;
-};
-
-// A Map (not an object) so keys like "constructor" or "__proto__" can never resolve to a handler.
-const HANDLERS: ReadonlyMap<string, FieldHandler> = new Map<string, FieldHandler>([
-  ['kind', kindHandler],
-  ['lang', languageHandler],
-  ['language', languageHandler],
-  ['path', (value, into) => { into.pathFilters.push(value); return true; }],
-  ['name', (value, into) => { into.nameFilters.push(value); return true; }],
-]);
+function consumeField(field: string, value: string, parsed: ParsedQuery): boolean {
+  switch (field) {
+    case 'kind':
+      if (!KINDS.has(value)) return false;
+      parsed.kinds.push(value as NodeKind);
+      return true;
+    case 'lang':
+    case 'language': {
+      const normalized = value.toLowerCase();
+      if (!LANGUAGE_IDS.has(normalized)) return false;
+      parsed.languages.push(normalized as Language);
+      return true;
+    }
+    case 'path':
+      parsed.pathFilters.push(value);
+      return true;
+    case 'name':
+      parsed.nameFilters.push(value);
+      return true;
+    default:
+      return false;
+  }
+}
 
 export function parseQuery(raw: string): ParsedQuery {
   const parsed: ParsedQuery = { text: '', kinds: [], languages: [], pathFilters: [], nameFilters: [] };
   const freeText: string[] = [];
 
-  for (const token of raw.match(TOKEN) ?? []) {
+  for (const token of queryTokens(raw)) {
     const colon = token.indexOf(':');
-    const isField = colon > 0 && colon < token.length - 1;
-    const value = isField ? stripQuotes(token.slice(colon + 1)) : '';
-    const handler = isField && value ? HANDLERS.get(token.slice(0, colon).toLowerCase()) : undefined;
-    if (!handler || !handler(value, parsed)) freeText.push(token);
+    if (colon <= 0 || colon === token.length - 1) {
+      freeText.push(token);
+      continue;
+    }
+    const value = fieldValue(token, colon);
+    if (!value || !consumeField(token.slice(0, colon).toLowerCase(), value, parsed)) freeText.push(token);
   }
 
   parsed.text = freeText.join(' ').trim();
