@@ -19,37 +19,43 @@ export function normalizeNameToken(raw: string): string {
   return raw.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
-function readOptional(file: string): string | null {
+function readText(file: string): string | undefined {
   try {
     return fs.readFileSync(file, 'utf-8');
-  } catch {
-    return null;
-  }
-}
-
-function goModuleName(root: string): string | undefined {
-  const manifest = readOptional(path.join(root, 'go.mod'));
-  const modulePath = manifest?.match(/^\s*module\s+(\S+)/m)?.[1];
-  return modulePath?.split('/').pop();
-}
-
-function packageName(root: string): string | undefined {
-  const manifest = readOptional(path.join(root, 'package.json'));
-  if (manifest === null) return undefined;
-  try {
-    const name: unknown = JSON.parse(manifest).name;
-    return typeof name === 'string' ? name.replace(/^@[^/]+\//, '') : undefined;
   } catch {
     return undefined;
   }
 }
 
-export function deriveProjectNameTokens(projectRoot: string): Set<string> {
-  const sources = [goModuleName(projectRoot), packageName(projectRoot), path.basename(path.resolve(projectRoot))];
-  const tokens = new Set<string>();
-  for (const source of sources) {
-    const token = source ? normalizeNameToken(source) : '';
-    if (token.length >= MIN_PROJECT_TOKEN) tokens.add(token);
+function lastPathPart(value: string): string {
+  const parts = value.split('/');
+  return parts[parts.length - 1] ?? '';
+}
+
+function nameFromPackageJson(root: string): string | undefined {
+  const source = readText(path.join(root, 'package.json'));
+  if (source === undefined) return undefined;
+  try {
+    const candidate: unknown = JSON.parse(source).name;
+    return typeof candidate === 'string' ? candidate.replace(/^@[^/]+\//, '') : undefined;
+  } catch {
+    return undefined;
   }
-  return tokens;
+}
+
+function nameFromGoModule(root: string): string | undefined {
+  const declaration = readText(path.join(root, 'go.mod'))?.match(/^\s*module\s+(\S+)/m);
+  return declaration ? lastPathPart(declaration[1]!) : undefined;
+}
+
+export function deriveProjectNameTokens(projectRoot: string): Set<string> {
+  const candidates = [
+    nameFromGoModule(projectRoot),
+    nameFromPackageJson(projectRoot),
+    path.basename(path.resolve(projectRoot)),
+  ];
+  return new Set(candidates
+    .filter((candidate): candidate is string => candidate !== undefined)
+    .map(normalizeNameToken)
+    .filter((candidate) => candidate.length >= MIN_PROJECT_TOKEN));
 }

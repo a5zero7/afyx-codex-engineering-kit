@@ -16,90 +16,78 @@ import { isGeneratedFile } from '../extraction/generated-detection';
 
 const MAX_RELATED_SYMBOLS = 10;
 
-/** Non-generated items first, generated ones after, each group in its original order. */
-function generatedLast<T>(items: readonly T[], pathOf: (item: T) => string, isGenerated: (filePath: string) => boolean): T[] {
-  const handWritten: T[] = [];
-  const generated: T[] = [];
-  for (const item of items) (isGenerated(pathOf(item)) ? generated : handWritten).push(item);
-  return [...handWritten, ...generated];
+/** Stable two-bucket ordering: authored artifacts precede generated artifacts. */
+function authoredFirst<T>(items: readonly T[], fileOf: (item: T) => string, generated: (file: string) => boolean): T[] {
+  const authored: T[] = [];
+  const derived: T[] = [];
+  for (const item of items) (generated(fileOf(item)) ? derived : authored).push(item);
+  authored.push(...derived);
+  return authored;
 }
 
 const locationOf = (node: Node): string => (node.startLine ? `:${node.startLine}` : '');
 
-function entryPointLines(entries: readonly Node[]): string[] {
-  if (entries.length === 0) return [];
-  const lines = ['### Entry Points\n'];
-  for (const node of entries) {
-    lines.push(`- **${node.name}** (${node.kind}) - ${node.filePath}${locationOf(node)}`);
-    if (node.signature) lines.push(`  \`${node.signature}\``);
-  }
-  lines.push('');
-  return lines;
+function renderEntryPoints(entries: readonly Node[]): string[] {
+  if (!entries.length) return [];
+  return entries.reduce<string[]>((output, node) => {
+    output.push(`- **${node.name}** (${node.kind}) - ${node.filePath}${locationOf(node)}`);
+    if (node.signature) output.push(`  \`${node.signature}\``);
+    return output;
+  }, ['### Entry Points\n']).concat('');
 }
 
-function relatedSymbolLines(context: TaskContext, isGenerated: (filePath: string) => boolean): string[] {
+function renderRelatedSymbols(context: TaskContext, generated: (filePath: string) => boolean): string[] {
   const entryIds = new Set(context.entryPoints.map((node) => node.id));
-  const related = [...context.subgraph.nodes.values()]
-    .filter((node) => !entryIds.has(node.id) && !isGenerated(node.filePath))
+  const related = Array.from(context.subgraph.nodes.values())
+    .filter((node) => !entryIds.has(node.id) && !generated(node.filePath))
     .slice(0, MAX_RELATED_SYMBOLS);
-  if (related.length === 0) return [];
+  if (!related.length) return [];
 
-  const byFile = new Map<string, Node[]>();
-  for (const node of related) {
-    const group = byFile.get(node.filePath);
-    if (group) group.push(node);
-    else byFile.set(node.filePath, [node]);
-  }
+  const byFile = related.reduce<Map<string, Node[]>>((groups, node) => {
+    const siblings = groups.get(node.filePath);
+    if (siblings) siblings.push(node);
+    else groups.set(node.filePath, [node]);
+    return groups;
+  }, new Map());
   const lines = ['### Related Symbols\n'];
-  for (const [file, nodes] of byFile) lines.push(`- ${file}: ${nodes.map((node) => `${node.name}:${node.startLine}`).join(', ')}`);
-  lines.push('');
-  return lines;
+  byFile.forEach((nodes, file) => lines.push(`- ${file}: ${nodes.map((node) => `${node.name}:${node.startLine}`).join(', ')}`));
+  return lines.concat('');
 }
 
-function codeBlockLines(blocks: readonly CodeBlock[]): string[] {
-  if (blocks.length === 0) return [];
-  const lines = ['### Code\n'];
+function renderCodeBlocks(blocks: readonly CodeBlock[]): string[] {
+  if (!blocks.length) return [];
+  const output = ['### Code\n'];
   for (const block of blocks) {
-    lines.push(`#### ${block.node?.name ?? 'Unknown'} (${block.filePath}:${block.startLine})\n`, '```' + block.language, block.content, '```\n');
+    output.push(
+      `#### ${block.node?.name ?? 'Unknown'} (${block.filePath}:${block.startLine})\n`,
+      `\`\`\`${block.language}`,
+      block.content,
+      '```\n',
+    );
   }
-  return lines;
+  return output;
 }
 
 /** `isGenerated` defaults to the filename convention; the builder passes a storage-backed test that also knows header-flagged files. */
 export function formatContextAsMarkdown(context: TaskContext, isGenerated: (filePath: string) => boolean = isGeneratedFile): string {
-  return [
-    '## Code Context\n',
-    `**Query:** ${context.query}\n`,
-    ...entryPointLines(generatedLast(context.entryPoints, (node) => node.filePath, isGenerated)),
-    ...relatedSymbolLines(context, isGenerated),
-    ...codeBlockLines(generatedLast(context.codeBlocks, (block) => block.filePath, isGenerated)),
-  ].join('\n');
+  const entries = authoredFirst(context.entryPoints, (node) => node.filePath, isGenerated);
+  const blocks = authoredFirst(context.codeBlocks, (block) => block.filePath, isGenerated);
+  return ['## Code Context\n', `**Query:** ${context.query}\n`]
+    .concat(renderEntryPoints(entries), renderRelatedSymbols(context, isGenerated), renderCodeBlocks(blocks))
+    .join('\n');
 }
 
-const describeNode = (node: Node): Record<string, unknown> => ({
-  id: node.id,
-  kind: node.kind,
-  name: node.name,
-  qualifiedName: node.qualifiedName,
-  filePath: node.filePath,
-  language: node.language,
-  startLine: node.startLine,
-  endLine: node.endLine,
-  signature: node.signature,
-  docstring: node.docstring,
-  visibility: node.visibility,
-  isExported: node.isExported,
-  isAsync: node.isAsync,
-  isStatic: node.isStatic,
-});
+function describeNode(node: Node): Record<string, unknown> {
+  const { id, kind, name, qualifiedName, filePath, language, startLine, endLine,
+    signature, docstring, visibility, isExported, isAsync, isStatic } = node;
+  return { id, kind, name, qualifiedName, filePath, language, startLine, endLine,
+    signature, docstring, visibility, isExported, isAsync, isStatic };
+}
 
-const describeEdge = (edge: Edge): Record<string, unknown> => ({
-  source: edge.source,
-  target: edge.target,
-  kind: edge.kind,
-  line: edge.line,
-  column: edge.column,
-});
+function describeEdge(edge: Edge): Record<string, unknown> {
+  const { source, target, kind, line, column } = edge;
+  return { source, target, kind, line, column };
+}
 
 export function formatContextAsJson(context: TaskContext): string {
   return JSON.stringify({
@@ -132,29 +120,29 @@ const SIGNATURE_WIDTH = 50;
 const shorten = (text: string, width: number): string => (text.length <= width ? text : `${text.slice(0, width - 3)}...`);
 
 export function formatSubgraphTree(subgraph: Subgraph, entryPoints: Node[]): string {
-  const outgoing = new Map<string, Edge[]>();
-  for (const edge of subgraph.edges) {
-    const list = outgoing.get(edge.source);
-    if (list) list.push(edge);
-    else outgoing.set(edge.source, [edge]);
-  }
-  const printed = new Set<string>();
+  const outgoing = subgraph.edges.reduce<Map<string, Edge[]>>((index, edge) => {
+    const existing = index.get(edge.source);
+    if (existing) existing.push(edge);
+    else index.set(edge.source, [edge]);
+    return index;
+  }, new Map());
+  const visited = new Set<string>();
   const lines: string[] = [];
   const nameOf = (id: string): string => subgraph.nodes.get(id)?.name ?? 'unknown';
 
-  const outline = (node: Node, depth: number, indent: string): void => {
-    if (printed.has(node.id)) return;
-    printed.add(node.id);
+  const appendNode = (node: Node, depth: number, indent: string): void => {
+    if (visited.has(node.id)) return;
+    visited.add(node.id);
     const signature = node.signature ? ` - ${shorten(node.signature, SIGNATURE_WIDTH)}` : '';
     lines.push(`${indent}${node.kind}: ${node.name} (${node.filePath}${locationOf(node)})${signature}`);
 
     const relations = (outgoing.get(node.id) ?? []).filter((edge) => OUTLINE_KINDS.has(edge.kind));
-    const byKind = new Map<string, Edge[]>();
-    for (const edge of relations) {
-      const group = byKind.get(edge.kind);
-      if (group) group.push(edge);
-      else byKind.set(edge.kind, [edge]);
-    }
+    const byKind = relations.reduce<Map<string, Edge[]>>((groups, edge) => {
+      const siblings = groups.get(edge.kind);
+      if (siblings) siblings.push(edge);
+      else groups.set(edge.kind, [edge]);
+      return groups;
+    }, new Map());
     const inner = `${indent}  `;
     for (const [kind, group] of byKind) {
       if (group.length > MAX_EDGES_LISTED) {
@@ -167,16 +155,16 @@ export function formatSubgraphTree(subgraph: Subgraph, entryPoints: Node[]): str
     if (depth >= 1) return;
     for (const edge of relations.slice(0, MAX_EDGES_LISTED)) {
       const target = subgraph.nodes.get(edge.target);
-      if (target && !printed.has(target.id)) outline(target, depth + 1, inner);
+      if (target && !visited.has(target.id)) appendNode(target, depth + 1, inner);
     }
   };
 
   for (const entry of entryPoints) {
-    outline(entry, 0, '');
+    appendNode(entry, 0, '');
     lines.push('');
   }
 
-  const remaining = [...subgraph.nodes.values()].filter((node) => !printed.has(node.id));
+  const remaining = [...subgraph.nodes.values()].filter((node) => !visited.has(node.id));
   if (remaining.length > MAX_OUTLINE_REMAINDER) {
     lines.push(`... and ${remaining.length} more related symbols`);
   } else if (remaining.length > 0) {
