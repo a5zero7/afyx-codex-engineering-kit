@@ -14,7 +14,7 @@ the audit scratch directory named by Phase 3B.12B.
 
 Afyx Graph is technically independent only when it has no runtime, build,
 operational, package, configuration, release, or product-identity dependency on
-CodeGraph; retains no private upstream implementation; and has no unexplained
+the historical upstream product; retains no private upstream implementation; and has no unexplained
 substantial implementation overlap. Historical comparison tooling may remain an
 external development oracle, never a product or user dependency.
 
@@ -205,15 +205,15 @@ flow is replaced.
 
 ## Operational identity and dependency remnants
 
-A tracked-tree scan found zero CodeGraph product-name, legacy `.codegraph`,
-`codegraph.db`, legacy MCP, CLI, environment, config, telemetry, waitlist,
+A tracked-tree scan found zero historical upstream product-name, legacy state
+directory/database identity, legacy MCP, CLI, environment, config, telemetry, waitlist,
 release, or update identity hits. The generic phrase “code graph” describes the
 domain and is not an upstream product remnant.
 
 Current package, binary, state, DB, environment and MCP identities are Afyx:
 `@a5zero7/afyx-graph`, `afyx-graph`, `.afyx-graph`, `afyx-graph.db`,
 `AFYX_GRAPH_*`, `afyx_graph`, and `afyx_graph_*`. No runtime, build, operational,
-or package dependency on CodeGraph was found. The historical snapshot is
+or package dependency on the historical upstream product was found. Its snapshot is
 reachable only through Git history/audit tooling.
 
 This satisfies the operational-identity half of independence. It does not
@@ -250,7 +250,7 @@ review; this document cannot authorize removal.
 
 UI server Scope A is 98.32% substantive / 98.69% comment / 93.80% shingle
 overlap; frontend Scope A is 99.75% / 99.29% / 99.03%. Renaming
-`CodegraphUi.svelte` to `AfyxGraphUi.svelte` changed identity, not private
+the historical root component to `AfyxGraphUi.svelte` changed identity, not private
 implementation provenance. HTTP APIs, wire serialization, SSE, trail storage,
 security middleware, Svelte models/views, navigation, and graph visualization
 therefore remain closure candidates.
@@ -298,7 +298,7 @@ Graph, DB/WAL, Watcher, Daemon, MCP and CLI have focused tests and deterministic
 benchmarks, but future slices must inventory or add mutation coverage for the
 specific private region rather than infer coverage from a neighboring test.
 
-No product-facing CodeGraph identity appears in current tracked documentation.
+No product-facing historical upstream identity appears in current tracked documentation.
 README/engine notices accurately state historical authorship and are
 `REQUIRED_ATTRIBUTION`; references to Prompt Master or Headroom upstream are
 unrelated external-component documentation. Fixture descriptions referencing
