@@ -1,9 +1,10 @@
 /**
- * Affected-test-file computation: transitive file impact (`file-impact.ts`), terminated at
- * whatever this call classifies as a test — the shared `isTestPath` classifier (`search/
- * test-paths.ts`, untouched and reused so `affected` never drifts from what `search`/the
- * MCP tools count as a test, #1507) unless a caller-supplied filter glob replaces it
- * entirely, exactly as the CLI's own `--filter` option always has.
+ * Affected-test-file computation over transitive file impact (`file-impact.ts`). The shared
+ * `isTestPath` classifier (`search/test-paths.ts`) decides which reached files are reported.
+ * Only an explicit test filename terminates Graph's walk: a support module matched solely
+ * because it lives in a test tree can itself have an executable test as a dependent. A
+ * caller-supplied filter still replaces the classifier entirely (and remains terminal),
+ * exactly as the CLI's own `--filter` option always has.
  */
 import { isTestPath } from '../search/test-paths';
 import { transitiveFileImpact, type FileImpactHost } from './file-impact';
@@ -28,12 +29,19 @@ export function computeAffectedTests(
   options: AffectedTestsOptions
 ): AffectedTestsResult {
   const classify = options.customFilter ? (f: string) => options.customFilter!.test(f) : isTestPath;
-  const { allDependents, terminals } = transitiveFileImpact(host, changedFiles, {
+  const isTerminal = options.customFilter
+    ? classify
+    : (filePath: string) => isTestPath(filePath.replace(/\\/g, '/').split('/').pop()!);
+  const { allDependents } = transitiveFileImpact(host, changedFiles, {
     maxDepth: options.maxDepth,
-    isTerminal: classify,
+    isTerminal,
   });
+  const affectedTests = new Set(changedFiles.filter(classify));
+  for (const dependent of allDependents) {
+    if (classify(dependent)) affectedTests.add(dependent);
+  }
   return {
-    affectedTests: [...terminals].sort(),
+    affectedTests: [...affectedTests].sort(),
     totalDependentsTraversed: allDependents.size,
   };
 }
