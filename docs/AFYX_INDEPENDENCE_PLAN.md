@@ -367,6 +367,42 @@ behavior. Large subsystem labels never authorize a batch rewrite.
 - **Stop:** output/ordering regression, process leak, cross-platform failure,
   material reproducible startup regression, or scope crossing into CLI/domain.
 
+#### IND-C01 closure evidence (2026-09-29)
+
+- **Status/scope:** the private implementation in
+  `src/ui/{color,glyphs,shimmer-progress,shimmer-worker}.ts` is replaced by an
+  Afyx-owned policy/lifecycle design. The public message contract in
+  `src/ui/types.ts`, CLI registry, and semantic subsystems are unchanged.
+- **Behavioral contract:** argument/environment/TTY color precedence, managed
+  versus raw-write Unicode fallbacks, stable glyph data, one-line non-TTY
+  progress, bounded worker messages, phase ordering, cancellation, and final
+  phase output are preserved. Teardown is now idempotent and worker errors are
+  contained without leaving a live worker or timer.
+- **Mutation evidence:** four OLD and four NEW load-bearing mutants were each
+  killed: color disablement inversion, ASCII fallback bypass, ignored stop,
+  and skipped worker termination.
+- **Differential:** nine exact CLI contract scenarios have identical exit code,
+  stdout, and stderr between OLD and NEW. Help/status/query/explore/context/
+  impact also pass against this repository with non-TTY output and no ANSI
+  leakage. `UNEXPLAINED = 0`; the only deliberate correction is safer,
+  repeatable/error-path teardown.
+- **Performance:** ten OLD/NEW interleaved CLI pairs show median deltas from
+  -3.34% to +1.61%. A 20-pair presentation microbenchmark measured plain
+  progress at 0.147/0.040 ms and worker start-update-stop at 30.018/28.865 ms
+  (OLD/NEW medians). A 10-pair colored query measured 553.499/551.858 ms.
+  The policy microbenchmark is 14.016 ms slower per 50,000 paired decisions
+  (about 0.28 microseconds each), an immaterial absolute cost.
+- **Provenance:** under the established historical-reference normalization,
+  substantive overlap falls from 173/177 (97.74%) to 31/215 (14.42%);
+  five-line shingle overlap falls from 92.14% to 5.88%. The two remaining
+  identical blocks of at least eight lines are public data/type contracts
+  (`Glyphs`, `IndexProgress`, and `ShimmerProgress`), not private control flow.
+- **Validation/gaps:** focused terminal/CLI tests, build/type checking, semantic
+  baseline, CLI+MCP smoke, real-repository smoke, and local Windows lifecycle
+  checks pass. Cross-platform confirmation remains the PR CI gate. The next
+  recommended bounded slice remains IND-C02; this result does not claim
+  repository-wide independence.
+
 ### IND-C02 — packaging and distribution helpers
 
 - **Scope/ownership:** high-overlap bundle/copy/check helpers only; Afyx release
