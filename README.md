@@ -128,6 +128,7 @@ Panduan lengkap, perilaku konflik, dan pemulihan ada di [docs/INSTALLATION.md](d
 Diagnostik, kontrak komponen, dan deteksi project dijelaskan di [docs/DIAGNOSTICS.md](docs/DIAGNOSTICS.md).
 Metodologi dan hasil campaign benchmark tersedia di [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
 Tracker penggunaan token Codex dan integrasi VS Code dijelaskan di [docs/CODEX_USAGE_TRACKER.md](docs/CODEX_USAGE_TRACKER.md).
+Kontrak arsitektur UI opsional Afyx Graph dijelaskan di [docs/AFYX_GRAPH_UI_ARCHITECTURE.md](docs/AFYX_GRAPH_UI_ARCHITECTURE.md).
 
 ## Lisensi dan atribusi
 
