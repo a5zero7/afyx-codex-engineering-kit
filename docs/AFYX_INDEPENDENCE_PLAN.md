@@ -419,6 +419,41 @@ behavior. Large subsystem labels never authorize a batch rewrite.
 - **Frozen/stop:** runtime semantics and legal records frozen; stop on artifact,
   platform, license, or reproducibility mismatch.
 
+#### IND-C02 closure evidence (2026-09-29)
+
+- **Scope/architecture:** the four audited private helper hosts
+  `scripts/{build-bundle.sh,build-kernel.sh,check-ui-build.mjs,kernel-parity.mjs}`
+  now use Afyx-owned orchestration. A new testable
+  `scripts/distribution-contract.mjs` owns distribution validation and normalized
+  SHA-256 manifests; semantic engine and Rust sources are unchanged.
+- **Frozen contract:** all six target names, archive names/layout, bundled Node
+  launchers, optional native kernel location, package identity, production-only
+  dependencies, viewer/WASM assets, engine source maps, disabled viewer source
+  maps, and both required legal files are preserved.
+- **Fault evidence:** controlled fixtures catch missing runtime, viewer asset,
+  WASM grammar, notice, launcher, wrong CLI metadata, and development-only
+  contamination (eight focused tests). Existing attribution validation remains
+  7/7 PASS.
+- **Differential/size:** controlled OLD and NEW `win32-x64` bundles each contain
+  1,544 files and 240,303,024 unpacked bytes; normalized path/size/SHA-256
+  comparison has zero differences. Npm dry-run changes only the reimplemented
+  packaged helper sources: 1,370 to 1,371 entries, 8,284,302 to 8,283,228 packed
+  bytes, and 78,777,294 to 78,772,635 unpacked bytes.
+- **Execution/rebuild:** packaged version/help/status/query all pass from the
+  isolated NEW artifact. A deliberately stale dist file is removed by a clean
+  build, and two clean-build manifests are identical.
+- **Performance/provenance:** one controlled local bundle build is retained as
+  directional evidence only (OLD about 29 s; NEW about 33 s); CI remains the
+  cross-platform reliability gate. Established normalized provenance falls
+  from 272/313 substantive lines (86.90%) across the four historical hosts to
+  20/340 (5.88%) across those hosts plus the new contract module; five-line
+  shingle overlap is 0%, longest identical block is three lines, and no block
+  of eight lines remains.
+- **Validation/gaps:** TypeScript, shell syntax, packaging/UI tests, semantic
+  baseline, CLI+MCP smoke, package identity/attribution validation, and local
+  Windows artifact execution pass. UI packaging remains bundled as frozen by
+  Phase 3B.12A; future optional UI productization is intentionally deferred.
+
 ### IND-C03 — Search and Context residual hosts
 
 - **Scope/ownership:** seven Search and five Context Scope C hosts, one small
@@ -606,8 +641,7 @@ Current `TECHNICAL_INDEPENDENCE_STATUS` is
 `OPERATIONALLY_INDEPENDENT_BUT_IMPLEMENTATION_CLOSURE_REQUIRED`.
 Current `ATTRIBUTION_REVIEW_STATUS` is `OPEN_RETAIN_ALL_NOTICES`.
 
-The exact next task is **IND-C01 only**: reimplement the four private terminal
-presentation modules behind the frozen `src/ui/types.ts` contract, add the four
-specified mutation classes, run exact CLI differential plus real-repository
-smoke and interleaved CLI performance, require cross-platform CI, and stop
-without touching domain semantics, legal files, packaging, MCP, or browser UI.
+The exact next task is **IND-C03 only**: close the bounded Search and Context
+residual hosts one contract at a time, with mutation, semantic differential,
+real-repository evidence, performance, and downstream gates. Do not combine it
+with DB/WAL, Graph, lifecycle, MCP, CLI, installer, or browser UI work.
