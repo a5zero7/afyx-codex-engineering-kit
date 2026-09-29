@@ -9,6 +9,13 @@ import { Language, Node } from '../types';
 import { UnresolvedRef, ResolvedRef, ResolutionContext, SUPERTYPE_TARGET_KINDS, isInheritanceRef, isImportableKind } from './types';
 import { blankStringContents, stripCommentsForRegex } from './strip-comments';
 import { JS_BUILT_INS, TS_PRIMITIVE_TYPES } from './js-builtins';
+import {
+  computePathProximity,
+  preferCallSiteFile,
+  selectBestCandidate,
+} from './resolution-policy';
+
+export { preferCallSiteFile } from './resolution-policy';
 
 /**
  * Ceiling on how many same-named definitions a FUZZY name-match strategy will
@@ -806,7 +813,7 @@ export function matchByExactName(
   }
 
   // Multiple matches - try to narrow down
-  const bestMatch = findBestMatch(ref, candidates, context);
+  const bestMatch = selectBestCandidate(ref, candidates);
   if (bestMatch && isCrossFileReachable(bestMatch, ref, context)) {
     // Lower confidence when the match is from a distant/unrelated module
     const proximity = computePathProximity(ref.filePath, bestMatch.filePath);
@@ -933,17 +940,6 @@ export function matchByQualifiedName(
  * whichever was indexed first, so a call in `b/svc` wrongly targets `a/svc`.
  * No-op when there are <2 candidates or none share the call site's file.
  */
-export function preferCallSiteFile(nodes: Node[], callSiteFile: string): Node[] {
-  if (nodes.length < 2) return nodes;
-  const same: Node[] = [];
-  const other: Node[] = [];
-  for (const n of nodes) {
-    if (n.filePath === callSiteFile) same.push(n);
-    else other.push(n);
-  }
-  return same.length ? [...same, ...other] : nodes;
-}
-
 /**
  * Languages whose object literals declare callable members — `export const
  * api = { call() {…}, get: () => {…} }` used as a namespace (#1573).
@@ -3239,149 +3235,6 @@ function splitCamelCase(str: string): string[] {
 }
 
 /**
- * Compute directory proximity from a pre-split list of directory segments
- * (`filePath1` minus its filename) and a second file path.
- * Returns a score based on the number of shared leading directory segments.
- * Higher score = closer in directory tree.
- *
- * Split into a pre-split variant because findBestMatch scores every candidate
- * against the SAME `ref.filePath`; re-splitting it per candidate was a hot spot
- * on large repos (#915), so the caller splits it once and passes the segments.
- */
-function pathProximityFromDirs(dir1: string[], filePath2: string): number {
-  const dir2 = filePath2.split('/');
-  dir2.pop(); // drop filename — matches the original slice(0, -1) on both paths
-
-  let shared = 0;
-  const limit = Math.min(dir1.length, dir2.length);
-  for (let i = 0; i < limit; i++) {
-    if (dir1[i] === dir2[i]) {
-      shared++;
-    } else {
-      break;
-    }
-  }
-
-  // Each shared directory segment contributes 15 points, capped at 80
-  return Math.min(shared * 15, 80);
-}
-
-/**
- * Compute directory proximity between two file paths.
- * Returns a score based on the number of shared directory segments.
- */
-function computePathProximity(filePath1: string, filePath2: string): number {
-  const dir1 = filePath1.split('/');
-  dir1.pop();
-  return pathProximityFromDirs(dir1, filePath2);
-}
-
-/**
- * Find the best matching node when there are multiple candidates
- */
-function findBestMatch(
-  ref: UnresolvedRef,
-  candidates: Node[],
-  _context: ResolutionContext
-): Node | null {
-  // Prioritization rules:
-  // 1. Same file > different file
-  // 2. Directory proximity (same module/package > different module)
-  // 3. Same language > different language
-  // 4. Functions/methods > classes/types (for call references)
-  // 5. Exported > non-exported
-
-  let bestScore = -1;
-  let bestNode: Node | null = null;
-
-  // Split the ref's path once (it's the same across every candidate) instead of
-  // re-splitting it inside computePathProximity per candidate (#915 hot spot).
-  const refDirs = ref.filePath.split('/');
-  refDirs.pop();
-
-  // A same-language candidate ALWAYS outscores a cross-language one: same-language
-  // scores at least +50 (language bonus), while a cross-language candidate maxes
-  // out at +35 (−80 language, +80 proximity, +25 kind, +10 exported; it can never
-  // be in the same file). So when any same-language candidate exists, skip the
-  // cross-language ones — provably the same winner, without paying the per-candidate
-  // scoring. Cuts the candidate set to same-language size on mixed front-end +
-  // back-end repos (#915). When ALL candidates are cross-language (a legitimate
-  // cross-language `calls` bridge), none are skipped and behavior is unchanged.
-  const hasSameLanguage = candidates.some((c) => c.language === ref.language);
-
-  for (const candidate of candidates) {
-    if (hasSameLanguage && candidate.language !== ref.language) continue;
-
-    let score = 0;
-
-    // Same file bonus
-    if (candidate.filePath === ref.filePath) {
-      score += 100;
-    }
-
-    // Directory proximity bonus — strongly prefer same module/package
-    score += pathProximityFromDirs(refDirs, candidate.filePath);
-
-    // Language matching: strongly prefer same language, penalize cross-language
-    if (candidate.language === ref.language) {
-      score += 50;
-    } else {
-      score -= 80;
-    }
-
-    // For call references, prefer functions/methods
-    if (ref.referenceKind === 'calls') {
-      if (candidate.kind === 'function' || candidate.kind === 'method') {
-        score += 25;
-      }
-    }
-
-    // For instantiation references (`new Foo()`), prefer class-like
-    // targets — without this, a function named `Foo` in another module
-    // could outscore the actual class.
-    if (ref.referenceKind === 'instantiates') {
-      if (
-        candidate.kind === 'class' ||
-        candidate.kind === 'struct' ||
-        candidate.kind === 'union' ||
-        candidate.kind === 'interface'
-      ) {
-        score += 25;
-      }
-    }
-
-    // For decorator references (`@Foo`), prefer functions. Class
-    // decorators (Python `@SomeClass`, Java annotation interfaces)
-    // also resolve here, hence the smaller class bonus.
-    if (ref.referenceKind === 'decorates') {
-      if (candidate.kind === 'function' || candidate.kind === 'method') {
-        score += 25;
-      } else if (candidate.kind === 'class' || candidate.kind === 'interface') {
-        score += 15;
-      }
-    }
-
-    // Exported bonus
-    if (candidate.isExported) {
-      score += 10;
-    }
-
-    // Closer line number (within same file)
-    if (candidate.filePath === ref.filePath && candidate.startLine) {
-      const distance = Math.abs(candidate.startLine - ref.line);
-      score += Math.max(0, 20 - distance / 10);
-    }
-
-    if (score > bestScore) {
-      bestScore = score;
-      bestNode = candidate;
-    }
-  }
-
-  return bestNode;
-}
-
-/**
  * Fuzzy match - last resort with lower confidence
  */
 export function matchFuzzy(
@@ -3588,7 +3441,7 @@ export function matchReference(
         if (candidates.length === 1) {
           return { original: ref, targetNodeId: candidates[0]!.id, confidence: 0.8, resolvedBy: 'exact-match' };
         }
-        const best = findBestMatch(ref, candidates, context);
+        const best = selectBestCandidate(ref, candidates);
         if (best) {
           const proximity = computePathProximity(ref.filePath, best.filePath);
           return {

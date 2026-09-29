@@ -1647,12 +1647,22 @@ export function resolveViaImport(
   for (const imp of imports) {
     if (imp.localName === ref.referenceName || ref.referenceName.startsWith(imp.localName + '.')) {
       // Resolve the import path
-      const resolvedPath = resolveImportPath(
+      let resolvedPath = resolveImportPath(
         imp.source,
         ref.filePath,
         ref.language,
         context
       );
+
+      // Python absolute imports use bare dotted module names (`from source
+      // import pay`), which the generic path resolver correctly treats as an
+      // external package specifier. When that module is nevertheless present
+      // in the indexed project, retain the explicit import provenance instead
+      // of falling through to an unrelated project-wide same-name candidate.
+      // Relative imports are already handled by resolveImportPath above.
+      if (!resolvedPath && ref.language === 'python' && !imp.isNamespace) {
+        resolvedPath = findPythonModuleFile(imp.source, context, ref.filePath)?.filePath ?? null;
+      }
 
       if (resolvedPath) {
         const exportedName = imp.isDefault ? 'default' : imp.exportedName;
@@ -1660,13 +1670,16 @@ export function resolveViaImport(
           ? ref.referenceName.replace(imp.localName + '.', '')
           : null;
 
-        const targetNode = findExportedSymbol(
-          resolvedPath,
-          { isDefault: imp.isDefault, isNamespace: imp.isNamespace, exportedName, memberName },
-          ref.language,
-          context,
-          new Set()
-        );
+        const targetNode =
+          ref.language === 'python' && !imp.isNamespace
+            ? findPythonImportedSymbol(resolvedPath, exportedName, context)
+            : findExportedSymbol(
+                resolvedPath,
+                { isDefault: imp.isDefault, isNamespace: imp.isNamespace, exportedName, memberName },
+                ref.language,
+                context,
+                new Set()
+              );
 
         if (targetNode) {
           // `Foo.bar()` / `Foo.CONST` — a NAMED (non-namespace) class import
@@ -1714,6 +1727,14 @@ export function resolveViaImport(
             // constant edge below rather than fabricating a wrong one.
             const instanceMember = resolveImportedInstanceMember(targetNode, ref, imp.localName, context);
             if (instanceMember) return instanceMember;
+
+            // A Python named import binds the root value, not arbitrary members
+            // accessed through it. If none of the validated member paths above
+            // found the requested member, keep the full member reference
+            // unresolved instead of collapsing `root.member()` onto `root`.
+            // Bare `root()` references never enter this branch and retain the
+            // explicit imported-symbol resolution above.
+            if (ref.language === 'python') return null;
           }
 
           return {
@@ -1728,6 +1749,29 @@ export function resolveViaImport(
   }
 
   return null;
+}
+
+/**
+ * Python has no export keyword: a module-level declaration is importable by
+ * name unless Python runtime code hides it. The generic export index therefore
+ * cannot answer `from module import name`. Keep the lookup module-scoped and
+ * top-level so a method or nested declaration never becomes an import target.
+ */
+function findPythonImportedSymbol(
+  filePath: string,
+  exportedName: string,
+  context: ResolutionContext
+): Node | undefined {
+  return context
+    .getNodesInFile(filePath)
+    .filter(
+      (node) =>
+        node.language === 'python' &&
+        node.kind !== 'file' &&
+        node.name === exportedName &&
+        node.startColumn === 0
+    )
+    .sort((a, b) => a.startLine - b.startLine || a.startColumn - b.startColumn)[0];
 }
 
 /**
