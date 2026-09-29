@@ -1,38 +1,50 @@
-/**
- * Terminal color detection for CLI output (issue #1281).
- *
- * One switch decides whether any afyx-graph-authored output carries ANSI
- * color codes. Precedence, strongest first:
- *
- *   1. `--no-color` anywhere on the command line   -> off
- *   2. `--color` anywhere on the command line      -> on
- *   3. `NO_COLOR` set and non-empty (no-color.org) -> off
- *   4. `FORCE_COLOR` set and non-empty             -> on ('0'/'false' -> off)
- *   5. stdout is a TTY and TERM != 'dumb'          -> on
- *   6. `CI` set and non-empty                      -> on (CI log viewers render ANSI)
- *   7. otherwise (piped/redirected stdout)         -> off
- *
- * This intentionally tracks the detection @clack/prompts inherits from
- * picocolors closely enough that one run never mixes colored clack frames
- * with uncolored afyx-graph lines (or vice versa) for the common cases:
- * both honor NO_COLOR, --no-color/--color, FORCE_COLOR, TTY, and CI.
- */
+type ColorDecision = boolean | undefined;
+
+interface ColorContext {
+  arguments: readonly string[];
+  environment: NodeJS.ProcessEnv;
+  interactive: boolean;
+}
+
+type ColorRule = (context: ColorContext) => ColorDecision;
+
+const nonEmpty = (value: string | undefined): value is string => value !== undefined && value !== '';
+
+const explicitArgument: ColorRule = ({ arguments: args }) => {
+  if (args.includes('--no-color')) return false;
+  if (args.includes('--color')) return true;
+  return undefined;
+};
+
+const standardEnvironment: ColorRule = ({ environment }) => {
+  if (nonEmpty(environment.NO_COLOR)) return false;
+  if (!nonEmpty(environment.FORCE_COLOR)) return undefined;
+  return !['0', 'false'].includes(environment.FORCE_COLOR.toLowerCase());
+};
+
+const terminalCapability: ColorRule = ({ environment, interactive }) => {
+  if (interactive && environment.TERM !== 'dumb') return true;
+  if (nonEmpty(environment.CI)) return true;
+  return undefined;
+};
+
+const COLOR_POLICY: readonly ColorRule[] = [
+  explicitArgument,
+  standardEnvironment,
+  terminalCapability,
+];
+
+/** Resolve the single ANSI policy used by all Afyx-authored terminal output. */
 export function ansiColorsEnabled(): boolean {
-  if (process.argv.includes('--no-color')) return false;
-  if (process.argv.includes('--color')) return true;
+  const context: ColorContext = {
+    arguments: process.argv,
+    environment: process.env,
+    interactive: process.stdout.isTTY === true,
+  };
 
-  const noColor = process.env.NO_COLOR;
-  if (noColor !== undefined && noColor !== '') return false;
-
-  const forceColor = process.env.FORCE_COLOR;
-  if (forceColor !== undefined && forceColor !== '') {
-    return forceColor !== '0' && forceColor.toLowerCase() !== 'false';
+  for (const rule of COLOR_POLICY) {
+    const decision = rule(context);
+    if (decision !== undefined) return decision;
   }
-
-  if (process.stdout.isTTY === true && process.env.TERM !== 'dumb') return true;
-
-  const ci = process.env.CI;
-  if (ci !== undefined && ci !== '') return true;
-
   return false;
 }

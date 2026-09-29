@@ -1,15 +1,18 @@
 import { Worker } from 'worker_threads';
 import * as path from 'path';
 import { ansiColorsEnabled } from './color';
-import { getGlyphs } from './glyphs';
+import { getGlyphs, type Glyphs } from './glyphs';
+import type { ShimmerMainMessage, ShimmerWorkerMessage } from './types';
 
-const PHASE_NAMES: Record<string, string> = {
+const PHASE_LABELS: Readonly<Record<string, string>> = {
   scanning: 'Scanning files',
   parsing: 'Parsing code',
   storing: 'Storing data',
   resolving: 'Resolving refs',
   linking: 'Linking dynamic dispatch',
 };
+
+const STOP_TIMEOUT_MS = 2_000;
 
 export interface IndexProgress {
   phase: string;
@@ -22,130 +25,136 @@ export interface ShimmerProgress {
   stop: () => Promise<void>;
 }
 
-export function createShimmerProgress(): ShimmerProgress {
-  // Piped/redirected stdout: `\r`-rewriting animation frames are garbage in a
-  // log file — emit one plain line per phase instead (#1281).
-  if (process.stdout.isTTY !== true) {
-    return createPlainProgress();
+class PhaseJournal {
+  private phase = '';
+  private label = '';
+  private percent = -1;
+  private count = 0;
+
+  constructor(
+    private readonly glyphs: Glyphs,
+    private readonly color: boolean,
+  ) {}
+
+  update(progress: IndexProgress): ShimmerWorkerMessage {
+    if (this.phase && this.phase !== progress.phase) this.flush();
+    this.phase = progress.phase;
+    this.label = PHASE_LABELS[progress.phase] ?? progress.phase;
+    this.percent = progress.total > 0
+      ? Math.round((progress.current / progress.total) * 100)
+      : -1;
+    this.count = progress.total <= 0 && progress.current > 0 ? progress.current : 0;
+    return {
+      type: 'update',
+      phase: this.phase,
+      phaseName: this.label,
+      percent: this.percent,
+      count: this.count,
+    };
   }
 
-  const useColor = ansiColorsEnabled();
-  const G = getGlyphs();
-  const DM = useColor ? '\x1b[2m' : '';
-  const GRN = useColor ? '\x1b[32m' : '';
-  const RST = useColor ? '\x1b[0m' : '';
-
-  let lastPhase = '';
-  let lastPhaseName = '';
-  let lastPercent = -1;
-  let lastCount = 0;
-
-  // The persistent "phase done" lines — the ones that stay in scrollback —
-  // are printed HERE, on the main thread, not by the worker. process.stdout
-  // reaches a Windows console through the wide-char API, so these lines can
-  // carry the same Unicode glyphs @clack/prompts draws around them (#398);
-  // the worker's raw fs.writeSync path can't (codepage mojibake, #168) and is
-  // now used only for the transient, self-erasing animation frames. The main
-  // thread is guaranteed alive here: phase changes arrive via its own
-  // progress callback.
-  const printPhaseDone = (): void => {
-    if (!lastPhaseName) return;
-    let detail = '';
-    if (lastPercent >= 0) detail = ` ${G.dash} done`;
-    else if (lastCount > 0) detail = ` ${G.dash} ${lastCount.toLocaleString()} found`;
-    // Leading \r + erase clears the worker's in-flight animation line; one
-    // atomic write so a worker frame can't interleave mid-line.
+  flush(): void {
+    if (!this.label) return;
+    const dim = this.color ? '\x1b[2m' : '';
+    const green = this.color ? '\x1b[32m' : '';
+    const reset = this.color ? '\x1b[0m' : '';
+    const detail = this.percent >= 0
+      ? ` ${this.glyphs.dash} done`
+      : this.count > 0
+        ? ` ${this.glyphs.dash} ${this.count.toLocaleString()} found`
+        : '';
     process.stdout.write(
-      `\r\x1b[K${DM}${G.rail}${RST}  ${GRN}${G.phaseDone}${RST} ${lastPhaseName}${detail}\n`
+      `\r\x1b[K${dim}${this.glyphs.rail}${reset}  ${green}${this.glyphs.phaseDone}${reset} ${this.label}${detail}\n`,
     );
-    lastPhaseName = '';
-    lastPercent = -1;
-    lastCount = 0;
-  };
+    this.label = '';
+    this.percent = -1;
+    this.count = 0;
+  }
+}
 
-  const workerPath = path.join(__dirname, 'shimmer-worker.js');
-  const worker = new Worker(workerPath, {
-    // colors:false keeps the animation (still an interactive TTY) but drops
-    // the ANSI color codes, honoring NO_COLOR / --no-color (#1281).
-    workerData: { startTime: Date.now(), colors: useColor },
-  });
+class AnimationWorker {
+  private closed = false;
+  private stopRequested = false;
+  private readonly completion: Promise<void>;
+  private finish!: () => void;
+  private timer: NodeJS.Timeout | undefined;
+
+  constructor(private readonly worker: Worker) {
+    this.completion = new Promise<void>((resolve) => {
+      this.finish = resolve;
+    });
+    worker.on('message', (message: ShimmerMainMessage) => {
+      if (message.type === 'stopped') void this.terminate();
+    });
+    worker.on('error', () => void this.terminate());
+    worker.on('exit', () => this.settle());
+  }
+
+  send(message: ShimmerWorkerMessage): void {
+    if (!this.closed && !this.stopRequested) this.worker.postMessage(message);
+  }
+
+  stop(): Promise<void> {
+    if (this.closed || this.stopRequested) return this.completion;
+    this.stopRequested = true;
+    this.timer = setTimeout(() => void this.terminate(), STOP_TIMEOUT_MS);
+    try {
+      this.worker.postMessage({ type: 'stop' } satisfies ShimmerWorkerMessage);
+    } catch {
+      void this.terminate();
+    }
+    return this.completion;
+  }
+
+  private async terminate(): Promise<void> {
+    if (this.closed) return;
+    this.closed = true;
+    try {
+      await this.worker.terminate();
+    } finally {
+      this.settle();
+    }
+  }
+
+  private settle(): void {
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = undefined;
+    this.closed = true;
+    this.finish();
+  }
+}
+
+function createInteractiveProgress(): ShimmerProgress {
+  const color = ansiColorsEnabled();
+  const journal = new PhaseJournal(getGlyphs(), color);
+  const animation = new AnimationWorker(new Worker(path.join(__dirname, 'shimmer-worker.js'), {
+    workerData: { startTime: Date.now(), colors: color },
+  }));
+  let stopResult: Promise<void> | undefined;
 
   return {
-    onProgress(progress: IndexProgress) {
-      const phaseName = PHASE_NAMES[progress.phase] || progress.phase;
-
-      if (progress.phase !== lastPhase && lastPhase) {
-        printPhaseDone();
-      }
-      lastPhase = progress.phase;
-      lastPhaseName = phaseName;
-
-      let percent = -1;
-      let count = 0;
-      if (progress.total > 0) {
-        percent = Math.round((progress.current / progress.total) * 100);
-      } else if (progress.current > 0) {
-        count = progress.current;
-      }
-      lastPercent = percent;
-      lastCount = count;
-
-      worker.postMessage({
-        type: 'update',
-        phase: progress.phase,
-        phaseName,
-        percent,
-        count,
-      });
+    onProgress(progress) {
+      animation.send(journal.update(progress));
     },
-
     stop() {
-      return new Promise<void>((resolve) => {
-        let settled = false;
-        const finish = (): void => {
-          if (settled) return;
-          settled = true;
-          // Worker has cleared (or been terminated off) the animation line;
-          // persist the final phase's done-line from the main thread.
-          printPhaseDone();
-          resolve();
-        };
-
-        const timeout = setTimeout(() => {
-          worker.terminate().then(finish);
-        }, 2000);
-
-        worker.on('message', (msg: { type: string }) => {
-          if (msg.type === 'stopped') {
-            clearTimeout(timeout);
-            worker.terminate().then(finish);
-          }
-        });
-
-        worker.postMessage({ type: 'stop' });
-      });
+      stopResult ??= animation.stop().then(() => journal.flush());
+      return stopResult;
     },
   };
 }
 
-/**
- * Non-TTY fallback: one plain line per phase, no rewrites, no ANSI.
- * Completion details (counts, timings) are printed by the caller's result
- * summary, so phase starts are all that's worth logging here.
- */
 function createPlainProgress(): ShimmerProgress {
-  let lastPhase = '';
-
+  let previousPhase = '';
   return {
-    onProgress(progress: IndexProgress) {
-      if (progress.phase === lastPhase) return;
-      lastPhase = progress.phase;
-      const phaseName = PHASE_NAMES[progress.phase] || progress.phase;
-      process.stdout.write(`${phaseName}...\n`);
+    onProgress(progress) {
+      if (progress.phase === previousPhase) return;
+      previousPhase = progress.phase;
+      process.stdout.write(`${PHASE_LABELS[progress.phase] ?? progress.phase}...\n`);
     },
-
-    stop() {
-      return Promise.resolve();
-    },
+    stop: async () => undefined,
   };
+}
+
+export function createShimmerProgress(): ShimmerProgress {
+  return process.stdout.isTTY === true ? createInteractiveProgress() : createPlainProgress();
 }
