@@ -435,24 +435,27 @@ behavior. Large subsystem labels never authorize a batch rewrite.
   contamination (eight focused tests). Existing attribution validation remains
   7/7 PASS.
 - **Differential/size:** controlled OLD and NEW `win32-x64` bundles each contain
-  1,544 files and 240,303,024 unpacked bytes; normalized path/size/SHA-256
+  1,544 files and 240,303,435 unpacked bytes; normalized path/size/SHA-256
   comparison has zero differences. Npm dry-run changes only the reimplemented
-  packaged helper sources: 1,370 to 1,371 entries, 8,284,302 to 8,283,228 packed
-  bytes, and 78,777,294 to 78,772,635 unpacked bytes.
+  packaged helper sources: 1,370 to 1,371 entries, 8,284,381 to 8,283,660 packed
+  bytes, and 78,781,278 to 78,776,470 unpacked bytes.
 - **Execution/rebuild:** packaged version/help/status/query all pass from the
   isolated NEW artifact. A deliberately stale dist file is removed by a clean
   build, and two clean-build manifests are identical.
-- **Performance/provenance:** one controlled local bundle build is retained as
-  directional evidence only (OLD about 29 s; NEW about 33 s); CI remains the
-  cross-platform reliability gate. Established normalized provenance falls
-  from 272/313 substantive lines (86.90%) across the four historical hosts to
-  20/340 (5.88%) across those hosts plus the new contract module; five-line
-  shingle overlap is 0%, longest identical block is three lines, and no block
-  of eight lines remains.
+- **Performance/provenance:** three OLD/NEW interleaved clean builds measured
+  13.823/13.945 s median and 14.550/14.240 s p95 (+0.122 s, +0.88% median).
+  Three interleaved self-contained bundle builds measured 30.601/30.505 s
+  median and 30.888/30.991 s p95 (-0.096 s, -0.31% median); NEW manifest
+  generation measured 0.496 s median and 0.501 s p95 over five runs.
+  Established normalized provenance falls from 272/313 substantive lines
+  (86.90%) across the four historical hosts to 19/340 (5.59%) across those
+  hosts plus the new contract module; five-line shingle overlap is 0%, longest
+  identical block is three lines, and no block of eight lines remains.
 - **Validation/gaps:** TypeScript, shell syntax, packaging/UI tests, semantic
   baseline, CLI+MCP smoke, package identity/attribution validation, and local
-  Windows artifact execution pass. UI packaging remains bundled as frozen by
-  Phase 3B.12A; future optional UI productization is intentionally deferred.
+  Windows artifact execution pass. PR #21 confirms all seven Linux/macOS/
+  Windows/Rust CI gates. UI packaging remains bundled as frozen by Phase
+  3B.12A; future optional UI productization is intentionally deferred.
 
 ### IND-C03 — Search and Context residual hosts
 
