@@ -698,7 +698,8 @@ behavior. Large subsystem labels never authorize a batch rewrite.
 - **Validation and status:** selected node/DB/sync tests pass 320 with four
   platform-conditioned skips; focused downstream tests pass 489/489; semantic
   baseline passes 6/6; CLI/MCP smoke passes 21/21; typecheck and clean build
-  pass. Normal cross-platform CI is recorded on the slice PR. Classification is
+  pass. PR #25 passes all seven normal jobs (Linux 2/2, macOS 2/2, Windows 2/2,
+  and Rust kernel 1/1). Classification is
   `DB_NODE_READER_SLICE_COMPLETE_WITH_KNOWN_GAPS`. Remaining DB-reader review
   inventory is edge, file/index-state, dependency, routing, search, stats, and
   vocabulary. The recommended next bounded persistence slice is edge identity/
