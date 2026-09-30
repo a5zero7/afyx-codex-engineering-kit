@@ -705,6 +705,73 @@ behavior. Large subsystem labels never authorize a batch rewrite.
   vocabulary. The recommended next bounded persistence slice is edge identity/
   adjacency reads; IND-C05 Graph remains deferred.
 
+#### Edge identity/adjacency reader residual closure evidence (2026-09-30)
+
+- **Selected family and exclusions:** the complete bounded family is
+  `src/db/edge-reader.ts`: single and batched outgoing/incoming adjacency,
+  kind/provenance filters, per-endpoint fan-in/fan-out counts, and induced
+  connectivity reads. `query-session.ts`, `row-mappers.ts`, `graph-reader.ts`,
+  the `QueryBuilder` facade, edge writers, schema, node/reference readers, WAL,
+  and Graph traversal remain frozen boundaries. File/index-state, dependency,
+  routing, search, stats, and vocabulary readers remain separate residual
+  families.
+- **OLD contract and mutation:** the ordered DB-query golden and a focused
+  observable edge contract freeze source/target identity, kind, metadata,
+  coordinates, provenance, direction, filters, natural SQLite result order,
+  batch-endpoint deduplication, counts, connectivity, and missing/empty shapes.
+  Nine OLD mutants are killed: omission, wrong source, wrong target, direction
+  inversion, filter bypass, ordering corruption, duplicate expansion, relation
+  remapping, and empty-input corruption.
+- **Afyx-native architecture:** an explicit adjacency-direction/query catalog
+  owns persisted source/target meaning; a named edge projection and one decode
+  boundary own SQL-to-domain conversion; shared bounded helpers implement batch
+  reads and counts without moving traversal into persistence. Public signatures,
+  predicates, natural result order, mapper, session, schema, and writers are
+  unchanged.
+- **NEW mutation and differential:** the same nine NEW mutants are killed.
+  OLD and NEW pass the exact ordered query contract. On isolated copies of the
+  accepted repository snapshot, 76,550 edges across eight kinds produce the
+  same representative logical SHA-256
+  `d767be34141ee8f12c58ed8679ac0b106223106ab73fca1ab17720c3dc3a535e`;
+  `UNEXPLAINED = 0`. The canonical and both copies retain the same 100,700,160
+  bytes and SHA-256
+  `9e7ca8bffc655925c0f8bd9da81d9296e85956350e431816203b6610ae82097f`;
+  no migration or sidecar is produced.
+- **Graph boundary, real repository, determinism, and payload:** Graph-facing
+  inputs, Search, Context, Impact, and affected-test contracts pass unchanged.
+  Real-snapshot cases cover 1,557-edge outgoing and 880-edge incoming high-fanout
+  nodes, filtered and batch reads, counts, induced connectivity, and empty cases.
+  Three repeated NEW reads preserve identity, order, direction, values, payload
+  (1,557,544 bytes), and digest. OLD/NEW full outgoing scans each surface all
+  76,550 edges, 16,704,218 serialized bytes, and digest
+  `a438b2b7c14fa91d`; no duplicate expansion, recursion, relation inversion,
+  identity drift, false negative, or unexplained payload growth is observed.
+- **Performance:** seven interleaved OLD/NEW pairs preserve every case count,
+  digest, and payload. Median microseconds (OLD/NEW) are 2,553.6/2,579.4
+  outgoing, 1,514.8/1,463.9 incoming, 2,322.9/2,315.1 kind-filtered,
+  6,712.8/6,740.4 outgoing batch, 7,779.1/7,581.5 incoming batch,
+  1,115.9/1,067.8 counts, 212.1/209.4 connectivity, and
+  162,426.7/163,697.8 full scan. Median deltas range from -4.31% to +1.01%; the
+  full-scan delta is +0.78%. Maximum observed process RSS is
+  329,818,112/335,642,624 bytes. No material reproducible regression appears.
+- **Provenance:** established normalization moves complete family Scope A
+  (`query-session.ts`, `row-mappers.ts`, `edge-reader.ts`) from 54.82%
+  substantive / 25.00% comments / 19.93% shingles to 35.67% / 34.78% / 18.80%.
+  Frozen Scope B remains 50.00% / 31.25% / 29.59%. Replaced residual Scope C
+  (`edge-reader.ts`) falls from 60.81% / 16.67% / 4.67% to 15.38% / 42.86% /
+  0.00%; longest identical block moves 6→2 and both sides have zero blocks >=8.
+  Remaining overlap is SQL/schema identifiers, public edge shapes, and standard
+  TypeScript/SQLite idioms, not a legal conclusion.
+- **Validation and status:** focused edge/DB/Graph tests pass 720 with four
+  platform-conditioned skips; Search/Context/Impact downstream tests pass
+  159/159; sync/rebuild convergence passes 56/56; semantic baseline passes 6/6;
+  CLI/MCP smoke, typecheck, and clean build pass. Normal cross-platform CI is
+  pending on the PR. Classification is
+  `DB_EDGE_READER_SLICE_COMPLETE_WITH_KNOWN_GAPS`. Remaining DB-reader review
+  inventory is file/index-state, dependency, routing, search, stats, and
+  vocabulary. The recommended next bounded persistence slice is file/index-state
+  reads; IND-C05 Graph remains deferred.
+
 ### IND-C05 — Graph legacy hosts
 
 - **Scope/ownership:** branch guards, dead code, named flow, type hierarchy and
