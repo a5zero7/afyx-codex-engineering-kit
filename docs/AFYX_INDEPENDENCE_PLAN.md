@@ -916,9 +916,10 @@ behavior. Large subsystem labels never authorize a batch rewrite.
 - **Validation and classification:** focused downstream persistence,
   Graph/file traversal, incremental/sync and CLI affected boundaries pass
   688/688. Semantic baseline passes 6/6, CLI/MCP smoke passes 21/21, and
-  TypeScript typecheck plus clean production/UI build pass. Normal PR CI is
-  pending. Previous DB reader closures and DB foundation/WAL remain unchanged.
-  Current classification is
+  TypeScript typecheck plus clean production/UI build pass. PR #28 passes all
+  seven normal jobs (Linux 2/2, macOS 2/2, Windows 2/2, and Rust kernel 1/1).
+  Previous DB reader closures and DB foundation/WAL remain unchanged. Current
+  classification is
   `DB_DEPENDENCY_READER_SLICE_COMPLETE_WITH_KNOWN_GAPS`: routing, search,
   stats/metadata, and vocabulary remain DB-reader review inventory. The
   recommended next bounded slice is routing; IND-C05 Graph remains deferred.
