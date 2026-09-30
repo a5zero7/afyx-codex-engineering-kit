@@ -924,6 +924,64 @@ behavior. Large subsystem labels never authorize a batch rewrite.
   stats/metadata, and vocabulary remain DB-reader review inventory. The
   recommended next bounded slice is routing; IND-C05 Graph remains deferred.
 
+#### Routing reader residual closure evidence (2026-10-01)
+
+- **Selected family and separation:** `src/db/routing-reader.ts` owns persisted
+  project-shape facts: dominant same-file edge concentration, top route-file
+  concentration, and the ordered route-to-handler manifest. `query-session.ts`,
+  the closed `file-reader.ts`, `graph-reader.ts`, `QueryBuilder`, the public
+  `AfyxGraph` facade, and generated-file classification remain frozen
+  Afyx-native boundaries. Context reranking, Graph traversal, route extraction
+  and resolution, UI navigation, and CLI/MCP/HTTP/provider/installer routing are
+  behavioral consumers or separate domains and were excluded.
+- **OLD contract and sensitivity:** accepted behavior freezes source/target row
+  identity, route and handler mapping, stable route ordering, first-wins handler
+  precedence, 20-candidate bounds, generated/test filtering, thresholds and
+  null fallback, duplicate preservation, limit-before-filter behavior, and
+  reopen behavior. OLD focused routing plus DB golden passed; all nine applicable
+  mutants were killed: omission, wrong target, precedence, ordering, filter,
+  fallback, duplicate, missing-result, and row-mapping corruption.
+- **Afyx-native architecture and differential:** a named query catalog owns the
+  three projections; explicit row types and a single route-entry decoder own the
+  SQLite boundary; named policy constants and one eligibility function own
+  filters; an insertion-ordered count fold owns stable precedence. NEW focused
+  routing plus DB golden passed and killed the same 9/9 mutants. OLD/NEW real and
+  controlled snapshots are byte-logically identical (`UNEXPLAINED = 0`).
+- **Snapshot, determinism, and consumer boundary:** the isolated accepted
+  100,700,160-byte DB (23,978 nodes, 76,550 edges, 949 files, 31 route nodes)
+  produced an identical 836-byte logical payload and
+  `47d68ab8b49a22fb40fc0cf7bafcfdeff8c4e145f46355b9f908d6ae249937bb`
+  digest for OLD and three NEW runs. A controlled positive fixture preserved all
+  200 manifest rows, 41,215 manifest bytes, and the
+  `39c26d09f738df174e2cd9a5506ac53f9e8280db39084396c0401b0377114090`
+  digest. Routing 4/4, DB query 131/131, Context 77/77, and UI server 61/61
+  passed (one declared UI skip).
+- **Performance and payload:** seven interleaved OLD/NEW pairs preserved every
+  result count, serialized byte count, and digest. Median/p95 microseconds were
+  598.2/928.1 to 579.7/679.0 for dominant file, 115.2/140.9 to 104.5/143.3
+  for top route, 575.5/706.1 to 571.1/671.6 for fallback manifest,
+  704.5/940.7 to 750.6/985.3 for a bounded 40-row manifest, and
+  1,329.0/2,264.9 to 1,406.9/2,090.5 for the full 200-row manifest. Positive
+  median deltas are +46.1 microseconds (+6.54%) and +77.9 microseconds (+5.86%),
+  with no material regression. Payloads remain 64, 69, 4, 8,063, and 41,215
+  bytes respectively; maximum observed NEW RSS was 64,110,592 bytes.
+- **Provenance:** established normalization moves complete Scope A
+  (`query-session.ts`, `file-reader.ts`, `routing-reader.ts`) from 26.24%
+  substantive / 29.41% comments / 3.43% five-line shingles to 13.81% / 26.32%
+  / 0.29%. Frozen Scope B remains 15.75% / 27.78% / 0.00%. Replaced Scope C
+  (`routing-reader.ts`) moves from 44.00% / 30.30% / 8.66% to 11.61% / 0.00%
+  / 0.65%; its longest identical block falls 9 to 5 lines and blocks of at least
+  eight lines fall 2 to 0. Residual matches are public result contracts,
+  SQL/schema identifiers and literals, and standard TypeScript/SQLite idioms,
+  not copied private helper decomposition.
+- **Regression, CI, and known gaps:** TypeScript typecheck, clean production/UI
+  build, semantic baseline 6/6, and CLI/MCP smoke 21/21 pass. Cross-platform CI
+  is pending on the closure PR. DB foundation/WAL and all previously closed
+  reader families remain unchanged. Classification is
+  `DB_ROUTING_READER_SLICE_COMPLETE_WITH_KNOWN_GAPS`; search, stats/metadata,
+  and vocabulary readers remain. The recommended next bounded closure is the
+  Search DB reader; IND-C05 Graph remains deferred.
+
 ### IND-C05 — Graph legacy hosts
 
 - **Scope/ownership:** branch guards, dead code, named flow, type hierarchy and
