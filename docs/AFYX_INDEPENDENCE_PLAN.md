@@ -843,8 +843,9 @@ behavior. Large subsystem labels never authorize a batch rewrite.
   baseline passes 6/6; CLI/MCP smoke, typecheck, and clean build pass. One
   concurrent evidence run exceeded a 5-second convergence-test budget by 148 ms;
   that exact test passed isolated at 4,793 ms and the complete serial group then
-  passed 180/180. Normal cross-platform CI is pending on the PR. Classification
-  is `DB_FILE_READER_SLICE_COMPLETE_WITH_KNOWN_GAPS`. Remaining DB-reader review
+  passed 180/180. PR #27 passes all seven normal jobs (Linux 2/2, macOS 2/2,
+  Windows 2/2, and Rust kernel 1/1). Classification is
+  `DB_FILE_READER_SLICE_COMPLETE_WITH_KNOWN_GAPS`. Remaining DB-reader review
   inventory is dependency, routing, search, stats, and vocabulary. The
   recommended next bounded DB slice is dependency analytics; IND-C05 Graph
   remains deferred.
