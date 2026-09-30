@@ -850,6 +850,79 @@ behavior. Large subsystem labels never authorize a batch rewrite.
   recommended next bounded DB slice is dependency analytics; IND-C05 Graph
   remains deferred.
 
+#### Dependency analytics reader residual closure evidence (2026-09-30)
+
+- **Selected family and exclusions:** the complete bounded family is
+  `src/db/dependency-reader.ts`: dead-code dependency evidence, symbol/file
+  fan-in and fan-out aggregates, module rollups, cross-file pairs, direct
+  dependency/dependent paths, and incoming-edge reconciliation reads.
+  `query-session.ts` and `row-mappers.ts` are already Afyx-native shared
+  boundaries; `graph-reader.ts` and the `QueryBuilder` facade only delegate.
+  Node, edge, reference, file/index-state, routing, search, stats/metadata,
+  vocabulary, schema, writers, DB foundation/WAL, Extraction, Resolution,
+  Sync/Watcher orchestration, Graph traversal, Impact, and Affected Tests are
+  excluded. Graph owns recursion, reachability, cycles and traversal limits;
+  this reader returns persisted facts only.
+- **OLD contract and mutation:** the ordered DB-query golden freezes source and
+  target identity, direction, relation-kind filters, direct/reverse file sets,
+  distinct/count behavior, module grouping and pair ranking, dead-code evidence,
+  missing/empty results, edge mapping, and accepted SQLite result order. The
+  focused Graph/Impact/Affected oracle passes 169/169. All ten OLD observable
+  mutants are killed: dependency omission, source/target inversion, kind-filter
+  bypass, direction swap, ordering, count, aggregation, duplicate, empty/missing,
+  and relation-mapping corruption.
+- **Afyx-native architecture:** one named query catalog owns fixed dependency
+  reads; dynamic list queries explicitly own projections; row types and decode
+  points make direction and identity visible; module facts are collected once
+  and folded by Afyx-owned link/pair identities. Fixed statements are cached by
+  the existing session, chunking remains bounded, and no traversal algorithm was
+  moved into the DB layer. Public signatures, filters, grouping, duplicates,
+  return shapes, and observed order remain unchanged.
+- **NEW mutation, differential and snapshot:** all ten equivalent NEW mutants
+  are killed (10/10, no survivors). OLD and NEW against the accepted
+  100,700,160-byte snapshot both report 23,978 nodes, 76,550 edges, 949 files and
+  51,990 non-`contains` dependency edges. Every selected identity, direction,
+  kind, ordered result, aggregate and serialized value is identical with digest
+  `169ed1d440ac906b29da2a94a7334aa8c5ab6b15ddb7f36a96583790176be213`;
+  `UNEXPLAINED = 0`, no migration is required. Three repeated NEW runs retain
+  that digest and exact 1,175,272-byte logical payload. The high-fan-in case
+  (`src/index.ts`) returns 203 distinct dependent files / 11,427 bytes; the
+  selected high-out case returns seven files / 304 bytes, with no Cartesian or
+  recursive expansion.
+- **Performance and payload:** seven interleaved OLD/NEW pairs preserve every
+  digest, count and payload. Median microseconds (OLD/NEW) are 550.2/505.1 direct,
+  666.8/616.4 reverse, 83,883.6/81,432.3 confidence-filtered full pairs,
+  9,135.2/9,367.7 batch counts, 115,357.0/116,437.6 module aggregation,
+  33,193.0/33,263.8 top-depended, and 1,963.2/1,920.1 incoming high-fanout.
+  Median deltas range from -8.20% to +2.55%; the largest positive absolute
+  median delta is 1,080.6 microseconds on the 116 ms aggregation. Median-of-run
+  p95 OLD/NEW values are respectively 678.1/618.8, 799.4/842.9,
+  93,345.3/88,445.9, 11,957.4/11,867.7, 120,195.5/122,958.6,
+  37,357.6/38,634.2, and 2,994.6/2,767.3 microseconds. Maximum observed NEW RSS
+  is 146,595,840 bytes. Identical payloads include 2,548 pairs / 306,207 bytes,
+  589 incoming edges / 242,856 bytes, and the complete 1,175,272-byte snapshot;
+  there is no material reproducible regression or unexplained growth.
+- **Provenance:** established normalization moves complete Scope A
+  (`query-session.ts`, `row-mappers.ts`, `dependency-reader.ts`) from
+  52.57% substantive / 25.30% comments / 16.17% five-line shingles to
+  21.83% / 29.41% / 12.22%. Frozen already-native Scope B
+  (`query-session.ts`, `row-mappers.ts`) remains 50.00% / 31.25% / 29.59%.
+  Replaced residual Scope C (`dependency-reader.ts`) falls from
+  53.89% / 23.88% / 9.34% to 12.54% / 0.00% / 4.31%; longest identical block
+  is 13→17 and blocks >=8 are 2→1. Residual matches are SQL syntax/schema
+  identifiers, public dependency shapes and literals, and standard
+  SQLite/TypeScript idioms; this is a technical provenance measure, not a legal
+  conclusion.
+- **Validation and classification:** focused downstream persistence,
+  Graph/file traversal, incremental/sync and CLI affected boundaries pass
+  688/688. Semantic baseline passes 6/6, CLI/MCP smoke passes 21/21, and
+  TypeScript typecheck plus clean production/UI build pass. Normal PR CI is
+  pending. Previous DB reader closures and DB foundation/WAL remain unchanged.
+  Current classification is
+  `DB_DEPENDENCY_READER_SLICE_COMPLETE_WITH_KNOWN_GAPS`: routing, search,
+  stats/metadata, and vocabulary remain DB-reader review inventory. The
+  recommended next bounded slice is routing; IND-C05 Graph remains deferred.
+
 ### IND-C05 — Graph legacy hosts
 
 - **Scope/ownership:** branch guards, dead code, named flow, type hierarchy and
