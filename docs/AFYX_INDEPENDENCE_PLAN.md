@@ -765,8 +765,8 @@ behavior. Large subsystem labels never authorize a batch rewrite.
 - **Validation and status:** focused edge/DB/Graph tests pass 720 with four
   platform-conditioned skips; Search/Context/Impact downstream tests pass
   159/159; sync/rebuild convergence passes 56/56; semantic baseline passes 6/6;
-  CLI/MCP smoke, typecheck, and clean build pass. Normal cross-platform CI is
-  pending on the PR. Classification is
+  CLI/MCP smoke, typecheck, and clean build pass. PR #26 passes all seven normal
+  jobs (Linux 2/2, macOS 2/2, Windows 2/2, and Rust kernel 1/1). Classification is
   `DB_EDGE_READER_SLICE_COMPLETE_WITH_KNOWN_GAPS`. Remaining DB-reader review
   inventory is file/index-state, dependency, routing, search, stats, and
   vocabulary. The recommended next bounded persistence slice is file/index-state
