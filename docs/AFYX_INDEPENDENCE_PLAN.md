@@ -975,9 +975,10 @@ behavior. Large subsystem labels never authorize a batch rewrite.
   SQL/schema identifiers and literals, and standard TypeScript/SQLite idioms,
   not copied private helper decomposition.
 - **Regression, CI, and known gaps:** TypeScript typecheck, clean production/UI
-  build, semantic baseline 6/6, and CLI/MCP smoke 21/21 pass. Cross-platform CI
-  is pending on the closure PR. DB foundation/WAL and all previously closed
-  reader families remain unchanged. Classification is
+  build, semantic baseline 6/6, and CLI/MCP smoke 21/21 pass. PR #29
+  cross-platform CI passes 7/7 (Linux 2/2, macOS 2/2, Windows 2/2, Rust kernel
+  1/1). DB foundation/WAL and all previously closed reader families remain
+  unchanged. Classification is
   `DB_ROUTING_READER_SLICE_COMPLETE_WITH_KNOWN_GAPS`; search, stats/metadata,
   and vocabulary readers remain. The recommended next bounded closure is the
   Search DB reader; IND-C05 Graph remains deferred.
