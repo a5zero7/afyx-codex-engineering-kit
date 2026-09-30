@@ -1,121 +1,122 @@
 /**
- * Edge reads: outgoing/incoming from one node or from many at once, and fan-in/fan-out
- * counts. Direction and kind filtering are explicit at every call site — nothing here
- * infers one from the other.
+ * Persisted edge identity and adjacency reads.
+ *
+ * Direction is data in this module, not an inference made by callers: outgoing
+ * reads bind `source`, incoming reads bind `target`, and connectivity binds both.
+ * The database's natural row order remains part of the compatibility contract.
  */
 
 import type { Edge, EdgeKind } from '../types';
 import { chunked, placeholders, QuerySession } from './query-session';
 import { rowToEdge, type EdgeRow } from './row-mappers';
 
-function kindFilter(kinds: readonly EdgeKind[] | undefined): string {
-  return kinds && kinds.length > 0 ? ` AND kind IN (${placeholders(kinds.length)})` : '';
+const EDGE_PROJECTION = 'id, source, target, kind, metadata, line, col, provenance';
+
+interface AdjacencyDirection {
+  readonly endpoint: 'source' | 'target';
+  readonly one: string;
+}
+
+const ADJACENCY = {
+  outgoing: {
+    endpoint: 'source',
+    one: `SELECT ${EDGE_PROJECTION} FROM edges WHERE source = ?`,
+  },
+  incoming: {
+    endpoint: 'target',
+    one: `SELECT ${EDGE_PROJECTION} FROM edges WHERE target = ?`,
+  },
+} as const satisfies Record<'outgoing' | 'incoming', AdjacencyDirection>;
+
+const CONNECTED_QUERY =
+  `SELECT ${EDGE_PROJECTION} FROM edges ` +
+  'WHERE source IN (SELECT value FROM json_each(?)) ' +
+  'AND target IN (SELECT value FROM json_each(?))';
+
+const decodeEdges = (rows: readonly EdgeRow[]): Edge[] => rows.map(rowToEdge);
+
+function kindConstraint(kinds: readonly EdgeKind[] | undefined): string {
+  return kinds?.length ? ` AND kind IN (${placeholders(kinds.length)})` : '';
 }
 
 export class EdgeReader {
   constructor(private readonly session: QuerySession) {}
 
-  /** Edges leaving `sourceId`, optionally narrowed by kind and/or provenance. */
   getOutgoingEdges(sourceId: string, kinds?: EdgeKind[], provenance?: string): Edge[] {
-    if ((kinds && kinds.length > 0) || provenance) {
-      let sql = 'SELECT * FROM edges WHERE source = ?';
-      const params: (string | number)[] = [sourceId];
-      if (kinds && kinds.length > 0) {
-        sql += kindFilter(kinds);
-        params.push(...kinds);
-      }
-      if (provenance) {
-        sql += ' AND provenance = ?';
-        params.push(provenance);
-      }
-      const rows = this.session.db.prepare(sql).all(...params) as EdgeRow[];
-      return rows.map(rowToEdge);
+    const direction = ADJACENCY.outgoing;
+    const unfiltered = !kinds?.length && !provenance;
+    if (unfiltered) return this.fixed(direction.one, [sourceId]);
+
+    const values: string[] = [sourceId, ...(kinds ?? [])];
+    let query = direction.one + kindConstraint(kinds);
+    if (provenance) {
+      query += ' AND provenance = ?';
+      values.push(provenance);
     }
-    const rows = this.session.statement('SELECT * FROM edges WHERE source = ?').all(sourceId) as EdgeRow[];
-    return rows.map(rowToEdge);
+    return this.dynamic(query, values);
   }
 
-  /** Edges entering `targetId`, optionally narrowed by kind. */
   getIncomingEdges(targetId: string, kinds?: EdgeKind[]): Edge[] {
-    if (kinds && kinds.length > 0) {
-      const rows = this.session.db.prepare(`SELECT * FROM edges WHERE target = ?${kindFilter(kinds)}`).all(targetId, ...kinds) as EdgeRow[];
-      return rows.map(rowToEdge);
-    }
-    const rows = this.session.statement('SELECT * FROM edges WHERE target = ?').all(targetId) as EdgeRow[];
-    return rows.map(rowToEdge);
+    const direction = ADJACENCY.incoming;
+    return kinds?.length
+      ? this.dynamic(direction.one + kindConstraint(kinds), [targetId, ...kinds])
+      : this.fixed(direction.one, [targetId]);
   }
 
-  /** Outgoing edges for many source nodes in one pass — the batch form of `getOutgoingEdges`, chunked under the parameter limit. */
   getOutgoingEdgesFrom(sourceIds: readonly string[], kinds?: EdgeKind[]): Edge[] {
-    if (sourceIds.length === 0) return [];
-    const out: Edge[] = [];
-    for (const chunk of chunked([...new Set(sourceIds)])) {
-      let sql = `SELECT * FROM edges WHERE source IN (${placeholders(chunk.length)})`;
-      const params: string[] = [...chunk];
-      if (kinds && kinds.length > 0) {
-        sql += kindFilter(kinds);
-        params.push(...kinds);
-      }
-      const rows = this.session.db.prepare(sql).all(...params) as EdgeRow[];
-      for (const row of rows) out.push(rowToEdge(row));
-    }
-    return out;
+    return this.many(ADJACENCY.outgoing, sourceIds, kinds);
   }
 
-  /** Incoming edges for many target nodes in one pass — the mirror of `getOutgoingEdgesFrom`. */
   getIncomingEdgesTo(targetIds: readonly string[], kinds?: EdgeKind[]): Edge[] {
-    if (targetIds.length === 0) return [];
-    const out: Edge[] = [];
-    for (const chunk of chunked([...new Set(targetIds)])) {
-      let sql = `SELECT * FROM edges WHERE target IN (${placeholders(chunk.length)})`;
-      const params: string[] = [...chunk];
-      if (kinds && kinds.length > 0) {
-        sql += kindFilter(kinds);
-        params.push(...kinds);
-      }
-      const rows = this.session.db.prepare(sql).all(...params) as EdgeRow[];
-      for (const row of rows) out.push(rowToEdge(row));
-    }
-    return out;
+    return this.many(ADJACENCY.incoming, targetIds, kinds);
   }
 
-  /** Total incoming-edge count for many nodes; an id with no incoming edges is absent from the map rather than present as 0. */
   countIncomingEdges(ids: readonly string[]): Map<string, number> {
-    const out = new Map<string, number>();
-    if (ids.length === 0) return out;
-    for (const chunk of chunked([...new Set(ids)])) {
-      const rows = this.session.db
-        .prepare(`SELECT target, COUNT(*) AS count FROM edges WHERE target IN (${placeholders(chunk.length)}) GROUP BY target`)
-        .all(...chunk) as Array<{ target: string; count: number }>;
-      for (const row of rows) out.set(row.target, row.count);
-    }
-    return out;
+    return this.count(ADJACENCY.incoming, ids);
   }
 
-  /** Total outgoing-edge count for many nodes; the mirror of `countIncomingEdges`. */
   countOutgoingEdges(ids: readonly string[]): Map<string, number> {
-    const out = new Map<string, number>();
-    if (ids.length === 0) return out;
-    for (const chunk of chunked([...new Set(ids)])) {
-      const rows = this.session.db
-        .prepare(`SELECT source, COUNT(*) AS count FROM edges WHERE source IN (${placeholders(chunk.length)}) GROUP BY source`)
-        .all(...chunk) as Array<{ source: string; count: number }>;
-      for (const row of rows) out.set(row.source, row.count);
-    }
-    return out;
+    return this.count(ADJACENCY.outgoing, ids);
   }
 
-  /** Edges whose source and target are both in `nodeIds` — recovering inter-node connectivity after a traversal. */
   findEdgesBetweenNodes(nodeIds: string[], kinds?: EdgeKind[]): Edge[] {
     if (nodeIds.length === 0) return [];
-    const idsJson = JSON.stringify(nodeIds);
-    let sql = 'SELECT * FROM edges WHERE source IN (SELECT value FROM json_each(?)) AND target IN (SELECT value FROM json_each(?))';
-    const params: string[] = [idsJson, idsJson];
-    if (kinds && kinds.length > 0) {
-      sql += kindFilter(kinds);
-      params.push(...kinds);
+    const encodedIds = JSON.stringify(nodeIds);
+    return this.dynamic(CONNECTED_QUERY + kindConstraint(kinds), [encodedIds, encodedIds, ...(kinds ?? [])]);
+  }
+
+  private fixed(query: string, values: readonly string[]): Edge[] {
+    return decodeEdges(this.session.statement(query).all(...values) as EdgeRow[]);
+  }
+
+  private dynamic(query: string, values: readonly string[]): Edge[] {
+    return decodeEdges(this.session.db.prepare(query).all(...values) as EdgeRow[]);
+  }
+
+  private many(direction: AdjacencyDirection, ids: readonly string[], kinds?: readonly EdgeKind[]): Edge[] {
+    const uniqueIds = [...new Set(ids)];
+    if (uniqueIds.length === 0) return [];
+
+    const edges: Edge[] = [];
+    for (const group of chunked(uniqueIds)) {
+      const query =
+        `SELECT ${EDGE_PROJECTION} FROM edges WHERE ${direction.endpoint} IN (${placeholders(group.length)})` +
+        kindConstraint(kinds);
+      edges.push(...this.dynamic(query, [...group, ...(kinds ?? [])]));
     }
-    const rows = this.session.db.prepare(sql).all(...params) as EdgeRow[];
-    return rows.map(rowToEdge);
+    return edges;
+  }
+
+  private count(direction: AdjacencyDirection, ids: readonly string[]): Map<string, number> {
+    const totals = new Map<string, number>();
+    const uniqueIds = [...new Set(ids)];
+    for (const group of chunked(uniqueIds)) {
+      const query =
+        `SELECT ${direction.endpoint} AS endpoint, COUNT(*) AS total FROM edges ` +
+        `WHERE ${direction.endpoint} IN (${placeholders(group.length)}) GROUP BY ${direction.endpoint}`;
+      const rows = this.session.db.prepare(query).all(...group) as Array<{ endpoint: string; total: number }>;
+      for (const row of rows) totals.set(row.endpoint, row.total);
+    }
+    return totals;
   }
 }
