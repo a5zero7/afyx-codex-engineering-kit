@@ -39,11 +39,15 @@ export type SqliteBackend = 'node-sqlite';
 
 /** Bind a driver statement to the engine's statement shape. */
 function wrapStatement(native: any): SqliteStatement {
+  const normalizeRun = (params: any[]): { changes: number; lastInsertRowid: number | bigint } => {
+    const outcome = native.run(...params);
+    return {
+      changes: Number(outcome?.changes ?? 0),
+      lastInsertRowid: outcome?.lastInsertRowid ?? 0,
+    };
+  };
   return {
-    run(...params: any[]) {
-      const outcome = native.run(...params);
-      return { changes: Number(outcome?.changes ?? 0), lastInsertRowid: outcome?.lastInsertRowid ?? 0 };
-    },
+    run: (...params: any[]) => normalizeRun(params),
     get: (...params: any[]) => native.get(...params),
     all: (...params: any[]) => native.all(...params),
     iterate: (...params: any[]) => native.iterate(...params),
@@ -104,28 +108,23 @@ class NodeSqliteAdapter implements SqliteDatabase {
    * caller has ever relied on any (`BEGIN` inside a transaction would simply throw).
    */
   transaction<T>(fn: (...args: any[]) => T): (...args: any[]) => T {
-    return (...args: any[]): T => {
-      if (this.transactionDepth > 0) {
-        this.transactionDepth++;
-        try {
-          return fn(...args);
-        } finally {
-          this.transactionDepth--;
-        }
-      }
-      this.native.exec('BEGIN');
-      this.transactionDepth = 1;
-      try {
-        const value = fn(...args);
-        this.native.exec('COMMIT');
-        this.transactionDepth = 0;
-        return value;
-      } catch (error) {
-        this.native.exec('ROLLBACK');
-        this.transactionDepth = 0;
-        throw error;
-      }
-    };
+    return (...args: any[]): T => this.withTransaction(() => fn(...args));
+  }
+
+  private withTransaction<T>(operation: () => T): T {
+    const ownsBoundary = this.transactionDepth === 0;
+    if (ownsBoundary) this.native.exec('BEGIN');
+    this.transactionDepth += 1;
+    try {
+      const result = operation();
+      if (ownsBoundary) this.native.exec('COMMIT');
+      return result;
+    } catch (error) {
+      if (ownsBoundary) this.native.exec('ROLLBACK');
+      throw error;
+    } finally {
+      this.transactionDepth -= 1;
+    }
   }
 
   /** `DatabaseSync.close()` throws when already closed; callers close defensively, so it must not. */

@@ -22,6 +22,7 @@ const DEFAULT_WAL_VALVE_MB = 256;
 const HARD_CAP_MULTIPLIER = 2;
 /** File cap = this × soft threshold; past it the barrier also TRUNCATEs the file. */
 const FILE_CAP_MULTIPLIER = 4;
+const MIB = 1024 * 1024;
 
 export interface WalSizeSource {
   getWalSizeBytes(): number;
@@ -32,17 +33,16 @@ export interface WalSizeSource {
  * override; non-numeric / non-positive values fall back to the default.
  */
 export function resolveWalValveMb(envVal: string | undefined, dbSizeBytes?: number): number {
-  if (envVal !== undefined && envVal !== '') {
-    const n = Number(envVal);
-    if (Number.isFinite(n) && n > 0) return Math.floor(n);
-  }
+  const override = envVal === undefined || envVal === '' ? Number.NaN : Number(envVal);
+  if (Number.isFinite(override) && override > 0) return Math.floor(override);
   // Scale with the project when the caller knows the DB size: every fold
   // re-writes hot B-tree pages into the main file (the #1231 pathology in
   // bounded form — 111s of a kernel-scale batch loop at the flat 256MB cap,
   // §7a.2), so a big project affords a proportionally bigger transient WAL
   // (~dbSize/4 soft ⇒ file cap ≈ dbSize) in exchange for ~4× fewer folds.
   if (dbSizeBytes !== undefined && dbSizeBytes > 0) {
-    return Math.min(2048, Math.max(DEFAULT_WAL_VALVE_MB, Math.floor(dbSizeBytes / 4 / (1024 * 1024))));
+    const scaled = Math.floor(dbSizeBytes / (4 * MIB));
+    return Math.max(DEFAULT_WAL_VALVE_MB, Math.min(2048, scaled));
   }
   return DEFAULT_WAL_VALVE_MB;
 }
@@ -69,7 +69,7 @@ export class WalPressure {
     private readonly db: WalSizeSource,
     softMb: number
   ) {
-    this.softBytes = softMb * 1024 * 1024;
+    this.softBytes = softMb * MIB;
     this.hardBytes = this.softBytes * HARD_CAP_MULTIPLIER;
     this.fileCapBytes = this.softBytes * FILE_CAP_MULTIPLIER;
   }
@@ -98,12 +98,14 @@ export class WalPressure {
    * `wal-checkpoint-coordinator.ts` for what happens past this gate.
    */
   withinCaps(): boolean {
-    return this.growthBytes() <= this.hardBytes && this.walBytes() <= this.fileCapBytes;
+    if (this.growthBytes() > this.hardBytes) return false;
+    return this.walBytes() <= this.fileCapBytes;
   }
 
   /** Past either cap: the sole condition the bounded backfill retry's fail-closed checks use. */
   overCaps(): boolean {
-    return this.walBytes() > this.fileCapBytes || this.growthBytes() > this.hardBytes;
+    if (this.walBytes() > this.fileCapBytes) return true;
+    return this.growthBytes() > this.hardBytes;
   }
 
   /** Record that a checkpoint just reported the ENTIRE WAL backfilled: the new growth baseline. */

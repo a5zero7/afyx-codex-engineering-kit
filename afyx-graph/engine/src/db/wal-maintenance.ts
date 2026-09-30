@@ -64,6 +64,40 @@ const PRAGMA_WORKER = `
   parentPort.postMessage('done');
 `;
 
+type WorkerReply = { row?: Record<string, number> | null; err?: string | null } | 'done';
+
+async function dispatchWorker(script: string, workerData: object): Promise<WorkerReply | null> {
+  try {
+    const { Worker } = await import('node:worker_threads');
+    return await new Promise<WorkerReply | null>((resolve) => {
+      let finished = false;
+      const finish = (reply: WorkerReply | null): void => {
+        if (finished) return;
+        finished = true;
+        resolve(reply);
+      };
+      let worker: InstanceType<typeof Worker>;
+      try {
+        worker = new Worker(script, { eval: true, workerData });
+      } catch {
+        finish(null);
+        return;
+      }
+      worker.once('message', (reply: WorkerReply) => {
+        void worker.terminate();
+        finish(reply);
+      });
+      worker.once('error', () => {
+        void worker.terminate();
+        finish(null);
+      });
+      worker.once('exit', () => finish(null));
+    });
+  } catch {
+    return null;
+  }
+}
+
 export class WalMaintenance {
   private healing: Promise<WalHealResult> | null = null;
 
@@ -95,31 +129,12 @@ export class WalMaintenance {
         return null;
       }
     }
-    try {
-      const { Worker } = await import('node:worker_threads');
-      return await new Promise<CheckpointResult | null>((resolve) => {
-        let settled = false;
-        const settle = (row?: Record<string, number> | null): void => {
-          if (settled) return;
-          settled = true;
-          resolve(checkpointOutcome(row));
-        };
-        try {
-          const worker = new Worker(CHECKPOINT_WORKER, { eval: true, workerData: { dbPath: this.dbPath, mode } });
-          worker.once('message', (message: { row?: Record<string, number> | null; err?: string | null }) => {
-            if (message?.err && process.env.AFYX_GRAPH_WAL_VALVE_DEBUG) console.error(`[wal-valve] checkpoint worker (${mode}): ${message.err}`);
-            void worker.terminate();
-            settle(message?.row ?? null);
-          });
-          worker.once('error', () => { void worker.terminate(); settle(null); });
-          worker.once('exit', () => settle(null));
-        } catch {
-          settle(null);
-        }
-      });
-    } catch {
-      return null;
+    const reply = await dispatchWorker(CHECKPOINT_WORKER, { dbPath: this.dbPath, mode });
+    if (!reply || reply === 'done') return null;
+    if (reply.err && process.env.AFYX_GRAPH_WAL_VALVE_DEBUG) {
+      console.error(`[wal-valve] checkpoint worker (${mode}): ${reply.err}`);
     }
+    return checkpointOutcome(reply.row);
   }
 
   /**
@@ -139,8 +154,8 @@ export class WalMaintenance {
   }
 
   private async shrink(beforeBytes: number): Promise<WalHealResult> {
-    // A concurrent reader or writer degrades a pass to a busy no-op; retry a few times.
-    for (let attempt = 0; attempt < 3; attempt++) {
+    const attempts = [0, 1, 2];
+    for (const attempt of attempts) {
       if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 300));
       await this.checkpoint('PASSIVE');
       await this.checkpoint('TRUNCATE');
@@ -176,26 +191,10 @@ export class WalMaintenance {
 
   /** Run pragmas on a worker connection; `inline` runs on this connection only when workers are unavailable. */
   private async runOffThread(pragmas: string[], inline: string[]): Promise<void> {
-    try {
-      const { Worker } = await import('node:worker_threads');
-      await new Promise<void>((resolve) => {
-        let settled = false;
-        const settle = (): void => {
-          if (!settled) { settled = true; resolve(); }
-        };
-        try {
-          const worker = new Worker(PRAGMA_WORKER, { eval: true, workerData: { dbPath: this.dbPath, pragmas } });
-          worker.once('message', () => { void worker.terminate(); settle(); });
-          worker.once('error', () => { void worker.terminate(); settle(); });
-          worker.once('exit', settle);
-        } catch {
-          settle();
-        }
-      });
-    } catch {
-      for (const pragma of inline) {
-        try { this.db.exec(pragma); } catch { /* best effort */ }
-      }
+    const reply = await dispatchWorker(PRAGMA_WORKER, { dbPath: this.dbPath, pragmas });
+    if (reply !== null) return;
+    for (const pragma of inline) {
+      try { this.db.exec(pragma); } catch { /* best effort */ }
     }
   }
 }

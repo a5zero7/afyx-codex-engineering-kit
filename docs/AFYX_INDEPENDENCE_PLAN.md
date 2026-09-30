@@ -522,6 +522,67 @@ behavior. Large subsystem labels never authorize a batch rewrite.
   loss, unexplained digest/order difference, lock/durability failure or material
   regression.
 
+#### IND-C04 closure evidence (2026-09-30)
+
+- **Bounded scope:** the DB foundation slice replaces residual private structure in
+  `src/db/{migrations,row-mappers,sqlite-adapter}.ts`; the WAL slice replaces
+  orchestration in `wal-checkpoint-coordinator.ts`, worker lifecycle in
+  `wal-maintenance.ts`, and threshold policy in `wal-pressure.ts`. The
+  `wal-valve.ts` facade, schema, native readers/writers/sessions, public APIs, and
+  every semantic subsystem remain unchanged. Residual domain-reader hosts stay a
+  separately reviewable gap rather than being batch-rewritten here.
+- **Frozen OLD contracts:** 164 persistence assertions, 131 ordered-query
+  assertions, the FTS dual-mode contract, connection/reopen/backend checks, and
+  37 WAL policy/concurrency/healing/deferral assertions pass (350 PASS and four
+  platform-conditioned skips in the focused run). They cover single/bulk writes,
+  update/delete/conflict behavior, metadata, row/null mapping, ordering, commit/
+  rollback, reopen, checkpoint, pressure, fail-closed, and stale-WAL healing.
+- **Architecture:** declarative SQL migrations now share one transaction-owned
+  executor; row decoding centralizes nullable, boolean, and JSON conversion; the
+  SQLite adapter owns a single explicit outer transaction boundary while nested
+  operations join it. WAL maintenance shares one single-settlement worker
+  dispatcher, while pressure sampling and checkpoint completion/error decisions
+  are explicit and independently testable. Persisted SQL/descriptions and wire
+  shapes are unchanged.
+- **Mutation and differential:** OLD and NEW each kill one commit-to-rollback
+  write mutant, one exported-flag read mutant, and one disabled-soft-checkpoint
+  WAL mutant (3/3 each). DB Write, DB Read, and WAL golden differentials all have
+  `UNEXPLAINED = 0`. A four-way OLD/NEW writer-reader matrix passes 4/4 with the
+  same logical SHA-256 digest
+  `3ad35cf4209a6d526dae2f4230cbbbe769731be8c3c00e9e6dc5c091ac4f1c9f`.
+- **Real snapshot and safety:** disposable copies of this repository's accepted
+  index contain 23,978 nodes, 76,550 edges, 949 files, and seven metadata rows;
+  OLD and NEW reads produce the same logical digest
+  `c7f46c7728847b2ac94ed37efc8acb58b233aa823346ddd3d1b204a30e63f73e`.
+  A bounded NEW write adds exactly one metadata row, an induced exception rolls
+  back with no partial row, reopen succeeds, and the canonical index is untouched.
+- **Incremental/downstream:** R0-R9 resolution convergence, rebuild convergence,
+  46 sync cases, Graph/Search/Context/Impact contracts, CLI/MCP semantic contracts,
+  semantic baseline (6/6 fixtures), and CLI/MCP smoke (21/21 checks) pass. The
+  focused downstream run is 550/550 assertions; no frozen subsystem file changed.
+- **Performance and size:** three OLD/NEW interleaved pairs preserve every work
+  count and digest. DB write-case median deltas range from -47.05% to +4.61%; DB
+  read-case deltas range from -16.67% to +20.14%, with the largest regression a
+  15.86-microsecond name-prefix microcase amid run spread; the real WAL full cycle
+  improves 1.97%. Policy-only 0.01-microsecond deltas are not treated as material.
+  Fixture DBs are byte-identical at 159,744 bytes, real snapshot copies are
+  100,700,160 bytes, and both sides leave no WAL/SHM sidecars after close; operation
+  counts show no write-amplification change.
+- **Provenance:** established normalization reproduces OLD DB Scope A at 43.77%
+  substantive / 28.65% comments / 12.08% shingles and WAL Scope A at 45.90% /
+  49.81% / 21.21%. NEW DB Scope A is 42.78% / 28.95% / 10.69%; the selected DB
+  residual slice falls from 62.63% / 27.66% / 29.72% to 52.55% / 30.59% / 19.02%,
+  with longest block 24→22 and blocks >=8 at 13→9. NEW WAL Scope A is 35.83% /
+  50.00% / 14.67%; WAL residual Scope C falls from 49.56% / 56.09% / 23.01% to
+  38.56% / 56.33% / 15.89%, with blocks >=8 at 11→9. Remaining blocks are SQL/
+  schema shapes, stable error/diagnostic contracts, worker/SQLite protocol, and
+  standard API idioms; this is a technical classification, not a legal conclusion.
+- **Classification and gaps:** `IND_C04_COMPLETE_WITH_KNOWN_GAPS`. Local Windows
+  evidence is complete; PR #23 passes all seven normal jobs (Linux 2/2, macOS
+  2/2, Windows 2/2, and Rust kernel 1/1). The next bounded persistence follow-up
+  is one domain-reader family from the residual DB inventory; IND-C05 must not
+  absorb that work.
+
 ### IND-C05 — Graph legacy hosts
 
 - **Scope/ownership:** branch guards, dead code, named flow, type hierarchy and
