@@ -635,7 +635,8 @@ behavior. Large subsystem labels never authorize a batch rewrite.
 - **Validation and status:** selected-reader tests pass 163/163, DB contracts,
   FTS, reopen/lifecycle/backends, Graph contracts, sync/rebuild convergence,
   semantic baseline (6/6), typecheck, clean build, and CLI/MCP smoke (21/21)
-  pass locally. Cross-platform CI remains required. Classification is
+  pass locally. PR #24 passes all seven normal jobs (Linux 2/2, macOS 2/2,
+  Windows 2/2, and Rust kernel 1/1). Classification is
   `DB_DOMAIN_READER_SLICE_COMPLETE_WITH_KNOWN_GAPS`; the recommended next DB
   slice is the node identity/lookup reader, not IND-C05 Graph.
 
