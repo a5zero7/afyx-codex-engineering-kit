@@ -772,6 +772,83 @@ behavior. Large subsystem labels never authorize a batch rewrite.
   vocabulary. The recommended next bounded persistence slice is file/index-state
   reads; IND-C05 Graph remains deferred.
 
+#### File/index-state reader residual closure evidence (2026-09-30)
+
+- **Selected family and exclusions:** the complete bounded family is
+  `src/db/file-reader.ts`: exact-path file records, ordered file/path population,
+  file-node lookup, latest-index timestamp and revision, bounded indexed-since
+  reads, hash staleness, generated-file state/count, and ambient-declaration
+  classification. `query-session.ts`, `row-mappers.ts`, `graph-reader.ts`, the
+  `QueryBuilder` facade, and file writer remain frozen shared boundaries.
+  Filesystem discovery, extraction, Resolution, Sync/Watcher orchestration,
+  metadata/schema-version state, schema, writers, migrations, node/edge/reference,
+  dependency, routing, search, stats, vocabulary, and Graph traversal are excluded.
+- **OLD file/index-state contract and mutation:** the ordered DB-query golden and
+  focused observable contract freeze exact case-sensitive stored paths, complete
+  file row/null decoding, path ordering, file-node identity, content hash and
+  generated state, `MAX(indexed_at)`, revision row count, strict indexed-since
+  filtering with newest-first/path tie order and caps, missing/empty/reopen
+  behavior, duplicate-safe bounded probes, hash staleness, and ambient file
+  classification. Ten OLD mutants are killed: omission, wrong identity, path
+  corruption, filter bypass, order reversal, revision corruption, hash inversion,
+  null/default corruption, missing-file corruption, and file-node remapping.
+  Generic metadata values and schema/build versions belong to the separately
+  deferred stats/metadata family rather than this reader.
+- **Afyx-native architecture:** one explicit query catalog owns fixed file and
+  index-state reads; a named file projection and one decode boundary own
+  SQL-to-domain conversion; exact persisted paths are deliberately not
+  renormalized or checked against the filesystem; prepared statements serve
+  fixed reads; bounded path probes share chunk handling; and ambient
+  classification uses explicit summary/behavior/inbound stages. Public
+  signatures, predicates, row mapper, schema, writers, and observable order are
+  unchanged.
+- **NEW mutation and differential:** the same ten NEW mutants are killed. OLD
+  and NEW pass the exact ordered query contract. On isolated copies of the
+  accepted repository snapshot, both expose 949 files across 21 languages,
+  identical file-node/index-state/classification results, 368,035 representative
+  serialized bytes, and logical SHA-256
+  `36314d4d1267d2e6344dfa6dd472cd222b4a9e72431662fc4229df6212716ef8`;
+  file and index-state `UNEXPLAINED = 0`. The canonical and both copies retain
+  the same 100,700,160-byte SHA-256
+  `9e7ca8bffc655925c0f8bd9da81d9296e85956350e431816203b6610ae82097f`;
+  no migration, write, WAL, or SHM sidecar is produced.
+- **Sync/Watcher boundary, real repository, determinism, and payload:** known,
+  changed, removed, no-op, reopen, incremental, and rebuild-convergence
+  observations pass without changing Sync or Watcher. Real-snapshot reads cover
+  first/middle/last/missing paths, all 949 ordered records and paths, 247 file
+  nodes, revision/indexed-since state, eight stale hash cases, 16 generated
+  paths, two ambient paths, and generated count. Three repeated NEW reads retain
+  every identity, path, value, order, 368,035-byte payload, and digest. OLD/NEW
+  full file-population payload is identical at 256,971 bytes; no false negative,
+  false positive, path/identity/state/order drift, or unexplained growth appears.
+- **Performance:** seven interleaved OLD/NEW pairs preserve every case count,
+  digest, and payload. Median microseconds (OLD/NEW) are 6.6/6.6 path lookup,
+  4.2/4.2 missing path, 1,306.2/1,294.1 population, 273.9/272.7 paths,
+  1,225.9/1,147.6 file nodes, 45.3/38.2 revision, 258.9/225.5 indexed-since,
+  1,409.6/1,468.7 staleness, 636.2/501.2 generated probes, and
+  55,418.2/55,427.3 ambient classification. Median deltas range from -21.22%
+  to +4.19%; ambient is +9.1 microseconds (+0.02%). Maximum observed process RSS
+  is 128,831,488/122,941,440 bytes. No material reproducible regression appears.
+- **Provenance:** established normalization moves complete family Scope A
+  (`query-session.ts`, `row-mappers.ts`, `file-reader.ts`) from 56.18%
+  substantive / 29.03% comments / 16.51% shingles to 32.16% / 34.78% / 15.58%.
+  Frozen Scope B remains 50.00% / 31.25% / 29.59%. Replaced residual Scope C
+  (`file-reader.ts`) falls from 62.79% / 28.26% / 2.53% to 16.82% / 42.86% /
+  0.00%; longest identical block moves 5→4 and both sides have zero blocks >=8.
+  Residual overlap is SQL/schema/column identifiers, public result shapes, path
+  literals, and standard TypeScript/SQLite idioms, not a legal conclusion.
+- **Validation and status:** focused file/DB tests pass 353 with four
+  platform-conditioned skips; Sync/Watcher/Resolution convergence passes
+  180/180; Graph/Search/Context/Impact downstream tests pass 509/509; semantic
+  baseline passes 6/6; CLI/MCP smoke, typecheck, and clean build pass. One
+  concurrent evidence run exceeded a 5-second convergence-test budget by 148 ms;
+  that exact test passed isolated at 4,793 ms and the complete serial group then
+  passed 180/180. Normal cross-platform CI is pending on the PR. Classification
+  is `DB_FILE_READER_SLICE_COMPLETE_WITH_KNOWN_GAPS`. Remaining DB-reader review
+  inventory is dependency, routing, search, stats, and vocabulary. The
+  recommended next bounded DB slice is dependency analytics; IND-C05 Graph
+  remains deferred.
+
 ### IND-C05 — Graph legacy hosts
 
 - **Scope/ownership:** branch guards, dead code, named flow, type hierarchy and
