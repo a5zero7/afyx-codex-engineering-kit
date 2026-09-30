@@ -640,6 +640,70 @@ behavior. Large subsystem labels never authorize a batch rewrite.
   `DB_DOMAIN_READER_SLICE_COMPLETE_WITH_KNOWN_GAPS`; the recommended next DB
   slice is the node identity/lookup reader, not IND-C05 Graph.
 
+#### Node identity/lookup reader residual closure evidence (2026-09-30)
+
+- **Selected family and exclusions:** the complete bounded family is
+  `src/db/node-reader.ts`: ID and batch identity reads, file/kind/name/qualified/
+  case-folded lookups, prefix and full-name scans, streaming kind/decorator
+  reads, definition-delta names, and the decoded-node identity cache.
+  `query-session.ts`, `row-mappers.ts`, `graph-reader.ts`, the `QueryBuilder`
+  facade, and writer invalidation hooks remain frozen Afyx-native/shared
+  boundaries. Reference, edge, file/index-state, dependency, routing, search,
+  stats, and vocabulary readers remain separately bounded families; schema,
+  writers, WAL, and Graph semantics are unchanged.
+- **OLD contract and mutation:** 131 ordered DB-query assertions plus 164 DB
+  assertions, iterator/decorator/language, reopen/lifecycle, and ten sync/
+  rebuild convergence cases freeze positive/missing/batch identities, source
+  and candidate order, file/kind/name filters, qualified/case-folded lookups,
+  null/default decoding, and write-through cache invalidation. Nine OLD
+  observable mutants are killed: row omission, wrong identity, name and kind
+  filter bypass, order reversal, multi-result omission, file-relation
+  corruption, and per-ID/per-file cache invalidation failures.
+- **Afyx-native architecture:** an explicit fixed/dynamic node query catalog
+  owns SQL selection; one decoding boundary handles materialized rows; one
+  streaming boundary handles cursor reads; and a bounded `NodeIdentityCache`
+  owns LRU touch, insertion, and explicit mutation invalidation. Public
+  signatures, SQL predicates/order, row mapper, prepared-statement session,
+  schema, and writer hooks are unchanged.
+- **NEW mutation and differential:** the same nine NEW mutants are killed.
+  OLD and NEW pass the exact query golden with `UNEXPLAINED = 0`. On isolated
+  copies of the accepted repository snapshot, both read 23,978 nodes and
+  produce identical selected-case SHA-256
+  `c02e5c77ce033a63af2d49a6043f6fedda06875fe51e1fb15e43445a07844cf5`
+  and full-population SHA-256
+  `6f8f7cd82bbd22133cf21848f01d7aebf78c1515dcd8a409c9fa5b4c28880d2c`.
+  The canonical and both copies retain the same 100,700,160-byte content hash;
+  no migration, write, WAL, or SHM sidecar is produced.
+- **Graph boundary, determinism, and payload:** Graph contracts pass 376/376;
+  Search 22/22, Context 77/77, Impact/helper 6/6, and FTS dual-mode/fallback
+  8/8 also pass. Three repeated NEW real-snapshot reads preserve identities,
+  order, values, and both digests. OLD and NEW each surface a 5,004,204-byte
+  representative payload and 13,566,389-byte full-node payload, with identical
+  counts including 432 ambiguous-name and 5,080 busy-kind results.
+- **Performance:** seven OLD/NEW interleaved pairs preserve every case digest,
+  row count, and byte count. Median microseconds are 9.6/9.5 cold ID, 0.4/0.4
+  warm ID, 2,263.5/2,100.9 batch IDs, 1,433.8/1,427.9 ambiguous name,
+  7,823.0/7,571.4 file, 18,799.1/18,590.2 kind, 166.4/165.3 prefix, and
+  89,605.6/87,207.4 all nodes (OLD/NEW). Median deltas range from 0.00% to
+  -7.18%; maximum observed process RSS is 397,307,904/397,225,984 bytes.
+  No material regression or payload growth is observed.
+- **Provenance:** established normalization moves complete family Scope A
+  (`query-session.ts`, `row-mappers.ts`, `node-reader.ts`) from 45.86%
+  substantive / 29.27% comments / 14.80% shingles to 32.52% / 25.00% /
+  14.62%. Frozen Scope B remains 50.00% / 31.25% / 29.59%. Replaced residual
+  Scope C (`node-reader.ts`) falls from 41.57% / 28.79% / 1.59% to 18.42% /
+  18.75% / 0.00%; longest identical block moves 5→4 and neither side has a
+  block >=8. Remaining overlap is SQL/schema identifiers, public result shapes,
+  and standard TypeScript/SQLite idioms, not a legal conclusion.
+- **Validation and status:** selected node/DB/sync tests pass 320 with four
+  platform-conditioned skips; focused downstream tests pass 489/489; semantic
+  baseline passes 6/6; CLI/MCP smoke passes 21/21; typecheck and clean build
+  pass. Normal cross-platform CI is recorded on the slice PR. Classification is
+  `DB_NODE_READER_SLICE_COMPLETE_WITH_KNOWN_GAPS`. Remaining DB-reader review
+  inventory is edge, file/index-state, dependency, routing, search, stats, and
+  vocabulary. The recommended next bounded persistence slice is edge identity/
+  adjacency reads; IND-C05 Graph remains deferred.
+
 ### IND-C05 — Graph legacy hosts
 
 - **Scope/ownership:** branch guards, dead code, named flow, type hierarchy and
