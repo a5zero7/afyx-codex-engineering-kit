@@ -1,183 +1,191 @@
 /**
- * Unresolved-reference reads: by name, by file, by source node, batched/keyset paging
- * for the resolution loop, and the retry/rebind lookups a sync uses after a file that
- * introduced or removed a definition changes.
+ * Read model for unresolved references and the resolved edges that may need to
+ * return to that queue after an incremental change.
  */
 
 import type { Edge, Language, UnresolvedReference } from '../types';
 import { chunked, placeholders, QuerySession } from './query-session';
 import { rowToEdge, rowToUnresolvedRef, type EdgeRow, type UnresolvedRefRow } from './row-mappers';
 
+const REFERENCE_COLUMNS = [
+  'id', 'from_node_id', 'reference_name', 'reference_kind', 'line', 'col',
+  'candidates', 'file_path', 'language', 'status', 'name_tail',
+].join(', ');
+
+const selectReferences = (where = ''): string =>
+  `SELECT ${REFERENCE_COLUMNS} FROM unresolved_refs${where ? ` ${where}` : ''}`;
+
+const FIXED_QUERY = {
+  all: selectReferences(),
+  byName: selectReferences('WHERE reference_name = ?'),
+  bySource: selectReferences('WHERE from_node_id = ?'),
+  pendingCount: "SELECT COUNT(*) AS count FROM unresolved_refs WHERE status = 'pending'",
+  pendingPage: selectReferences("WHERE status = 'pending' ORDER BY rowid LIMIT ? OFFSET ?"),
+  inFile: selectReferences('WHERE file_path = ? ORDER BY line, col LIMIT ?'),
+} as const;
+
+const PREREQUISITE_KINDS = "('imports', 'extends', 'implements')";
+
+type ResolutionEdge = Edge & {
+  edgeId: number;
+  sourceFilePath: string;
+  sourceLanguage: Language;
+};
+
+function decodeReferences(rows: readonly UnresolvedRefRow[]): UnresolvedReference[] {
+  return rows.map(rowToUnresolvedRef);
+}
+
+function uniqueNonEmpty(values: Iterable<string>): string[] {
+  return [...new Set(values)].filter((value) => value.length > 0);
+}
+
 export class ReferenceReader {
   constructor(private readonly session: QuerySession) {}
 
+  private read(sql: string, params: readonly unknown[] = []): UnresolvedReference[] {
+    return decodeReferences(this.session.statement(sql).all(...params) as UnresolvedRefRow[]);
+  }
+
+  /** Preserve input chunk boundaries while accumulating an unbounded logical result. */
+  private readReferenceChunks(values: readonly string[], whereForSize: (size: number) => string): UnresolvedReference[] {
+    const found: UnresolvedReference[] = [];
+    for (const part of chunked(values)) {
+      const sql = selectReferences(whereForSize(part.length));
+      const rows = this.session.listStatement(sql, part.length).all(...part) as UnresolvedRefRow[];
+      for (const row of rows) found.push(rowToUnresolvedRef(row));
+    }
+    return found;
+  }
+
+  /** Keep only names whose matching population does not exceed the retry safety ceiling. */
+  private namesWithinCeiling(
+    names: readonly string[],
+    ceiling: number,
+    countQuery: (size: number) => string
+  ): string[] {
+    const accepted: string[] = [];
+    for (const part of chunked(names)) {
+      const counts = this.session.db.prepare(countQuery(part.length)).all(...part) as Array<{ name: string; count: number }>;
+      for (const row of counts) {
+        if (row.count <= ceiling) accepted.push(row.name);
+      }
+    }
+    return accepted;
+  }
+
   getUnresolvedByName(name: string): UnresolvedReference[] {
-    const rows = this.session.statement('SELECT * FROM unresolved_refs WHERE reference_name = ?').all(name) as UnresolvedRefRow[];
-    return rows.map(rowToUnresolvedRef);
+    return this.read(FIXED_QUERY.byName, [name]);
   }
 
   getUnresolvedReferences(): UnresolvedReference[] {
-    const rows = this.session.db.prepare('SELECT * FROM unresolved_refs').all() as UnresolvedRefRow[];
-    return rows.map(rowToUnresolvedRef);
+    return this.read(FIXED_QUERY.all);
   }
 
-  /**
-   * Count of PENDING (never-attempted) references, without loading them. Rows marked
-   * `failed` — attempted by a completed pass, no match — are excluded: they are retry
-   * candidates for the #1240 sweep, not outstanding work, so they must not trip the
-   * #1187 orphan sweep or the `status` pending-refs warning.
-   */
+  /** Failed rows are retry candidates, not pending work. */
   getUnresolvedReferencesCount(): number {
-    const row = this.session.statement("SELECT COUNT(*) as count FROM unresolved_refs WHERE status = 'pending'").get() as { count: number };
+    const row = this.session.statement(FIXED_QUERY.pendingCount).get() as { count: number };
     return row.count;
   }
 
-  /**
-   * A page of PENDING references via LIMIT/OFFSET, ordered by rowid. The order is
-   * load-bearing for the pipelined resolution loop: it prefetches batch k+1 at
-   * `OFFSET batch_k.length` while batch k's rows are still pending, which is only exact
-   * under a stable enumeration.
-   */
+  /** Stable row-id enumeration is required by the pipelined OFFSET resolver. */
   getUnresolvedReferencesBatch(offset: number, limit: number): UnresolvedReference[] {
-    const rows = this.session.statement("SELECT * FROM unresolved_refs WHERE status = 'pending' ORDER BY rowid LIMIT ? OFFSET ?").all(limit, offset) as UnresolvedRefRow[];
-    return rows.map(rowToUnresolvedRef);
+    return this.read(FIXED_QUERY.pendingPage, [limit, offset]);
   }
 
   /**
-   * Keyset variant of `getUnresolvedReferencesBatch`: seeks past the last-seen row id
-   * instead of OFFSET-walking, which re-scans the accumulated failed-row prefix on every
-   * batch (O(failed rows) per read — 54.6s of a kernel-scale batch loop, §7a.2), while the
-   * seek stays O(batch) forever. `id` is the rowid alias, so enumeration order matches the
-   * OFFSET reader's. `prerequisites` splits the phase so import/extends/implements refs
-   * commit before dependent calls, even when an interrupted sync queued rows out of order
-   * (#1577); each phase's statement is cached under its own key so the three variants
-   * never overwrite each other.
+   * Keyset enumeration avoids repeatedly scanning failed rows. A phase may select
+   * prerequisite reference kinds or their complement while retaining row-id order.
    */
   getUnresolvedReferencesBatchAfter(afterRowId: number, limit: number, prerequisites?: boolean): UnresolvedReference[] {
-    const filter = prerequisites === undefined ? '' : ` AND reference_kind ${prerequisites ? 'IN' : 'NOT IN'} ('imports', 'extends', 'implements')`;
-    const sql = `SELECT * FROM unresolved_refs WHERE status = 'pending' AND id > ?${filter} ORDER BY id LIMIT ?`;
-    const rows = this.session.statement(sql).all(afterRowId, limit) as UnresolvedRefRow[];
-    return rows.map(rowToUnresolvedRef);
+    let phase = '';
+    if (prerequisites !== undefined) {
+      phase = ` AND reference_kind ${prerequisites ? 'IN' : 'NOT IN'} ${PREREQUISITE_KINDS}`;
+    }
+    const sql = selectReferences(`WHERE status = 'pending' AND id > ?${phase} ORDER BY id LIMIT ?`);
+    return this.read(sql, [afterRowId, limit]);
   }
 
-  /** Every unresolved reference recorded in one file, ordered by line — one indexed lookup whatever the file holds. `limit` bounds the answer, not the work; rows come back in line order, so a cap trims the end of the file. */
+  /** A bounded, source-ordered view used by file diagnostics and resolution evidence. */
   getUnresolvedReferencesInFile(filePath: string, limit = 5000): UnresolvedReference[] {
-    const rows = this.session.statement('SELECT * FROM unresolved_refs WHERE file_path = ? ORDER BY line, col LIMIT ?').all(filePath, limit) as UnresolvedRefRow[];
-    return rows.map(rowToUnresolvedRef);
+    return this.read(FIXED_QUERY.inFile, [filePath, limit]);
   }
 
-  /** References recorded against a symbol that never resolved to a node (a third-party package, a runtime builtin). */
   getUnresolvedReferencesFrom(fromNodeId: string): UnresolvedReference[] {
-    const rows = this.session.statement('SELECT * FROM unresolved_refs WHERE from_node_id = ?').all(fromNodeId) as UnresolvedRefRow[];
-    return rows.map(rowToUnresolvedRef);
+    return this.read(FIXED_QUERY.bySource, [fromNodeId]);
   }
 
-  /** Unresolved references scoped to specific file paths (`idx_unresolved_file_path`), chunked under the parameter limit and appended with a loop — the result set is unbounded even though the input chunk is (#540, #1558). */
+  /** Read pending references for every requested file without imposing a result cap. */
   getUnresolvedReferencesByFiles(filePaths: string[]): UnresolvedReference[] {
     if (filePaths.length === 0) return [];
-    const rows: UnresolvedRefRow[] = [];
-    for (const chunk of chunked(filePaths)) {
-      const chunkRows = this.session.listStatement(`SELECT * FROM unresolved_refs WHERE status = 'pending' AND file_path IN (${placeholders(chunk.length)})`, chunk.length).all(...chunk) as UnresolvedRefRow[];
-      for (const row of chunkRows) rows.push(row);
-    }
-    return rows.map(rowToUnresolvedRef);
+    return this.readReferenceChunks(
+      filePaths,
+      (size) => `WHERE status = 'pending' AND file_path IN (${placeholders(size)})`
+    );
   }
 
-  /**
-   * Which of `names` the index holds an unresolved reference to, matched loosely on the
-   * reference name AND its tail (`util.greet` → `greet`) — a maybe has to count as a yes
-   * when the question is "could this be the name we failed to follow".
-   */
+  /** Match both the recorded reference and its terminal name segment. */
   getUnresolvedNamesAmong(names: Iterable<string>): Set<string> {
-    const unique = [...new Set(names)].filter((name) => name.length > 0);
+    const candidates = uniqueNonEmpty(names);
     const found = new Set<string>();
-    if (unique.length === 0) return found;
-    for (const chunk of chunked(unique)) {
-      const rows = this.session.db
-        .prepare(`
-          SELECT DISTINCT reference_name AS name FROM unresolved_refs WHERE reference_name IN (${placeholders(chunk.length)})
-          UNION
-          SELECT DISTINCT name_tail AS name FROM unresolved_refs WHERE name_tail IN (${placeholders(chunk.length)})
-        `)
-        .all(...chunk, ...chunk) as Array<{ name: string }>;
+    for (const part of chunked(candidates)) {
+      const marks = placeholders(part.length);
+      const rows = this.session.db.prepare(`
+        SELECT DISTINCT reference_name AS name FROM unresolved_refs WHERE reference_name IN (${marks})
+        UNION
+        SELECT DISTINCT name_tail AS name FROM unresolved_refs WHERE name_tail IN (${marks})
+      `).all(...part, ...part) as Array<{ name: string }>;
       for (const row of rows) found.add(row.name);
     }
     return found;
   }
 
-  /**
-   * Failed refs whose name tail matches one of the given symbol names — the retry
-   * candidates after files carrying those names changed (#1240). A name matching more
-   * than `perNameCeiling` failed refs is skipped entirely: at that population it is
-   * external/builtin noise (`get`, `map`, …) that one new definition will not resolve.
-   */
+  /** Failed references worth retrying after a matching definition appears. */
   getRetryableFailedReferences(names: string[], perNameCeiling = 500): UnresolvedReference[] {
     if (names.length === 0) return [];
-
-    const retryNames: string[] = [];
-    for (const chunk of chunked(names)) {
-      const counts = this.session.db
-        .prepare(`SELECT name_tail, COUNT(*) as count FROM unresolved_refs WHERE status = 'failed' AND name_tail IN (${placeholders(chunk.length)}) GROUP BY name_tail`)
-        .all(...chunk) as Array<{ name_tail: string; count: number }>;
-      for (const row of counts) if (row.count <= perNameCeiling) retryNames.push(row.name_tail);
-    }
+    const retryNames = this.namesWithinCeiling(names, perNameCeiling, (size) => `
+      SELECT name_tail AS name, COUNT(*) AS count
+        FROM unresolved_refs
+       WHERE status = 'failed' AND name_tail IN (${placeholders(size)})
+    GROUP BY name_tail`);
     if (retryNames.length === 0) return [];
-
-    const rows: UnresolvedRefRow[] = [];
-    for (const chunk of chunked(retryNames)) {
-      const chunkRows = this.session.db
-        .prepare(`SELECT * FROM unresolved_refs WHERE status = 'failed' AND name_tail IN (${placeholders(chunk.length)})`)
-        .all(...chunk) as UnresolvedRefRow[];
-      for (const row of chunkRows) rows.push(row);
-    }
-    return rows.map(rowToUnresolvedRef);
+    return this.readReferenceChunks(
+      retryNames,
+      (size) => `WHERE status = 'failed' AND name_tail IN (${placeholders(size)})`
+    );
   }
 
-  /**
-   * Resolution edges whose target symbol is named one of `names` — the edges a sync must
-   * re-resolve after `names` gained or lost a definition (CG-33). Resolution binds a
-   * reference to a node whose name matches the reference's tail, picking among ALL
-   * same-named definitions project-wide, so one definition changing anywhere can change
-   * the answer for every matching reference in the repo. Excludes synthesized
-   * (`provenance='heuristic'`) edges: they carry no reference name to resurrect from, so
-   * deleting one would be a permanent loss. Names matching more than `perNameCeiling`
-   * edges are skipped, same rationale as `getRetryableFailedReferences`.
-   */
-  getResolutionEdgesByTargetName(
-    names: string[],
-    perNameCeiling = 500
-  ): Array<Edge & { edgeId: number; sourceFilePath: string; sourceLanguage: Language }> {
+  /** Non-heuristic resolved edges eligible for incremental reconciliation. */
+  getResolutionEdgesByTargetName(names: string[], perNameCeiling = 500): ResolutionEdge[] {
     if (names.length === 0) return [];
+    const acceptedNames = this.namesWithinCeiling(names, perNameCeiling, (size) => `
+      SELECT tgt.name AS name, COUNT(*) AS count
+        FROM edges e
+        JOIN nodes tgt ON tgt.id = e.target
+       WHERE tgt.name IN (${placeholders(size)})
+         AND (e.provenance IS NULL OR e.provenance != 'heuristic')
+    GROUP BY tgt.name`);
+    if (acceptedNames.length === 0) return [];
 
-    const keep: string[] = [];
-    for (const chunk of chunked(names)) {
-      const counts = this.session.db
-        .prepare(`
-          SELECT tgt.name AS name, COUNT(*) AS count
-            FROM edges e JOIN nodes tgt ON tgt.id = e.target
-           WHERE tgt.name IN (${placeholders(chunk.length)})
-             AND (e.provenance IS NULL OR e.provenance != 'heuristic')
-        GROUP BY tgt.name`)
-        .all(...chunk) as Array<{ name: string; count: number }>;
-      for (const row of counts) if (row.count <= perNameCeiling) keep.push(row.name);
-    }
-    if (keep.length === 0) return [];
-
-    const out: Array<Edge & { edgeId: number; sourceFilePath: string; sourceLanguage: Language }> = [];
-    for (const chunk of chunked(keep)) {
-      const rows = this.session.db
-        .prepare(`
-          SELECT e.*, src.file_path AS source_file_path, src.language AS source_language
-            FROM edges e
-            JOIN nodes tgt ON tgt.id = e.target
-            JOIN nodes src ON src.id = e.source
-           WHERE tgt.name IN (${placeholders(chunk.length)})
-             AND (e.provenance IS NULL OR e.provenance != 'heuristic')`)
-        .all(...chunk) as Array<EdgeRow & { source_file_path: string; source_language: Language }>;
+    const result: ResolutionEdge[] = [];
+    for (const part of chunked(acceptedNames)) {
+      const rows = this.session.db.prepare(`
+        SELECT e.*, src.file_path AS source_file_path, src.language AS source_language
+          FROM edges e
+          JOIN nodes tgt ON tgt.id = e.target
+          JOIN nodes src ON src.id = e.source
+         WHERE tgt.name IN (${placeholders(part.length)})
+           AND (e.provenance IS NULL OR e.provenance != 'heuristic')
+      `).all(...part) as Array<EdgeRow & { source_file_path: string; source_language: Language }>;
       for (const row of rows) {
-        out.push({ ...rowToEdge(row), edgeId: row.id, sourceFilePath: row.source_file_path, sourceLanguage: row.source_language });
+        result.push({
+          ...rowToEdge(row),
+          edgeId: row.id,
+          sourceFilePath: row.source_file_path,
+          sourceLanguage: row.source_language,
+        });
       }
     }
-    return out;
+    return result;
   }
 }
