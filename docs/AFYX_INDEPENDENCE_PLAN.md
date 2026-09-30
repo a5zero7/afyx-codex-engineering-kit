@@ -1041,9 +1041,10 @@ behavior. Large subsystem labels never authorize a batch rewrite.
   Search/result contracts, SQL/schema identifiers and search literals, and
   standard TypeScript/SQLite idioms—not retained private DB helper topology.
 - **Regression, CI, and known gaps:** typecheck, clean production/UI build,
-  semantic baseline 6/6, and CLI/MCP smoke 21/21 pass. Cross-platform CI is
-  pending on the closure PR. All previously closed readers, DB foundation/WAL,
-  IND-C03 semantics, and legal/provenance files remain unchanged.
+  semantic baseline 6/6, and CLI/MCP smoke 21/21 pass. PR #30 cross-platform CI
+  passes 7/7 (Linux 2/2, macOS 2/2, Windows 2/2, Rust kernel 1/1). All previously
+  closed readers, DB foundation/WAL, IND-C03 semantics, and legal/provenance
+  files remain unchanged.
   Classification is `DB_SEARCH_READER_SLICE_COMPLETE_WITH_KNOWN_GAPS`;
   stats/metadata and vocabulary remain DB-reader review inventory. The
   recommended next bounded persistence slice is stats/metadata; IND-C05 Graph
