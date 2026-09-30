@@ -983,6 +983,72 @@ behavior. Large subsystem labels never authorize a batch rewrite.
   and vocabulary readers remain. The recommended next bounded closure is the
   Search DB reader; IND-C05 Graph remains deferred.
 
+#### Search DB reader residual closure evidence (2026-10-01)
+
+- **Selected family and separation:** persisted candidate retrieval formerly
+  embedded in `src/db/search-reader.ts` is isolated in
+  `src/db/search-candidate-reader.ts`: FTS prefix candidates, LIKE candidates,
+  exact/case-folded and exact-spelling reads, filter-only reads, rare-name file
+  probes, and substring candidates. Query parsing, fuzzy-name selection,
+  rescoring, path/name gates, co-location boosts, deduplication, and final
+  ranking/limits remain frozen Search semantics in `search-reader.ts`.
+  `query-session.ts`, `row-mappers.ts`, the closed `node-reader.ts`,
+  `graph-reader.ts`, QueryBuilder, and the public facade remain unchanged.
+- **OLD contract and sensitivity:** accepted behavior freezes exact, prefix,
+  substring, and fuzzy identities; case folding; kind/language filters; DB
+  ordering and candidate bounds; complete node decoding; multi-name
+  deduplication; missing/empty behavior; and reopen determinism. Existing
+  Search/FTS/index/DB/Context contracts plus the new focused four-test corpus
+  pass on OLD. All nine observable mutants are killed: candidate omission,
+  wrong identity, filter bypass, ordering, limit, case/prefix, duplicate,
+  missing-result, and row-decoding corruption.
+- **Afyx-native architecture and differential:** one candidate reader owns an
+  explicit node projection, filter construction, SQL execution, FTS capability
+  observation, and node/scored-row decode boundaries. SearchReader owns no
+  SQLite query and retains the accepted semantic orchestration. NEW kills the
+  same 9/9 mutants. OLD and NEW are byte-logically identical for every focused
+  contract and real-snapshot case (`UNEXPLAINED = 0`).
+- **Snapshot, determinism, and boundaries:** isolated copies of the accepted
+  100,700,160-byte DB (SHA-256
+  `9e7ca8bffc655925c0f8bd9da81d9296e85956350e431816203b6610ae82097f`)
+  contain 23,978 nodes and 23,978 FTS rows. Exact, partial, kind/language,
+  path-constrained, multi-exact, substring, empty, missing, and 200-candidate
+  reads preserve all counts, identities, fields, scores and order in a
+  165,726-byte payload with digest
+  `89069b73afc74e2070a7e0c22fb9cad51dce62796e9d97bb3b1011c28b675d42`.
+  Three repeated NEW runs are identical; no migration or canonical-index write
+  occurs. Search DB/DB/Search/Context/symbol boundaries pass 299/299; CLI, MCP,
+  and UI public-consumer gates pass 78 with one declared UI skip.
+- **Performance and payload:** seven interleaved OLD/NEW pairs preserve every
+  result count, byte count, and digest. Median/p95 microseconds are
+  476.0/902.8 to 515.2/1,020.7 exact, 1,981.7/2,734.8 to 1,993.3/2,864.9
+  partial, 482.9/610.8 to 519.1/645.9 filtered, 1,772.2/2,966.8 to
+  1,939.2/2,704.6 path-constrained, 194.4/285.6 to 224.9/314.2 multi-exact,
+  4,031.7/5,612.9 to 3,795.6/5,557.6 bounded-40, and 9,305.0/12,748.9 to
+  9,506.5/12,150.3 bounded-200. Median deltas range from -5.86% to +15.69%;
+  the largest positive absolute delta is 201.5 microseconds on the 9.5 ms
+  200-candidate case. Maximum OLD/NEW RSS is 103,436,288/103,411,712 bytes.
+  Corresponding payloads remain 2,133, 3,429, 110, 2,401, 266, 4,656, and
+  21,609 bytes with zero unexplained growth or loss.
+- **Provenance:** established normalization moves complete Scope A
+  (`query-session.ts`, `row-mappers.ts`, `node-reader.ts`, `search-reader.ts`,
+  and the new candidate reader) from 43.51% substantive / 21.15% comments /
+  10.76% five-line shingles to 31.50% / 20.95% / 7.61%. Frozen Scope B remains
+  32.52% / 25.00% / 14.62%. Selected Scope C moves from 54.29% / 19.44% /
+  7.04% to 30.41% / 19.18% / 0.85%; longest identical block falls 19 to 6
+  lines and blocks of at least eight lines fall 2 to 0. The new candidate
+  reader itself has 7/85 substantive matches. Residuals are frozen public
+  Search/result contracts, SQL/schema identifiers and search literals, and
+  standard TypeScript/SQLite idioms—not retained private DB helper topology.
+- **Regression, CI, and known gaps:** typecheck, clean production/UI build,
+  semantic baseline 6/6, and CLI/MCP smoke 21/21 pass. Cross-platform CI is
+  pending on the closure PR. All previously closed readers, DB foundation/WAL,
+  IND-C03 semantics, and legal/provenance files remain unchanged.
+  Classification is `DB_SEARCH_READER_SLICE_COMPLETE_WITH_KNOWN_GAPS`;
+  stats/metadata and vocabulary remain DB-reader review inventory. The
+  recommended next bounded persistence slice is stats/metadata; IND-C05 Graph
+  remains deferred.
+
 ### IND-C05 — Graph legacy hosts
 
 - **Scope/ownership:** branch guards, dead code, named flow, type hierarchy and

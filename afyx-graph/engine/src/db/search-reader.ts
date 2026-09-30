@@ -10,7 +10,7 @@ import { boundedEditDistance, parseQuery } from '../search/query-parser';
 import { kindBonus, nameMatchBonus, scorePathRelevance } from '../search/query-utils';
 import type { NodeReader } from './node-reader';
 import { QuerySession } from './query-session';
-import { rowToNode, type NodeRow } from './row-mappers';
+import { SearchCandidateReader } from './search-candidate-reader';
 
 /**
  * How much of the exact-name bonus a `deprioritize`d path keeps (#982). Damped rather
@@ -25,16 +25,10 @@ import { rowToNode, type NodeRow } from './row-mappers';
  */
 export const DEPRIORITIZED_NAME_BONUS_SCALE = 0.75;
 
-function kindFilterSql(kinds: readonly NodeKind[] | undefined): string {
-  return kinds && kinds.length > 0 ? ` AND kind IN (${kinds.map(() => '?').join(',')})` : '';
-}
-function languageFilterSql(languages: readonly Language[] | undefined): string {
-  return languages && languages.length > 0 ? ` AND language IN (${languages.map(() => '?').join(',')})` : '';
-}
-
 export class SearchReader {
   /** Detected once at construction — like `DatabaseConnection.fts5Available`, but independently, and (like the original) never re-detected on `rebind`. */
   private readonly fts5Available: boolean;
+  private readonly candidates: SearchCandidateReader;
 
   // Normalized project-name tokens (go.mod / package.json / repo dir): a query word
   // matching one is dropped from path-relevance scoring, since it names the whole
@@ -43,15 +37,11 @@ export class SearchReader {
   private isDeprioritizedPath: ((filePath: string) => boolean) | undefined;
 
   constructor(
-    private readonly session: QuerySession,
+    session: QuerySession,
     private readonly nodes: NodeReader
   ) {
-    try {
-      session.db.prepare('SELECT * FROM nodes_fts LIMIT 0').get();
-      this.fts5Available = true;
-    } catch {
-      this.fts5Available = false;
-    }
+    this.candidates = new SearchCandidateReader(session);
+    this.fts5Available = this.candidates.ftsAvailable;
   }
 
   setProjectNameTokens(tokens: Set<string>): void {
@@ -123,22 +113,10 @@ export class SearchReader {
     const existingIds = new Set(results.map((r) => r.node.id));
     const maxScore = Math.max(...results.map((r) => r.score));
     for (const term of query.split(/\s+/).filter((t) => t.length >= 2)) {
-      let sql = 'SELECT * FROM nodes WHERE lower(name) = lower(?)';
-      const params: (string | number)[] = [term];
-      if (kinds && kinds.length > 0) {
-        sql += kindFilterSql(kinds);
-        params.push(...kinds);
-      }
-      if (languages && languages.length > 0) {
-        sql += languageFilterSql(languages);
-        params.push(...languages);
-      }
-      sql += ' LIMIT 20';
-      const rows = this.session.db.prepare(sql).all(...params) as NodeRow[];
-      for (const row of rows) {
-        if (existingIds.has(row.id)) continue;
-        results.push({ node: rowToNode(row), score: maxScore });
-        existingIds.add(row.id);
+      for (const node of this.candidates.exactTerm(term, { kinds, languages }, 20)) {
+        if (existingIds.has(node.id)) continue;
+        results.push({ node, score: maxScore });
+        existingIds.add(node.id);
       }
     }
   }
@@ -161,20 +139,7 @@ export class SearchReader {
 
   /** Match-everything path for a filter-only query, ordered by name; the caller's filter pass narrows to what was asked for. */
   private searchAllByFilters(options: { kinds?: NodeKind[]; languages?: Language[]; limit: number }): SearchResult[] {
-    let sql = 'SELECT * FROM nodes WHERE 1=1';
-    const params: (string | number)[] = [];
-    if (options.kinds && options.kinds.length > 0) {
-      sql += kindFilterSql(options.kinds);
-      params.push(...options.kinds);
-    }
-    if (options.languages && options.languages.length > 0) {
-      sql += languageFilterSql(options.languages);
-      params.push(...options.languages);
-    }
-    sql += ' ORDER BY name LIMIT ?';
-    params.push(options.limit);
-    const rows = this.session.db.prepare(sql).all(...params) as NodeRow[];
-    return rows.map((row) => ({ node: rowToNode(row), score: 1 }));
+    return this.candidates.all(options, options.limit);
   }
 
   /**
@@ -199,22 +164,10 @@ export class SearchReader {
     const seen = new Set<string>();
     for (const candidate of capped) {
       if (results.length >= options.limit) break;
-      let sql = 'SELECT * FROM nodes WHERE name = ?';
-      const params: (string | number)[] = [candidate.name];
-      if (options.kinds && options.kinds.length > 0) {
-        sql += kindFilterSql(options.kinds);
-        params.push(...options.kinds);
-      }
-      if (options.languages && options.languages.length > 0) {
-        sql += languageFilterSql(options.languages);
-        params.push(...options.languages);
-      }
-      sql += ' LIMIT 5';
-      const rows = this.session.db.prepare(sql).all(...params) as NodeRow[];
-      for (const row of rows) {
-        if (seen.has(row.id)) continue;
-        seen.add(row.id);
-        results.push({ node: rowToNode(row), score: 1 / (1 + candidate.dist) });
+      for (const node of this.candidates.exactSpelling(candidate.name, options, 5)) {
+        if (seen.has(node.id)) continue;
+        seen.add(node.id);
+        results.push({ node, score: 1 / (1 + candidate.dist) });
         if (results.length >= options.limit) break;
       }
     }
@@ -231,73 +184,14 @@ export class SearchReader {
    */
   private searchNodesFTS(query: string, options: SearchOptions): SearchResult[] {
     const { kinds, languages, limit = 100, offset = 0 } = options;
-    const ftsQuery = query
-      .replace(/::/g, ' ')
-      .replace(/['"*():^]/g, '')
-      .split(/\s+/)
-      .filter((term) => term.length > 0)
-      .filter((term) => !/^(AND|OR|NOT|NEAR)$/i.test(term))
-      .map((term) => `"${term}"*`)
-      .join(' OR ');
-    if (!ftsQuery) return [];
-
     const ftsLimit = Math.max(limit * 5, 100);
-    let sql = `
-      SELECT nodes.*, bm25(nodes_fts, 0, 20, 5, 1, 2) as score
-      FROM nodes_fts
-      JOIN nodes ON nodes_fts.id = nodes.id
-      WHERE nodes_fts MATCH ?
-    `;
-    const params: (string | number)[] = [ftsQuery];
-    if (kinds && kinds.length > 0) {
-      sql += ` AND nodes.kind IN (${kinds.map(() => '?').join(',')})`;
-      params.push(...kinds);
-    }
-    if (languages && languages.length > 0) {
-      sql += ` AND nodes.language IN (${languages.map(() => '?').join(',')})`;
-      params.push(...languages);
-    }
-    sql += ' ORDER BY score LIMIT ? OFFSET ?';
-    params.push(ftsLimit, offset);
-
-    try {
-      const rows = this.session.db.prepare(sql).all(...params) as Array<NodeRow & { score: number }>;
-      return rows.map((row) => ({ node: rowToNode(row), score: Math.abs(row.score) })); // bm25 returns negative scores
-    } catch {
-      return [];
-    }
+    return this.candidates.prefixText(query, { kinds, languages }, ftsLimit, offset);
   }
 
   /** LIKE-based substring search (camelCase matching where FTS's tokenizer keeps a name as one token — e.g. "signIn" finding "signInWithGoogle"). */
   private searchNodesLike(query: string, options: SearchOptions): SearchResult[] {
     const { kinds, languages, limit = 100, offset = 0 } = options;
-    let sql = `
-      SELECT nodes.*,
-        CASE
-          WHEN name = ? THEN 1.0
-          WHEN name LIKE ? THEN 0.9
-          WHEN name LIKE ? THEN 0.8
-          WHEN qualified_name LIKE ? THEN 0.7
-          ELSE 0.5
-        END as score
-      FROM nodes
-      WHERE (name LIKE ? OR qualified_name LIKE ? OR name LIKE ?)
-    `;
-    const startsWith = `${query}%`;
-    const contains = `%${query}%`;
-    const params: (string | number)[] = [query, startsWith, contains, contains, contains, contains, startsWith];
-    if (kinds && kinds.length > 0) {
-      sql += kindFilterSql(kinds);
-      params.push(...kinds);
-    }
-    if (languages && languages.length > 0) {
-      sql += languageFilterSql(languages);
-      params.push(...languages);
-    }
-    sql += ' ORDER BY score DESC, length(name) ASC LIMIT ? OFFSET ?';
-    params.push(limit, offset);
-    const rows = this.session.db.prepare(sql).all(...params) as Array<NodeRow & { score: number }>;
-    return rows.map((row) => ({ node: rowToNode(row), score: row.score }));
+    return this.candidates.substringText(query, { kinds, languages }, limit, offset);
   }
 
   /**
@@ -313,15 +207,7 @@ export class SearchReader {
 
     const nameToFiles = new Map<string, Set<string>>();
     for (const name of names) {
-      let sql = 'SELECT DISTINCT file_path FROM nodes WHERE lower(name) = lower(?)';
-      const params: (string | number)[] = [name];
-      if (kinds && kinds.length > 0) {
-        sql += kindFilterSql(kinds);
-        params.push(...kinds);
-      }
-      sql += ' LIMIT 100';
-      const rows = this.session.db.prepare(sql).all(...params) as Array<{ file_path: string }>;
-      nameToFiles.set(name.toLowerCase(), new Set(rows.map((row) => row.file_path)));
+      nameToFiles.set(name.toLowerCase(), new Set(this.candidates.filesForExactName(name, kinds, 100)));
     }
     const distinctiveFiles = new Set<string>();
     for (const files of nameToFiles.values()) if (files.size > 0 && files.size < 10) for (const file of files) distinctiveFiles.add(file);
@@ -330,25 +216,11 @@ export class SearchReader {
     const allResults: SearchResult[] = [];
     const seenIds = new Set<string>();
     for (const name of names) {
-      let sql = 'SELECT nodes.*, 1.0 as score FROM nodes WHERE lower(name) = lower(?)';
-      const params: (string | number)[] = [name];
-      if (kinds && kinds.length > 0) {
-        sql += kindFilterSql(kinds);
-        params.push(...kinds);
-      }
-      if (languages && languages.length > 0) {
-        sql += languageFilterSql(languages);
-        params.push(...languages);
-      }
-      sql += ' LIMIT ?';
-      params.push(Math.max(perNameLimit * 3, 50));
-      const rows = this.session.db.prepare(sql).all(...params) as Array<NodeRow & { score: number }>;
       const nameResults: SearchResult[] = [];
-      for (const row of rows) {
-        const node = rowToNode(row);
+      for (const { node, score } of this.candidates.exactName(name, { kinds, languages }, Math.max(perNameLimit * 3, 50))) {
         if (seenIds.has(node.id)) continue;
         const coLocationBoost = distinctiveFiles.has(node.filePath) ? 20 : 0;
-        nameResults.push({ node, score: row.score + coLocationBoost });
+        nameResults.push({ node, score: score + coLocationBoost });
       }
       nameResults.sort((a, b) => b.score - a.score);
       for (const result of nameResults.slice(0, perNameLimit)) {
@@ -363,23 +235,6 @@ export class SearchReader {
   /** Names containing a substring — CamelCase-part matching where FTS fails because the whole name is one token. Ordered shortest-name-first (more likely the core type). */
   findNodesByNameSubstring(substring: string, options: SearchOptions & { excludePrefix?: boolean } = {}): SearchResult[] {
     const { kinds, languages, limit = 30, excludePrefix } = options;
-    let sql = 'SELECT nodes.*, 1.0 as score FROM nodes WHERE name LIKE ?';
-    const params: (string | number)[] = [`%${substring}%`];
-    if (excludePrefix) {
-      sql += ' AND name NOT LIKE ?';
-      params.push(`${substring}%`);
-    }
-    if (kinds && kinds.length > 0) {
-      sql += kindFilterSql(kinds);
-      params.push(...kinds);
-    }
-    if (languages && languages.length > 0) {
-      sql += languageFilterSql(languages);
-      params.push(...languages);
-    }
-    sql += ' ORDER BY length(name) ASC LIMIT ?';
-    params.push(limit);
-    const rows = this.session.db.prepare(sql).all(...params) as Array<NodeRow & { score: number }>;
-    return rows.map((row) => ({ node: rowToNode(row), score: row.score }));
+    return this.candidates.nameSubstring(substring, { kinds, languages, excludePrefix }, limit);
   }
 }
