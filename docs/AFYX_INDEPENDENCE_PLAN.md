@@ -1106,8 +1106,11 @@ behavior. Large subsystem labels never authorize a batch rewrite.
 - **Validation, CI, and known gaps:** focused DB/metadata plus direct CLI, MCP,
   UI, index-state, lifecycle, and full-pipeline consumers pass 144 tests with one
   declared UI skip. TypeScript typecheck, clean production/UI build, semantic
-  baseline 6/6, and CLI/MCP smoke 21/21 pass. Cross-platform PR CI is pending.
-  Classification is `DB_STATS_METADATA_READER_SLICE_COMPLETE_WITH_KNOWN_GAPS`:
+  baseline 6/6, and CLI/MCP smoke 21/21 pass. PR #31 passes all seven normal CI
+  jobs (Linux 2/2, macOS 2/2, Windows 2/2, and Rust kernel 1/1); one unrelated
+  Usage Tracker watcher failure passed its targeted rerun while the other
+  Windows matrix job had already passed. Classification is
+  `DB_STATS_METADATA_READER_SLICE_COMPLETE_WITH_KNOWN_GAPS`:
   vocabulary is the only remaining DB-reader review family. The recommended
   next bounded DB slice is vocabulary; IND-C05 Graph remains deferred.
 
