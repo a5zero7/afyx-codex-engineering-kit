@@ -1,217 +1,214 @@
 /**
- * Node identity and lookup reads: by id, by file, by kind, by name (exact, prefix,
- * qualified, case-folded), and the small full-graph name scans other readers build on.
- *
- * Owns the LRU node cache. A write that changes or removes a node calls `forgetNode` /
- * `forgetByFile` / `forgetAll` (wired from `GraphWriter`'s cache hooks), so a cached row
- * can never outlive the write that replaced it.
+ * Node identity and lookup reads. This module owns query selection and the bounded
+ * identity cache; row decoding remains the shared responsibility of `row-mappers`.
  */
 
 import type { Language, Node, NodeKind } from '../types';
 import { chunked, placeholders, QuerySession } from './query-session';
 import { rowToNode, type NodeRow } from './row-mappers';
 
-const MAX_CACHE_SIZE = 1000;
+const NODE_CACHE_CAPACITY = 1000;
 
-export class NodeReader {
-  private readonly cache = new Map<string, Node>();
+const NODE_QUERY = Object.freeze({
+  byId: 'SELECT * FROM nodes WHERE id = ?',
+  byFile: 'SELECT * FROM nodes WHERE file_path = ? ORDER BY start_line',
+  byKind: 'SELECT * FROM nodes WHERE kind = ?',
+  all: 'SELECT * FROM nodes',
+  byLanguageDecorator: "SELECT * FROM nodes WHERE language = ? AND decorators LIKE '%' || ? || '%'",
+  fileLanguages: 'SELECT DISTINCT language FROM files',
+  byName: 'SELECT * FROM nodes WHERE name = ? ORDER BY file_path, start_line',
+  byNamePrefix: 'SELECT * FROM nodes WHERE name >= ? AND name < ? ORDER BY name LIMIT ?',
+  byQualifiedName: 'SELECT * FROM nodes WHERE qualified_name = ?',
+  byFoldedName: 'SELECT * FROM nodes WHERE lower(name) = lower(?)',
+  allNames: 'SELECT DISTINCT name FROM nodes',
+});
 
-  constructor(private readonly session: QuerySession) {}
+function nodesFrom(rows: readonly NodeRow[]): Node[] {
+  return rows.map(rowToNode);
+}
 
-  private cacheNode(node: Node): void {
-    if (this.cache.size >= MAX_CACHE_SIZE) {
-      const oldest = this.cache.keys().next().value;
-      if (oldest) this.cache.delete(oldest);
-    }
-    this.cache.set(node.id, node);
-  }
+function nodesByIdsQuery(size: number): string {
+  return `SELECT * FROM nodes WHERE id IN (${placeholders(size)})`;
+}
 
-  /** Drop one cached node — called when a write changes or removes it. */
-  forgetNode(id: string): void {
-    this.cache.delete(id);
-  }
+function namesByFilesQuery(size: number): string {
+  return `SELECT DISTINCT name FROM nodes WHERE file_path IN (${placeholders(size)})`;
+}
 
-  /** Drop every cached node belonging to a file — called when a write replaces the file's rows. */
-  forgetByFile(filePath: string): void {
-    for (const [id, node] of this.cache) {
-      if (node.filePath === filePath) this.cache.delete(id);
-    }
-  }
+function namePairsByFilesQuery(size: number): string {
+  return `SELECT DISTINCT file_path, name FROM nodes WHERE file_path IN (${placeholders(size)})`;
+}
 
-  /** Empty the cache entirely. */
-  clearCache(): void {
-    this.cache.clear();
-  }
+/** A small LRU of decoded identities. Mutation hooks invalidate entries explicitly. */
+class NodeIdentityCache {
+  private readonly entries = new Map<string, Node>();
 
-  getNodeById(id: string): Node | null {
-    const cached = this.cache.get(id);
-    if (cached !== undefined) {
-      // LRU touch: delete and re-add so it becomes the newest entry.
-      this.cache.delete(id);
-      this.cache.set(id, cached);
-      return cached;
-    }
-    const row = this.session.statement('SELECT * FROM nodes WHERE id = ?').get(id) as NodeRow | undefined;
-    if (!row) return null;
-    const node = rowToNode(row);
-    this.cacheNode(node);
+  read(id: string): Node | undefined {
+    const node = this.entries.get(id);
+    if (node === undefined) return undefined;
+    this.entries.delete(id);
+    this.entries.set(id, node);
     return node;
   }
 
-  /**
-   * Batch lookup: cache hits are served from memory, misses go out as chunked `IN (...)`
-   * reads. Returns a map keyed by id, in no particular order — callers restore their own
-   * ordering (typically the order edges were returned from the graph); ids with no
-   * stored node are simply absent.
-   */
+  remember(node: Node): void {
+    if (this.entries.size >= NODE_CACHE_CAPACITY) {
+      const oldest = this.entries.keys().next().value as string | undefined;
+      if (oldest) this.entries.delete(oldest);
+    }
+    this.entries.set(node.id, node);
+  }
+
+  drop(id: string): void {
+    this.entries.delete(id);
+  }
+
+  dropFile(filePath: string): void {
+    for (const [id, node] of this.entries) {
+      if (node.filePath === filePath) this.entries.delete(id);
+    }
+  }
+
+  reset(): void {
+    this.entries.clear();
+  }
+}
+
+export class NodeReader {
+  private readonly identities = new NodeIdentityCache();
+
+  constructor(private readonly session: QuerySession) {}
+
+  private fixed(sql: string, params: readonly unknown[] = []): Node[] {
+    return nodesFrom(this.session.statement(sql).all(...params) as NodeRow[]);
+  }
+
+  private *stream(sql: string, params: readonly unknown[] = []): IterableIterator<Node> {
+    const statement = this.session.db.prepare(sql);
+    for (const row of statement.iterate(...params)) yield rowToNode(row as NodeRow);
+  }
+
+  /** Called by writer hooks after one identity changes or disappears. */
+  forgetNode(id: string): void {
+    this.identities.drop(id);
+  }
+
+  /** Called by writer hooks after all rows for one file are replaced. */
+  forgetByFile(filePath: string): void {
+    this.identities.dropFile(filePath);
+  }
+
+  clearCache(): void {
+    this.identities.reset();
+  }
+
+  getNodeById(id: string): Node | null {
+    const cached = this.identities.read(id);
+    if (cached !== undefined) return cached;
+
+    const row = this.session.statement(NODE_QUERY.byId).get(id) as NodeRow | undefined;
+    if (row === undefined) return null;
+    const node = rowToNode(row);
+    this.identities.remember(node);
+    return node;
+  }
+
+  /** Missing IDs are absent from the returned map; consumers retain their own order. */
   getNodesByIds(ids: readonly string[]): Map<string, Node> {
-    const found = new Map<string, Node>();
-    if (ids.length === 0) return found;
+    const result = new Map<string, Node>();
+    const pending: string[] = [];
 
-    const misses: string[] = [];
     for (const id of ids) {
-      const cached = this.cache.get(id);
-      if (cached !== undefined) {
-        this.cache.delete(id);
-        this.cache.set(id, cached);
-        found.set(id, cached);
-      } else {
-        misses.push(id);
-      }
+      const cached = this.identities.read(id);
+      if (cached === undefined) pending.push(id);
+      else result.set(id, cached);
     }
-    if (misses.length === 0) return found;
 
-    for (const chunk of chunked(misses)) {
-      const rows = this.session.listStatement(`SELECT * FROM nodes WHERE id IN (${placeholders(chunk.length)})`, chunk.length).all(...chunk) as NodeRow[];
-      for (const row of rows) {
-        const node = rowToNode(row);
-        found.set(node.id, node);
-        this.cacheNode(node);
+    for (const idsChunk of chunked(pending)) {
+      const sql = nodesByIdsQuery(idsChunk.length);
+      const rows = this.session.listStatement(sql, idsChunk.length).all(...idsChunk) as NodeRow[];
+      for (const node of nodesFrom(rows)) {
+        result.set(node.id, node);
+        this.identities.remember(node);
       }
     }
-    return found;
+    return result;
   }
 
   /** Every node in a file, in source order. */
   getNodesByFile(filePath: string): Node[] {
-    const rows = this.session.statement('SELECT * FROM nodes WHERE file_path = ? ORDER BY start_line').all(filePath) as NodeRow[];
-    return rows.map(rowToNode);
+    return this.fixed(NODE_QUERY.byFile, [filePath]);
   }
 
   getNodesByKind(kind: NodeKind): Node[] {
-    const rows = this.session.statement('SELECT * FROM nodes WHERE kind = ?').all(kind) as NodeRow[];
-    return rows.map(rowToNode);
+    return this.fixed(NODE_QUERY.byKind, [kind]);
   }
 
-  /**
-   * Stream every node of a kind instead of materializing them all (`getNodesByKind`): on a
-   * symbol-dense project the full array of `function`/`method` nodes is gigabytes, and the
-   * dynamic-edge synthesizers only scan-and-filter, so memory stays O(1) in the node count
-   * (#610). Fresh statement per call — an iterator holds an open cursor, which a shared,
-   * cached statement cannot serve across overlapping scans.
-   */
-  *iterateNodesByKind(kind: NodeKind): IterableIterator<Node> {
-    const statement = this.session.db.prepare('SELECT * FROM nodes WHERE kind = ?');
-    for (const row of statement.iterate(kind)) yield rowToNode(row as NodeRow);
+  /** Streaming scan keeps memory bounded for symbol-dense node kinds. */
+  iterateNodesByKind(kind: NodeKind): IterableIterator<Node> {
+    return this.stream(NODE_QUERY.byKind, [kind]);
   }
 
   getAllNodes(): Node[] {
-    const rows = this.session.db.prepare('SELECT * FROM nodes').all() as NodeRow[];
-    return rows.map(rowToNode);
+    return this.fixed(NODE_QUERY.all);
   }
 
-  /**
-   * Stream nodes of one language whose `decorators` JSON array contains `decorator`. The
-   * LIKE is a cheap index-free pre-filter over the JSON text (a decorator name can appear
-   * as a substring of another), so callers must still exact-check `node.decorators`. Exists
-   * so a synthesizer never materializes the whole node table the way `getAllNodes().filter`
-   * did — that alone exhausted Node's default heap on a 2M-node graph (#1212).
-   */
-  *iterateNodesByLanguageWithDecorator(language: Language, decorator: string): IterableIterator<Node> {
-    const statement = this.session.db.prepare("SELECT * FROM nodes WHERE language = ? AND decorators LIKE '%' || ? || '%'");
-    for (const row of statement.iterate(language, `"${decorator}"`)) yield rowToNode(row as NodeRow);
+  /** SQL narrows candidates; consumers still exact-check the decoded decorator list. */
+  iterateNodesByLanguageWithDecorator(language: Language, decorator: string): IterableIterator<Node> {
+    return this.stream(NODE_QUERY.byLanguageDecorator, [language, `"${decorator}"`]);
   }
 
-  /** Distinct languages present in the files table — lets a dynamic-edge synthesizer skip a whole pass on a project that has none of its language (#1212). */
   getDistinctFileLanguages(): Set<string> {
-    const rows = this.session.db.prepare('SELECT DISTINCT language FROM files').all() as Array<{ language: string }>;
-    return new Set(rows.map((row) => row.language));
+    const rows = this.session.statement(NODE_QUERY.fileLanguages).all() as Array<{ language: string }>;
+    return new Set(rows.map(({ language }) => language));
   }
 
-  /**
-   * Nodes by exact name — resolution's candidate list. The `ORDER BY` is load-bearing, not
-   * cosmetic (CG-33): when a reference names a symbol several files define and nothing
-   * disambiguates them, resolution binds to the first candidate, so without a stable order
-   * the winner would be decided by row insertion order (scan order on a full index, append
-   * order on an incremental one) and a long-lived synced index would drift from a rebuild
-   * of itself. `(file_path, start_line)` is a property of the code, so both paths pick the
-   * same candidate.
-   */
+  /** Stable source identity order is load-bearing for ambiguous resolution candidates. */
   getNodesByName(name: string): Node[] {
-    const rows = this.session.statement('SELECT * FROM nodes WHERE name = ? ORDER BY file_path, start_line').all(name) as NodeRow[];
-    return rows.map(rowToNode);
+    return this.fixed(NODE_QUERY.byName, [name]);
   }
 
-  /** Nodes whose name starts with `prefix`, by index range scan (a `LIKE 'prefix%'` would skip `idx_nodes_name` under SQLite's default case-insensitive LIKE). */
+  /** Range bounds retain use of the name index under SQLite's default LIKE behavior. */
   getNodesByNamePrefix(prefix: string, limit = 20): Node[] {
-    const rows = this.session.statement('SELECT * FROM nodes WHERE name >= ? AND name < ? ORDER BY name LIMIT ?').all(prefix, prefix + '￿', limit) as NodeRow[];
-    return rows.map(rowToNode);
+    return this.fixed(NODE_QUERY.byNamePrefix, [prefix, `${prefix}￿`, limit]);
   }
 
   getNodesByQualifiedNameExact(qualifiedName: string): Node[] {
-    const rows = this.session.statement('SELECT * FROM nodes WHERE qualified_name = ?').all(qualifiedName) as NodeRow[];
-    return rows.map(rowToNode);
+    return this.fixed(NODE_QUERY.byQualifiedName, [qualifiedName]);
   }
 
-  /**
-   * Nodes by name, case-insensitively (seeks the `idx_nodes_lower_name` expression index).
-   * The parameter is lowered in SQL, not trusted to arrive lowered: written as a bare
-   * `lower(name) = ?` it silently matched nothing for input carrying an uppercase letter,
-   * and — because SQLite's `lower()` folds ASCII only while JavaScript's `.toLowerCase()`
-   * folds Unicode — a caller that pre-lowered in JS could not match a non-ASCII name at
-   * all. This hardens the query, not its one caller (`matchFuzzy` still lowers in JS first),
-   * so the non-ASCII gap remains open there.
-   */
+  /** SQLite performs both case folds so its collation semantics remain authoritative. */
   getNodesByLowerName(name: string): Node[] {
-    const rows = this.session.statement('SELECT * FROM nodes WHERE lower(name) = lower(?)').all(name) as NodeRow[];
-    return rows.map(rowToNode);
+    return this.fixed(NODE_QUERY.byFoldedName, [name]);
   }
 
-  /** Every distinct node name (lightweight — names only, for pre-filtering). */
   getAllNodeNames(): string[] {
-    const rows = this.session.statement('SELECT DISTINCT name FROM nodes').all() as Array<{ name: string }>;
-    return rows.map((row) => row.name);
+    const rows = this.session.statement(NODE_QUERY.allNames).all() as Array<{ name: string }>;
+    return rows.map(({ name }) => name);
   }
 
-  /** The incremental counterpart to `getAllNodeNames`, for callers that must yield to the event loop mid-scan (resolver cache warm-up on multi-million-node indexes). */
   *iterateNodeNames(): IterableIterator<string> {
-    const statement = this.session.db.prepare('SELECT DISTINCT name FROM nodes');
-    for (const row of statement.iterate()) yield (row as { name: string }).name;
+    for (const row of this.session.db.prepare(NODE_QUERY.allNames).iterate()) {
+      yield (row as { name: string }).name;
+    }
   }
 
-  /** Distinct node names defined in the given files — the symbol names a sync pass looks up retryable failed refs against. */
   getNodeNamesByFiles(filePaths: string[]): string[] {
-    if (filePaths.length === 0) return [];
     const names = new Set<string>();
-    for (const chunk of chunked(filePaths)) {
-      const rows = this.session.listStatement(`SELECT DISTINCT name FROM nodes WHERE file_path IN (${placeholders(chunk.length)})`, chunk.length).all(...chunk) as Array<{ name: string }>;
-      for (const row of rows) names.add(row.name);
+    for (const pathsChunk of chunked(filePaths)) {
+      const sql = namesByFilesQuery(pathsChunk.length);
+      const rows = this.session.listStatement(sql, pathsChunk.length).all(...pathsChunk) as Array<{ name: string }>;
+      for (const { name } of rows) names.add(name);
     }
     return [...names];
   }
 
-  /**
-   * Distinct `file\0name` pairs defined by the given files — sync's definition-delta shape
-   * (CG-33). A bare name set taken over the whole changed batch would cancel a name that
-   * moves between two files in one commit out of the symmetric difference; keying by file
-   * makes each definition its own fact, so a move reads as one removal plus one addition.
-   */
+  /** File-qualified names make a moved definition one removal plus one addition. */
   getNodeNamePairsByFiles(filePaths: string[]): Set<string> {
     const pairs = new Set<string>();
-    if (filePaths.length === 0) return pairs;
-    for (const chunk of chunked(filePaths)) {
-      const rows = this.session.listStatement(`SELECT DISTINCT file_path, name FROM nodes WHERE file_path IN (${placeholders(chunk.length)})`, chunk.length).all(...chunk) as Array<{ file_path: string; name: string }>;
-      // NUL-joined: a path or a symbol name can contain a space, never a NUL.
+    for (const pathsChunk of chunked(filePaths)) {
+      const sql = namePairsByFilesQuery(pathsChunk.length);
+      const rows = this.session.listStatement(sql, pathsChunk.length).all(...pathsChunk) as Array<{ file_path: string; name: string }>;
       for (const row of rows) pairs.add(`${row.file_path}\0${row.name}`);
     }
     return pairs;
