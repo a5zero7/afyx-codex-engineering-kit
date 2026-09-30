@@ -583,6 +583,63 @@ behavior. Large subsystem labels never authorize a batch rewrite.
   is one domain-reader family from the residual DB inventory; IND-C05 must not
   absorb that work.
 
+#### DB domain-reader residual closure evidence (2026-09-30)
+
+- **Selected family:** unresolved/reference reads in
+  `src/db/reference-reader.ts`. This is one storage and observable-contract
+  family: pending/failed reference enumeration, name/file/source filters,
+  stable resolver pagination, retry ceilings, and resolution-edge candidates.
+  Shared `query-session.ts`, `row-mappers.ts`, `graph-reader.ts`, and the
+  `QueryBuilder` facade remain unchanged boundaries. Node, edge, file,
+  dependency-analytics, routing, and search readers remain separately bounded
+  residual families.
+- **OLD contract and mutation:** the 131-assertion ordered DB query golden plus
+  pagination, 200,000-row chunking, resolution, extraction, and cache-binding
+  fixtures freeze identity, count, order, filters, status handling, missing-row
+  behavior, nullable mapping, relations, retry ceilings, and reopen behavior.
+  Five OLD observable mutants are killed: filter bypass, order reversal, row
+  omission, relation remapping, and missing-row corruption.
+- **Afyx-native architecture:** explicit reference-column and fixed-query
+  definitions form one SQL-to-domain boundary; fixed reads share prepared
+  statements; unbounded chunked reads append iteratively; prerequisite phases
+  retain explicit row-id order; and retry/reference-edge reconciliation shares
+  one population-ceiling policy. Schema, public signatures, mappers, writers,
+  and surrounding resolution/extraction semantics are unchanged. The initial
+  iterative implementation exposed and then corrected a 200,000-row spread
+  overflow before acceptance.
+- **NEW mutation and differential:** the same five NEW mutants are killed.
+  The complete synthetic golden and accepted real snapshot have
+  `UNEXPLAINED = 0`. On the real repository copy, both readers return 85,617
+  unresolved rows and identical filtered/retry/relation results, with logical
+  SHA-256 `f67507d17266f2ad508cbd5d3a29cb62edb44388b907ea5aecdda35e055d4430`.
+  Both DB copies remain byte-identical to the 100,700,160-byte canonical input.
+- **Determinism, payload, and performance:** three repeated NEW real-snapshot
+  reads preserve order, values, digest, and 24,557,839 serialized bytes. Seven
+  interleaved OLD/NEW benchmark pairs preserve every case digest, row count,
+  and payload. OLD/NEW median microseconds are 522.8/527.8 for single-name,
+  4.6/4.6 for missing-name, 240.4/280.7 for file-filtered, 3,935.9/4,059.8 for
+  retryable multi-row, 2,716.1/2,916.9 for resolution edges, and
+  202,270.7/204,280.0 for all 85,617 real rows. The largest relative delta is
+  the 40.3-microsecond file-filtered microcase; the full snapshot delta is
+  +0.99%. Peak process RSS differs by 262,144 bytes. No material regression or
+  payload growth is observed.
+- **Provenance:** under the established historical-reference normalization,
+  Family Scope A (`query-session.ts` plus `reference-reader.ts`) falls from
+  36.19% substantive / 25.81% comments / 1.47% shingles to 21.14% / 21.43% /
+  1.46%. Already-native Scope B (`query-session.ts`) remains 10.00% / 18.18% /
+  0.00%. Residual Scope C (`reference-reader.ts`) falls from 42.35% / 27.45% /
+  1.85% to 23.30% / 23.53% / 1.84%; longest identical block moves 6→7 and both
+  sides have zero blocks >=8. Remaining overlap is SQL/schema identifiers,
+  public result shapes, and standard TypeScript/SQLite idioms, not a legal
+  conclusion.
+- **Validation and status:** selected-reader tests pass 163/163, DB contracts,
+  FTS, reopen/lifecycle/backends, Graph contracts, sync/rebuild convergence,
+  semantic baseline (6/6), typecheck, clean build, and CLI/MCP smoke (21/21)
+  pass locally. PR #24 passes all seven normal jobs (Linux 2/2, macOS 2/2,
+  Windows 2/2, and Rust kernel 1/1). Classification is
+  `DB_DOMAIN_READER_SLICE_COMPLETE_WITH_KNOWN_GAPS`; the recommended next DB
+  slice is the node identity/lookup reader, not IND-C05 Graph.
+
 ### IND-C05 — Graph legacy hosts
 
 - **Scope/ownership:** branch guards, dead code, named flow, type hierarchy and
