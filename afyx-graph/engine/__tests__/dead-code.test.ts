@@ -34,6 +34,8 @@ import {
   isVendoredPath,
   mentionCount,
   DEAD_CODE_KINDS,
+  MAX_CORROBORATION_BYTES,
+  MAX_OVERRIDE_ANCESTOR_DEPTH,
 } from '../src/graph/dead-code';
 import { createGraphApi, startUiServer, type GraphApi, type UiServerHandle } from '../src/ui-server';
 
@@ -86,6 +88,70 @@ async function getDeadCode(query = ''): Promise<any> {
 
 const names = (report: { entries: Array<{ node: { name: string } }> }): string[] =>
   report.entries.map((entry) => entry.node.name);
+
+function ancestryBoundaryGraph(depth: number): AfyxGraph {
+  const nodes = new Map<string, any>();
+  const candidate = {
+    id: 'candidate', name: 'run', qualifiedName: 'Leaf.run', kind: 'method',
+    language: 'typescript', filePath: 'src/leaf.ts', startLine: 1, endLine: 1,
+    isExported: false, decorators: [],
+  };
+  const leaf = { ...candidate, id: 'c0', name: 'Leaf', qualifiedName: 'Leaf', kind: 'class' };
+  nodes.set(candidate.id, candidate);
+  nodes.set(leaf.id, leaf);
+  const hierarchy: any[] = [];
+  const members: any[] = [];
+  for (let level = 1; level <= depth; level += 1) {
+    const owner = { ...leaf, id: `c${level}`, name: `C${level}`, qualifiedName: `C${level}` };
+    const member = {
+      ...candidate,
+      id: `m${level}`,
+      name: level === depth ? 'run' : `other${level}`,
+      qualifiedName: `C${level}.${level === depth ? 'run' : `other${level}`}`,
+    };
+    nodes.set(owner.id, owner);
+    nodes.set(member.id, member);
+    hierarchy.push({ source: `c${level - 1}`, target: owner.id, kind: 'extends' });
+    members.push({ source: owner.id, target: member.id, kind: 'contains' });
+  }
+  return {
+    getUnreferencedNodes: () => [{ node: candidate, generated: false }],
+    getLanguagesWithExports: () => new Set(['typescript']),
+    getIncomingEdgesTo: () => [{ source: leaf.id, target: candidate.id, kind: 'contains' }],
+    getOutgoingEdgesFrom: (ids: string[], kinds?: string[]) => {
+      const wanted = new Set(ids);
+      const allowed = new Set(kinds ?? []);
+      return [...hierarchy, ...members].filter(
+        (edge) => wanted.has(edge.source) && (allowed.size === 0 || allowed.has(edge.kind))
+      );
+    },
+    getNodesByIds: (ids: string[]) => new Map(ids.filter((id) => nodes.has(id)).map((id) => [id, nodes.get(id)])),
+    getFileDependentCounts: () => new Map([['src/leaf.ts', 1]]),
+    getUnresolvedNamesAmong: () => new Set(),
+    getAmbiguousReferencedNames: () => new Set(),
+    getFileDependents: () => [],
+  } as unknown as AfyxGraph;
+}
+
+function oneCandidateGraph(root: string, filePath: string): AfyxGraph {
+  const candidate = {
+    id: 'only', name: 'onlyCandidate', qualifiedName: 'onlyCandidate', kind: 'function',
+    language: 'typescript', filePath, startLine: 1, endLine: 1,
+    isExported: false, decorators: [],
+  };
+  return {
+    getProjectRoot: () => root,
+    getUnreferencedNodes: () => [{ node: candidate, generated: false }],
+    getLanguagesWithExports: () => new Set(['typescript']),
+    getIncomingEdgesTo: () => [],
+    getOutgoingEdgesFrom: () => [],
+    getNodesByIds: () => new Map(),
+    getFileDependentCounts: () => new Map([[filePath, 1]]),
+    getUnresolvedNamesAmong: () => new Set(),
+    getAmbiguousReferencedNames: () => new Set(),
+    getFileDependents: () => [],
+  } as unknown as AfyxGraph;
+}
 
 beforeAll(async () => {
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-graph-deadcode-'));
@@ -412,6 +478,35 @@ describe('the rules that are pure', () => {
     expect(isImplicitEntryName('__enter__')).toBe(true);
     expect(isImplicitEntryName('ToString')).toBe(true);
     expect(isImplicitEntryName('mainHandler')).toBe(false);
+  });
+});
+
+describe('bounded ancestor evidence', () => {
+  it.each([
+    ['below', MAX_OVERRIDE_ANCESTOR_DEPTH - 1],
+    ['at', MAX_OVERRIDE_ANCESTOR_DEPTH],
+    ['above', MAX_OVERRIDE_ANCESTOR_DEPTH + 1],
+  ] as const)('stays conservative %s the ancestry limit', (_label, depth) => {
+    const report = buildDeadCodeReport(ancestryBoundaryGraph(depth), { readSource: null });
+    expect(report.entries).toEqual([]);
+    expect(report.excluded.overriding).toBe(1);
+  });
+});
+
+describe('bounded source corroboration', () => {
+  it('fails safe when a source file exceeds the byte cap', () => {
+    const relative = 'src/oversized.ts';
+    write(projectRoot, relative, 'x'.repeat(MAX_CORROBORATION_BYTES + 1));
+    const report = buildDeadCodeReport(oneCandidateGraph(projectRoot, relative));
+    expect(report.entries).toEqual([]);
+    expect(report.excluded.unreadable).toBe(1);
+  });
+
+  it('does not read a path that escapes the project root', () => {
+    write(tempDir, 'outside.ts', 'function onlyCandidate() {}');
+    const report = buildDeadCodeReport(oneCandidateGraph(projectRoot, '../outside.ts'));
+    expect(report.entries).toEqual([]);
+    expect(report.excluded.unreadable).toBe(1);
   });
 });
 
