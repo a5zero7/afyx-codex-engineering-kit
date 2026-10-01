@@ -1114,6 +1114,72 @@ behavior. Large subsystem labels never authorize a batch rewrite.
   vocabulary is the only remaining DB-reader review family. The recommended
   next bounded DB slice is vocabulary; IND-C05 Graph remains deferred.
 
+#### Vocabulary reader residual closure evidence (2026-10-01)
+
+- **Selected family and semantic separation:** `src/db/vocabulary-reader.ts`
+  owns the five persisted name-segment reads: empty-state detection, paged
+  distinct node names, segment co-occurrence, per-segment name frequencies, and
+  names by segment. `name-vocabulary.ts` remains the already-native writer.
+  Tokenization, identifier segmentation, plural variants,
+  `AfyxGraph.getSegmentMatches`, Search ranking/candidates, and Context
+  seeding/expansion remain frozen semantic consumers. This reader has no prefix
+  or kind/language/file-filter API, so none was invented. Schema, migrations,
+  writers, WAL, and all earlier reader closures are unchanged.
+- **OLD contract and sensitivity:** a focused five-test contract plus twelve
+  existing vocabulary/semantic tests freeze empty/missing results, identity and
+  exclusions, stable paging order, bounds, duplicates, variant folding,
+  coverage order, counts/frequencies, shortest-name order, and reopen
+  determinism (17/17 PASS). All ten applicable OLD mutants are killed: omission,
+  wrong identity, count/frequency, filter, order, limit, coverage threshold,
+  duplicate variant, missing/empty, and row decoding.
+- **Afyx-native architecture:** a fixed named query catalog owns static reads;
+  bounded builders own parameterized co-occurrence and frequency statements;
+  explicit row types and decode functions form the SQL-to-domain boundary; and
+  every statement uses the existing prepared `QuerySession`. Public signatures,
+  predicates, ordering, limits, and result shapes remain unchanged. NEW kills
+  the same 10/10 mutants.
+- **Differential, real snapshot, determinism, and payload:** seven interleaved
+  OLD/NEW runs use isolated copies of the accepted 100,700,160-byte DB (SHA-256
+  `9e7ca8bffc655925c0f8bd9da81d9296e85956350e431816203b6610ae82097f`).
+  Both readers return 25,457 vocabulary rows and 10,734 distinct names, with
+  identical identities, order, counts, co-occurrence, missing/empty behavior,
+  5,419-byte representative payloads, and full-population digest
+  `6481df8363df4bb99719f1c9f0c43c2abddc6521684a7777bb4fec27bd95b2d2`;
+  `UNEXPLAINED = 0`. All seven NEW runs are identical. The canonical index was
+  hash-verified and never opened by the campaign; no migration or writer ran.
+- **Consumer boundary and performance:** vocabulary/DB, Search, and Context
+  gates pass 151/151. Seven interleaved benchmark pairs preserve every result
+  count and payload. Median milliseconds (OLD/NEW) are 0.0049/0.0051 emptiness,
+  0.6102/0.5896 bounded page, 17.5133/18.2358 full distinct population,
+  0.0964/0.0632 co-occurrence, 0.1022/0.0867 frequency batch,
+  0.1084/0.1243 names by segment, and 0.0163/0.0092 missing segment. The largest
+  positive absolute median delta is 0.7225 ms on the 18.24 ms full population;
+  no material reproducible regression or payload growth appears.
+- **Provenance:** established Phase 3B normalization moves complete Scope A
+  (`query-session.ts`, `vocabulary-reader.ts`) from 31.25% substantive / 22.22%
+  comments / 1.08% five-line shingles to 14.93% / 22.22% / 0.00%. Frozen Scope
+  B remains 10.00% / 18.18% / 0.00%. Replaced Scope C
+  (`vocabulary-reader.ts`) falls from 46.43% / 25.00% / 1.96% to 17.02% /
+  25.00% / 0.00%; longest identical block falls 5 to 2 lines and both sides
+  have zero blocks of at least eight lines. Residual matches are public result
+  shapes, SQL/schema identifiers and standard TypeScript/SQLite idioms; this is
+  technical provenance evidence, not a legal conclusion.
+- **Final DB-reader inventory audit:** reference/unresolved, node identity,
+  edge/adjacency, file/index-state, dependency analytics, routing, Search DB,
+  stats/metadata, vocabulary, and DB foundation/WAL are
+  `CLOSED_AFYX_NATIVE`. `query-session.ts`, `row-mappers.ts`, reader composition/
+  facade, and `name-vocabulary.ts` are `ALREADY_NATIVE`. Schema, migrations,
+  writers, semantic Graph/Search/Context logic, Extraction, Resolution,
+  Sync/Watcher, MCP/CLI/UI, and IND-C05 Graph are
+  `DEFERRED_OUTSIDE_DB_READER_SCOPE`. `UNRESOLVED_RESIDUAL` is empty: no
+  material persisted reader family remains.
+- **Validation and closure:** TypeScript typecheck, clean production/UI build,
+  semantic baseline 6/6, and CLI/MCP smoke 21/21 pass locally. Cross-platform CI
+  status is recorded on the task PR. Classification is
+  `DB_VOCABULARY_READER_SLICE_COMPLETE`; the DB reader subsystem is ready for a
+  consolidation checkpoint, but no consolidation implementation or IND-C05
+  Graph work starts in this slice.
+
 ### IND-C05 — Graph legacy hosts
 
 - **Scope/ownership:** branch guards, dead code, named flow, type hierarchy and
