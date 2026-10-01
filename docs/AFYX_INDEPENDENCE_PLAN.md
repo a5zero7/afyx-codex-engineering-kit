@@ -2394,6 +2394,10 @@ a legal conclusion.
   Search/Context/Graph/Impact/QueryPool, DB/lifecycle, CLI semantic,
   Extraction/Resolution, semantic fixtures, smoke, typecheck, production/UI
   builds, and final-head seven-job CI are required closure gates.
+  PR #45 final-head CI passed **7/7** after one unchanged-head rerun of the
+  Linux Graph Build: the initial run passed 5,446 tests but a frozen WAL
+  concurrency timing case crossed its deliberately tiny pressure threshold;
+  the rerun passed without source or test changes.
 - **Residual map and next slice:** closing this independent family does not
   merge or split downstream family ownership. The evidence-based count is
   therefore **14 remaining C07 material families**, `UNKNOWN = 0`. Search is
