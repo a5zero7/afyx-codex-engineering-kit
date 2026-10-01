@@ -1328,11 +1328,10 @@ behavior. Large subsystem labels never authorize a batch rewrite.
   Impact/Affected 10/10, direct Dead Code/UI boundary 76/76, semantic fixtures
   6/6, CLI/MCP smoke 21/21, typecheck, clean production build, and clean UI
   build pass. `src/db/**`, Branch Guard policy/semantics, all named frozen
-  subsystems, and legal/provenance files have no changes. Cross-platform CI is
-  the remaining PR gate and is not claimed until all seven required jobs pass.
-- **Known gap and next slice:** local phase evidence does not replace the pending
-  seven-job PR CI. IND-C05 remains active; the next independently bounded slice
-  is IND-C05.3 Named Flow. This slice does not start it.
+  subsystems, and legal/provenance files have no changes. PR #35 cross-platform
+  CI passes all seven required Linux, macOS, Windows, and Rust-kernel jobs.
+- **Known gap and next slice:** IND-C05 remains active; the next independently
+  bounded slice is IND-C05.3 Named Flow. This slice does not start it.
 
 ### IND-C06 — Watcher, daemon and proxy lifecycle
 
