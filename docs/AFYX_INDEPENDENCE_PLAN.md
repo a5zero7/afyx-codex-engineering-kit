@@ -1488,6 +1488,116 @@ behavior. Large subsystem labels never authorize a batch rewrite.
   bounded inventory of the remaining traversal family, not a change to frozen
   `typeViewOf` in this PR.
 
+#### IND-C05.5 — Remaining traversal inventory and Graph consolidation (2026-10-01)
+
+- **Baseline, scope, and ownership:** official baseline
+  `2794d203c01437c6e83227c480186a70641149f3` (merged PR #37) was clean and
+  identical to `origin/main`. The inventory inspected `frontier-walk.ts`,
+  `walk-request.ts`, `relations.ts`, `containment.ts`, `route.ts`, and
+  `traversal.ts`, plus supporting `graph-store.ts`, `queries.ts`, and
+  `graph/index.ts`; CodeGraph call paths, public `AfyxGraph` consumers,
+  Context/Impact/MCP/CLI callers, focused tests, graph-contract worlds,
+  semantic fixtures, benchmark coverage, Git history, and historical commit
+  `b7a1aa2718dc1f6940e483043733f67020d9a62f` were reviewed. No production or
+  test source changed. Scratch-only evidence is under
+  `%LOCALAPPDATA%\Temp\afyx-ind-c05r5-20261001\campaign-1790842284`.
+- **Prior hypothesis rechecked:** the initial audit called frontier walk, walk
+  request, relations, containment, route, and graph store Afyx-native, while
+  leaving `traversal.ts` and `queries.ts` unknown. Current history confirms the
+  focused modules and narrow `GraphReader` boundary were introduced together
+  by Afyx-native commit `eda65906a3199ff66b36d29167d66b6b9a5b1b35`.
+  Current source and call paths resolve the two former unknowns: `GraphTraverser`
+  is delegation only, and relevant `GraphQueryManager` behavior is public
+  context/metrics assembly over the traverser and catalog, not a retained
+  traversal algorithm.
+- **Accepted behavior and ground truth:** the 376-case graph-contract golden
+  matrix exercises linear, diamond, cycle, self-edge, disconnected, duplicate,
+  multi-relation, inheritance, multiple-parent, file-dependency, relation-kind,
+  and extra worlds. It records BFS/DFS for outgoing/incoming/both, depths
+  0/1/2/unbounded, limits, include-start, edge/node filters, missing nodes,
+  parallel edges and deterministic ordering; relationship depths 0/1/2/3/5,
+  callers/callees, focal call graph, usages, frozen ancestor-only type view and
+  graph-local impact; containment parent/member order and cycles; and route
+  existence, filters, tie order, reconstruction, missing endpoints, and
+  unreachable pairs. `graph.test.ts` additionally pins high-fanout limits and
+  edge completeness. Public contracts, current corrected Afyx semantics, and
+  accepted golden output remain the authority; historical behavior is not an
+  independent authority.
+- **Family inventory and classification:**
+
+  | Family / subfamily | Primary owner | Public consumer | Final classification | Basis |
+  | --- | --- | --- | --- | --- |
+  | Generic BFS/DFS | `frontier-walk.ts` | `GraphTraverser.traverseBFS/DFS` | `CLOSED_AFYX_NATIVE` | Explicit-stack/queue Afyx module; bounded, cycle-safe, batched, deterministic |
+  | Walk request/policy | `walk-request.ts` | frontier walks | `CLOSED_AFYX_NATIVE` | Afyx-owned option resolution/direction/filter/edge identity seam |
+  | Callers/callees | `relations.ts::followCalls` | traverser, public graph, Context/CLI/MCP | `CLOSED_AFYX_NATIVE` | Focused explicit-stack relationship policy with strong golden coverage |
+  | Call graph | `relations.ts::callGraphAround` | traverser/public graph | `CLOSED_AFYX_NATIVE` | Thin deterministic composition of native callers and callees |
+  | Usages | `relations.ts::usagesOf` | traverser/public graph | `CLOSED_AFYX_NATIVE` | Batched source attachment preserving incoming edge order |
+  | `typeViewOf` | `relations.ts::typeViewOf` | `GraphTraverser.getTypeHierarchy`, Context | `FROZEN_PUBLIC_CONTRACT` | IND-C05.4 frozen ancestor-only generic `Subgraph`; rich hierarchy remains separate |
+  | Graph-local `impactOf` | `relations.ts::impactOf` | traverser/public graph | `CLOSED_AFYX_NATIVE` | Same-depth member expansion and bounded incoming dependents are independently guarded; `src/impact/**` remains outside scope |
+  | Containment | `containment.ts` | traverser and `GraphQueryManager` context/metrics | `CLOSED_AFYX_NATIVE` | Nearest-first first-parent chain and direct ordered members; cycle-safe |
+  | Route | `route.ts` | `GraphTraverser.findPath` | `CLOSED_AFYX_NATIVE` | Outgoing filtered BFS, claim-on-discovery, parent-linked reconstruction |
+  | `GraphTraverser` facade | `traversal.ts` | engine/public facade/Context | `FROZEN_PUBLIC_CONTRACT` | Stable signatures and direct delegation; owns no private algorithm |
+  | Relevant `GraphQueryManager` usage | `queries.ts` | context/metrics/public query facade | `FROZEN_PUBLIC_CONTRACT` | Stable public assembly around catalog/traverser; no relationship traversal policy |
+
+- **Sensitivity, real repository, and determinism:** 19/19 targeted scratch
+  mutants are killed, with zero survivors/invalid probes: Generic Frontier and
+  Walk Request 8/8 (depth, limit, include-start, edge dedup, structural order,
+  direction, edge filter, node filter); Relationships 6/6 (calling vocabulary,
+  side, depth, dedup, frozen type-view direction, impact member depth);
+  Containment 2/2 (parent choice, child order); Route 3/3 (direction, filter,
+  reconstruction). Facade/manager mutations were not fabricated because those
+  boundaries only delegate/assemble and their calls are covered by the same
+  contracts. Three runs against a copied accepted 100,700,160-byte DB are
+  byte-for-byte deterministic: 27,932-byte normalized payload, SHA-256
+  `4574568802eecc050a8be48ad08550381eb2494b3a97b154b1e094987e1e4f8c`.
+  Representative results contain BFS 50 nodes/76 edges, DFS 50/64,
+  callers/callees 1/9, call graph 11/10, usages 7, generic type view 5/4,
+  graph-local impact 2/8, containment 1 ancestor/9 children, and a two-stop
+  real route. The copied DB remains SHA-256
+  `9e7ca8bffc655925c0f8bd9da81d9296e85956350e431816203b6610ae82097f`.
+- **Complexity and performance:** frontier and relationship traversals schedule
+  or open an identity once and batch node lookup per adjacency frame; route
+  claims on discovery and stores parent indices; containment is a cycle-safe
+  parent chain or one batched direct-member lookup. There is no hidden
+  full-graph scan in these algorithms. The existing nine-round graph benchmark
+  passes with stable digests: representative medians are BFS shallow 54.6 µs
+  (7 nodes/6 edges), DFS outgoing 553.9 µs (49/48), cyclic 136.6 µs (4/6),
+  containment ancestors 98.4 µs (2 nodes), and a 120-node/119-edge route
+  4,456.2 µs. This inventory changes no implementation, so no OLD/NEW
+  performance claim is made.
+- **Per-family provenance:** established Phase 3B normalization (trim/collapse
+  whitespace; substantive lines ≥20 characters with three alphanumerics;
+  comment overlap; nonempty five-line shingles; `SequenceMatcher` blocks with
+  `autojunk=false`) compares the current modules with the combined historical
+  traversal/query corpus. Generic Frontier is 1/97 substantive (1.03%), 0.00%
+  comments, 2.34% shingles, longest block 8 and one block ≥8; the block is the
+  public default traversal option values. Relationships is 4/118 (3.39%),
+  0.00%, 0.00%, longest 3, zero blocks ≥8. Containment is 0/18 (0.00%), 0.00%,
+  0.00%, longest 1. Route is 1/30 (3.33%), 0.00%, 0.00%, longest 2. The
+  `GraphTraverser` facade is 10/32 (31.25%), 0.00%, 1.56%, longest 5, zero
+  blocks ≥8; `GraphQueryManager` is 17/65 (26.15%), 0.00%, 3.42%, longest 8,
+  one block ≥8, consisting only of the public `getNodeMetrics` return shape.
+  Supporting graph contracts are 1/28 (3.57%), 0.00%, 0.00%, longest 2.
+  Residual matches are public/shared contract, graph vocabulary, or standard
+  graph/TypeScript idioms; material unexplained private traversal residual is
+  zero. This is technical provenance evidence, not a legal conclusion.
+- **Consolidation gates and freezes:** Graph full regression passes 427/427;
+  Context 108/108; Impact/Affected 10/10; Branch Guard 59/59; Dead Code 27/27;
+  Named Flow consumer/API/viewer 75/75; direct Type Hierarchy 64/64; semantic
+  fixtures 6/6; CLI/MCP smoke 21/21. TypeScript typecheck, clean production
+  build, and clean UI build pass. DB, Search, Context semantics,
+  Impact/Affected, Extraction, Resolution, Watcher/Daemon, MCP/CLI/UI
+  semantics, provider/installer, and legal/attribution files are unchanged.
+  Branch Guards, Dead Code, Named Flow, Rich Type Hierarchy, and frozen
+  `typeViewOf` remain closed and were not reopened.
+- **Decision and closure:** Path A. `MATERIAL_RESIDUAL_REQUIRES_CLOSURE = 0`
+  and `UNKNOWN_REQUIRES_EVIDENCE = 0`. Graph-wide closure now covers Branch
+  Guards, Dead Code, Named Flow, Rich Type Hierarchy, Generic Frontier,
+  Relationships, Containment, Route, and facade/shared contracts. Final
+  classification is `GRAPH_REMAINING_TRAVERSAL_CONSOLIDATION_COMPLETE`;
+  `IND-C05 Graph = COMPLETE` and frozen. The exact next separately bounded
+  phase is IND-C06 Watcher / Daemon / Proxy; it is not started here.
+
 ### IND-C06 — Watcher, daemon and proxy lifecycle
 
 - **Scope/ownership:** residual sync/watch and daemon/proxy lifecycle hosts;
