@@ -1928,7 +1928,7 @@ behavior. Large subsystem labels never authorize a batch rewrite.
 
 - **Baseline and method:** official baseline
   `a57d2cd4d57aefac5ecf9bd0548d27d81f291c0f`; inventory was performed on
-  `afyx/ind-c07-adapter-inventory`. CodeGraph topology, source-region review,
+  `afyx/ind-c07-adapter-inventory`. Afyx Graph topology, source-region review,
   history, accepted OLD/NEW mutation artifacts, semantic/smoke tests, a frozen
   scratch copy of the repository index, and established Phase 3B normalization
   against `b7a1aa2718dc1f6940e483043733f67020d9a62f` were used. Similarity is a
