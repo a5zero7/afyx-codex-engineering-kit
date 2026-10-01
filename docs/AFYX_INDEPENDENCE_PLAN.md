@@ -1896,7 +1896,8 @@ behavior. Large subsystem labels never authorize a batch rewrite.
   attach gate passes 2/2. DB 325/325, Graph 488/488, Search 45/45, Context
   108/108, Impact/Affected 6/6, semantic fixtures 6/6, and CLI/MCP smoke 21/21
   pass. TypeScript typecheck, clean production build, and clean UI build pass.
-  Final-head Linux/macOS/Windows/Rust CI is pending PR creation.
+  PR #41 cross-platform evidence passes 7/7: general CI Linux/macOS/Windows
+  3/3 and manually dispatched Graph Build Linux/macOS/Windows/Rust 4/4.
 - **Decision and state:** Path A. `MATERIAL_RESIDUAL_REQUIRES_CLOSURE = 0` and
   `UNKNOWN_REQUIRES_EVIDENCE = 0`. `COMPETING_WRITER`, `LOST_EVENT`,
   `STALE_FINAL_INDEX`, `ORPHAN_PROCESS`, and `SOCKET_LEAK` are all zero. Final
