@@ -8,7 +8,7 @@
  * itself exited. The backstop reaps any server that never receives a single
  * byte of MCP traffic; early-ppid.ts shrinks the blind window itself.
  */
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { PassThrough } from 'stream';
 import {
   DEFAULT_STARTUP_HANDSHAKE_TIMEOUT_MS,
@@ -18,6 +18,8 @@ import {
 import { EARLY_PPID } from '../src/mcp/early-ppid';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+afterEach(() => vi.useRealTimers());
 
 describe('parseStartupHandshakeTimeoutMs', () => {
   it('defaults when unset or empty', () => {
@@ -47,6 +49,7 @@ describe('armStartupHandshakeTimeout', () => {
     armStartupHandshakeTimeout(() => { fired++; }, stream, 40);
     await sleep(140);
     expect(fired).toBe(1);
+    expect(stream.listenerCount('data')).toBe(0);
   });
 
   it('does not fire once any traffic arrives', async () => {
@@ -56,6 +59,7 @@ describe('armStartupHandshakeTimeout', () => {
     stream.write('{"jsonrpc":"2.0","id":1,"method":"initialize"}\n');
     await sleep(140);
     expect(fired).toBe(0);
+    expect(stream.listenerCount('data')).toBe(0);
   });
 
   it('a single early byte disarms it for good', async () => {
@@ -75,6 +79,7 @@ describe('armStartupHandshakeTimeout', () => {
     disarm(); // idempotent
     await sleep(140);
     expect(fired).toBe(0);
+    expect(stream.listenerCount('data')).toBe(0);
   });
 
   it('timeout 0 disables (env convention shared with AFYX_GRAPH_PPID_POLL_MS)', async () => {
@@ -97,6 +102,29 @@ describe('armStartupHandshakeTimeout', () => {
     stream.write(' world');
     await sleep(20);
     expect(seen).toBe('hello world');
+  });
+
+  it('settles deterministically when data arrives at the deadline boundary', () => {
+    vi.useFakeTimers();
+    const stream = new PassThrough();
+    const abandoned = vi.fn();
+    armStartupHandshakeTimeout(abandoned, stream, 40);
+    vi.advanceTimersByTime(39);
+    stream.write('x');
+    vi.advanceTimersByTime(1);
+    expect(abandoned).not.toHaveBeenCalled();
+    expect(stream.listenerCount('data')).toBe(0);
+  });
+
+  it('clears its timer exactly once when explicitly disarmed', () => {
+    vi.useFakeTimers();
+    const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout');
+    const stream = new PassThrough();
+    const disarm = armStartupHandshakeTimeout(() => { /* noop */ }, stream, 40);
+    disarm();
+    disarm();
+    expect(clearTimeoutSpy).toHaveBeenCalledTimes(1);
+    clearTimeoutSpy.mockRestore();
   });
 });
 

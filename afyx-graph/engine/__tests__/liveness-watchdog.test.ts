@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, vi } from 'vitest';
 import { spawn } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -34,6 +34,23 @@ describe('installMainThreadWatchdog opt-out', () => {
     } finally {
       if (prev === undefined) delete process.env.AFYX_GRAPH_NO_WATCHDOG;
       else process.env.AFYX_GRAPH_NO_WATCHDOG = prev;
+    }
+  });
+
+  it('stops idempotently and clears the heartbeat timer once', () => {
+    const clearIntervalSpy = vi.spyOn(global, 'clearInterval');
+    const previousTimeout = process.env.AFYX_GRAPH_WATCHDOG_TIMEOUT_MS;
+    process.env.AFYX_GRAPH_WATCHDOG_TIMEOUT_MS = '60000';
+    try {
+      const handle = installMainThreadWatchdog();
+      expect(handle).not.toBeNull();
+      handle?.stop();
+      handle?.stop();
+      expect(clearIntervalSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      clearIntervalSpy.mockRestore();
+      if (previousTimeout === undefined) delete process.env.AFYX_GRAPH_WATCHDOG_TIMEOUT_MS;
+      else process.env.AFYX_GRAPH_WATCHDOG_TIMEOUT_MS = previousTimeout;
     }
   });
 });
@@ -86,8 +103,14 @@ describe('liveness watchdog (spawned, real watchdog process)', () => {
   // `process.kill(pid, 'SIGKILL')` maps to TerminateProcess and an observer sees
   // signal=null with a non-zero exit code. Either is a kill; the synthetic
   // 'TIMEOUT' (the watchdog never fired) is the failure we're guarding against.
-  function expectKilled(r: { code: number | null; signal: NodeJS.Signals | 'TIMEOUT' | null }): void {
-    expect(r.signal === 'SIGKILL' || (r.signal === null && r.code !== 0 && r.code !== null)).toBe(true);
+  function expectKilled(
+    r: { code: number | null; signal: NodeJS.Signals | 'TIMEOUT' | null },
+    ownExitCode?: number,
+  ): void {
+    expect(
+      r.signal === 'SIGKILL' ||
+      (r.signal === null && r.code !== 0 && r.code !== null && r.code !== ownExitCode),
+    ).toBe(true);
   }
 
   it('SIGKILLs a process whose main thread wedges in a sync loop', async () => {
@@ -162,7 +185,7 @@ describe('liveness watchdog (spawned, real watchdog process)', () => {
       10_000,
       [tmp]
     );
-    expectKilled(r);
+    expectKilled(r, 5);
   }, 15000);
 
   it('kills at the hard cap even with ongoing file activity (bounded deferral)', async () => {
@@ -180,7 +203,7 @@ describe('liveness watchdog (spawned, real watchdog process)', () => {
       ),
       growFile(tmp, 9000),
     ]);
-    expectKilled(r);
+    expectKilled(r, 5);
   }, 20000);
 
   it('does NOT kill a wedged process when AFYX_GRAPH_NO_WATCHDOG=1', async () => {
