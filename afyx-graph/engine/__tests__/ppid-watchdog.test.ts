@@ -9,8 +9,14 @@
  * fire. These pure-function tests exercise the Windows branch on any OS by
  * stubbing `isAlive` and `platform`.
  */
-import { describe, it, expect } from 'vitest';
-import { supervisionLostReason, parsePpidPollMs, parseHostPpid, DEFAULT_PPID_POLL_MS } from '../src/mcp/ppid-watchdog';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import {
+  supervisionLostReason,
+  parsePpidPollMs,
+  parseHostPpid,
+  installPpidWatchdog,
+  DEFAULT_PPID_POLL_MS,
+} from '../src/mcp/ppid-watchdog';
 
 const alive = () => true;
 const dead = () => false;
@@ -163,5 +169,33 @@ describe('parseHostPpid', () => {
   });
   it('returns a real positive pid', () => {
     expect(parseHostPpid('4242')).toBe(4242);
+  });
+});
+
+describe('installPpidWatchdog', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('does not arm when polling is explicitly disabled', () => {
+    expect(installPpidWatchdog(() => { throw new Error('must not run'); }, {
+      originalPpid: process.ppid,
+      hostPpid: null,
+      isAlive: alive,
+      pollMsRaw: '0',
+    })).toBeNull();
+  });
+
+  it('polls through the shared decision policy and returns a clearable timer', () => {
+    vi.useFakeTimers();
+    const lost = vi.fn();
+    const timer = installPpidWatchdog(lost, {
+      originalPpid: process.ppid + 1,
+      hostPpid: null,
+      isAlive: alive,
+      pollMsRaw: '25',
+    });
+    expect(timer).not.toBeNull();
+    vi.advanceTimersByTime(25);
+    expect(lost).toHaveBeenCalledWith(`ppid ${process.ppid + 1} -> ${process.ppid}`);
+    if (timer) clearInterval(timer);
   });
 });

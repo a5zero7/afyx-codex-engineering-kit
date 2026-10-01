@@ -58,18 +58,19 @@ describe('writer lock (#1740)', () => {
 
   it('reports taken when a live foreign pid holds the lock', () => {
     const root = makeProject();
-    // Use our own pid first, then overwrite with a fake live-looking pid by
-    // writing a pid that is alive: process.pid of this test — simulate foreign
-    // by writing a different alive pid. On Linux, PID 1 is almost always alive.
+    // A controlled child is portable; PID 1 is not reliably probeable on
+    // Windows or inside restricted process namespaces.
+    holder = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+    if (!holder.pid) throw new Error('Failed to spawn writer-lock holder');
     fs.writeFileSync(
       getWriterPidPath(root),
-      JSON.stringify({ pid: 1, mode: 'direct', startedAt: Date.now() }) + '\n',
+      JSON.stringify({ pid: holder.pid, mode: 'direct', startedAt: Date.now() }) + '\n',
       { flag: 'wx' },
     );
     const r = tryAcquireWriterLock(root, 'direct');
     expect(r.kind).toBe('taken');
     if (r.kind === 'taken') {
-      expect(r.existing?.pid).toBe(1);
+      expect(r.existing?.pid).toBe(holder.pid);
       const msg = writerLockHeldMessage(r.existing, r.pidPath);
       expect(msg).toMatch(/writer lock held/i);
       expect(msg).toMatch(/AFYX_GRAPH_NO_DAEMON/);

@@ -1731,6 +1731,80 @@ behavior. Large subsystem labels never authorize a batch rewrite.
   active. Do not begin IND-C07 until the selected IND-C06 slice and subsequent
   lifecycle consolidation gate are complete.
 
+#### IND-C06.2 — Process supervision / liveness closure (2026-10-01)
+
+- **Baseline and scope:** official baseline `fb93fea7fac4055b6b22dfe968da0c7dbbdaf0a0`.
+  The selected production family is the stable facades `liveness-watchdog.ts`,
+  `ppid-watchdog.ts`, `startup-handshake.ts`, `stdin-teardown.ts`, and
+  `early-ppid.ts`, backed by new Afyx-owned `supervision-policy.ts`,
+  `watchdog-policy.ts`, and `watchdog-runtime.ts`. `process-liveness.ts`, all
+  daemon/proxy/watcher callers, DB, Graph, Search, Context, Impact, MCP/CLI/UI,
+  provider/installer, and legal files remain frozen and unchanged.
+- **OLD architecture and ground truth:** supervision policy, timers, streams,
+  child spawning, and disk-progress decisions were embedded in five historical
+  facades. The reconstructed OLD selection passed 39/43 cases with four genuine
+  POSIX-only skips on Windows. A valid OLD mutation campaign killed 23/23
+  applicable mutants; its first junction-following result was rejected rather
+  than used. The matrix covers platform-specific parent/host loss, PID parsing,
+  startup abandonment, terminal stdin fan-in, healthy heartbeat, CPU and
+  non-allocating wedges, progress deferral, hard cap, spawn/pipe failure, and
+  idempotent stop.
+- **Afyx-native ownership:** deterministic PPID/host/deadline decisions and the
+  single-settlement primitive live in `supervision-policy.ts`;
+  `ProgressSilencePolicy` is both directly tested and serialized into the
+  isolated watchdog child; `watchdog-runtime.ts` exclusively owns spawn,
+  heartbeat, unref, stream failure, and teardown. Existing exported names,
+  defaults, environment variables, reason strings, and caller order remain the
+  public/runtime contract.
+- **NEW evidence:** final focused selection passes 58 tests with four legitimate
+  POSIX-only skips. NEW mutation sensitivity is 22/22 applicable mutants killed,
+  one equivalent double-callback mutant, zero meaningful survivors, and zero
+  invalid mutants after compile-valid closure. Real child campaigns cover
+  healthy heartbeat, allocating and non-allocating wedges, slow progress,
+  no-progress stall, hard cap, watchdog opt-out, normal stop, startup abandonment,
+  and socket-backed stdin failure; accepted cleanup leaves zero orphan children.
+- **Controlled differential:** PPID/host decisions and reasons, parsing,
+  watchdog cadence, startup callback behavior, destruction, and callback counts
+  are identical. NEW intentionally removes stdin terminal listeners immediately
+  after settlement, whereas OLD retained them; this is an
+  `EXPECTED_CORRECTION` with unchanged destruction and callback count.
+  `UNEXPLAINED = 0`.
+- **Platform and resource behavior:** POSIX retains reparent-change detection;
+  Windows retains direct original-parent liveness probing; an explicit host PID
+  remains authoritative on either platform. Watchdog child/stdin and heartbeat
+  timers are unref'd, stop is idempotent, startup timer/listener cleanup is
+  asserted, stdin listeners are released, and no persistent handle growth was
+  observed. Windows real-process evidence passes locally; Linux/macOS final-head
+  evidence is delegated to the normal cross-platform PR jobs.
+- **Performance:** interleaved OLD/NEW medians in milliseconds were PPID policy
+  100k `2.3705/3.4057`, startup arm/disarm 1k `0.7576/1.3089`, PPID setup/stop
+  1k `0.6603/0.6608`, watchdog arm/stop `31.4177/31.0809`, wedge detection
+  `462.4922/460.2562`, and startup orphan cleanup `127.2475/141.1551`.
+  Percentage changes on the first two microbenchmarks are large but correspond
+  to about 10 ns/op and 0.55 us/op; process-scheduling paths show no material
+  regression or persistent process/timer/handle leak.
+- **Provenance:** against historical reference
+  `b7a1aa2718dc1f6940e483043733f67020d9a62f`, Scope A OLD is 18/137 substantive
+  lines (13.14%), 19.17% comments, 0.61% five-line shingles, longest block 6,
+  zero blocks >=8; Scope A NEW is 13/211 (6.16%), 25.58%, 0.00%, 3, zero;
+  Scope B new seams is 9/133 (6.77%), 13.33%, 0.00%, 3, zero; Scope C stable
+  facades is 4/78 (5.13%), 32.14%, 0.00%, 2, zero. Residual matches are public
+  constants/env names, stable facade contracts, and standard Node/OS idioms,
+  not unexplained retained private supervision flow.
+- **Freeze and validation:** DB 325/325, Graph 488/488, Search 45/45, Context
+  108/108, Impact/Affected 6/6, semantic fixtures 6/6, and CLI/MCP smoke 21/21
+  pass. TypeScript typecheck and clean production/UI builds pass. The serialized
+  23-file lifecycle run passes 276 tests with 14 declared skips; its sole watcher
+  cleanup `EPERM` is reproduced unchanged on the exact OLD baseline (35/36 in
+  both OLD and NEW), so it is a bounded Windows filesystem-handle artifact, not
+  a C06.2 regression. Writer ownership, convergence, daemon, socket, proxy, and
+  all other lifecycle results in that run remain healthy.
+- **CI and state:** PR #40 final-head cross-platform CI passes 7/7: Linux 2/2,
+  macOS 2/2, Windows 2/2, and Rust kernel 1/1. The selected private residual is
+  closed, but IND-C06 remains active until separate
+  IND-C06.3 lifecycle consolidation proves subsystem-wide `MATERIAL_RESIDUAL = 0`
+  and `UNKNOWN = 0`. Do not begin IND-C07 yet.
+
 ### IND-C07 — MCP and CLI adapter internals
 
 - **Scope/ownership:** split private implementation from frozen tool/command/
