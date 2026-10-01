@@ -1924,6 +1924,167 @@ behavior. Large subsystem labels never authorize a batch rewrite.
 - **Frozen/stop:** public names/schema/output, domain semantics and UI peer
   boundary; stop on agent compatibility or startup/payload regression.
 
+#### IND-C07.1 — MCP / CLI adapter inventory and first-slice selection (2026-10-02)
+
+- **Baseline and method:** official baseline
+  `a57d2cd4d57aefac5ecf9bd0548d27d81f291c0f`; inventory was performed on
+  `afyx/ind-c07-adapter-inventory`. CodeGraph topology, source-region review,
+  history, accepted OLD/NEW mutation artifacts, semantic/smoke tests, a frozen
+  scratch copy of the repository index, and established Phase 3B normalization
+  against `b7a1aa2718dc1f6940e483043733f67020d9a62f` were used. Similarity is a
+  risk signal only, never a rewrite criterion.
+- **Frozen public MCP contract:** ordered names remain `afyx_graph_search`,
+  `afyx_graph_callers`, `afyx_graph_callees`, `afyx_graph_impact`,
+  `afyx_graph_node`, `afyx_graph_explore`, `afyx_graph_status`, and
+  `afyx_graph_files`; catalog SHA-256 remains
+  `4eaa5a29a1f93bcee7d6b9a77605aa221f53c5767ba26cf0c6d150a0b43d6b3a`.
+  `initialize`, protocol negotiation, `serverInfo`, `{ tools: {} }`,
+  `tools/list`, `tools/call`, `ping`, empty resources/prompts probes, tool
+  schemas/order/annotations, `AFYX_GRAPH_MCP_TOOLS`, project-path behavior,
+  JSON-RPC error codes/messages, and established `ToolResult` shapes/wording
+  are frozen.
+- **Frozen public CLI contract:** canonical order remains `init`, `uninit`,
+  `index`, `sync`, `status`, `query`, `explore`, `context`, `prompt-hook`,
+  `node`, `files`, `daemon`, `ui`, `serve`, `unlock`, `callers`, `callees`,
+  `impact`, `affected`, `install`, `uninstall`, `upgrade`, `version`; aliases
+  remain `daemon -> daemons` and `ui -> web`; `prompt-hook` and `serve` remain
+  hidden. Root-help SHA-256 is
+  `c37f1c94b207601e524ee591056da18238df1e5b7cc2b1e55eab0a015db23168`
+  and query-help SHA-256 is
+  `0ce2d5d2c93401f903871589a0db50b588e969524eb405253488bc81618b8bcd`.
+  Names/options/help, ordering, aliases, hidden state, stdout/stderr, JSON
+  purity, exit codes, color handling, and stdin behavior are frozen.
+
+**MCP ownership and classification**
+
+| Family / region | Owner and approximate lines | Classification | Evidence / boundary |
+| --- | --- | --- | --- |
+| Catalog declarations | `tools.ts:1091-1438` | `FROZEN_PUBLIC_CONTRACT` | Semantic digest freezes names, schema, descriptions, annotations, metadata and default exposure. |
+| Registry/allowlist seam | `tool-registry.ts:4-125` | `CLOSED_AFYX_NATIVE` | Afyx-native commit `3e0a03e`; public name to private route, parsing, ordering, allowlist and project-path schema transform are explicit. |
+| Dispatch and cross-cutting validation | `ToolHandler.execute`, `executeReadTool`, `dispatchTool` (`tools.ts:2072-2248`) | `MATERIAL_RESIDUAL_REQUIRES_CLOSURE` | Owns private gate/allowlist/path validation, status exception, pool selection, route switch, failure classification and notices. |
+| Result primitives | `tool-results.ts:5-37` | `CLOSED_AFYX_NATIVE` | Afyx-native result/error seam; not-indexed guidance, path refusal and internal failure are distinct. Public result wording remains frozen. |
+| Tool-specific result assembly | handler/formatter regions in `tools.ts:2253-3208,6058-6991` | `MATERIAL_RESIDUAL_REQUIRES_CLOSURE` | Validation, domain-call orchestration, text assembly, truncation and availability are still coupled in the host. |
+| Search/relationship/node/status/files adapters | `handleSearch`, `handleCallers`, `handleCallees`, `handleImpact`, `handleNode`, `handleStatus`, `handleFiles` | `MATERIAL_RESIDUAL_REQUIRES_CLOSURE` | Domain algorithms stay frozen; only MCP-specific validation/orchestration/presentation is C07-owned. |
+| Explore adapter | `tools.ts:162-1090,2526-6049` plus `explore-*` and `dynamic-boundaries.ts` | `MATERIAL_RESIDUAL_REQUIRES_CLOSURE` | Adapter budgeting, allocation, dedup, diagnostics, session emission and bounded presentation remain material; Search/Context/Graph/Impact semantics are frozen. Not selected first. |
+| Session dispatch | `session.ts:85-324` | `MATERIAL_RESIDUAL_REQUIRES_CLOSURE` | Wire behavior is frozen; private method switch, initialization/roots control flow and tools-call bridging remain implementation. |
+| Transport | `transport.ts:23-89` public shapes; `90-246` line transport; `272-436` stdio/socket | `MATERIAL_RESIDUAL_REQUIRES_CLOSURE` | JSON-RPC shapes/error codes are frozen; private parsing/request correlation remains C07. Socket lifecycle is C06-frozen and outside the future slice. |
+| Engine/project selection | `engine.ts:64-297` selection/handler ownership; `298-412` watcher/catch-up | `MATERIAL_RESIDUAL_REQUIRES_CLOSURE` | Selection/retry/handler ownership is adapter logic; indexing, watcher, locks and catch-up lifecycle are frozen/outside. |
+| Query pool/worker | `query-pool.ts`, `query-worker.ts` | `MATERIAL_RESIDUAL_REQUIRES_CLOSURE` | MCP read-dispatch performance infrastructure owns queue, scaling, retry/backstop and result transport. It must follow, not precede, a stable dispatch seam. |
+| Instructions/version | `server-instructions.ts`, `version.ts` | `FROZEN_PUBLIC_CONTRACT` | Public behavior-defining data/constants; no implementation rewrite is justified. |
+
+The MCP call path is `MCPSession.handleToolsCall -> ToolHandler.execute ->
+QueryPool.run or executeReadTool -> dispatchTool -> one domain-facing handler ->
+AfyxGraph API -> ToolResult -> transport.sendResult`. The session owns JSON-RPC
+and per-session Explore state; the handler owns MCP validation and presentation;
+the domain APIs retain Search, Context, Graph, Impact and DB semantics.
+
+**CLI ownership and classification**
+
+| Family / region | Owner and approximate lines | Classification | Evidence / boundary |
+| --- | --- | --- | --- |
+| Registry/invocation | `cli-registry.ts:3-86` | `CLOSED_AFYX_NATIVE` | Afyx-native commit `0f06c33`; canonical metadata, aliases, hidden commands, version/color preprocessing and Commander catalog assertion. |
+| Project/index group | `afyx-graph.ts:599-1039` | `MATERIAL_RESIDUAL_REQUIRES_CLOSURE` | `init/uninit/index/sync/status` retain CLI orchestration; indexing and DB semantics are frozen. |
+| Query/intelligence group | `afyx-graph.ts:1042-1676,2017-2346` | `MATERIAL_RESIDUAL_REQUIRES_CLOSURE` | `query/explore/context/node/files/callers/callees/impact/affected` retain command validation, domain routing and output mapping; domain semantics are frozen. |
+| Service group | `afyx-graph.ts:1678-1752,1909-2024` | `OUTSIDE_IND_C07` | `daemon/serve/unlock` lifecycle is IND-C06 complete/frozen; only its public CLI surface is frozen here. |
+| UI command | `afyx-graph.ts:1754-1908` | `OUTSIDE_IND_C07` | UI semantics are outside C07; command/help/exit contract is frozen. |
+| Installer group | `afyx-graph.ts:2348-2496` and `uninstall.ts` | `OUTSIDE_IND_C07` | Thin CLI contract is frozen; provider/installer implementation belongs to IND-C10. |
+| Utility group | `prompt-hook`, `version`, invocation setup | `FROZEN_PUBLIC_CONTRACT` | Stable integration/version behavior; registry is already Afyx-native. |
+| Result/error mapping | command actions in `afyx-graph.ts`; `cli-presentation.ts` | `MATERIAL_RESIDUAL_REQUIRES_CLOSURE` | Host still owns JSON/human/quiet, exit and exception mapping. IND-C01 presentation primitives remain complete/frozen and must be reused. |
+| Runtime helpers | `cli-path.ts`, `cli-presentation.ts`, `command-supervision.ts`, `fatal-handler.ts`, `node-version-check.ts` | `OUTSIDE_IND_C07` | `cli-path.ts` is a small Afyx-native seam; presentation is C01, packaging prerequisite is C02, and supervision/liveness is C06. |
+
+CLI call paths remain command-specific: Commander registration uses
+`cli-registry.ts`, each action resolves a project and calls the relevant public
+`AfyxGraph`/domain API, then maps the result to CLI-only human/JSON/quiet output.
+No universal MCP/CLI adapter is justified: sharing stops at domain APIs and
+genuinely identical primitives.
+
+**Ground truth, mutation and real-repository evidence**
+
+| Family | Contract / test | Strength | Remaining gap |
+| --- | --- | --- | --- |
+| MCP catalog/session/errors | `mcp-semantic-contract` 8/8; tool allowlist, annotations, path requirement, unindexed behavior, roots/init tests | Strong contract plus subprocess coverage | Three subprocess groups complete assertions but Windows teardown can report `EPERM` while deleting a just-killed child cwd; CI remains the platform authority. |
+| CLI catalog/help/JSON/errors | `cli-semantic-contract` 9/9 plus focused query/context/node/affected/color/truncation 23/23 | Strong process-level contract | Future slices need family-specific mutation reruns. |
+| All exposed adapters | `smoke-cli-mcp.mjs` 21/21 | Strong end-to-end smoke for all eight MCP tools and representative CLI | Fixture-sized, not a throughput claim. |
+| Domain freezes | semantic baseline 6/6; Search/Context/Graph/Impact/query-pool 435/435; DB 295/295; watcher/writer-lock 42/42, proxy 3 platform-skipped | Strong frozen boundary evidence | No domain behavior may be changed by C07. |
+
+Accepted mutation evidence is sufficient for selection: MCP OLD 16/16 and NEW
+16/16 catch catalog/schema/annotation/default-surface/allowlist/project-path,
+wrong route, argument normalization, unknown tool/method, `isError`, not-indexed
+and generic failure mutations. CLI OLD 16/16 and NEW 16/16 catch catalog,
+aliases/hidden state, version, required arguments, stdout/stderr, numeric exits,
+JSON pollution, path/stdin/color/default/result formatting and wrong query route.
+No new mutation was needed for this inventory; the selected slice must rerun and
+extend the dispatch-specific set if its final boundary introduces an uncovered
+branch.
+
+A scratch-only copy of the current repository and its index produced exit zero
+for `status`, `query`, `explore`, `context`, `callers`, `callees`, `impact`,
+`affected`, `node`, and `files`. Their normalized payload sizes were respectively
+1,234; 3,936; 25,117; 15,660; 2,601; 3,411; 43,659; 14,274; 840; and 2,156
+bytes, with SHA-256 captured during the run. Benchmark and current-head
+provenance artifacts are under
+`%LOCALAPPDATA%\Temp\afyx-ind-c07-inventory-20261002`. This is adapter evidence,
+not a new semantic oracle. MCP all-tool behavior is separately proven by the
+21-check isolated smoke; the controlled benchmark used
+`AFYX_GRAPH_MCP_TOOLS=explore,search,status`.
+
+**Current performance and provenance**
+
+- MCP, five current-state rounds on an isolated indexed fixture: lifecycle
+  median 1,277.18 ms (nearest-rank p95 1,279.22); initialize 475.64/483.52;
+  controlled three-tool `tools/list` 528.56/532.52; first search
+  238.97/253.85; repeated search 1.18/1.25 ms. Payloads: initialize 6,664,
+  controlled `tools/list` 3,074, valid/repeated result 180, invalid tool 93,
+  invalid arguments 127 bytes. The 3,074-byte number is not the full eight-tool
+  catalog. RSS was not exposed by the existing harness.
+- CLI, five current-state rounds: help median/p95 153.70/188.75 ms, version
+  143.68/154.19, indexed query 490.70/504.69. Scratch real-repository one-shot
+  runs separate process/adapter/domain cost rather than attributing the total to
+  adapters: status 1,999.4, query 630.1, explore 1,177.7, context 833.1 ms.
+- Established MCP normalization: whole relevant scope (`tools.ts`, `session.ts`,
+  `tool-registry.ts`, `tool-results.ts`) is 2,584/2,795 substantive lines
+  (92.45%), 95.52% comments, 84.35% five-line shingles, longest block 910,
+  110 blocks >=8. New native registry/result modules are 6/79 (7.59%), 0%
+  comments, 0.72% shingles, no >=8 block. Legacy mixed hosts are 2,578/2,716
+  (94.92%), 96.14% comments, 86.08% shingles, longest 910, 110 blocks >=8.
+- Established CLI normalization: whole relevant scope is 986/1,297
+  substantive lines (76.02%), 83.33% comments, 58.43% shingles, longest 95,
+  80 blocks >=8. Native registry/path/presentation modules are 16/122 (13.11%),
+  14.29% comments, 2.25% shingles, no >=8 block. Legacy mixed hosts are
+  970/1,175 (82.55%), 84.24% comments, 62.47% shingles, longest 95, 80 blocks
+  >=8. Matches include frozen contract/schema/domain vocabulary, standard
+  Commander/JSON-RPC/Node idioms, and retained private orchestration; this is
+  technical provenance evidence, not a legal conclusion.
+
+**Decision and dependency order**
+
+- Region-level inventory finds **11 material residual families** and **zero
+  unknowns**. Mixed hosts are intentionally not assigned one file-wide label.
+- Dependency order is: (1) MCP read-tool dispatch/failure seam; (2) MCP
+  tool-specific result assembly and thin domain adapters; (3) session dispatch;
+  (4) transport, project selection, and pool/worker in independently bounded
+  slices; (5) Explore adapter policy; then (6) CLI project/index,
+  query/intelligence, and result/error families as separate slices. Frozen
+  domains and C01-C06 remain outside every step.
+- **Selected first family:** `MCP Read-Tool Dispatch / Failure Adapter`, limited
+  to `ToolHandler.executeReadTool` and `ToolHandler.dispatchTool`
+  (`tools.ts:2223-2248`) and their consumption of the already-native
+  `resolveToolRoute` / `classifyToolFailure` seams. Expected future seam:
+  `src/mcp/tool-dispatch.ts`, with explicit route-to-handler dependencies;
+  downstream consumers are `ToolHandler.execute` and `query-worker.ts`.
+  `ToolHandler.execute`, per-tool handlers, Explore, session/transport, pool,
+  CLI, and every domain API are excluded from that first implementation slice.
+- Selection reason: retained private control flow is directly evidenced; it is
+  lower than session/pool/tool families, bounded to two symbols, covered by
+  wrong-route/unknown-tool/failure-shape mutations, and permits extraction
+  without changing any public schema, name, ordering, result wording,
+  availability, lifecycle or domain semantics.
+- Decision path is **Path C** (multiple residuals, one dependency-safe first
+  slice selected). Final classification is
+  `MCP_CLI_ADAPTER_RESIDUAL_SELECTED`. IND-C07 remains **ACTIVE**. Exact next
+  phase: **Phase 3B.12C.7.2 — MCP Read-Tool Dispatch / Failure Adapter Residual
+  Closure**. Do not begin IND-C08.
+
 ### IND-C08 — Extraction closure
 
 - **Scope/ownership:** parser dispatch/control flow and language hosts after
