@@ -555,9 +555,10 @@ describe('MCP Tool Improvements', () => {
     const result = truncate(text);
     // Should end with truncation notice after a newline boundary
     expect(result).toContain('... (output truncated)');
-    // Should not cut mid-line (the char before truncation notice should be \n)
+    // The content before the notice must end on one complete source line, not
+    // at the raw character cap in the middle of its payload.
     const beforeTruncation = result.split('\n\n... (output truncated)')[0]!;
-    expect(beforeTruncation.endsWith('\n') || !beforeTruncation.includes('\0')).toBe(true);
+    expect(beforeTruncation.split('\n').at(-1)).toMatch(/^Line \d+: a{50}$/);
   });
 
   describe('findSymbol disambiguation', () => {
