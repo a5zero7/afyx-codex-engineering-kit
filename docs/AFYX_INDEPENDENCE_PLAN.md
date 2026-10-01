@@ -2334,6 +2334,78 @@ a legal conclusion.
   mutation artifacts live under
   `%LOCALAPPDATA%\Temp\afyx-ind-c07r3-20261002`; none belong in the repository.
 
+#### IND-C07.4 — MCP shared bounded-output seam residual closure (2026-10-02)
+
+- **Baseline and selected ownership:** official baseline
+  `42de349301007c850a46d54ec89ea7f45d956f8c`. The selected OLD symbols were
+  `MAX_OUTPUT_LENGTH`, `ToolHandler.truncateOutput`, and every existing
+  Search/Callers/Callees/Impact/Node/Files consumption site. OLD kept the
+  shared 15,000-JavaScript-string-unit policy inside the domain-hosting
+  `ToolHandler` class.
+- **OLD ground truth and mutation:** a 12-case direct oracle captured empty,
+  short, 14,999, exactly 15,000, no-newline, long single-line, below/exact/above
+  strict 80% threshold, last eligible newline, complete-line, ordinary-marker,
+  and deterministic-repeat behavior with exact strings, lengths, cut points,
+  markers, and SHA-256. The accepted focused OLD tests passed 2/2; the C07.3
+  campaign was reproduced at **5/5 killed**, zero survivor/invalid.
+- **Afyx-native seam:** `src/mcp/tool-output.ts` now owns one pure
+  `boundToolOutput(text)` operation. It has no handler, graph, DB, session,
+  transport, pool, worker, CLI, environment, or mutable-state dependency.
+  `tools.ts` imports it directly at all 15 actual consumption sites; the old
+  constant and private method were removed. Family formatting, ToolResult
+  construction, Explore policy, and Node's separate 38k file-view pagination
+  remain outside this seam.
+- **NEW direct contract and sensitivity:** the dependency-free durable suite
+  passes 6/6 and directly freezes unchanged short/exact-limit values, raw cap,
+  strict `>` threshold, last eligible newline, exact
+  `\n\n... (output truncated)` marker, complete-line behavior, existing-marker
+  treatment, and repeatability. NEW mutation kills **12/12** applicable
+  semantic mutants with zero survivor/equivalent/invalid, including first-vs-
+  last newline and `>=` boundary changes.
+- **Controlled differential and payload:** all **12/12** OLD/NEW cases are
+  byte-for-byte `IDENTICAL`; output lengths, cut points, marker presence, and
+  SHA-256 match, with `UNEXPLAINED = 0`. The complete-line case remains 14,980
+  bytes/chars with cut point 14,956 and digest
+  `76391e95979b4e440f75964963d4fd7038c71f857f5b09dc8fa1edc00931a2b4`.
+  Focused MCP/adapter coverage passes 192 with two declared skips, exercising
+  all owning families and representative oversized Search, relationship, Node,
+  input-limit, and security paths; remaining call sites are mechanical direct
+  consumers of the same proven pure operation.
+- **Performance:** 31 alternating OLD/NEW samples of 25,000 calls each report
+  median deltas: short +0.004 ns (+0.10%), >15k single line +6.536 ns (+0.13%),
+  and eligible-newline multiline -2.916 ns (-0.33%). Corresponding NEW
+  median/p95 values are 4.192/11.436 ns, 5,190.068/5,332.460 ns, and
+  886.796/911.516 ns. There is no material reproducible regression; these
+  nanosecond-scale figures are not user-facing latency claims.
+- **Provenance:** established normalization against
+  `b7a1aa2718dc1f6940e483043733f67020d9a62f` reports Scope A (OLD constant and
+  method) 7/7 substantive, 2/2 comments, 75% five-line shingles, longest block
+  11, one block >=8. Scope B (new seam) is 1/9 substantive (11.11%), 0/1
+  comments, 0% shingles, longest block 2, zero blocks >=8. Scope C (remaining
+  `tools.ts` import/calls) is 0/15 substantive, no comments, 0% shingles,
+  longest block 0, zero blocks >=8. The one Scope-B match is necessary public
+  policy/standard string handling, not unexplained retained private ownership;
+  this is technical provenance evidence, not a legal conclusion.
+- **Freeze gates:** catalog digest remains
+  `4eaa5a29a1f93bcee7d6b9a77605aa221f53c5767ba26cf0c6d150a0b43d6b3a`.
+  C07.2 dispatch, Search/Files/relationship/Impact/Node/Status adapters,
+  Explore, session, transport, QueryPool/worker, CLI, C01-C06, Extraction,
+  Resolution, Provider/Installer, and UI remain frozen. Focused MCP tests,
+  Search/Context/Graph/Impact/QueryPool, DB/lifecycle, CLI semantic,
+  Extraction/Resolution, semantic fixtures, smoke, typecheck, production/UI
+  builds, and final-head seven-job CI are required closure gates.
+- **Residual map and next slice:** closing this independent family does not
+  merge or split downstream family ownership. The evidence-based count is
+  therefore **14 remaining C07 material families**, `UNKNOWN = 0`. Search is
+  the next dependency-safe family: it is smaller than Files, has the strongest
+  direct public/ground-truth coverage, and has a bounded validation/domain-call/
+  ordering/formatting boundary. Exact next phase is **Phase 3B.12C.7.5 — MCP
+  Search Adapter Residual Closure**; it is not implemented here. IND-C07 stays
+  **ACTIVE** and IND-C08 remains not started.
+- Scratch-only OLD/NEW oracles, differential, mutation, performance, and
+  provenance artifacts live under
+  `%LOCALAPPDATA%\Temp\afyx-ind-c07r4-20261002` and are excluded from the PR.
+
 ### IND-C08 — Extraction closure
 
 - **Scope/ownership:** parser dispatch/control flow and language hosts after

@@ -83,6 +83,7 @@ import {
   textToolResult,
 } from './tool-results';
 import { dispatchReadTool, type ReadToolHandlers } from './tool-dispatch';
+import { boundToolOutput } from './tool-output';
 
 export { NotIndexedError } from './tool-results';
 
@@ -108,9 +109,6 @@ export { NotIndexedError } from './tool-results';
 export { PathRefusalError } from '../errors';
 import { PathRefusalError } from '../errors';
 import { resolve as resolvePath, relative as relativePath } from 'path';
-
-/** Maximum output length to prevent context bloat (characters) */
-const MAX_OUTPUT_LENGTH = 15000;
 
 /**
  * Maximum length for free-form string inputs (query, task, symbol).
@@ -2271,7 +2269,7 @@ export class ToolHandler {
     });
 
     const formatted = this.formatSearchResults(ranked);
-    return this.textResult(this.truncateOutput(formatted));
+    return this.textResult(boundToolOutput(formatted));
   }
 
   /**
@@ -2348,7 +2346,7 @@ export class ToolHandler {
         ? `\n\n> Showing ${limit} of ${callers.length} callers; pass \`limit\` (up to 100) to widen.`
         : '';
       const formatted = this.formatNodeList(callers.slice(0, limit), `Callers of ${symbol}`, labels) + cut + note + filterNote;
-      return this.textResult(this.truncateOutput(formatted));
+      return this.textResult(boundToolOutput(formatted));
     }
 
     // Multiple DISTINCT definitions (#764): one section per definition so an
@@ -2373,7 +2371,7 @@ export class ToolHandler {
         lines.push(`- … +${callers.length - limit} more (pass \`limit\` to widen)`);
       }
     }
-    return this.textResult(this.truncateOutput(lines.join('\n') + filterNote));
+    return this.textResult(boundToolOutput(lines.join('\n') + filterNote));
   }
 
   /**
@@ -2428,7 +2426,7 @@ export class ToolHandler {
         ? `\n\n> Showing ${limit} of ${callees.length} callees; pass \`limit\` (up to 100) to widen.`
         : '';
       const formatted = this.formatNodeList(callees.slice(0, limit), `Callees of ${symbol}`, labels) + cut + note + filterNote;
-      return this.textResult(this.truncateOutput(formatted));
+      return this.textResult(boundToolOutput(formatted));
     }
 
     // Multiple DISTINCT definitions (#764): per-definition sections.
@@ -2451,7 +2449,7 @@ export class ToolHandler {
         lines.push(`- … +${callees.length - limit} more (pass \`limit\` to widen)`);
       }
     }
-    return this.textResult(this.truncateOutput(lines.join('\n') + filterNote));
+    return this.textResult(boundToolOutput(lines.join('\n') + filterNote));
   }
 
   /**
@@ -2480,7 +2478,7 @@ export class ToolHandler {
     // Single definition (or same-file overloads): the familiar merged report.
     if (groups.length === 1) {
       const formatted = this.formatImpact(symbol, impactOf(groups[0]!)) + (fileFilter && !filteredOut ? "" : allMatches.note) + filterNote;
-      return this.textResult(this.truncateOutput(formatted));
+      return this.textResult(boundToolOutput(formatted));
     }
 
     // Multiple DISTINCT definitions (#764): a blast radius PER definition —
@@ -2497,7 +2495,7 @@ export class ToolHandler {
         this.formatImpact(`${head.qualifiedName} (${head.filePath}${line})`, impactOf(group))
       );
     }
-    return this.textResult(this.truncateOutput(sections.join('\n') + filterNote));
+    return this.textResult(boundToolOutput(sections.join('\n') + filterNote));
   }
 
   /**
@@ -6096,7 +6094,7 @@ export class ToolHandler {
 
     // Single definition — the common case.
     if (matches.length === 1) {
-      return this.textResult(this.truncateOutput(await this.renderNodeSection(cg, matches[0]!, includeCode)));
+      return this.textResult(boundToolOutput(await this.renderNodeSection(cg, matches[0]!, includeCode)));
     }
 
     // Multiple definitions share this name — overloads, or same-named methods on
@@ -6110,12 +6108,12 @@ export class ToolHandler {
     const header = `**${matches.length} definitions named "${symbol}"**`;
     if (!includeCode) {
       const list = matches.map((n) => `- \`${n.name}\` (${n.kind}) — ${n.filePath}:${n.startLine}`);
-      return this.textResult(this.truncateOutput(
+      return this.textResult(boundToolOutput(
         [header, '', 'Re-query with `includeCode: true` to get every body in one call — no need to pick one first.', '', ...list].join('\n'),
       ));
     }
 
-    const BODY_BUDGET = 12000; // leaves room under MAX_OUTPUT_LENGTH for the header + list
+    const BODY_BUDGET = 12000; // leaves room under the shared 15k output cap for the header + list
     // The CHAR budget is the real limiter — keep the count cap high so a set of
     // SHORT overloads (Alamofire's 10 `validate` variants, each a few lines) all
     // render in full rather than relegating the one the agent wanted to a
@@ -6156,7 +6154,7 @@ export class ToolHandler {
         `> Need one of these in full? Call afyx_graph_node again with \`file\` (e.g. \`"${listed[0]!.filePath.split('/').pop()}"\`) or \`line\` — do NOT Read it.`,
       );
     }
-    return this.textResult(this.truncateOutput(out.join('\n')));
+    return this.textResult(boundToolOutput(out.join('\n')));
   }
 
   /**
@@ -6232,7 +6230,7 @@ export class ToolHandler {
       if (nodes.length) out.push(...symbolMap('**Symbols**'));
       else out.push('_No indexed symbols in this file._');
       out.push('', '> Drop `symbolsOnly` (or pass `offset`/`limit`) to read the source, like Read.');
-      return this.textResult(this.truncateOutput(out.join('\n')));
+      return this.textResult(boundToolOutput(out.join('\n')));
     }
 
     // SECURITY (#383): never dump a raw config/data file — a yaml/properties
@@ -6241,7 +6239,7 @@ export class ToolHandler {
       const out = [`**${filePath}** — configuration/data file, ${depSummary}`, ''];
       if (nodes.length) out.push(...symbolMap('**Keys (values withheld for safety)**'));
       out.push('', '> Values may be secrets, so afyx-graph indexes keys only. Read the file directly if you need a value.');
-      return this.textResult(this.truncateOutput(out.join('\n')));
+      return this.textResult(boundToolOutput(out.join('\n')));
     }
 
     // Read the current bytes from disk through the security chokepoint
@@ -6255,7 +6253,7 @@ export class ToolHandler {
       const out = [`**${filePath}** — could not read from disk (it may have moved since indexing). ${depSummary}`, ''];
       if (nodes.length) out.push(...symbolMap('**Symbols**'));
       out.push('', `> Read \`${filePath}\` directly for its current content.`);
-      return this.textResult(this.truncateOutput(out.join('\n')));
+      return this.textResult(boundToolOutput(out.join('\n')));
     }
 
     // Split exactly as Read does — keep the trailing empty line a final newline
@@ -6267,7 +6265,7 @@ export class ToolHandler {
     // (1-based start line; max line count). Default: the whole file, capped like
     // Read at 2000 lines and bounded by a char budget that tracks explore's
     // proven-safe ~38k response ceiling. Overflow is stated explicitly (Read
-    // paginates too) — never the silent 15k truncateOutput chop.
+    // paginates too) — never silently apply the shared 15k output bound.
     const CHAR_BUDGET = 38000;
     const DEFAULT_LIMIT = 2000;
     const offset = Math.max(1, opts.offset ?? 1);
@@ -6298,7 +6296,7 @@ export class ToolHandler {
         `(lines ${offset}–${shownEnd} of ${total} — pass \`offset\`/\`limit\` for another range, or \`afyx_graph_node <symbol>\` for one symbol in full)`,
       );
     }
-    // Self-bounded to CHAR_BUDGET — do NOT route through truncateOutput (15k).
+    // Self-bounded to CHAR_BUDGET — do NOT route through the shared 15k output bound.
     return this.textResult(out.join('\n'));
   }
 
@@ -6330,7 +6328,7 @@ export class ToolHandler {
   }
 
   // Whole-file fallback caps for a drifted file (#1474): small enough to fit
-  // afyx_graph_node's output cap (MAX_OUTPUT_LENGTH) with headroom for the
+  // afyx_graph_node's shared 15k output cap with headroom for the
   // header + trail. A file within these bounds is served WHOLE and CURRENT
   // (Read-parity, correct by construction) instead of a possibly-wrong slice.
   private static readonly STALE_WHOLE_FILE_MAX_LINES = 300;
@@ -6603,7 +6601,7 @@ export class ToolHandler {
         break;
     }
 
-    return this.textResult(this.truncateOutput(output));
+    return this.textResult(boundToolOutput(output));
   }
 
   /**
@@ -6826,17 +6824,6 @@ export class ToolHandler {
    */
   private findAllSymbols(cg: AfyxGraph, symbol: string): { nodes: Node[]; note: string } {
     return findAllSymbols(cg, symbol);
-  }
-
-  /**
-   * Truncate output if it exceeds the maximum length
-   */
-  private truncateOutput(text: string): string {
-    if (text.length <= MAX_OUTPUT_LENGTH) return text;
-    const truncated = text.slice(0, MAX_OUTPUT_LENGTH);
-    const lastNewline = truncated.lastIndexOf('\n');
-    const cutPoint = lastNewline > MAX_OUTPUT_LENGTH * 0.8 ? lastNewline : MAX_OUTPUT_LENGTH;
-    return truncated.slice(0, cutPoint) + '\n\n... (output truncated)';
   }
 
   // =========================================================================
