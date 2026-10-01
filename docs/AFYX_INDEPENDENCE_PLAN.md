@@ -1805,6 +1805,108 @@ behavior. Large subsystem labels never authorize a batch rewrite.
   IND-C06.3 lifecycle consolidation proves subsystem-wide `MATERIAL_RESIDUAL = 0`
   and `UNKNOWN = 0`. Do not begin IND-C07 yet.
 
+#### IND-C06.3 — Lifecycle final consolidation and freeze (2026-10-02)
+
+- **Baseline and audit scope:** official baseline
+  `e5b0954b63fa8c5e48b0058504d0f0e800c05c86` (PR #40 merged). This gate
+  inspected lifecycle ownership under `src/sync/**` and the bounded writer,
+  daemon, socket, proxy, client, shutdown, and supervision hosts under
+  `src/mcp/**`. General MCP tool/session semantics remain outside IND-C06.
+  Current lifecycle production source is unchanged from its accepted C06.1/C06.2
+  evidence commits, so no production or permanent test change is justified.
+- **Ownership architecture:** filesystem adapters feed `FileWatcher`, which owns
+  freshness intake and convergence through `PendingChangeSet`,
+  `DebounceScheduler`, and `RetryPolicy`. Atomic writer ownership gates the
+  daemon/service. The daemon owns registry, socket, watcher, client sessions,
+  and activity timers; each proxy owns one attachment and its daemon-loss
+  fallback. Supervision separately owns parent/host health, startup abandonment,
+  terminal stdin, and main-loop health. MCP owns wire behavior, not these
+  lifecycle decisions. No unexpected cross-layer ownership leak was found.
+
+| Family | Owner | Contract | Ground truth | Mutation | Provenance | Platform | Final classification |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Watch Event Intake | `FsWatchAdapter`, `watcher-scope.ts`, `FileWatcher` | normalize/filter create, change, delete and scope events | watcher and 87-case sync contract; real `fs.watch` behavior | OLD 20/20, NEW 21/21; utilities 5/5 | Afyx collaborators own intake; residual matches are fs/path idioms | recursive Windows/macOS; per-directory Linux | `CLOSED_AFYX_NATIVE` |
+| Pending Change / Debounce | `PendingChangeSet`, `DebounceScheduler` | fold duplicates, preserve arrivals, trailing quick/full windows | boundary, burst, during-sync and stop cases PASS | included in watcher 21/21 and utilities 5/5 | explicit Afyx state owners; no unexplained private flow | equivalent observable scheduling contract | `CLOSED_AFYX_NATIVE` |
+| Retry / Convergence | `RetryPolicy`, `FileWatcher.flush` | retain work through lock/generic failure and converge after success | sync contract 87/87; incremental convergence 10/10 | included in watcher/utility campaigns | Afyx retry/convergence policy; Extraction stays frozen | deterministic policy on all OSes | `CLOSED_AFYX_NATIVE` |
+| Writer Ownership / Lock | `atomic-lockfile.ts`, `writer-lock.ts` | at most one writer; stale/live/PID-reuse-safe acquire/release | writer 6/6, MCP writer 2/2, daemon election 12/12 | daemon/proxy OLD 24/24, NEW 27/27 | 15/151 substantive (9.93%); no >=8-line block | controlled live child is portable; no PID-1 dependency | `CLOSED_AFYX_NATIVE` |
+| Process Supervision / Liveness | supervision policy/runtime and stable facades | parent/host, startup, stdin and wedge supervision | focused 58 PASS plus four legitimate POSIX skips; real children | OLD 23/23; NEW 22/22 applicable plus one equivalent | NEW Scope A 13/211 (6.16%), 0% shingles, longest block 3 | POSIX reparent; Windows parent probe; CI on three OSes | `CLOSED_AFYX_NATIVE` |
+| Daemon Startup / Registry / Handshake | `Daemon`, election, manager and registry | cold/concurrent start, identity hello, reuse and stale recovery | MCP daemon 12/12; registry 11/11; PID reuse and attach PASS | daemon/proxy OLD 24/24, NEW 27/27 | 186/503 (36.98%); retained matches are public shapes/messages and API idioms | real Windows plus accepted Linux/macOS CI | `CLOSED_AFYX_NATIVE` |
+| Socket Binding / Fallback | `socket-bind.ts`, `daemon-paths.ts`, `Daemon.bindSocket` | ordered candidates, no live endpoint theft, partial/stale cleanup | socket selection/fallback 13 PASS plus six POSIX-only local skips | covered by daemon/proxy 27/27 | included in daemon/path ownership; OS vocabulary is not private flow | named pipe Windows; Unix socket candidates POSIX | `CLOSED_AFYX_NATIVE` |
+| Proxy Attach / Client | `proxy.ts`, `client-registry.ts`, `ActivityTimers` | warm attach, multi-client lifetime, dead peer, daemon-loss fallback | daemon 12/12, client-liveness 19/19, attach-log 2/2 | daemon/proxy OLD 24/24, NEW 27/27 | 88/234 (37.61%); 3.28% shingles, two >=8 blocks classified public/facade | same observable lifecycle across all CI OSes | `CLOSED_AFYX_NATIVE` |
+| Shutdown / Teardown | bounded stop paths of owners above | idempotent ordered cleanup; forced kill uses stale-owner recovery | stop/failure/disconnect paths in lifecycle selection | covered by all three accepted mutation families | stable terminal contracts span owners; no separate private host | graceful cleanup plus OS-specific crash recovery | `FROZEN_RUNTIME_CONTRACT` |
+
+- **Resource ownership and recovery:**
+
+  | Resource | Owner / creation | Normal and failure cleanup / crash recovery | Evidence |
+  | --- | --- | --- | --- |
+  | `FSWatcher` handles | `FsWatchAdapter.start` | `FileWatcher.stop` closes adapters; degradation also stops | watcher stop/integration; accepted 40-cycle handle probe |
+  | pending state, debounce and retry timers | `FileWatcher` collaborators | stop cancels schedule; failed sync retains pending work; success prunes absorbed generations | sync contract 87/87; convergence 10/10 |
+  | writer lock | direct/daemon engine through `writer-lock.ts` | owned release is compare-and-delete; dead/malformed holder recovered atomically | writer and daemon election/PID-reuse tests |
+  | registry record and socket/named pipe | `Daemon.start` / bind candidates | `Daemon.stop` removes only owned record/endpoints; stale artifacts recovered next start | registry, bind-failure, fallback and PID-reuse tests |
+  | client sessions and activity timers | `Daemon`, `ClientRegistry`, `ActivityTimers` | disconnect/dead-peer/last-client stop paths release sessions and timers | client-liveness and MCP daemon tests |
+  | proxy socket and inflight/pending state | one `LocalHandshakeSession` | shutdown destroys attachment; daemon loss replays inflight locally | proxy and MCP daemon-loss tests |
+  | PPID/startup/heartbeat timers | supervision facades/runtime | timers are unref'd and cleared on settlement/stop | supervision, startup and watchdog-runtime tests |
+  | watchdog child and stdin pipe | `watchdog-runtime.ts` | idempotent stop closes heartbeat/pipe and kills child best-effort | real wedge/healthy tests and runtime ownership tests |
+  | stdin terminal listeners | `stdin-teardown.ts` | first terminal event removes all three listeners before destruction/callback | stdin tests including socket-backed failure |
+  | forced-kill remnants | operating system plus next launcher | no graceful callback assumed; stale lock/registry/socket ownership is recovered on next start | stale/PID-reuse/crash-recovery tests |
+
+- **Final invariants:** cold, concurrent, live, stale, dead-owner,
+  PID-reuse-sensitive, reentrant, release, and crash-recovery paths preserve
+  `COMPETING_WRITER = 0`. Create/change/delete, duplicate/burst, debounce,
+  during-sync, retry, failure-then-success, full-scan, and stop paths preserve
+  `LOST_EVENT = 0` and `STALE_FINAL_INDEX = 0`. Supervision preserves healthy
+  processes, parent/host detection, startup reaping, single terminal settlement,
+  allocating/non-allocating wedge termination, progress deferral, hard cap, and
+  idempotent stop with `ORPHAN_PROCESS = 0`. Socket evidence gives
+  `SOCKET_LEAK = 0`. Observable persistent timer, listener, handle, and orphan
+  child growth are all zero.
+- **Windows watcher artifact:** current baseline again produced 35/36 in
+  `watcher.test.ts`; the only failure is `fs.rmSync` receiving `EPERM` while
+  deleting the temporary real-watch directory. This exactly matches accepted
+  OLD and NEW evidence, while sync contract 87/87 and final convergence 10/10
+  pass. It does not affect convergence, writer ownership, cleanup contracts, or
+  production semantics. Disposition: `KNOWN_NON_REGRESSION_TEST_ARTIFACT`.
+- **Mutation consolidation:** watcher OLD 20/20, NEW 21/21, utilities 5/5;
+  daemon/proxy OLD 24/24 and NEW 27/27; supervision OLD 23/23 applicable and NEW
+  22/22 applicable with one equivalent, zero meaningful survivors. Current
+  source is unchanged from those campaigns; meaningful unexplained mutation
+  survivors remain zero, so no audit-only mutations were fabricated.
+- **Provenance consolidation:** historical reference remains
+  `b7a1aa2718dc1f6940e483043733f67020d9a62f`. Watcher is 215/548 substantive
+  overlap (39.23%), 43.11% comments, 11.76% shingles, longest block 28, 12
+  blocks >=8; Writer/Lock 15/151 (9.93%), 23.68%, 0.45%, 6/0; Daemon 186/503
+  (36.98%), 23.24%, 5.74%, 12/7; current supervision 13/211 (6.16%), 25.58%,
+  0%, 3/0; Proxy 88/234 (37.61%), 19.30%, 3.28%, 8/2. Git history, explicit
+  state owners, call boundaries, mutation, and runtime tests classify remaining
+  matches as public shapes/messages, paths/env names, stable contracts, or
+  standard Node/OS filesystem/process/socket idioms. This technical evidence
+  establishes `MATERIAL_UNEXPLAINED_PRIVATE_LIFECYCLE_RESIDUAL = 0`; it is not
+  a legal conclusion.
+- **Performance consolidation:** accepted medians are watcher 100 events
+  13.060 ms, 1,000 events 134.777 ms, daemon cold start 376.940 ms, warm attach
+  13.392 ms, second attach 1.123 ms, shutdown 7.074 ms, watchdog arm/stop about
+  31 ms, and wedge detection about 460 ms. Current sanity runs retain the
+  watcher digest `d0bca111f862` and measured 6.468 ms / 56.538 ms; daemon cold
+  start 384.952 ms, warm attach 13.822 ms, second attach 1.201 ms, and shutdown
+  7.250 ms. Absolute deltas are small or improved, with no leak signal:
+  `MATERIAL_PERFORMANCE_REGRESSION = 0`.
+- **Regression and downstream freeze:** the exact serialized 23-file lifecycle
+  selection records 276 PASS, 14 declared platform skips, one known EPERM
+  artifact, and `NEW_UNEXPLAINED_LIFECYCLE_FAILURE = 0`; the additional daemon
+  attach gate passes 2/2. DB 325/325, Graph 488/488, Search 45/45, Context
+  108/108, Impact/Affected 6/6, semantic fixtures 6/6, and CLI/MCP smoke 21/21
+  pass. TypeScript typecheck, clean production build, and clean UI build pass.
+  Final-head Linux/macOS/Windows/Rust CI is pending PR creation.
+- **Decision and state:** Path A. `MATERIAL_RESIDUAL_REQUIRES_CLOSURE = 0` and
+  `UNKNOWN_REQUIRES_EVIDENCE = 0`. `COMPETING_WRITER`, `LOST_EVENT`,
+  `STALE_FINAL_INDEX`, `ORPHAN_PROCESS`, and `SOCKET_LEAK` are all zero. Final
+  classification: `LIFECYCLE_FINAL_CONSOLIDATION_COMPLETE`.
+
+  **IND-C06 Watcher / Daemon / Proxy Lifecycle: COMPLETE AND FROZEN.**
+
+  Exact next phase is **IND-C07 — MCP / CLI Adapter Internals**. It is not
+  started by this consolidation task.
+
 ### IND-C07 — MCP and CLI adapter internals
 
 - **Scope/ownership:** split private implementation from frozen tool/command/
