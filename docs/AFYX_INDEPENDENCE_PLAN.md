@@ -1397,8 +1397,8 @@ behavior. Large subsystem labels never authorize a batch rewrite.
   fixtures 6/6, CLI/MCP smoke 21/21, typecheck, clean production build, and
   clean UI build pass. `src/db/**`, Branch Guard and Dead Code policies and
   semantics, every named frozen subsystem, and legal/provenance files have no
-  production change. Normal seven-job cross-platform CI remains the merge
-  gate for the PR.
+  production change. PR #36 passes all seven normal Linux, macOS, Windows,
+  and Rust-kernel CI jobs.
 - **Known gap next slice:** IND-C05 remains active. Type Hierarchy and the
   remaining traversal families are not started; the recommended next bounded
   slice is IND-C05.4 Type Hierarchy only after this PR is accepted.
