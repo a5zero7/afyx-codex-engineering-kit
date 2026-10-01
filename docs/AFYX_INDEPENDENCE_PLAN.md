@@ -2155,8 +2155,9 @@ not a new semantic oracle. MCP all-tool behavior is separately proven by the
   TypeScript typecheck and clean production/UI builds pass. Catalog SHA-256
   remains `4eaa5a29a1f93bcee7d6b9a77605aa221f53c5767ba26cf0c6d150a0b43d6b3a`;
   names, order, schemas, annotations, session/transport behavior, allowlist,
-  QueryPool, Explore, CLI, and C01-C06 behavior remain unchanged. Final-head
-  cross-platform CI is required on the C07.2 PR before completion.
+  QueryPool, Explore, CLI, and C01-C06 behavior remain unchanged. PR #43
+  cross-platform CI passes all seven Linux, macOS, Windows, and Rust-kernel
+  jobs; one Linux runner OOM/timing failure passed on its unchanged-head rerun.
 - **Evidence location and state:** scratch-only mutation, differential,
   worker-parity, performance, payload, and provenance artifacts are under
   `%LOCALAPPDATA%\Temp\afyx-ind-c07r2-20261002` and are excluded from the PR.
