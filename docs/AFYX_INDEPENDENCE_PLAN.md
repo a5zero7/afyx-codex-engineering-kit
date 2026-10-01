@@ -2085,6 +2085,90 @@ not a new semantic oracle. MCP all-tool behavior is separately proven by the
   phase: **Phase 3B.12C.7.2 — MCP Read-Tool Dispatch / Failure Adapter Residual
   Closure**. Do not begin IND-C08.
 
+#### IND-C07.2 — MCP read-tool dispatch / failure adapter closure (2026-10-02)
+
+- **Baseline and selected residual:** official baseline
+  `589c376f6152154004f75169557af9a6cc5b4fd7` (merged PR #42). The selected
+  private implementation was limited to `ToolHandler.executeReadTool` and its
+  former `dispatchTool` switch. `ToolHandler.execute`, the eight per-tool
+  handlers, QueryPool/worker protocol, session, transport, CLI, Explore policy,
+  and domain algorithms remained frozen.
+- **OLD architecture and ground truth:** `executeReadTool` caught failures around
+  a private route switch in `tools.ts`; that switch used the existing native
+  `resolveToolRoute` seam, invoked one of seven host handlers, and returned the
+  established unknown-tool result. A direct OLD contract passed 13/13; the
+  combined dispatch/MCP semantic/allowlist/query-pool selection passed 41/41;
+  CLI/MCP smoke passed 21/21. The focused OLD mutation campaign killed all
+  13/13 applicable semantic mutants with zero survivors, invalids, or
+  equivalents. Mutants covered wrong routes, status acceptance, unknown-route
+  success/throw behavior, classifier bypass/leak, and all retained failure
+  classes.
+- **Afyx-native seam:** new private `src/mcp/tool-dispatch.ts` owns only public
+  tool-name resolution, explicit injected handler selection, status exclusion,
+  unknown-route result construction through `errorToolResult`, and thrown
+  failure classification through `classifyToolFailure`. It imports no
+  `ToolHandler`, graph, pool, session, transport, or domain implementation.
+  `ToolHandler.executeReadTool` is now a thin stable facade over one explicit
+  seven-handler dependency map; `query-worker.ts` required no change.
+- **NEW ground truth and mutation:** the direct seam/facade contract passes
+  21/21, covering all seven routes, status exclusion, unknown names, argument
+  and result identity, `NotIndexedError`, `PathRefusalError`, generic `Error`,
+  non-Error throws, and never-throw facade behavior. The NEW focused mutation
+  campaign also killed 13/13 applicable mutants with zero survivors, invalids,
+  or equivalents; semantic sensitivity is equal to OLD.
+- **Controlled differential and worker boundary:** OLD and NEW route/failure
+  matrices serialize to the same 2,170 bytes and SHA-256
+  `a7b6a48446d3c4dbb9cb973433ae1d799c7986e0f755f084b4c93a25d0797c50`;
+  every result, selected handler, call count, forwarded argument, and throw
+  boundary is identical (`UNEXPLAINED = 0`). A real built worker against a
+  temporary indexed fixture reached ready state and matched in-process search
+  and unknown-tool results exactly. Raw worker/in-process parity therefore
+  passes without protocol or scheduling changes.
+- **Performance and payload:** twelve interleaved 50,000-call samples measured
+  OLD/NEW pure success medians of 0.187176/0.158638 microseconds, classified
+  failure medians of 1.172170/1.053668 microseconds, and unknown-route medians
+  of 0.135480/0.122068 microseconds. Deltas are respectively -0.028538,
+  -0.118502, and -0.013412 microseconds; percentage changes at this scale are
+  not treated as throughput claims. Five controlled MCP rounds measured OLD/NEW
+  repeated-search medians of 1.1011/1.0983 ms (p95 1.1160/1.1448 ms): no
+  material adapter regression. Initialize (6,664), controlled three-tool
+  `tools/list` (3,074), successful search (180), unknown tool (93), invalid
+  arguments (127), and repeated result (180) payload bytes are identical. The
+  3,074-byte value remains explicitly a controlled
+  `AFYX_GRAPH_MCP_TOOLS=explore,search,status` surface, not the full catalog.
+- **Provenance:** established normalization against
+  `b7a1aa2718dc1f6940e483043733f67020d9a62f` reports Scope A, the OLD selected
+  dispatch/failure region: 4/13 substantive lines (30.77%), 3/4 comments
+  (75%), 0% five-line shingles, longest block 4, zero blocks >=8. Scope B, the
+  new native seam: 0/18 substantive (0%), 0/5 comments, 0% shingles, longest
+  block 2, zero blocks >=8. Scope C, the remaining dependency map/thin facade:
+  1/10 substantive (10%), no comments, 0% shingles, longest block 1, zero
+  blocks >=8. Residual matches are public terminology and standard async/switch
+  idioms; material unexplained retained private dispatch implementation is
+  zero. This is technical provenance evidence, not a legal conclusion.
+- **Freeze gates:** focused MCP/query-pool coverage passes 84 with one skipped;
+  Explore passes 92/92; semantic fixtures 6/6; CLI/MCP smoke 21/21; Search,
+  Context, Graph, Impact/Affected and QueryPool pass 435/435; DB 295/295;
+  watcher/writer-lock lifecycle 42/42; CLI semantic contract 9/9; extraction
+  ground truth 5/5; resolution ground truth 13/13; provider/installer and CLI
+  install 244 with three skipped; UI entry/CLI UI 34 with one skipped.
+  TypeScript typecheck and clean production/UI builds pass. Catalog SHA-256
+  remains `4eaa5a29a1f93bcee7d6b9a77605aa221f53c5767ba26cf0c6d150a0b43d6b3a`;
+  names, order, schemas, annotations, session/transport behavior, allowlist,
+  QueryPool, Explore, CLI, and C01-C06 behavior remain unchanged. Final-head
+  cross-platform CI is required on the C07.2 PR before completion.
+- **Evidence location and state:** scratch-only mutation, differential,
+  worker-parity, performance, payload, and provenance artifacts are under
+  `%LOCALAPPDATA%\Temp\afyx-ind-c07r2-20261002` and are excluded from the PR.
+  This slice closes one of the 11 C07 material families: **10 material
+  residuals remain, with `UNKNOWN = 0`**. Current dependencies select MCP
+  tool-specific result assembly / thin domain adapters as the next planning
+  family because they consume this stable dispatch seam and precede session,
+  transport, pool/worker, and Explore-policy closure. Exact next phase is
+  **Phase 3B.12C.7.3 — MCP Tool-Specific Result Assembly / Thin Domain Adapter
+  Inventory and First-Slice Selection**. It is not started here; IND-C07
+  remains active and IND-C08 remains blocked on its completion.
+
 ### IND-C08 — Extraction closure
 
 - **Scope/ownership:** parser dispatch/control flow and language hosts after

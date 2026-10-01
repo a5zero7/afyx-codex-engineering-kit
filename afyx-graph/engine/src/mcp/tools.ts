@@ -82,6 +82,7 @@ import {
   errorToolResult,
   textToolResult,
 } from './tool-results';
+import { dispatchReadTool, type ReadToolHandlers } from './tool-dispatch';
 
 export { NotIndexedError } from './tool-results';
 
@@ -1488,6 +1489,16 @@ export class ToolHandler {
   // main loop stays free for the MCP transport under concurrent load. Null in
   // direct/in-process mode (one client, no concurrency to parallelize).
   private queryPool: QueryPool | null = null;
+  /** Stable explicit dependencies for worker-safe read-tool dispatch. */
+  private readonly readToolHandlers: ReadToolHandlers = {
+    search: (args) => this.handleSearch(args),
+    callers: (args) => this.handleCallers(args),
+    callees: (args) => this.handleCallees(args),
+    impact: (args) => this.handleImpact(args),
+    explore: (args) => this.handleExplore(args),
+    node: (args) => this.handleNode(args),
+    files: (args) => this.handleFiles(args),
+  };
 
   constructor(private cg: AfyxGraph | null) {}
 
@@ -2221,30 +2232,7 @@ export class ToolHandler {
    * path validation already ran in {@link execute} before routing here.
    */
   async executeReadTool(toolName: string, args: Record<string, unknown>): Promise<ToolResult> {
-    try {
-      return await this.dispatchTool(toolName, args);
-    } catch (err) {
-      return classifyToolFailure(err);
-    }
-  }
-
-  /**
-   * Pure dispatch over the read tools — the switch, with no gate, no notices, no
-   * allowlist/validation (the caller owns those). `afyx_graph_status` is handled
-   * on the main thread in {@link execute} and never reaches here. May throw
-   * NotIndexed/PathRefusal, which {@link executeReadTool} classifies.
-   */
-  private async dispatchTool(toolName: string, args: Record<string, unknown>): Promise<ToolResult> {
-    switch (resolveToolRoute(toolName)) {
-      case 'search': return await this.handleSearch(args);
-      case 'callers': return await this.handleCallers(args);
-      case 'callees': return await this.handleCallees(args);
-      case 'impact': return await this.handleImpact(args);
-      case 'explore': return await this.handleExplore(args);
-      case 'node': return await this.handleNode(args);
-      case 'files': return await this.handleFiles(args);
-      default: return this.errorResult(`Unknown tool: ${toolName}`);
-    }
+    return dispatchReadTool(toolName, args, this.readToolHandlers);
   }
 
   /**
