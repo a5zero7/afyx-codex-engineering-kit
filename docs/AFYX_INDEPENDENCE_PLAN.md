@@ -2170,6 +2170,170 @@ not a new semantic oracle. MCP all-tool behavior is separately proven by the
   Inventory and First-Slice Selection**. It is not started here; IND-C07
   remains active and IND-C08 remains blocked on its completion.
 
+#### IND-C07.3 — MCP tool-specific result assembly / thin domain adapter inventory and first-slice selection (2026-10-02)
+
+- **Baseline and method:** official baseline
+  `736d57b05b9c01f2041be63b0a80d88c21d83498` (merged PR #43). The audit
+  inspected the post-C07.2 call path `ToolHandler.execute -> QueryPool or
+  executeReadTool -> dispatchReadTool -> injected ToolHandler adapter -> public
+  AfyxGraph/domain API -> ToolResult`. Source regions, focused tests, history,
+  controlled fixtures, a fresh 971-file repository index, focused mutation,
+  and established provenance normalization against
+  `b7a1aa2718dc1f6940e483043733f67020d9a62f` were used. Similarity remained a
+  risk signal only. No production implementation changed.
+- **C07.2 freeze:** `tool-dispatch.ts`, `executeReadTool`, all seven read routes,
+  status exclusion, failure classification, QueryPool/worker parity, and the
+  eight-tool catalog remain frozen. Catalog SHA-256 remains
+  `4eaa5a29a1f93bcee7d6b9a77605aa221f53c5767ba26cf0c6d150a0b43d6b3a`.
+
+**Region ownership and classification**
+
+| Family / current region | Adapter-owned behavior | Frozen dependency / boundary | Classification |
+| --- | --- | --- | --- |
+| Search — `handleSearch` (`tools.ts:2241-2275`), `formatSearchResults` (`6846-6860`) | Query/kind/limit adaptation, advertised `type -> type_alias`, generated-vs-handwritten presentation order, empty result, compact formatting, bounding and ToolResult assembly | `searchNodes` ranking and `generatedFilePredicate` are frozen Search/domain APIs; applying their facts to MCP ordering is a public adapter contract | `MATERIAL_RESIDUAL_REQUIRES_CLOSURE` |
+| Callers — `handleCallers` (`2301-2377`) | Validation, file-narrow fallback note, relationship aggregation/deduplication/labels, limit markers, per-definition presentation and result assembly | `findAllSymbols`/`groupDefinitions` are frozen named-flow/symbol-lookup semantics; `getCallers` is frozen Graph | `MATERIAL_RESIDUAL_REQUIRES_CLOSURE` |
+| Callees — `handleCallees` (`2382-2455`) | Direction-specific aggregation, deduplication, labels, limits, grouped output and result assembly | Same frozen lookup/grouping boundary; `getCallees` is frozen Graph | `MATERIAL_RESIDUAL_REQUIRES_CLOSURE` |
+| Impact — `handleImpact` (`2460-2501`), `formatImpact` (`6893-6919`) | Validation/depth adaptation, file-narrow notes, per-definition blast-radius selection, formatting, bounding and result assembly | `findAllSymbols`, `groupDefinitions`, and `mergeSymbolImpact` own frozen Resolution/Graph/Impact semantics | `MATERIAL_RESIDUAL_REQUIRES_CLOSURE` |
+| Node — `handleNode` and file/body renderers (`6046-6433`), lookup facade (`6754-6818`), detail/outline formatters (`6921-6971`) | MCP mode selection, file/line hints, ambiguity/body budget, file-view safety presentation, stale result selection, structural outline/detail/trail assembly and bounding | `matchesSymbol`, name lookup, generated detection, graph children/trails, path containment and code retrieval remain frozen Graph/Resolution/DB/security dependencies | `MATERIAL_RESIDUAL_REQUIRES_CLOSURE`; mixed region, no domain move authorized |
+| Files — `handleFiles`, glob and formatters (`6550-6744`) | Path/glob normalization, format selection, metadata/maxDepth, deterministic presentation, empty/no-match result and bounding | `getFiles` is the frozen DB/domain boundary | `MATERIAL_RESIDUAL_REQUIRES_CLOSURE` |
+| Status — `handleStatus` (`6434-6545`) | Main-thread result selection and health-section assembly | Stats, WAL, pending references, watcher/degraded state, pending sync, writer lock and worktree detection are C04/C06/domain dependencies; status stays outside read dispatch | `MATERIAL_RESIDUAL_REQUIRES_CLOSURE` |
+| Shared result primitives — `textResult`/`errorResult` (`6973-6979`) | Thin delegation only | `tool-results.ts` owns Afyx-native shape/failure semantics; exact text and `isError` are public | `CLOSED_AFYX_NATIVE` with `FROZEN_PUBLIC_CONTRACT` output |
+| Shared bound — `MAX_OUTPUT_LENGTH` (`113`), `truncateOutput` (`6834-6840`) | 15,000-character cap, clean-newline preference, exact truncation marker, identity below cap | No domain state; consumed by Search, relationship, Impact, Node and Files adapters | `MATERIAL_RESIDUAL_REQUIRES_CLOSURE` |
+| Family presentation helpers — `definitionHeading`, `formatSearchResults`, `formatNodeList`, `edgeLabel`, `formatImpact`, Node and Files formatters | Family-specific selection/presentation control flow | Public wording/order is frozen; domain facts remain external | Counted with their owning material family, not as a synthetic framework |
+| Explore — `handleExplore` and supporting policy (`tools.ts:162-1090,2503-6041`) | Budget/allocation, deduplication, diagnostics, dynamic boundaries, source selection, session emission and bounded presentation | Search/Context/Graph/Impact remain frozen; session owns per-client state | `MATERIAL_RESIDUAL_REQUIRES_CLOSURE`, deliberately not selected |
+
+Callers and Callees remain separately classified and directionally tested, but
+count as one **relationship-adapter residual family**: they have the same
+lookup/grouping dependencies, output contract shape, downstream consumer,
+failure boundary and mutation strategy. Any future shared seam must keep the
+direction explicit; swapping callers/callees remains a required mutant.
+
+**Public and domain boundaries**
+
+- Frozen public results include all tool names/order/schemas/annotations,
+  ToolResult/isError shapes, empty/not-found wording, definition grouping,
+  relationship labels, deterministic order, limit/truncation markers, Node
+  ambiguity/file-view text, Files modes and Status sections. Textual matches in
+  these public contracts are not private residuals.
+- Search ranking, named-symbol flow, definition grouping, Graph traversal,
+  Impact calculation, generated-file detection, Context, DB readers, path
+  security, WAL, worktree detection and lifecycle state are
+  `DOMAIN_SEMANTIC_DEPENDENCY` or frozen C01-C06 behavior. The inventory found
+  no adapter closure that requires changing them.
+
+**Ground truth and test/evidence matrix**
+
+| Family | Accepted cases captured | Durable evidence / remaining future-slice need |
+| --- | --- | --- |
+| Search | Normal/empty, kind filter, `type -> type_alias`, limits 1/100, handwritten before generated, explicit `projectPath`, oversized output | MCP semantic/input/security/search freeze tests plus scratch matrix; a Search slice should make type mapping and generated ordering direct durable contracts |
+| Callers / Callees | Missing, one definition, overloads, distinct definitions, file hit/miss fallback, empty relationships, deduplication, labels, cap marker and stable output | Same-name, truncation, no-silent-fuzzy, symbol-lookup and smoke tests are strong; direction swap/dedup/file-fallback mutants remain required for that slice |
+| Impact | Missing, one/multiple definitions, file narrowing, depth clamp 1/10, stable per-definition order and bounded output | Impact contract and same-name tests plus scratch matrix; future slice must mutate depth/file/group roots without changing `mergeSymbolImpact` |
+| Node | Exact/qualified/ambiguous, file+line narrowing, handwritten preference, container outline, body/source numbering, file view and not-found | Symbol lookup, file-view, stale-slice, secret-redaction and security tests are strong; frozen Resolution behavior must remain outside a Node slice |
+| Files | Empty/no-match, root variants, Windows separators, prefix, glob, flat/grouped/tree, metadata on/off, maxDepth and deterministic sorting | Path-normalization and input-limit tests plus scratch matrix; format/glob/metadata/maxDepth mutation must accompany a Files slice |
+| Status | Healthy WAL, non-WAL warning, pending resolution, degraded watcher and pending sync | Status/staleness/worktree, DB and lifecycle tests cover the state providers; future Status work is presentation-only and main-thread-only |
+
+The focused affected selection passes **199 with 2 platform/dependency skips**
+across 12 files. It includes MCP semantic, dispatch, input limits, Search
+validation/truncation, callers/callees grouping and caps, Impact grouping, Node
+lookup/file view, Files path normalization, Status degraded/pending state and
+security. Domain freeze evidence separately passes Search/Context/Graph/
+Impact/QueryPool **435/435**, DB **295/295**, and lifecycle **93/93**.
+
+**Mutation evidence**
+
+- Accepted C07.1 MCP/CLI semantic campaigns remain 16/16 OLD and 16/16 NEW;
+  C07.2 focused dispatch remains 13/13 OLD and 13/13 NEW.
+- A scratch-only shared-bound campaign first found one meaningful survivor:
+  forcing a raw 15,000-character cut passed because the existing line-boundary
+  assertion was tautological. The durable assertion was corrected to require a
+  complete final source line. The same campaign then killed **5/5** applicable
+  mutants with zero survivors/invalids: bound bypass, marker removal, cap
+  increase, short-input truncation and clean-newline bypass. This changes test
+  evidence only, not production behavior.
+
+**Controlled repository, payload and performance evidence**
+
+- A fresh scratch archive of this baseline indexed **971 files, 24,460 nodes
+  and 78,105 edges**. Search, Callers, Callees, Impact, Node, Files and Status
+  all returned non-error results; normalized output order and SHA-256 were
+  recorded. Representative payloads were respectively 982, 311, 508, 397,
+  1,281, 1,654 and 874 bytes. These are selected controlled calls, not a claim
+  about every MCP payload.
+- On a 5-file/25-node fixture, 25 warm in-process samples gave median/p95:
+  Search 0.5801/0.7332 ms; Callers 0.0778/0.1293; Callees 0.0690/0.1540;
+  Impact 0.0978/0.2326; Node 1.7454/2.2200; Files 0.0393/0.0474. The shared
+  bound reduced a 36,489-byte controlled string to 14,980 bytes with the exact
+  marker and complete-line cut. This is a baseline only, with no OLD/NEW claim.
+- Five real-repository calls per family gave warm medians: Search 8.2082 ms,
+  Callers 0.2008, Callees 0.1596, Impact 0.2177, Node 0.8104, Files 1.8771 and
+  Status 3.9763. Nearest-rank p95 includes each first cold call and is retained
+  in scratch evidence rather than presented as adapter-only cost.
+
+**Provenance by current family scope**
+
+Established normalization reports current region vs the full historical
+`tools.ts` reference:
+
+| Scope | Substantive overlap | Comment overlap | Five-line shingles | Longest block | Blocks >=8 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Search | 26/27 (96.30%) | 7/7 (100%) | 79.49% | 30 | 2 |
+| Callers | 68/70 (97.14%) | 18/20 (90%) | 81.36% | 72 | 3 |
+| Callees | 68/70 (97.14%) | 15/16 (93.75%) | 82.14% | 69 | 3 |
+| Callers+Callees combined | 114/117 (97.44%) | 23/26 (88.46%) | 83.43% | 74 | 4 |
+| Impact | 44/47 (93.62%) | 10/11 (90.91%) | 67.11% | 27 | 4 |
+| Node | 211/225 (93.78%) | 104/113 (92.04%) | 75.54% | 58 | 15 |
+| Files | 90/92 (97.83%) | 15/15 (100%) | 95.62% | 182 | 2 |
+| Status | 43/46 (93.48%) | 27/27 (100%) | 84.54% | 48 | 4 |
+| Shared result/bound helpers | 8/10 (80%) | 1/1 (100%) | 50% | 10 | 1 |
+
+History corroborates retained implementation ownership: the historical
+reference still owns 34/35 Search, 76/77 Callers, 73/74 Callees, 40/42 Impact,
+369/388 Node, 193/195 Files, 109/112 Status and 10/10 bound-helper lines by
+blame. Classification nevertheless follows private control flow and ownership,
+not these percentages. Public vocabulary, headings, domain terms and standard
+TypeScript idioms remain legitimate matches; this is technical provenance, not
+a legal conclusion.
+
+**Recalculated residuals, dependency order and selected slice**
+
+- The former count of 10 used two broad overlapping buckets for tool-specific
+  result assembly and named adapters. This inventory replaces them with seven
+  non-overlapping material families: shared bound, Search, relationship
+  (Callers+Callees), Impact, Node, Files and Status. Adding Explore; later MCP
+  session, transport, engine/project selection and pool/worker; and the three
+  CLI project/index, query/intelligence and result/error families yields
+  **15 remaining C07 material residual families**. `UNKNOWN = 0`.
+- Dependency order is: **shared bounded-output seam -> Search and Files thin
+  adapters -> relationship adapter -> Impact -> Node -> Status -> Explore ->
+  session -> transport / engine selection / pool-worker in bounded slices ->
+  CLI project/index, query/intelligence and result/error slices**. Actual
+  evidence must be re-evaluated after every closure.
+- **Selected first family:** shared MCP bounded-output seam, limited to
+  `MAX_OUTPUT_LENGTH`, `ToolHandler.truncateOutput` and its existing call sites.
+  Frozen contract: unchanged short strings; 15,000-character source cap;
+  prefer the last newline only when it lies beyond 80% of the cap; exact
+  `\n\n... (output truncated)` marker; unchanged ToolResult shape and all
+  family-specific formatting. It has no domain, session, transport, pool,
+  lifecycle or CLI ownership.
+- Expected future seam: a small Afyx-owned private module such as
+  `src/mcp/tool-output.ts` exporting one bounded-output operation. Expected
+  production scope is that module plus mechanical consumption from `tools.ts`
+  and a focused direct contract test. It must not absorb family formatters,
+  ToolResult primitives, Node's separate 38k file-view pagination, or Explore
+  policy.
+- Selection reason: this is the lowest shared dependency, the smallest retained
+  private control-flow region, independently testable, mutation-sensitive 5/5,
+  and prerequisite to moving six adapter families without duplicating output
+  policy. Search/Files are deferred until this common boundary is stable.
+- Decision path is **Path C**: multiple material families, exactly one
+  dependency-safe implementation slice selected and not implemented. Final
+  classification is `MCP_TOOL_ADAPTER_RESIDUAL_SELECTED`. IND-C07 remains
+  **ACTIVE**; IND-C08 remains blocked. Exact next phase is **Phase
+  3B.12C.7.4 — MCP Shared Bounded-Output Seam Residual Closure**.
+- Scratch-only ground truth, payload/digest, performance, provenance and
+  mutation artifacts live under
+  `%LOCALAPPDATA%\Temp\afyx-ind-c07r3-20261002`; none belong in the repository.
+
 ### IND-C08 — Extraction closure
 
 - **Scope/ownership:** parser dispatch/control flow and language hosts after
