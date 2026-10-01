@@ -1495,7 +1495,7 @@ behavior. Large subsystem labels never authorize a batch rewrite.
   identical to `origin/main`. The inventory inspected `frontier-walk.ts`,
   `walk-request.ts`, `relations.ts`, `containment.ts`, `route.ts`, and
   `traversal.ts`, plus supporting `graph-store.ts`, `queries.ts`, and
-  `graph/index.ts`; CodeGraph call paths, public `AfyxGraph` consumers,
+  `graph/index.ts`; indexed call paths, public `AfyxGraph` consumers,
   Context/Impact/MCP/CLI callers, focused tests, graph-contract worlds,
   semantic fixtures, benchmark coverage, Git history, and historical commit
   `b7a1aa2718dc1f6940e483043733f67020d9a62f` were reviewed. No production or
