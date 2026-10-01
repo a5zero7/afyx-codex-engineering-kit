@@ -1403,6 +1403,90 @@ behavior. Large subsystem labels never authorize a batch rewrite.
   remaining traversal families are not started; the recommended next bounded
   slice is IND-C05.4 Type Hierarchy only after this PR is accepted.
 
+#### IND-C05.4 — Type Hierarchy residual closure (2026-10-01)
+
+- **Scope boundary:** selected the rich query-time hierarchy in
+  `src/graph/type-hierarchy.ts`: eligibility, `extends`/`implements` ancestry
+  and descendants, deterministic relation ordering, synthesized provenance,
+  true fan counts, bounded/hidden rows, dispatch threshold, and by-name member
+  redeclaration. `GraphTraverser.getTypeHierarchy()` and
+  `relations.ts::typeViewOf()` remain the frozen ancestor-only `Subgraph`
+  boundary used by Context. DB, Branch Guards, Dead Code, Named Flow, other
+  traversal, Search, Context, Impact/Affected, Extraction, Resolution,
+  Watcher/Daemon, MCP/CLI/UI semantics, provider/installer, and legal records
+  remain frozen.
+- **Architecture and public contract:** `type-hierarchy.ts` remains the stable
+  public facade and retains every public type, constant, name, and signature.
+  New `type-hierarchy-policy.ts` owns the private bounded query policy,
+  breadth-first level reads, ordering/dedup, fan accounting, override
+  derivation, and result assembly. Accepted edges remain `extends` and
+  `implements`; accepted node kinds remain class, interface, struct, trait,
+  protocol, enum, type alias, and union. Bounds remain ancestor depth 8,
+  descendant depth 6, 400 materialized descendants, 12 override ancestors,
+  and 8 direct implementers for polymorphic dispatch. The independent wire
+  caps remain 24 ancestors and 240 descendants.
+- **Semantic contract:** ancestors and descendants remain breadth-first,
+  cycle-safe, and one row per identity. Level order is `extends` before
+  `implements`, then name, path, and start line. For duplicate relations,
+  `extends` upgrades `implements` and supplies the selected edge/provenance.
+  Descendant caps preserve true direct counts, expose `bounded`, and attribute
+  hidden identities to their returned parent. Overrides remain a nearest
+  established-ancestor, member-name match for method/function/property/field;
+  `{ overrides: false }` changes only override calculation. Edge/member read
+  failures retain their narrow empty-result fallback, and implementer-count
+  failure remains zero.
+- **Correctness and mutation evidence:** the pre-change focused/graph contract
+  passes 123/123. The final focused set passes 149/149, including explicit
+  7/8/9 ancestor, 5/6/7 descendant, 399/400/401 row, 7/8/9 dispatch,
+  duplicate-order, cycle, missing-node, synthesized, failure, override, and
+  batched-work probes. OLD and NEW each kill 19/19 applicable mutants. In both
+  builds, lowering the override-member cap from 12 to 9 is equivalent because
+  the independently frozen ancestor walk already stops at depth 8.
+- **Differential and ground truth:** controlled OLD/NEW output is identical
+  except one `EXPECTED_CORRECTION`: a duplicate edge for the 401st child no
+  longer inflates direct/implementer/hidden identity counts (OLD 402, NEW 401).
+  Thirteen frozen real-repository hierarchy results are exactly identical.
+  `UNEXPLAINED = 0`; ancestor, descendant, relation/order, synthesized,
+  boundedness, dispatch, override, payload, and work parity otherwise hold.
+  The accepted copied DB remains 100,700,160 bytes at SHA-256
+  `9e7ca8bffc655925c0f8bd9da81d9296e85956350e431816203b6610ae82097f`.
+- **Safety, work, determinism, performance, and payload:** controlled work is
+  unchanged: ancestor-8 uses 1 incoming/9 outgoing reads, fan-400 uses 2/1
+  reads and one 400-id node batch, and dispatch-8 uses 2/1 reads and one 8-id
+  batch. Cycles terminate, all bounds hold, and no per-node query or hidden
+  full-graph scan appears. Three NEW runs have identical ordering, payload,
+  and semantic digest
+  `df12344dc4a12db382446692036eba2c77bdc66fcaeb6f819ccae0d171fabc4e`.
+  Seven 120-iteration controlled workloads show median deltas from -43.40% to
+  +22.22%; the largest increase is only +0.0006 ms. p95 changes range from
+  -0.0801 ms to +0.0202 ms, so no material regression exists. Normalized
+  controlled payload remains 119,894 bytes in both builds; result growth/loss
+  is zero outside the explicit duplicate-count correction.
+- **Consumers, generic boundary, and freeze gates:** `/api/node`, viewer Type
+  Hierarchy, MCP explore dispatch, generic Graph hierarchy, Context, and
+  Impact/Affected focused gates pass without consumer changes; MCP and viewer
+  continue to share `countImplementers`. Graph/consumer focused validation
+  passes, as do graph-contract, semantic CLI/MCP contracts, typecheck, clean
+  production build, clean UI build, semantic fixtures, and CLI/MCP smoke.
+  The broad local Windows suite has zero NEW regression: isolated `sync.test`
+  and `mcp-unindexed.test` pass, while the remaining teardown/lock/path
+  failures reproduce unchanged on the exact OLD baseline.
+  `src/db/**`, Branch Guards, Dead Code, Named Flow, and every named frozen
+  production subsystem have no semantic change.
+- **Provenance:** against historical commit
+  `b7a1aa2718dc1f6940e483043733f67020d9a62f`, complete-family Scope A moves
+  from 43.48% substantive / 17.11% comments / 8.29% five-line shingles to
+  22.27% / 21.67% / 4.03%. New private-policy Scope B is 11.32% / 0.00% /
+  1.18%, longest block 7 and no block >=8. Retained public-facade Scope C is
+  55.77% / 24.07% / 9.35%, longest block 8 and two blocks >=8, reflecting
+  public shapes, constants, vocabulary, and facade delegation. This is
+  technical provenance evidence, not a legal conclusion.
+- **Closure state and remaining inventory:** final cross-platform PR CI is the
+  remaining closure gate. IND-C05 remains active after Type Hierarchy; generic
+  frontier/relationship/containment/route traversal families remain pending.
+  The recommended next slice is a fresh, separately bounded inventory of the
+  remaining traversal family, not a change to frozen `typeViewOf` in this PR.
+
 ### IND-C06 — Watcher, daemon and proxy lifecycle
 
 - **Scope/ownership:** residual sync/watch and daemon/proxy lifecycle hosts;
