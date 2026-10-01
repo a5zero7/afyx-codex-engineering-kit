@@ -1612,6 +1612,125 @@ behavior. Large subsystem labels never authorize a batch rewrite.
 - **Frozen/stop:** DB semantics, MCP protocol and single writer; stop on stale
   index, competing writer, orphan/leak or platform-only failure.
 
+#### IND-C06.1 — Lifecycle inventory and first-slice selection (2026-10-01)
+
+- **Baseline and scope:** official baseline
+  `3a02a824afe96f0dda23e698806efb1afc22bb51` (merged PR #38) was clean and
+  equal to `origin/main`. The inventory covered all lifecycle-relevant files in
+  `src/sync` and `src/mcp`, their `src/index.ts`, `src/freshness.ts`, MCP
+  session/transport, and UI event call boundaries. DB, Graph, Search, Context,
+  Impact/Affected, Extraction, Resolution, MCP tool/wire semantics, CLI output,
+  UI, provider/installer, and legal files were treated as frozen dependencies.
+  No production or test source changed. Reproducible scratch evidence is under
+  `%LOCALAPPDATA%\Temp\afyx-ind-c06r1-20261001\campaign-3a02a824`.
+- **Ownership boundary:** `FileWatcher` owns freshness-event intake through
+  coalescing and sync-attempt completion; it does not own Extraction's
+  incremental reconciliation. `Daemon` owns the one writer/service, socket,
+  sessions, idle policy, and durable discovery artifacts. A proxy owns one
+  client's attachment, relay/fallback, and terminal signals. MCP sessions and
+  transport own JSON-RPC behavior, which remains outside IND-C06.
+- **Lifecycle topology and classification:**
+
+  | Family | Primary owner / supporting hosts | Runtime state and resources | Contracts and evidence | Final classification |
+  | --- | --- | --- | --- | --- |
+  | Watch Event Intake | `FsWatchAdapter`, `classify`, `FileWatcher`; `worktree.ts`, `git-hooks.ts` support policy | recursive/per-directory `FSWatcher` handles, live ignore matcher, normalized relative paths | add/change/delete, removed-directory full scan, ignored/out-of-scope paths, Windows/macOS recursive versus Linux directory watches | `CLOSED_AFYX_NATIVE` |
+  | Pending Change / Debounce | `PendingChangeSet`, `DebounceScheduler`, `FileWatcher` | insertion-ordered pending map and one trailing-edge timer | duplicate folding, during-sync preservation, quick/full window boundaries, stop cancellation | `CLOSED_AFYX_NATIVE` |
+  | Retry / Convergence | `RetryPolicy`, `FileWatcher.flush`; Extraction sync is a frozen callee | separate lock/generic failure streaks, bounded backoff, full-scan latch | retries retain work, arrivals during sync survive, successful sync clears only attempted entries, incremental/full rebuild convergence | `CLOSED_AFYX_NATIVE` |
+  | Writer Ownership / Lock | `atomic-lockfile.ts`, `writer-lock.ts`, daemon election/registry | atomic lockfile and writer PID record; no timer | at most one writer, compare-and-delete release, stale/live/PID-reuse handling | `CLOSED_AFYX_NATIVE` |
+  | Process Liveness / Watchdogs | `liveness-watchdog.ts`, `ppid-watchdog.ts`, `early-ppid.ts`, `startup-handshake.ts`, `stdin-teardown.ts`; `process-liveness.ts` is the native leaf seam | watchdog child, heartbeat/PPID intervals, startup timer, stdin listeners | parent/host death, main-loop wedge, slow-disk progress deferral, pre-handshake orphan, stdin failure | `MATERIAL_RESIDUAL_REQUIRES_CLOSURE` |
+  | Daemon Startup / Registry / Handshake | `Daemon`, daemon election in `mcp/index.ts`, `daemon-registry.ts`, `daemon-manager.ts` | daemon PID/registry records, writer ownership, sessions and signal listeners | cold start, concurrent election, ready/hello, stale registry, PID reuse, failed start cleanup | `CLOSED_AFYX_NATIVE` |
+  | Socket Binding / Fallback | `bindFirstUsableSocket`, `daemon-paths.ts`, `Daemon.bindSocket`, proxy connect | Unix socket or Windows named pipe and candidate paths | occupied address is not stolen; unsupported path candidates relocate; stale socket and partial bind are cleaned | `CLOSED_AFYX_NATIVE` |
+  | Proxy Attach / Client Lifecycle | `runProxy`, `LocalHandshakeSession`, `client-registry.ts`, `ActivityTimers` | client socket/session sets, inflight/pending maps, idle/max-idle/sweep timers | warm reuse, multiple clients, dead peer sweep, daemon-loss local fallback, last-client idle | `CLOSED_AFYX_NATIVE` |
+  | Shutdown / Teardown | `Daemon.stop`, proxy shutdown, watcher stop, activity policy, lock/socket cleanup | all resources above; no independently persisted state | idempotent stop ordering and public/runtime terminal behavior span the owners above | `FROZEN_RUNTIME_CONTRACT` |
+
+- **Why one residual remains:** watcher commit
+  `9f9ee23c3d04d74881ee01c678596db36857cb3d` and daemon/proxy commits
+  `5c416233c14de56efeaf5867389c7b390144001d` /
+  `7c4213eba303d91d90bf4c1b140006ebff5c7c5c` introduced explicit Afyx-owned
+  collaborators and orchestration with mutation evidence. By contrast, blame
+  retains 237/244 lines of `liveness-watchdog.ts`, 68/71 of
+  `startup-handshake.ts`, all 46 lines of `stdin-teardown.ts`, and all 25 lines
+  of `early-ppid.ts` from the historical import. The child-process heartbeat,
+  progress-deferral/hard-cap state machine, parent/host supervision, abandoned
+  startup, and stdin-terminal policy are distinctive private lifecycle control
+  flow. This conclusion is based on ownership and history, not similarity
+  alone; `process-liveness.ts` and the newly structured portion of
+  `ppid-watchdog.ts` remain Afyx-native supporting seams.
+- **Ground truth and focused validation:** the existing 23-file lifecycle
+  selection exercises 340 cases: the combined local run had 322 pass, 13
+  declared skips, and five failures. Isolated reruns proved daemon 12/12,
+  watcher 36/36, and incremental convergence 10/10 pass; four combined-run
+  failures were Windows temp-directory/watch-handle interference. Writer-lock
+  has 5/6 local passes; its one PID-1 fixture is not valid in this restricted
+  Windows sandbox (`process.kill(1, 0)` is denied), while real spawned-holder,
+  direct-mode competing writer, stale lock, re-entrant acquire and release
+  paths pass. The selected liveness set passes 39 tests with four
+  platform-conditioned skips, including real spawned wedge/healthy/slow-disk/
+  hard-cap processes. Semantic fixtures pass 6/6 and CLI/MCP smoke passes
+  21/21. TypeScript typecheck and clean production/UI builds pass.
+- **Invariants and resources:** accepted watcher tests preserve every arrival
+  through debounce, active sync and retry; isolated convergence produces zero
+  lost events and zero stale final indexes. Concurrent launcher and direct-mode
+  tests preserve one writer. Current and accepted PR #11 evidence records zero
+  watcher handle/timer growth across 40 real start/stop cycles; PR #12 records
+  zero leaked processes across repeated spawn/attach/detach/shutdown cycles on
+  Windows and Linux. Focused stop tests close watch handles, timers, sessions,
+  sockets, registry records and owned lockfiles. Forced `SIGKILL` deliberately
+  relies on stale-owner recovery at the next start rather than graceful cleanup.
+- **Mutation strength:** accepted watcher evidence kills OLD 20/20, NEW 21/21,
+  plus 5/5 support-utility mutants (drop/coalescing, retry, debounce and scope
+  decisions). Accepted daemon/proxy evidence kills OLD 24/24 and NEW 27/27
+  election, ownership, client, idle, socket and fallback mutants. No new
+  inventory-only mutants were fabricated. A bounded Afyx-owned mutation matrix
+  for the retained supervision/orphan-reaping family is not yet established;
+  this is the selected slice's principal missing evidence, not a claimed
+  survivor.
+- **Current-only performance baseline:** `benchmark-watcher-policy.mjs` runs 15
+  rounds with stable digest `d0bca111f862`: median single event 0.342 ms,
+  duplicate folding 3.676 ms, 100-event coalescing 13.060 ms, 1,000-event
+  coalescing 134.777 ms, mixed paths 21.628 ms, and post-success pruning 31.281
+  ms. `benchmark-daemon.mjs` runs five rounds: cold start median 376.940 ms
+  (372.269–419.950), existing attach 13.392 ms (12.524–15.608), second-client
+  attach 1.123 ms (0.993–1.528), request round trip 0.708 ms, detach 61.810 ms,
+  shutdown 7.074 ms (6.411–8.702), and stale-lock restart 483.888 ms. These
+  scripts do not emit p95, RSS, handle or process-count samples, so those fields
+  are `NOT AVAILABLE`; no OLD/NEW performance claim is made.
+- **Cross-platform evidence:** PR #11 (watcher) and PR #12 (daemon/proxy) each
+  passed seven jobs: Linux 2/2, macOS 2/2, Windows 2/2 and Rust kernel 1/1.
+  Their real watcher/daemon process campaigns covered Windows and Linux; macOS
+  CI covers build/focused suite behavior. Platform policy is explicit: recursive
+  watch on Windows/macOS, per-directory inotify on Linux, named pipes on
+  Windows, Unix-socket candidates on POSIX, reparent detection on POSIX and
+  direct parent-liveness probing on Windows. No platform-only semantic delta is
+  accepted.
+- **Provenance:** established Phase 3B normalization against historical commit
+  `b7a1aa2718dc1f6940e483043733f67020d9a62f` gives Watcher 215/548
+  substantive (39.23%), 43.11% comments, 11.76% five-line shingles, longest
+  block 28 and 12 blocks >=8; Writer/Lock 15/151 (9.93%), 23.68%, 0.45%, 6/0;
+  Daemon 186/503 (36.98%), 23.24%, 5.74%, 12/7; Liveness 20/145 (13.79%),
+  18.64%, 0.56%, 6/0; Proxy 88/234 (37.61%), 19.30%, 3.28%, 8/2. Retained
+  watcher/daemon/proxy matches are public result/hello shapes, paths/messages,
+  platform API idioms, or facade wiring already superseded by Afyx-owned
+  collaborators. Liveness is selected despite low aggregate textual overlap
+  because history and state ownership expose retained private control flow.
+  This is technical provenance evidence, not a legal conclusion.
+- **Decision:** Path B. `MATERIAL_RESIDUAL_REQUIRES_CLOSURE = 1` and
+  `UNKNOWN_REQUIRES_EVIDENCE = 0`. The first and only selected family is
+  **Process Supervision / Liveness / Orphan Reaping**, because it is a leaf
+  lifecycle policy consumed by direct MCP, proxy and daemon/index lifecycles;
+  closing it before orchestration avoids duplicating policy upward. Exact
+  residual hosts are `liveness-watchdog.ts`, `early-ppid.ts`,
+  `startup-handshake.ts`, `stdin-teardown.ts`, and historical regions of
+  `ppid-watchdog.ts`; `process-liveness.ts`, call sites, MCP protocol, CLI
+  behavior, single-writer semantics, timeout/env contracts and every frozen
+  subsystem remain unchanged. Ground truth is the 43-case liveness selection,
+  real child-process fixtures, and accepted cross-platform CI. Recommended next
+  branch: `afyx/ind-c06-liveness-native`; recommended task: **Phase 3B.12C.6.2
+  Process Supervision / Liveness / Orphan-Reaping Residual Closure**.
+- **State:** final classification `LIFECYCLE_RESIDUAL_SELECTED`; IND-C06 remains
+  active. Do not begin IND-C07 until the selected IND-C06 slice and subsequent
+  lifecycle consolidation gate are complete.
+
 ### IND-C07 — MCP and CLI adapter internals
 
 - **Scope/ownership:** split private implementation from frozen tool/command/
