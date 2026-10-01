@@ -1174,8 +1174,10 @@ behavior. Large subsystem labels never authorize a batch rewrite.
   `DEFERRED_OUTSIDE_DB_READER_SCOPE`. `UNRESOLVED_RESIDUAL` is empty: no
   material persisted reader family remains.
 - **Validation and closure:** TypeScript typecheck, clean production/UI build,
-  semantic baseline 6/6, and CLI/MCP smoke 21/21 pass locally. Cross-platform CI
-  status is recorded on the task PR. Classification is
+  semantic baseline 6/6, and CLI/MCP smoke 21/21 pass locally. PR #32 passes all
+  seven normal CI jobs (Linux 2/2, macOS 2/2, Windows 2/2, Rust kernel 1/1); one
+  Linux worker-exit after 5,355 passing assertions passed its targeted rerun.
+  Classification is
   `DB_VOCABULARY_READER_SLICE_COMPLETE`; the DB reader subsystem is ready for a
   consolidation checkpoint, but no consolidation implementation or IND-C05
   Graph work starts in this slice.
