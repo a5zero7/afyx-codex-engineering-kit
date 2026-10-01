@@ -1210,6 +1210,74 @@ behavior. Large subsystem labels never authorize a batch rewrite.
 - **Stop:** unexplained reachability/order delta, fanout blow-up or UI contract
   break.
 
+#### IND-C05.1 — Branch Guard residual closure (2026-10-01)
+
+- **Exact scope and architecture:** selected only source-AST branch/path guards:
+  public `BranchGuard` shape and labels, per-site/file extraction, language
+  profiles, function boundaries, early-exit/order/branch identity and arm-exit
+  semantics. `src/graph/branch-guard-policy.ts` now owns an Afyx-native
+  language-profile registry and one centralized ancestor policy;
+  `src/graph/branch-guards.ts` remains the stable facade and frozen host for
+  call arguments, triggers, loops, decorators, member types and other excluded
+  source-intelligence families. Persisted graph traversal, Dead Code, Named
+  Flow and Type Hierarchy remain outside this slice; the existing parser/cache
+  and UI `SiteReader` boundaries are reused.
+- **Accepted contract and mutation:** OLD and NEW focused contracts each pass
+  59/59. Ten applicable OLD and ten equivalent NEW mutants are killed:
+  language/filter and function-boundary bypass, branch inclusion, early-exit,
+  ordering, condition bound, site-line, branch identity, arm-exit and duplicate
+  insertion. Graph relation/direction/depth/visited mutations are not applicable
+  to this acyclic AST-parent policy and were not fabricated.
+- **Differential and repository evidence:** OLD/NEW are byte-identical across
+  synthetic contracts, 400-site fanout and the accepted repository snapshot
+  (`UNEXPLAINED = 0`). Synthetic is 4,266 bytes SHA-256
+  `3098af4774f6f70831833c20bfc74124febd4ab07daf685d95cee55b279fa4f5`;
+  fanout is 400/400 guarded, 33,097 bytes SHA-256
+  `5bce301748a5c56eecce1e160ed6b19c969c9887e9e5b8199da6043e11a78a3a`;
+  repository evidence is 63 guarded plus 40 unconditional observations,
+  25,674 bytes SHA-256
+  `14ce5f1c1a41c83e4caf1de5196bc2dceafee7ecb1e3c2c03a92f0eb8bd60227`.
+  Combined semantic payload is 30,161 bytes SHA-256
+  `9d441a08485e217c94c9a5ebcdaea5f38edc90b4aa469d672f147f1b5c964f03`.
+  Three frozen NEW runs reproduce identities, ordering, counts, bytes and
+  digests exactly; the copied DB remains 100,700,160 bytes with SHA-256
+  `9e7ca8bffc655925c0f8bd9da81d9296e85956350e431816203b6610ae82097f`
+  before and after every run.
+- **Performance and boundedness:** seven-pair interleaved final-source benchmark
+  shows high fanout median 43.253 ms OLD versus 41.258 ms NEW (-1.995 ms,
+  -4.6%) and p95 49.828 versus 50.402 ms (+0.573 ms). Repository representative
+  median is 0.264 versus 0.211 ms and p95 0.316 versus 0.380 ms.
+  Simple/multi/deep/cycle absolute median deltas are
+  0.0053/0.0025/0.0034/0.0009 ms. All workloads retain site/guard counts,
+  ordering, digest and serialized bytes; benchmark fanout is 400/400 and
+  29,201 bytes on both implementations. RSS median is 24.73 versus 24.96 MB.
+  No duplicate inflation, hidden expansion, limit bypass, cycle revisit or
+  unexplained payload growth exists; AST visited-node count is not an
+  observable contract, so fixed sites/results are the work proxy.
+- **Provenance:** established Phase 3B normalization against historical commit
+  `b7a1aa2718dc1f6940e483043733f67020d9a62f` moves complete-family Scope A
+  from 100.00% substantive / 99.62% comments / 99.75% five-line shingles to
+  57.54% / 94.02% / 59.61%. New native Scope B
+  (`branch-guard-policy.ts`) is 6.49% / 0.00% / 0.46%, longest identical block
+  0 and no block >=8. Frozen semantic-host Scope C (`branch-guards.ts`) moves
+  from 100.00% / 99.62% / 99.75% to 98.01% / 98.30% / 93.16%; its longest
+  block is 634 with nine blocks >=8 because excluded domain families remain
+  intentionally frozen. Scope B residuals are public contract/type shape,
+  grammar vocabulary and standard TypeScript idioms, not a material private
+  block; this is technical provenance evidence, not a legal conclusion.
+- **Downstream/freeze gates:** Graph 427/427, Context 108/108, Impact/Affected
+  10/10, semantic fixtures 6/6, CLI/MCP smoke 21/21 and UI Graph/server/viewer
+  684 passed with three declared skips. TypeScript typecheck and clean
+  production/UI build pass. No DB, Search, Context, Impact/Affected,
+  Extraction, Resolution, Watcher/Daemon, MCP, CLI, UI, provider/installer or
+  legal/provenance source changed. Cross-platform CI remains required on the
+  final PR head.
+- **Known gaps / next bounded slice:** branch guards are complete, but IND-C05
+  as a whole is not. Dead Code, Named Flow, Type Hierarchy and any remaining
+  traversal families stay separate. After this slice is reviewed and merged
+  into a frozen baseline, the recommended next one-family closure is Dead Code;
+  it is not started here.
+
 ### IND-C06 — Watcher, daemon and proxy lifecycle
 
 - **Scope/ownership:** residual sync/watch and daemon/proxy lifecycle hosts;
