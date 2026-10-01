@@ -1050,6 +1050,70 @@ behavior. Large subsystem labels never authorize a batch rewrite.
   recommended next bounded persistence slice is stats/metadata; IND-C05 Graph
   remains deferred.
 
+#### Stats / metadata reader residual closure evidence (2026-10-01)
+
+- **Selected family and separation:** `src/db/stats-reader.ts` exclusively owns
+  persisted whole-graph totals, node/edge/file grouped distributions, project
+  metadata lookup, and ordered project-metadata enumeration. `query-session.ts`
+  remains the Afyx-native prepared-statement boundary; `graph-reader.ts` and
+  `QueryBuilder` only compose/delegate. File revision/index timestamps remain in
+  the already-closed file reader; schema version is owned by `db/index.ts`;
+  metadata writes remain in `graph-writer.ts`; DB/WAL health, UI presentation,
+  and the vocabulary reader are excluded. No schema, migration, writer, WAL,
+  facade, consumer, or previously closed reader changed.
+- **OLD contract and sensitivity:** the focused four-test contract freezes
+  empty/new and reopened DB behavior; node/edge/file totals; kind/language
+  grouping and order; lightweight counts; metadata hit/miss (`null`), values,
+  insertion order and updates; zero DB/WAL placeholders; and observation-time
+  `lastUpdated`. OLD kills all eight applicable mutants: total count, group
+  count, metadata omission, metadata value, timestamp/default, ordering, null
+  handling, and row decoding. Schema version/revision mutation is not applicable
+  to this reader and was not used to broaden the slice.
+- **Afyx-native architecture and differential:** named statements own totals,
+  the metadata point read, and row-ordered metadata enumeration. One ordered
+  UNION result owns all three distribution dimensions, replacing three private
+  query loops; the existing query session caches every fixed statement. NEW
+  kills the same 8/8 mutants. OLD and NEW accepted-snapshot outputs are
+  byte-identical (`UNEXPLAINED = 0`), require no migration, and provide the same
+  values to every frozen consumer.
+- **Snapshot, determinism, and payload:** isolated copies of the accepted
+  100,700,160-byte DB (SHA-256
+  `9e7ca8bffc655925c0f8bd9da81d9296e85956350e431816203b6610ae82097f`)
+  report 23,978 nodes, 76,550 edges, 949 files, 19 node-kind groups, eight
+  edge-kind groups, 21 language groups, and seven metadata keys. OLD and three
+  repeated NEW runs retain identical grouping/order, 1,490-byte logical payload,
+  and SHA-256
+  `2b26fdca9a4f6ef87d95689f8cb7b90d66642f2e85543e9663a03c99cc01b010`.
+  Every per-operation benchmark payload/digest is also identical; the canonical
+  index was never opened by the campaign and no migration or writer ran.
+- **Performance:** seven deterministic interleaved OLD/NEW pairs preserve every
+  result and payload. Median/median-of-run-p95 microseconds move 21.1/34.5 to
+  14.8/18.5 for node/edge counts, 3,432.2/3,994.3 to 3,323.2/3,840.6 for full
+  stats, 11.1/19.5 to 5.4/7.5 for metadata hit, 9.0/15.5 to 4.2/4.8 for metadata
+  miss, and 18.9/31.8 to 9.0/13.4 for all metadata. Median deltas range from
+  -3.18% to -53.33%; maximum observed OLD/NEW RSS is
+  68,096,000/66,146,304 bytes. No payload growth/loss or performance regression
+  appears.
+- **Provenance:** established Phase 3B normalization moves complete Scope A
+  (`query-session.ts`, `stats-reader.ts`) from 34.62% substantive / 26.67%
+  comments / 5.68% five-line shingles to 14.71% / 25.00% / 0.00%. Frozen Scope
+  B (`query-session.ts`) remains 10.00% / 18.18% / 0.00%. Replaced Scope C
+  (`stats-reader.ts`) falls from 50.00% / 50.00% / 10.87% to 16.67% / 40.00% /
+  0.00%; longest identical block falls 9→3 and blocks of at least eight lines
+  fall 1→0. Residual matches are public result shapes, SQL/schema identifiers,
+  aggregate literals, and standard TypeScript/SQLite idioms; this is technical
+  provenance evidence, not a legal conclusion.
+- **Validation, CI, and known gaps:** focused DB/metadata plus direct CLI, MCP,
+  UI, index-state, lifecycle, and full-pipeline consumers pass 144 tests with one
+  declared UI skip. TypeScript typecheck, clean production/UI build, semantic
+  baseline 6/6, and CLI/MCP smoke 21/21 pass. PR #31 passes all seven normal CI
+  jobs (Linux 2/2, macOS 2/2, Windows 2/2, and Rust kernel 1/1); one unrelated
+  Usage Tracker watcher failure passed its targeted rerun while the other
+  Windows matrix job had already passed. Classification is
+  `DB_STATS_METADATA_READER_SLICE_COMPLETE_WITH_KNOWN_GAPS`:
+  vocabulary is the only remaining DB-reader review family. The recommended
+  next bounded DB slice is vocabulary; IND-C05 Graph remains deferred.
+
 ### IND-C05 — Graph legacy hosts
 
 - **Scope/ownership:** branch guards, dead code, named flow, type hierarchy and
