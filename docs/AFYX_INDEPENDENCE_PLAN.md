@@ -1278,6 +1278,62 @@ behavior. Large subsystem labels never authorize a batch rewrite.
   into a frozen baseline, the recommended next one-family closure is Dead Code;
   it is not started here.
 
+#### IND-C05.2 — Dead Code residual closure (2026-10-01)
+
+- **Scope and boundary:** selected only candidate acquisition, conservative
+  exclusion policy, bounded ancestor/override evidence, ambiguity and unresolved
+  protection, source corroboration, and deterministic report assembly. The
+  contract remains `UNREFERENCED = zero incoming indexed edge`; `DEAD` is the
+  narrower inference left after every unsafe candidate is removed. Islands stay
+  owned by the map. Named Flow, Type Hierarchy, remaining traversal, DB, Search,
+  Context, Impact/Affected, Resolution, MCP/CLI/UI semantics, and installer
+  behavior remain frozen.
+- **Architecture and contracts:** `src/graph/dead-code-policy.ts` owns the
+  Afyx-native facts → exclusion ledger → bounded corroboration → report pipeline;
+  `src/graph/dead-code.ts` is the stable public facade. `buildDeadCodeReport`,
+  query/report shapes, constants, allowed/default kinds, ordering, counters,
+  `/api/deadcode`, and UI wire behavior are unchanged. One safe-direction
+  correction excludes a candidate when ancestry demonstrably continues beyond
+  the eight-level inspection cap; below/at/above probes are 0/0/0 NEW findings
+  versus 0/0/1 OLD, classified `EXPECTED_CORRECTION`.
+- **Correctness evidence:** controlled OLD and NEW contracts pass 5/5. Equivalent
+  OLD and NEW mutation campaigns kill 21/21 applicable mutants. Focused current
+  tests pass 27/27, including every exclusion family, ranking/folding, candidate
+  and file bounds, oversized/unreadable/out-of-root source handling, and ancestry
+  limits. `NEW_FALSE_POSITIVE_ADDITIONS = 0`; all other controlled and accepted
+  repository differences are `IDENTICAL`, with `UNEXPLAINED = 0`.
+- **Accepted repository evidence:** the frozen 100,700,160-byte DB remains
+  byte-identical at SHA-256
+  `9e7ca8bffc655925c0f8bd9da81d9296e85956350e431816203b6610ae82097f`.
+  OLD and NEW both report 3,772 raw candidates, 14 final entries, `bounded=false`,
+  84 files / 2,717,247 bytes read, 4,078 serialized bytes, and logical SHA-256
+  `497d636eed7d8025ac84883c16c37768f1dd70fa2f8499462ad5927369062ab5`;
+  all exclusion counts, entries, order, members, lines, and payload bytes match.
+  Seven NEW runs are deterministic.
+- **Performance and boundedness:** seven-pair interleaved full-report medians are
+  145.333 ms OLD and 147.421 ms NEW (+2.088 ms, +1.44%); p95 is 151.958 ms and
+  161.070 ms. Candidate count, survivor count, files/bytes read, payload, digest,
+  and ordering remain fixed; no candidate/false-positive/duplicate inflation,
+  unbounded scan, repeated per-candidate ancestor lookup, or hidden traversal
+  expansion was observed.
+- **Provenance:** established normalization against historical commit
+  `b7a1aa2718dc1f6940e483043733f67020d9a62f` moves complete-family Scope A from
+  98.02% substantive / 99.59% comments / 95.76% five-line shingles to
+  22.01% / 0.00% / 1.76%. New policy Scope B is 22.10% / 0.00% / 1.79%, longest
+  identical block 11 with one block >=8; residuals are public contract/type and
+  exclusion vocabulary plus standard TypeScript/filesystem idioms, not an
+  unexplained private implementation block. The public facade Scope C is
+  0.00% / 0.00% / 0.00%, longest block 0.
+- **Downstream and freeze gates:** Graph 427/427, Context 108/108,
+  Impact/Affected 10/10, direct Dead Code/UI boundary 76/76, semantic fixtures
+  6/6, CLI/MCP smoke 21/21, typecheck, clean production build, and clean UI
+  build pass. `src/db/**`, Branch Guard policy/semantics, all named frozen
+  subsystems, and legal/provenance files have no changes. Cross-platform CI is
+  the remaining PR gate and is not claimed until all seven required jobs pass.
+- **Known gap and next slice:** local phase evidence does not replace the pending
+  seven-job PR CI. IND-C05 remains active; the next independently bounded slice
+  is IND-C05.3 Named Flow. This slice does not start it.
+
 ### IND-C06 — Watcher, daemon and proxy lifecycle
 
 - **Scope/ownership:** residual sync/watch and daemon/proxy lifecycle hosts;
