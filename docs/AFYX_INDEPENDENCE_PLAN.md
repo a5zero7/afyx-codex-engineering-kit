@@ -1481,11 +1481,12 @@ behavior. Large subsystem labels never authorize a batch rewrite.
   55.77% / 24.07% / 9.35%, longest block 8 and two blocks >=8, reflecting
   public shapes, constants, vocabulary, and facade delegation. This is
   technical provenance evidence, not a legal conclusion.
-- **Closure state and remaining inventory:** final cross-platform PR CI is the
-  remaining closure gate. IND-C05 remains active after Type Hierarchy; generic
-  frontier/relationship/containment/route traversal families remain pending.
-  The recommended next slice is a fresh, separately bounded inventory of the
-  remaining traversal family, not a change to frozen `typeViewOf` in this PR.
+- **Closure state and remaining inventory:** PR #37 passes all seven normal
+  Linux, macOS, Windows, and Rust-kernel CI jobs. IND-C05 remains active after
+  Type Hierarchy; generic frontier/relationship/containment/route traversal
+  families remain pending. The recommended next slice is a fresh, separately
+  bounded inventory of the remaining traversal family, not a change to frozen
+  `typeViewOf` in this PR.
 
 ### IND-C06 — Watcher, daemon and proxy lifecycle
 
