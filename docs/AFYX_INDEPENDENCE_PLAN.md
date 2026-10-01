@@ -1799,8 +1799,9 @@ behavior. Large subsystem labels never authorize a batch rewrite.
   both OLD and NEW), so it is a bounded Windows filesystem-handle artifact, not
   a C06.2 regression. Writer ownership, convergence, daemon, socket, proxy, and
   all other lifecycle results in that run remain healthy.
-- **CI and state:** final-head cross-platform CI is pending PR creation. The
-  selected private residual is closed, but IND-C06 remains active until separate
+- **CI and state:** PR #40 final-head cross-platform CI passes 7/7: Linux 2/2,
+  macOS 2/2, Windows 2/2, and Rust kernel 1/1. The selected private residual is
+  closed, but IND-C06 remains active until separate
   IND-C06.3 lifecycle consolidation proves subsystem-wide `MATERIAL_RESIDUAL = 0`
   and `UNKNOWN = 0`. Do not begin IND-C07 yet.
 
