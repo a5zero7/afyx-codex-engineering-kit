@@ -1333,6 +1333,76 @@ behavior. Large subsystem labels never authorize a batch rewrite.
 - **Known gap and next slice:** IND-C05 remains active; the next independently
   bounded slice is IND-C05.3 Named Flow. This slice does not start it.
 
+#### IND-C05.3 — Named Flow residual closure (2026-10-01)
+
+- **Scope boundary:** selected Flow token parsing and candidate policy, named
+  bounded traversal, directed bounded bidirectional traversal, path assembly,
+  ordering/deduplication, and call-site mapping. `findAllSymbols` remains an
+  exact frozen shared helper; `symbol-lookup.ts`, dynamic-boundary reporting,
+  Type Hierarchy, all other traversal families, DB, Branch Guards, Dead Code,
+  Search, Context, Impact/Affected, Extraction, Resolution, MCP/CLI/UI
+  semantics, and legal records remain frozen.
+- **Architecture and contracts:** `src/graph/named-flow-policy.ts` is the
+  Afyx-native token/policy/traversal/assembly seam; `named-symbol-flow.ts` is
+  the stable public facade and injects generic symbol lookup. Named mode keeps
+  every resolved named symbol eligible at both ends, chooses the deepest
+  accepted chain, and permits one unnamed bridge by default; route connectors
+  do not consume that bridge. Directed mode pins overload candidates for
+  `from -> to`, uses bounded two-ended traversal, and intentionally does not
+  claim mathematically shortest paths. Flow edges remain `calls` and
+  `navigates`, including qualified heuristic/synthesized endpoints.
+- **Resolution and bounds:** case-sensitive exact/fuzzy-hint behavior,
+  punctuation/extension normalization, query order/dedup, qualified/co-named
+  overload handling, generated/test down-ranking, and deterministic candidate
+  order are unchanged. Preserved limits are named/directed hops 7/12, bridge
+  1, seeds 8, candidates per token 6/12, tokens 16, named nodes 40, dynamic
+  endpoints 12 total and 4/token, named visits 1,500, directed visits 12,000
+  per side, and caller-supplied `maxChains`. Scratch below/at/above probes are
+  OLD/NEW identical; route, bridge, hop, seed, candidate, dynamic endpoint,
+  named-visit, and directed-visit caps do not escape.
+- **Correctness evidence:** controlled OLD and NEW contracts pass 8/8.
+  Equivalent mutation campaigns kill 14/14 applicable mutants in each build
+  across token/candidate/co-naming, edge/bridge/depth/visit, traversal,
+  ranking/dedup, call-site, synthesized endpoint, and directed endpoint
+  categories; no equivalent mutant was retained. The frozen 100,700,160-byte
+  repository DB remains byte-identical at SHA-256
+  `9e7ca8bffc655925c0f8bd9da81d9296e85956350e431816203b6610ae82097f`.
+  All nine real-repository workloads have identical token/node mappings,
+  candidates, chains, edge kinds, call sites, work counters, payloads, and
+  semantic digests (`UNEXPLAINED = 0`). Representative directed
+  `main -> resolveOne` remains seven steps, 69 callee/43 caller/11 node reads,
+  2,523 bytes, digest
+  `64e6610eb1640a914690fab4fd30cbb1ca2b4ec6032c3de4cffd161bd6989912`.
+- **Safety, determinism, performance, payload:** named and directed endpoint,
+  disconnected, cycle, route, bridge, high-fanout, dedup, and call-site gates
+  pass with `NAMED_FANOUT_REGRESSION = 0` and zero unexplained path delta.
+  Three frozen NEW runs are byte/digest identical. A 21-repetition interleaved
+  seven-workload benchmark preserves every work counter/path/payload/digest;
+  median deltas range from -16.43% to +15.44%, with the largest increase only
+  +0.963 ms and an improved p95, so no material regression. Payload delta is
+  zero in every cell and no hidden full-graph expansion was observed.
+- **Provenance and consumers:** against historical commit
+  `b7a1aa2718dc1f6940e483043733f67020d9a62f`, complete-family Scope A moves
+  from 99.17% substantive / 98.73% comments / 93.17% five-line shingles to
+  31.56% / 90.48% / 15.28%. New policy Scope B is 20.63% / not applicable /
+  0.30%, with longest identical block 0 and no block >=8. Frozen shared-host
+  Scope C is 72.88% / 90.48% / 60.36%, longest block 66 and two blocks >=8,
+  reflecting retained public/shared lookup contracts. Residual matches are
+  public types/constants and graph vocabulary or standard TypeScript/traversal
+  idioms, not a legal conclusion. MCP explore, `/api/flow`, and viewer Flow
+  continue to consume the single facade; consumer/API/viewer tests pass 75/75
+  with identical step/edge/call-site ordering.
+- **Downstream and freeze gates:** Named Flow scratch contracts 8/8, UI Flow
+  API 30/30, Graph 427/427, Context 108/108, Impact/Affected 10/10, semantic
+  fixtures 6/6, CLI/MCP smoke 21/21, typecheck, clean production build, and
+  clean UI build pass. `src/db/**`, Branch Guard and Dead Code policies and
+  semantics, every named frozen subsystem, and legal/provenance files have no
+  production change. Normal seven-job cross-platform CI remains the merge
+  gate for the PR.
+- **Known gap next slice:** IND-C05 remains active. Type Hierarchy and the
+  remaining traversal families are not started; the recommended next bounded
+  slice is IND-C05.4 Type Hierarchy only after this PR is accepted.
+
 ### IND-C06 — Watcher, daemon and proxy lifecycle
 
 - **Scope/ownership:** residual sync/watch and daemon/proxy lifecycle hosts;
