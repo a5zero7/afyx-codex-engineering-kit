@@ -2465,7 +2465,10 @@ a legal conclusion.
   Extraction/Resolution, Provider/Installer, and UI remain frozen. Focused
   Search/MCP, Search/Context/Graph/QueryPool/Impact, DB/lifecycle, CLI semantic,
   semantic fixtures, CLI/MCP smoke, typecheck, and clean production/UI builds
-  pass; final-head seven-job CI is the remaining PR closure gate.
+  pass. PR #46 final-head CI passed **7/7** after one unchanged-head rerun of
+  the Linux Graph Build: the initial job hit a Node/Vitest worker zone OOM and
+  a frozen WAL pressure threshold after 5,443 tests passed and 192 were
+  skipped; the rerun passed without source or test changes.
 - **Residual map:** the Search family closes without merging or splitting
   downstream ownership: **13 C07 material families remain**, `UNKNOWN = 0`.
   Files is the next dependency-safe bounded adapter, supported by existing path,
