@@ -87,6 +87,7 @@ import { executeFilesTool } from './files-tool';
 import { executeRelationshipTool, type RelationshipToolSource } from './relationship-tool';
 import { executeImpactTool, type ImpactToolSource } from './impact-tool';
 import { executeNodeTool, resolveNodeSymbolMatches } from './node-tool';
+import { executeStatusTool } from './status-tool';
 
 export { NotIndexedError } from './tool-results';
 
@@ -5907,104 +5908,11 @@ export class ToolHandler {
         }
       } catch { /* closed instance — leave as is */ }
     }
-    const stats = cg.getStats();
-
-    // Warn when this index actually belongs to a different git working tree
-    // (e.g. the server resolved up from a nested worktree to the main checkout).
-    // Queries then reflect that tree's branch, not the worktree being edited.
-    // status shows the verbose, multi-line form; the read tools get the compact
-    // one-liner via withWorktreeNotice. Both share the cached detection.
     const mismatch = this.worktreeMismatchFor(args.projectPath as string | undefined);
-
-    const lines: string[] = [
-      '**Afyx Graph Status**',
-      '',
-    ];
-    if (mismatch) {
-      lines.push(`> ⚠ ${worktreeMismatchWarning(mismatch).replace(/\n/g, '\n> ')}`, '');
-    }
-    lines.push(
-      `**Files indexed:** ${stats.fileCount}`,
-      `**Total nodes:** ${stats.nodeCount}`,
-      `**Total edges:** ${stats.edgeCount}`,
-      `**Database size:** ${(stats.dbSizeBytes / 1024 / 1024).toFixed(2)} MB`,
-    );
-
-    // Surface the active SQLite backend (node:sqlite, Node's built-in real
-    // SQLite — full WAL + FTS5, no native build).
-    lines.push(`**Backend:** node:sqlite (Node built-in) — full WAL + FTS5`);
-
-    // Effective journal mode. 'wal' ⇒ concurrent reads never block on a writer;
-    // anything else ⇒ they can ("database is locked"). node:sqlite supports WAL
-    // everywhere, so a non-wal mode means the filesystem can't (network/
-    // virtualized mounts, WSL2 /mnt). See issue #238.
-    const journalMode = cg.getJournalMode();
-    if (journalMode === 'wal') {
-      lines.push(`**Journal mode:** wal (concurrent reads safe)`);
-    } else {
-      lines.push(
-        `**Journal mode:** ⚠ ${journalMode || 'unknown'} — WAL not active, so reads ` +
-        `can block on a concurrent write (WAL appears unsupported on this filesystem)`
-      );
-    }
-
-    // Non-zero at rest means a resolution pass was interrupted mid-run, so
-    // some files' call/impact edges are missing until the next sync sweeps
-    // the leftovers (#1187). Surface it — an agent trusting an incomplete
-    // blast radius is worse than one that knows to re-sync.
-    const pendingRefs = cg.getPendingReferenceCount();
-    if (pendingRefs > 0) {
-      lines.push(
-        `**Pending resolution:** ⚠ ${pendingRefs} references from an interrupted ` +
-        `index run — some caller/impact edges are missing until the next sync ` +
-        `(any file change triggers it, or run \`afyx-graph sync\`)`
-      );
-    }
-
-    lines.push('', '**Nodes by Kind:**');
-
-    for (const [kind, count] of Object.entries(stats.nodesByKind)) {
-      if ((count as number) > 0) {
-        lines.push(`- ${kind}: ${count}`);
-      }
-    }
-
-    lines.push('', '**Languages:**');
-    for (const [lang, count] of Object.entries(stats.filesByLanguage)) {
-      if ((count as number) > 0) {
-        lines.push(`- ${lang}: ${count}`);
-      }
-    }
-
-    // Whole-index degradation (#876): when live watching has permanently
-    // stopped, getPendingFiles() is empty (so no "Pending sync" section below)
-    // but the index is frozen — call that out explicitly here, the one place an
-    // agent asks "is the index caught up?".
-    if (cg.isWatcherDegraded()) {
-      lines.push(
-        '',
-        '**Auto-sync disabled:**',
-        `- ${cg.getWatcherDegradedReason() ?? 'live file watching stopped'}`,
-        '- The index is frozen; Read files directly for current content.'
-      );
-    }
-
-    // Per-file freshness — the inverse of the auto-prepended staleness banner
-    // (issue #403). Surfacing it inside `status` gives the agent a single
-    // place to ask "is the index caught up?" rather than inferring from
-    // banners on other tool calls.
-    const pending = cg.getPendingFiles();
-    if (pending.length > 0) {
-      lines.push('', '**Pending sync:**');
-      const now = Date.now();
-      for (const p of pending) {
-        const ageMs = Math.max(0, now - p.lastSeenMs);
-        const label = p.indexing ? 'indexing in progress' : 'pending sync';
-        lines.push(`- ${p.path} (edited ${ageMs}ms ago, ${label})`);
-      }
-    }
-
-    return this.textResult(lines.join('\n'));
+    return executeStatusTool(cg, {
+      worktreeWarning: mismatch ? worktreeMismatchWarning(mismatch) : undefined,
+      nowMs: Date.now(),
+    });
   }
 
   /**
