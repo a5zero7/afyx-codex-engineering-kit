@@ -2410,7 +2410,7 @@ a legal conclusion.
   provenance artifacts live under
   `%LOCALAPPDATA%\Temp\afyx-ind-c07r4-20261002` and are excluded from the PR.
 
-#### IND-C07.5 — MCP Search adapter residual closure (2026-10-03)
+#### IND-C07.5 — MCP Search adapter residual closure (2026-10-02)
 
 - **Baseline and ownership:** official baseline
   `31a6e1d79f774206553654abf36d1119b7601559`. Selected OLD regions were
