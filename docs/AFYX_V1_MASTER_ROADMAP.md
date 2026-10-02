@@ -26,7 +26,7 @@ implementation phases after C07.11.
   - 5D — Native Product Surfaces
   - 5E — Native Optimization & Simplification
   - 5F — Third-Party Source / Runtime Replacement
-  - 5G — CodeGraph / Historical Artifact Eradication
+  - 5G — Legacy Product Identity / Historical Artifact Eradication
   - 5H — Historical License Closure
   - 5I — Final Independence Audit
 - Phase 6 — Unified Kit & Provider Control Plane
