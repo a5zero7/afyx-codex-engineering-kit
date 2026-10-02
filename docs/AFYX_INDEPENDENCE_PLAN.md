@@ -2480,6 +2480,87 @@ a legal conclusion.
   and provenance artifacts live under
   `%LOCALAPPDATA%\Temp\afyx-ind-c07r5-20261003` and are excluded from the PR.
 
+#### IND-C07.6 — MCP Files adapter residual closure (2026-10-02)
+
+- **Immutable metadata and ownership:** task date `2026-10-02`; official
+  baseline `e2cfd5ccf62c5e3b68edf513791dd79bbef82721`; branch
+  `afyx/ind-c07-files-adapter`; implementation evidence HEAD
+  `7879580066ac67c78a97cf8b07115e20194f2a25`; PR #47. Selected OLD symbols
+  were `ToolHandler.handleFiles`, `globToRegex`, `formatFilesFlat`,
+  `formatFilesGrouped`, and `formatFilesTree`. Cross-cutting
+  `validateOptionalPath` and `getAfyxGraph` remain host-owned; `getFiles`
+  remains the frozen domain-facts boundary.
+- **Frozen contract:** public `afyx_graph_files` catalog/schema, exact
+  empty/no-match strings, root-ish and Windows path normalization, exact-file
+  and segment-boundary subtree matching, the existing unanchored glob adapter,
+  format fallback, literal-`false` metadata policy, 1..20 depth clamp, flat/
+  grouped/tree layout and ordering, tree glyphs, and C07.4 `boundToolOutput`
+  consumption remain unchanged. No third-party glob behavior was introduced.
+- **OLD evidence:** a 60-case oracle records request, domain call count, source
+  facts, exact ToolResult/text, serialized bytes, and SHA-256 across path,
+  glob, options, empty, ordering, formatting, depth, bound, and deterministic
+  repeat cases. Focused OLD mutation kills **35/35** applicable mutants, with
+  zero survivor, equivalent, or invalid. Existing pre-edit Files/MCP gates
+  passed **70/70**.
+- **Afyx-native seam:** new `src/mcp/files-tool.ts` owns the narrow `getFiles`
+  call, Files request adaptation, path/glob filtering, empty selection,
+  flat/grouped/tree formatting, shared bound consumption, and ToolResult
+  assembly. It imports no ToolHandler, project cache, DB, session, transport,
+  pool, worker, CLI, or lifecycle owner. `ToolHandler.handleFiles` is now only
+  the project-resolution facade plus raw-request delegation.
+- **NEW evidence:** dependency-free Files contract passes **23/23** and the
+  existing real-index path-normalization contract passes **13/13**. NEW
+  source mutation kills **32/32** applicable mutants after strengthening four
+  durable sensitivity gaps; survivor/equivalent/invalid counts are zero.
+  Controlled OLD/NEW differential is **60/60 IDENTICAL** with
+  `UNEXPLAINED = 0`.
+- **Real repository and payload:** an unchanged 949-file index exercised whole
+  tree, flat, grouped, metadata false, POSIX/Windows subtree, glob, combined
+  path+glob, maxDepth, and no-match. Exact text, ToolResult bytes, ordering,
+  and SHA-256 are **10/10 IDENTICAL**, `UNEXPLAINED = 0`. This is controlled
+  Files payload evidence, not a global agent-token-efficiency claim.
+- **Performance:** 21 interleaved samples report OLD→NEW median ns/call:
+  empty 98.16→93.39, small flat 3124.14→3010.32, 100-file flat
+  32889.60→30702.60, grouped 39353.67→40188.00, tree
+  167282.33→163458.00, path+glob 26598.20→27788.40, and bounded large output
+  635144.00→625500.00. Median deltas range from -6.65% to +4.47%; p95 is
+  runner-noisy without a consistent increase. No material reproducible
+  adapter regression exists.
+- **Provenance:** normalization against historical
+  `b7a1aa2718dc1f6940e483043733f67020d9a62f` reports Scope A OLD regions:
+  54/57 substantive (94.74%), 12/13 comments (92.31%), 85.98% five-line
+  shingles, longest block 43, five blocks >=8. Scope B new seam: 33/100
+  substantive (33.00%), 0/1 comments, 7.69% shingles, longest block 9, one
+  block >=8. Scope C thin facade: 1/9 substantive (11.11%), 0/1 comments, 0%
+  shingles, longest block 2, zero blocks >=8. Residual matches are frozen
+  public strings/glyphs/vocabulary and standard TypeScript constructs;
+  unexplained private Files ownership is zero. This is technical provenance,
+  not a legal conclusion.
+- **Freeze and regression gates:** catalog SHA-256 remains
+  `4eaa5a29a1f93bcee7d6b9a77605aa221f53c5767ba26cf0c6d150a0b43d6b3a`.
+  C07.2 dispatch, C07.4 output, C07.5 Search, every other MCP/CLI family,
+  C01-C06, Extraction/Resolution, Provider/Installer, and UI remain frozen.
+  Focused MCP/Files/security, Search/Context/Graph/QueryPool/Impact-Affected,
+  DB/WAL/lifecycle, semantic fixtures, CLI/MCP smoke, CLI semantic,
+  Extraction/Resolution, typecheck, and clean production/UI builds pass.
+- **CI:** PR #47 implementation-head checks passed **7/7**: general CI
+  Linux/macOS/Windows and Graph Build Linux/macOS/Windows/Rust. The first Linux
+  Graph Build reached 305 files/5,675 tests before a Tinypool child exited
+  without an assertion failure; the unchanged-head failed-job rerun passed.
+  No production or test change was made for that frozen runner-resource event.
+- **Residual map and next slice:** Files closes as one independent family
+  without splitting or collapsing downstream ownership: **12 C07 material
+  families remain**, `UNKNOWN = 0`. Current source evidence selects Callers and
+  Callees together as one bounded relationship-adapter family because they
+  share symbol discovery, definition grouping, edge-label, limit/truncation,
+  and result-assembly ownership. Exact next phase is **Phase 3B.12C.7.7 — MCP
+  Relationship Adapter Residual Closure (Callers/Callees)**; it is not started
+  here. IND-C07 remains **ACTIVE** and IND-C08 remains not started.
+- Scratch-only OLD/NEW oracles, mutation, differential, real-repository,
+  performance, and provenance artifacts live literally under
+  `C:\Users\afif\AppData\Local\Temp\afyx-ind-c07r6-20261002` and are excluded
+  from PR #47.
+
 ### IND-C08 — Extraction closure
 
 - **Scope/ownership:** parser dispatch/control flow and language hosts after
