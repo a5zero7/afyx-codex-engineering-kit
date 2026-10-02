@@ -2351,7 +2351,7 @@ a legal conclusion.
 - **Afyx-native seam:** `src/mcp/tool-output.ts` now owns one pure
   `boundToolOutput(text)` operation. It has no handler, graph, DB, session,
   transport, pool, worker, CLI, environment, or mutable-state dependency.
-  `tools.ts` imports it directly at all 15 actual consumption sites; the old
+  `tools.ts` imports it directly at all 14 actual consumption sites; the old
   constant and private method were removed. Family formatting, ToolResult
   construction, Explore policy, and Node's separate 38k file-view pagination
   remain outside this seam.
