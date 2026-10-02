@@ -30,7 +30,7 @@ import {
   type WorktreeIndexMismatch,
 } from '../sync/worktree';
 import type { PendingFile } from '../sync';
-import type { Node, Edge, SearchResult, Subgraph, NodeKind } from '../types';
+import type { Node, Edge, Subgraph, NodeKind } from '../types';
 import { isTestFile, normalizeNameToken } from '../search/query-utils';
 import { groupDefinitions, lastQualifierPart, matchesSymbol } from '../graph/symbol-lookup';
 import { mergeSymbolImpact } from '../impact';
@@ -84,6 +84,7 @@ import {
 } from './tool-results';
 import { dispatchReadTool, type ReadToolHandlers } from './tool-dispatch';
 import { boundToolOutput } from './tool-output';
+import { executeSearchTool } from './search-tool';
 
 export { NotIndexedError } from './tool-results';
 
@@ -2241,35 +2242,11 @@ export class ToolHandler {
     if (typeof query !== 'string') return query;
 
     const cg = this.getAfyxGraph(args.projectPath as string | undefined);
-    const rawKind = args.kind as string | undefined;
-    // The schema enum says 'type' (what agents naturally reach for); the
-    // NodeKind is 'type_alias'. Without the mapping, kind: "type" silently
-    // matched nothing — a filter value we advertise must work.
-    const kind = rawKind === 'type' ? 'type_alias' : rawKind;
-    const rawLimit = Number(args.limit) || 10;
-    const limit = clamp(rawLimit, 1, 100);
-
-    const results = cg.searchNodes(query, {
-      limit,
-      kinds: kind ? [kind as NodeKind] : undefined,
+    return executeSearchTool(cg, {
+      query,
+      kind: args.kind as string | undefined,
+      limit: args.limit,
     });
-
-    if (results.length === 0) {
-      return this.textResult(`No results found for "${query}"`);
-    }
-
-    // Down-rank generated files within the FTS-returned set so a search
-    // for "Send" surfaces the hand-written keeper before .pb.go stubs
-    // that share the name. Stable: only reorders generated vs. not.
-    const isGen = cg.generatedFilePredicate(results.map((r) => r.node.filePath));
-    const ranked = [...results].sort((a, b) => {
-      const aGen = isGen(a.node.filePath) ? 1 : 0;
-      const bGen = isGen(b.node.filePath) ? 1 : 0;
-      return aGen - bGen;
-    });
-
-    const formatted = this.formatSearchResults(ranked);
-    return this.textResult(boundToolOutput(formatted));
   }
 
   /**
@@ -6829,22 +6806,6 @@ export class ToolHandler {
   // =========================================================================
   // Formatting helpers (compact by default to reduce context usage)
   // =========================================================================
-
-  private formatSearchResults(results: SearchResult[]): string {
-    const lines: string[] = [`**Search Results (${results.length} found)**`, ''];
-
-    for (const result of results) {
-      const { node } = result;
-      const location = node.startLine ? `:${node.startLine}` : '';
-      // Compact format: one line per result with key info
-      lines.push(`**${node.name}** (${node.kind})`);
-      lines.push(`${node.filePath}${location}`);
-      if (node.signature) lines.push(`\`${node.signature}\``);
-      lines.push('');
-    }
-
-    return lines.join('\n');
-  }
 
   private formatNodeList(nodes: Node[], title: string, labels?: Map<string, string>): string {
     const lines: string[] = [`**${title} (${nodes.length} found)**`, ''];
