@@ -2410,6 +2410,76 @@ a legal conclusion.
   provenance artifacts live under
   `%LOCALAPPDATA%\Temp\afyx-ind-c07r4-20261002` and are excluded from the PR.
 
+#### IND-C07.5 — MCP Search adapter residual closure (2026-10-02)
+
+- **Baseline and ownership:** official baseline
+  `31a6e1d79f774206553654abf36d1119b7601559`. Selected OLD regions were
+  `ToolHandler.handleSearch` and `formatSearchResults`. Generic
+  `validateString` and `getAfyxGraph` remain host-owned; `searchNodes`, Search
+  scoring/ranking, and `generatedFilePredicate` remain frozen domain APIs.
+- **Frozen contract:** `afyx_graph_search` schema/catalog, exact validation
+  errors, `type -> type_alias`, runtime pass-through of other kinds,
+  `Number(limit) || 10` plus 1..100 clamp, one domain call, success-shaped
+  no-result text, stable handwritten-before-generated presentation, exact
+  compact Markdown, and C07.4 `boundToolOutput` consumption remain unchanged.
+- **OLD evidence:** a 34-case oracle records inputs, domain arguments/count,
+  generated-predicate inputs, returned/presented order, project selection,
+  exact ToolResult/text, payload bytes, SHA-256, and truncation. Focused OLD
+  mutation kills **22/22** applicable semantic mutants, zero survivor,
+  equivalent, or invalid; initial probe gaps were strengthened before any
+  production edit.
+- **Afyx-native seam:** new pure-boundary `src/mcp/search-tool.ts` owns only
+  Search request adaptation, narrow domain invocation, generated presentation
+  ordering, empty selection, compact formatting, shared output-bound
+  consumption, and `textToolResult` assembly. It imports no ToolHandler,
+  project/cache, SQLite, session, transport, pool, worker, or CLI ownership.
+  `handleSearch` is now a thin generic validation/project-resolution facade.
+- **NEW evidence:** direct dependency-free contract passes **13/13**. NEW
+  mutation kills **22/22** equivalent-or-stronger mutants with zero survivor,
+  equivalent, or invalid. Controlled OLD/NEW differential is **34/34
+  IDENTICAL**, `UNEXPLAINED = 0`, including exact calls, order, text, bytes,
+  and digests.
+- **Real repository and payload:** an unchanged 971-file, 24,460-node,
+  78,105-edge index exercised common/partial symbols, class/type filters, low/
+  high limits, no-result, and explicit projectPath. OLD/NEW output/order/
+  payload digests are **8/8 IDENTICAL**, `UNEXPLAINED = 0`. This is controlled
+  Search evidence, not a global agent-token-efficiency claim.
+- **Performance:** 31 alternating samples of 5,000 adapter calls show NEW
+  median deltas of +5.14 ns empty, +11.18 ns one result, +17.64 ns ten results,
+  +0.92 ns mixed results, and +100.02 ns for 180 oversized results. Relative
+  percentages on the two sub-microsecond cases are timer-sensitive; ten/mixed/
+  oversized deltas are +1.61%, +0.05%, and +0.16%. No material reproducible
+  adapter regression exists.
+- **Provenance:** normalization against
+  `b7a1aa2718dc1f6940e483043733f67020d9a62f` reports Scope A OLD regions:
+  25/27 substantive (92.59%), 7/8 comments (87.5%), 69.05% shingles, longest
+  block 28, two blocks >=8. Scope B new seam: 8/29 substantive (27.59%), 0/1
+  comments, 7.69% shingles, longest block 9, one block >=8. Scope C thin facade:
+  2/12 substantive (16.67%), no comments, 0% shingles, longest block 1, zero
+  blocks >=8. Residual B matches are frozen public formatting/vocabulary and
+  standard TypeScript control flow; unexplained private Search ownership is
+  zero. This is technical provenance, not a legal conclusion.
+- **Freeze gates:** catalog digest remains
+  `4eaa5a29a1f93bcee7d6b9a77605aa221f53c5767ba26cf0c6d150a0b43d6b3a`.
+  C07.2 dispatch, C07.4 output, all other MCP/CLI families, C01-C06,
+  Extraction/Resolution, Provider/Installer, and UI remain frozen. Focused
+  Search/MCP, Search/Context/Graph/QueryPool/Impact, DB/lifecycle, CLI semantic,
+  semantic fixtures, CLI/MCP smoke, typecheck, and clean production/UI builds
+  pass. PR #46 final-head CI passed **7/7** after one unchanged-head rerun of
+  the Linux Graph Build: the initial job hit a Node/Vitest worker zone OOM and
+  a frozen WAL pressure threshold after 5,443 tests passed and 192 were
+  skipped; the rerun passed without source or test changes.
+- **Residual map:** the Search family closes without merging or splitting
+  downstream ownership: **13 C07 material families remain**, `UNKNOWN = 0`.
+  Files is the next dependency-safe bounded adapter, supported by existing path,
+  format, metadata, maxDepth, deterministic-ordering, and security evidence.
+  Exact next phase is **Phase 3B.12C.7.6 — MCP Files Adapter Residual Closure**;
+  it is not implemented here. IND-C07 remains **ACTIVE** and IND-C08 remains
+  not started.
+- Scratch-only oracles, mutation, differential, real-repository, performance,
+  and provenance artifacts live under
+  `%LOCALAPPDATA%\Temp\afyx-ind-c07r5-20261003` and are excluded from the PR.
+
 ### IND-C08 — Extraction closure
 
 - **Scope/ownership:** parser dispatch/control flow and language hosts after
