@@ -86,6 +86,7 @@ import { dispatchReadTool, type ReadToolHandlers } from './tool-dispatch';
 import { boundToolOutput } from './tool-output';
 import { executeSearchTool } from './search-tool';
 import { executeFilesTool } from './files-tool';
+import { executeRelationshipTool, type RelationshipToolSource } from './relationship-tool';
 
 export { NotIndexedError } from './tool-results';
 
@@ -2264,13 +2265,6 @@ export class ToolHandler {
     return groupDefinitions(nodes, fileFilter);
   }
 
-  /** Section heading for one distinct definition in grouped output. */
-  private definitionHeading(group: Node[]): string {
-    const head = group[0]!;
-    const line = head.startLine ? `:${head.startLine}` : '';
-    return `**${head.qualifiedName}** (${head.kind}) — ${head.filePath}${line}`;
-  }
-
   /**
    * Handle afyx_graph_callers
    */
@@ -2279,77 +2273,11 @@ export class ToolHandler {
     if (typeof symbol !== 'string') return symbol;
 
     const cg = this.getAfyxGraph(args.projectPath as string | undefined);
-    const limit = clamp((args.limit as number) || 20, 1, 100);
-    const fileFilter = typeof args.file === 'string' ? args.file : undefined;
-
-    const allMatches = this.findAllSymbols(cg, symbol);
-    if (allMatches.nodes.length === 0) {
-      return this.textResult(`Symbol "${symbol}" not found in the codebase${allMatches.note}`);
-    }
-
-    const { groups, filteredOut } = this.groupDefinitions(allMatches.nodes, fileFilter);
-    const filterNote = filteredOut
-      ? `\n\n> **Note:** no definition of "${symbol}" matches file "${fileFilter}" — showing all definitions instead.`
-      : '';
-
-    const collect = (defNodes: Node[]) => {
-      const seen = new Set<string>();
-      const callers: Node[] = [];
-      const labels = new Map<string, string>();
-      for (const node of defNodes) {
-        for (const c of cg.getCallers(node.id)) {
-          if (!seen.has(c.node.id)) {
-            seen.add(c.node.id);
-            callers.push(c.node);
-            const label = this.edgeLabel(c.edge);
-            if (label) labels.set(c.node.id, label);
-          }
-        }
-      }
-      return { callers, labels };
-    };
-
-    // Single definition (or same-file overloads): the familiar flat list.
-    if (groups.length === 1) {
-      const { callers, labels } = collect(groups[0]!);
-      if (callers.length === 0) {
-        return this.textResult(`No callers found for "${symbol}"${allMatches.note}${filterNote}`);
-      }
-      // A successful `file` narrowing makes the multi-symbol aggregation note
-      // stale — suppress it.
-      const note = fileFilter && !filteredOut ? '' : allMatches.note;
-      // Say when the cap cut the list (#1639, #1674): a truncated answer with
-      // no marker reads as the complete set, and an agent under-counts from it.
-      const cut = callers.length > limit
-        ? `\n\n> Showing ${limit} of ${callers.length} callers; pass \`limit\` (up to 100) to widen.`
-        : '';
-      const formatted = this.formatNodeList(callers.slice(0, limit), `Callers of ${symbol}`, labels) + cut + note + filterNote;
-      return this.textResult(boundToolOutput(formatted));
-    }
-
-    // Multiple DISTINCT definitions (#764): one section per definition so an
-    // agent never mistakes one app's callers for another's. Narrow with
-    // `file` to focus a single definition.
-    const lines: string[] = [
-      `**Callers of ${symbol} — ${groups.length} distinct definitions (narrow with \`file\`)**`,
-    ];
-    for (const group of groups) {
-      const { callers, labels } = collect(group);
-      lines.push('', this.definitionHeading(group));
-      if (callers.length === 0) {
-        lines.push('- (no callers)');
-        continue;
-      }
-      for (const node of callers.slice(0, limit)) {
-        const location = node.startLine ? `:${node.startLine}` : '';
-        const label = labels.get(node.id);
-        lines.push(`- ${node.name} (${node.kind}) - ${node.filePath}${location}${label ? ` — via ${label}` : ''}`);
-      }
-      if (callers.length > limit) {
-        lines.push(`- … +${callers.length - limit} more (pass \`limit\` to widen)`);
-      }
-    }
-    return this.textResult(boundToolOutput(lines.join('\n') + filterNote));
+    return executeRelationshipTool(this.relationshipToolSource(cg), {
+      symbol,
+      file: args.file,
+      limit: args.limit,
+    }, 'callers');
   }
 
   /**
@@ -2360,74 +2288,21 @@ export class ToolHandler {
     if (typeof symbol !== 'string') return symbol;
 
     const cg = this.getAfyxGraph(args.projectPath as string | undefined);
-    const limit = clamp((args.limit as number) || 20, 1, 100);
-    const fileFilter = typeof args.file === 'string' ? args.file : undefined;
+    return executeRelationshipTool(this.relationshipToolSource(cg), {
+      symbol,
+      file: args.file,
+      limit: args.limit,
+    }, 'callees');
+  }
 
-    const allMatches = this.findAllSymbols(cg, symbol);
-    if (allMatches.nodes.length === 0) {
-      return this.textResult(`Symbol "${symbol}" not found in the codebase${allMatches.note}`);
-    }
-
-    const { groups, filteredOut } = this.groupDefinitions(allMatches.nodes, fileFilter);
-    const filterNote = filteredOut
-      ? `\n\n> **Note:** no definition of "${symbol}" matches file "${fileFilter}" — showing all definitions instead.`
-      : '';
-
-    const collect = (defNodes: Node[]) => {
-      const seen = new Set<string>();
-      const callees: Node[] = [];
-      const labels = new Map<string, string>();
-      for (const node of defNodes) {
-        for (const c of cg.getCallees(node.id)) {
-          if (!seen.has(c.node.id)) {
-            seen.add(c.node.id);
-            callees.push(c.node);
-            const label = this.edgeLabel(c.edge);
-            if (label) labels.set(c.node.id, label);
-          }
-        }
-      }
-      return { callees, labels };
+  /** Narrow wiring from the project graph to Relationship adapter dependencies. */
+  private relationshipToolSource(cg: AfyxGraph): RelationshipToolSource {
+    return {
+      resolveSymbols: (symbol) => this.findAllSymbols(cg, symbol),
+      groupDefinitions: (nodes, fileFilter) => this.groupDefinitions(nodes, fileFilter),
+      getCallers: (nodeId) => cg.getCallers(nodeId),
+      getCallees: (nodeId) => cg.getCallees(nodeId),
     };
-
-    if (groups.length === 1) {
-      const { callees, labels } = collect(groups[0]!);
-      if (callees.length === 0) {
-        return this.textResult(`No callees found for "${symbol}"${allMatches.note}${filterNote}`);
-      }
-      // A successful `file` narrowing makes the multi-symbol aggregation note
-      // stale — suppress it.
-      const note = fileFilter && !filteredOut ? '' : allMatches.note;
-      // Say when the cap cut the list (#1639, #1674): a truncated answer with
-      // no marker reads as the complete set, and an agent under-counts from it.
-      const cut = callees.length > limit
-        ? `\n\n> Showing ${limit} of ${callees.length} callees; pass \`limit\` (up to 100) to widen.`
-        : '';
-      const formatted = this.formatNodeList(callees.slice(0, limit), `Callees of ${symbol}`, labels) + cut + note + filterNote;
-      return this.textResult(boundToolOutput(formatted));
-    }
-
-    // Multiple DISTINCT definitions (#764): per-definition sections.
-    const lines: string[] = [
-      `**Callees of ${symbol} — ${groups.length} distinct definitions (narrow with \`file\`)**`,
-    ];
-    for (const group of groups) {
-      const { callees, labels } = collect(group);
-      lines.push('', this.definitionHeading(group));
-      if (callees.length === 0) {
-        lines.push('- (no callees)');
-        continue;
-      }
-      for (const node of callees.slice(0, limit)) {
-        const location = node.startLine ? `:${node.startLine}` : '';
-        const label = labels.get(node.id);
-        lines.push(`- ${node.name} (${node.kind}) - ${node.filePath}${location}${label ? ` — via ${label}` : ''}`);
-      }
-      if (callees.length > limit) {
-        lines.push(`- … +${callees.length - limit} more (pass \`limit\` to widen)`);
-      }
-    }
-    return this.textResult(boundToolOutput(lines.join('\n') + filterNote));
   }
 
   /**
@@ -6622,37 +6497,6 @@ export class ToolHandler {
   // =========================================================================
   // Formatting helpers (compact by default to reduce context usage)
   // =========================================================================
-
-  private formatNodeList(nodes: Node[], title: string, labels?: Map<string, string>): string {
-    const lines: string[] = [`**${title} (${nodes.length} found)**`, ''];
-
-    for (const node of nodes) {
-      const location = node.startLine ? `:${node.startLine}` : '';
-      // Compact: just name, kind, location — plus the relationship when it
-      // isn't a plain call (callback registration, instantiation, …).
-      const label = labels?.get(node.id);
-      lines.push(
-        `- ${node.name} (${node.kind}) - ${node.filePath}${location}${label ? ` — via ${label}` : ''}`
-      );
-    }
-
-    return lines.join('\n');
-  }
-
-  /**
-   * Relationship label for a non-`calls` edge in callers/callees lists. A
-   * function-as-value edge (#756) is the high-signal one: `callers(cb)`
-   * showing "via callback registration" tells the agent this is where the
-   * callback is WIRED, not where it's invoked.
-   */
-  private edgeLabel(edge: Edge): string | null {
-    if (edge.kind === 'calls') return null;
-    if (edge.metadata?.fnRef === true) return 'callback registration';
-    if (edge.kind === 'instantiates') return 'instantiation';
-    if (edge.kind === 'imports') return 'import';
-    if (edge.kind === 'references') return 'reference';
-    return edge.kind;
-  }
 
   private formatImpact(symbol: string, impact: Subgraph): string {
     const nodeCount = impact.nodes.size;

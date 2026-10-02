@@ -2561,6 +2561,112 @@ a legal conclusion.
   `C:\Users\afif\AppData\Local\Temp\afyx-ind-c07r6-20261002` and are excluded
   from PR #47.
 
+#### IND-C07.7 — MCP Relationship adapter residual closure (Callers/Callees) (2026-10-02)
+
+- **Immutable task metadata:** phase `IND-C07.7`; title `MCP Relationship Adapter
+  Residual Closure (Callers/Callees)`; official baseline
+  `9f08c10796991379b167d582571bc075ea6c60ce`; branch
+  `afyx/ind-c07-relationship-adapter`; implementation/evidence HEAD
+  `3742aa586aa4d5ddee2ec940d997ec320c366333`; PR #48. Scratch-only
+  evidence lives literally under
+  `C:\Users\afif\AppData\Local\Temp\afyx-ind-c07r7-20261002` and is excluded
+  from the PR.
+- **Selected OLD ownership and frozen dependencies:** the selected private
+  regions were `ToolHandler.handleCallers`, `ToolHandler.handleCallees`,
+  `definitionHeading`, `formatNodeList`, and `edgeLabel`. Generic
+  `validateString` and project selection remain host-owned. The new seam
+  consumes, but does not duplicate, frozen `findAllSymbols`,
+  `groupDefinitions`, `getCallers`, and `getCallees` behavior. Impact, Node,
+  Status, Explore, dispatch, output bounding, Search, Files, session,
+  transport, QueryPool/worker, CLI, DB/WAL, and lifecycle ownership did not
+  move.
+- **Architecture closure:** OLD `ToolHandler` owned exact-symbol consumption,
+  file narrowing/fallback notes, direction selection, per-definition Graph
+  calls, node-ID first-seen deduplication, first-edge labels, flat/grouped
+  presentation, semantic limit disclosure, and result assembly. Afyx-native
+  `src/mcp/relationship-tool.ts` now owns that bounded adaptation through the
+  narrow `RelationshipToolSource` capability interface. Both ToolHandler
+  methods are thin generic validation/project-selection/wiring facades; the
+  new module owns no ToolHandler, AfyxGraph, SQLite, MCP session/transport,
+  QueryPool/worker, watcher, lifecycle, CLI, or domain algorithm.
+- **Frozen relationship contract:** Callers and Callees retain default 20,
+  clamp 1..100, current runtime coercion for zero/null/string/negative/NaN-like
+  limits, exact-only symbol selection with did-you-mean notes, same-file
+  overload aggregation, distinct-definition grouping, exact/suffix file
+  narrowing, failed-filter disclosure, resolver aggregation notes, per-node-ID
+  first-seen ordering, first-edge-label retention, and one Graph call per
+  definition node. `calls` remains unlabeled; `fnRef`, `instantiates`,
+  `imports`, `references`, and fallback kinds retain established labels.
+  Zero-result text, flat headings, definition headings, empty-group markers,
+  per-definition limits, grouped `… +N more`, flat total disclosure, and the
+  C07.4 15,000-character output bound remain byte-identical.
+- **Ground truth and mutation:** pre-edit OLD focused integration coverage
+  passed across nine selected contract files. The deterministic OLD oracle
+  recorded **64 cases** with request, direction, Graph call order/count,
+  ToolResult, bytes, and SHA-256. OLD focused mutation killed **33/33**
+  applicable mutants with zero survivors/equivalent/invalid. NEW direct,
+  dependency-free Relationship tests pass **7/7** and final-source mutation
+  kills **28/28** applicable mutants with zero survivors/equivalent/invalid.
+- **Differential and real-index parity:** the same controlled matrix is
+  **64/64 IDENTICAL**, including calls, ordering, labels, text, ToolResult,
+  serialized bytes, and SHA-256; `UNEXPLAINED = 0`. A freshly indexed
+  TypeScript fixture exercised default/high limits, zero/missing symbols,
+  grouped definitions, successful/failed file narrowing, callback labels,
+  and both directions: **14/14 IDENTICAL**, `UNEXPLAINED = 0`. These are
+  controlled Relationship payload/context measurements, not a claim about
+  every MCP payload or agent-token efficiency.
+- **Performance and payload:** five final OLD→NEW interleaved pairs measured
+  nine adapter scenarios at 500 calls each. Median ns/call OLD→NEW were:
+  not-found 8,700→8,200; one relation 11,300→12,300; 20 relations
+  14,600→15,400; 105/truncated 17,200→17,800; same-file overloads
+  13,100→14,400; multiple definitions 15,800→15,500; multiple groups
+  truncated 17,400→15,900; callback label 14,500→17,400; bounded large output
+  32,200→30,300. Median deltas span -8.62% to +20.00%, with the largest
+  positive absolute delta 2.9 microseconds on a microbenchmark; p95 movement
+  is runner-noisy and inconsistent. No material reproducible adapter
+  regression exists. Controlled 64-case and real-index 14-case payloads remain
+  byte-identical.
+- **Provenance:** against historical reference
+  `b7a1aa2718dc1f6940e483043733f67020d9a62f`, using trimmed/collapsed
+  whitespace, >=20-character substantive/comment lines, five-line shingles,
+  and `SequenceMatcher(autojunk=false)`: Scope A OLD selected regions are
+  105/111 substantive (94.59%), 19/21 comments (90.48%), 124/159 shingles
+  (77.99%), longest block 45, five blocks >=8. Scope B new Afyx seam is 22/87
+  substantive (25.29%), 0/2 comments, 3/120 shingles (2.50%), longest block 8,
+  one block >=8. Scope C remaining ToolHandler facades/wiring is 6/15
+  substantive (40.00%), 0/2 comments, 0/25 shingles, longest block 5, zero
+  blocks >=8. Residual matches are public strings/Markdown vocabulary,
+  relationship and edge-kind names, field names, and standard TypeScript
+  Map/Set/switch/loop idioms; material unexplained retained private
+  Relationship implementation is zero. This is technical provenance evidence,
+  not a legal conclusion.
+- **Frozen gates:** final focused Relationship/MCP/security/dispatch/output/
+  Search/Files/QueryPool selection reports **167 passed, 2 platform-skipped**.
+  Representative frozen domain suites report **942/942**: Graph 439,
+  Search/Context 153, Impact/Affected 6, QueryPool 12, DB/WAL 209, lifecycle
+  123. CLI/MCP semantic contracts plus extraction/resolution ground truth pass
+  **35/35** (9/9, 8/8, 5/5, 13/13). Semantic baseline passes 6/6; CLI/MCP
+  smoke passes 21/21 including all eight tools. TypeScript typecheck, clean
+  production build, and clean UI build pass. MCP catalog SHA-256 remains
+  `4eaa5a29a1f93bcee7d6b9a77605aa221f53c5767ba26cf0c6d150a0b43d6b3a`;
+  session, transport, QueryPool/worker, Explore, CLI, Search/Context, Graph,
+  DB/WAL, Impact/Affected, lifecycle, Extraction/Resolution, and
+  Provider/Installer/UI contracts remain frozen.
+- **CI and classification:** implementation/evidence-head CI on PR #48 passed
+  **7/7** (General CI Linux/macOS/Windows; Afyx Graph Build
+  Linux/macOS/Windows/Rust kernel). Exact final PR-head CI is verified in PR
+  checks and the task closure report after this evidence commit, avoiding a
+  self-referential documentation/CI loop. Implementation evidence supports
+  `MCP_RELATIONSHIP_ADAPTER_SLICE_COMPLETE` subject only to that exact final
+  PR-head check.
+- **Residual map:** Relationship closes exactly one independently owned family;
+  **11 C07 material residual families remain**, `UNKNOWN = 0`. Re-evaluation
+  selects the bounded MCP Impact adapter next because it consumes the same
+  now-stable lookup/grouping/output seams while retaining frozen
+  `mergeSymbolImpact` domain ownership. Exact next phase is **Phase
+  3B.12C.7.8 — MCP Impact Adapter Residual Closure**; it is not started here.
+  IND-C07 remains **ACTIVE** and IND-C08 remains not started.
+
 ### IND-C08 — Extraction closure
 
 - **Scope/ownership:** parser dispatch/control flow and language hosts after
