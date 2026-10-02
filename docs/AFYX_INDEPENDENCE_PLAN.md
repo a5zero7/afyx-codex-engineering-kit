@@ -2752,13 +2752,14 @@ a legal conclusion.
   **33/33 IDENTICAL** after canonicalizing only the random fixture root;
   payload bytes are identical and `UNEXPLAINED = 0`. OLD and NEW focused
   campaigns each kill **12/12** meaningful policy/orchestration/rendering/
-  dedup/emission mutants with zero survivors or invalid mutants. Three NEW
-  oracle runs produce one identical 33-case digest set. The new test also
-  invokes the seam directly with injected host capabilities and proves facade
-  parity.
+  dedup/emission mutants with zero survivors or invalid mutants. The complete
+  33-case oracle remains scratch-only evidence; three NEW runs produce one
+  identical digest set. The durable committed test freezes policy/allocation
+  fundamentals and direct seam versus host-facade parity without retaining
+  oracle payloads in a long-lived test worker.
 - **Integration, session, and payload:** all Explore plus required MCP,
   QueryPool, input-limit, staleness/worktree, dispatch, dynamic-boundary,
-  field-name, and secret-safety suites pass **396/396**. Session state/dedup
+  field-name, and secret-safety suites pass **394/394**. Session state/dedup
   coverage proves internal emission stripping, two-session isolation,
   cross-project resolution, unchanged-source back-references, changed-source
   re-serve, and diagnostic byte neutrality. Three real-repository OLD/NEW
