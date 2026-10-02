@@ -5,6 +5,13 @@ Baseline: `e401cbf002a0d0e57fcb9774d22c974abe580c4e`
 Historical comparison commit: `b7a1aa2718dc1f6940e483043733f67020d9a62f`  
 Classification: `INDEPENDENCE_PLAN_READY_WITH_GAPS`
 
+> **Canonical status notice (2026-10-03):** C01 through C07.11 below are
+> retained historical engineering evidence. C07.12 was planned but never
+> started, and its micro-residual closure plan is superseded. Active development
+> continues under [AFYX_V1_MASTER_ROADMAP.md](AFYX_V1_MASTER_ROADMAP.md), Phase
+> 5B — Native MCP/CLI Runtime Reimplementation. Historical evidence blocks,
+> SHAs, counts, PR numbers, and measurements remain unchanged.
+
 This document records technical provenance and plans implementation closure. It
 does not make a legal conclusion, authorize removal of attribution, or begin a
 rewrite. Detailed machine-readable evidence is stored outside the repository in

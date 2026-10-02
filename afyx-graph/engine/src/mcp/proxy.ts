@@ -30,9 +30,11 @@ import { treatStdinFailureAsShutdown } from './stdin-teardown';
 import { AfyxGraphPackageVersion } from './version';
 import { SERVER_INFO, PROTOCOL_VERSION } from './session';
 import { SERVER_INSTRUCTIONS } from './server-instructions';
-import { getStaticTools } from './tools';
-import { ExploreSessionState } from './explore-session-state';
+import { getStaticTools, type ToolHandler } from './tools';
+import { AfyxSessionContext } from './session-context';
 import type { MCPEngine } from './engine';
+import { ErrorCodes } from './transport';
+import { parseToolCallParams } from './tool-registry';
 
 /**
  * Env var that opts INTO the "attached to shared daemon" log line, off by
@@ -209,6 +211,54 @@ function buildInitializeResult(): JsonRpc {
   };
 }
 
+type RuntimeToolHandler = Pick<ToolHandler, 'executeRuntime'>;
+
+/** Execute one request after the daemon has become unavailable. */
+export async function handleLocalFallbackMessage(
+  msg: JsonRpc,
+  context: AfyxSessionContext,
+  getToolHandler: () => Promise<RuntimeToolHandler>,
+): Promise<JsonRpc | null> {
+  const id = msg.id;
+  if (msg.method === 'tools/call' && id !== undefined) {
+    const parsed = parseToolCallParams(msg.params);
+    if (!parsed.ok) {
+      return {
+        jsonrpc: '2.0',
+        id,
+        error: { code: ErrorCodes.InvalidParams, message: parsed.message },
+      };
+    }
+    try {
+      const handler = await getToolHandler();
+      const { name, args } = parsed.call;
+      const result = await context.execute(
+        name,
+        args,
+        (toolName, prepared) => handler.executeRuntime(toolName, prepared),
+      );
+      return { jsonrpc: '2.0', id, result };
+    } catch (err) {
+      return {
+        jsonrpc: '2.0',
+        id,
+        error: { code: ErrorCodes.InternalError, message: err instanceof Error ? err.message : String(err) },
+      };
+    }
+  }
+  if (msg.method === 'ping' && id !== undefined) {
+    return { jsonrpc: '2.0', id, result: {} };
+  }
+  if (id !== undefined && msg.method !== 'initialize') {
+    return {
+      jsonrpc: '2.0',
+      id,
+      error: { code: ErrorCodes.MethodNotFound, message: `Method not found: ${String(msg.method)}` },
+    };
+  }
+  return null;
+}
+
 /**
  * Session state for the local-handshake proxy (the cold-start fix): answers
  * `initialize`/`tools/list`/etc. from static constants the instant the
@@ -235,10 +285,9 @@ class LocalHandshakeSession {
   // daemon exactly when a new session starts), these would otherwise hang
   // forever; re-serving them in-process means the host always gets a reply.
   private readonly inflight = new Map<unknown, string>();
-  // Explore call history for the ONE host connection this proxy serves
-  // (CG-17). Only the daemon-unavailable fallback path below reads it; while
-  // the daemon is up, tracking happens on ITS OWN MCPSession instead.
-  private readonly exploreSession = new ExploreSessionState();
+  // Per-host state for daemon-unavailable fallback. Daemon-backed calls use the
+  // daemon connection's independent context and the two histories never merge.
+  private readonly context = new AfyxSessionContext();
 
   constructor(private readonly deps: LocalHandshakeDeps) {}
 
@@ -273,29 +322,15 @@ class LocalHandshakeSession {
   private async handleLocally(line: string): Promise<void> {
     let msg: JsonRpc;
     try { msg = JSON.parse(line) as JsonRpc; } catch { return; }
-    const id = msg.id;
-
-    if (msg.method === 'tools/call' && id !== undefined) {
-      try {
+    const response = await handleLocalFallbackMessage(
+      msg,
+      this.context,
+      async () => {
         await this.ensureEngine();
-        const params = (msg.params || {}) as { name: string; arguments?: Record<string, unknown> };
-        const result = await this.engine!.getToolHandler().execute(params.name, params.arguments || {}, this.exploreSession);
-        this.writeClient({ jsonrpc: '2.0', id, result });
-      } catch (err) {
-        this.writeClient({ jsonrpc: '2.0', id, error: { code: -32603, message: err instanceof Error ? err.message : String(err) } });
-      }
-      return;
-    }
-    if (msg.method === 'ping' && id !== undefined) {
-      this.writeClient({ jsonrpc: '2.0', id, result: {} });
-      return;
-    }
-    if (id !== undefined && msg.method !== 'initialize') {
-      // Nothing here can serve this request and the daemon is gone — answer
-      // with an error rather than let the host hang on a reply that never comes.
-      this.writeClient({ jsonrpc: '2.0', id, error: { code: -32603, message: 'Afyx Graph daemon unavailable' } });
-    }
-    // initialize was already answered locally; notifications need no reply.
+        return this.engine!.getToolHandler();
+      },
+    );
+    if (response) this.writeClient(response);
   }
 
   private routeToDaemon(line: string): void {

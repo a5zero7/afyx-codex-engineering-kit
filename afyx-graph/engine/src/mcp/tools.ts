@@ -41,9 +41,6 @@ import { createHash } from 'crypto';
 import { validatePathWithinRoot, validateProjectPath } from '../utils';
 import { findAllSymbols } from '../graph/named-symbol-flow';
 import {
-  EXPLORE_EMISSION_KEY,
-  EXPLORE_SESSION_VIEW_ARG,
-  ExploreSessionState,
   type ExploreEmission,
 } from './explore-session-state';
 import {
@@ -56,6 +53,7 @@ import {
   NotIndexedError,
   classifyToolFailure,
   errorToolResult,
+  stripInternalToolResult,
 } from './tool-results';
 import { dispatchReadTool, type ReadToolHandlers } from './tool-dispatch';
 import { executeSearchTool } from './search-tool';
@@ -303,14 +301,13 @@ export interface ToolResult {
   }>;
   isError?: boolean;
   /**
-   * INTERNAL side-channel (CG-17): what a `afyx_graph_explore` call actually put
+   * INTERNAL side-channel: what a `afyx_graph_explore` call actually put
    * on the wire — files, line ranges, bytes. It rides the result because the
    * call may have run on a query-pool worker, while the session state it feeds
-   * lives on the main thread. {@link ToolHandler.execute} records it and DELETES
-   * it, so nothing here ever reaches the client. Keyed by
-   * {@link EXPLORE_EMISSION_KEY}; the two must stay in sync.
+   * lives on the main thread. The owning Afyx session context records and
+   * removes it before the result reaches the client.
    */
-  _cgExploreEmission?: ExploreEmission;
+  _afyxExploreEmission?: ExploreEmission;
 }
 
 /**
@@ -1224,19 +1221,22 @@ export class ToolHandler {
     return { ...result, content: [{ type: 'text', text: composed }, ...rest] };
   }
 
-  /**
-   * Execute a tool by name.
-   *
-   * `sessionState` is the CALLER's per-session explore history (CG-17). The
-   * daemon shares one ToolHandler across every connected session, so this state
-   * cannot live on the handler — each session owns one and hands it in, which is
-   * what keeps two sessions on one daemon from ever seeing each other's calls.
-   * Omit it (the CLI does) and explore behaves exactly as before, untracked.
-   */
+  /** Execute without a session and return only the public result. */
   async execute(
     toolName: string,
     args: Record<string, unknown>,
-    sessionState?: ExploreSessionState,
+  ): Promise<ToolResult> {
+    return stripInternalToolResult(await this.executeRuntime(toolName, args));
+  }
+
+  /**
+   * Execute for the MCP runtime. The result may carry serializable internal
+   * metadata for the owning session context to consume before it reaches the
+   * wire; no client state is stored on this shared handler.
+   */
+  async executeRuntime(
+    toolName: string,
+    args: Record<string, unknown>,
   ): Promise<ToolResult> {
     try {
       // Block the first tool call on the engine's post-open reconcile so we
@@ -1300,75 +1300,14 @@ export class ToolHandler {
       // staleness (#403) — which need the watched MAIN instance and so are
       // always applied here, never in the worker.
       //
-      // Explore also carries the session's own call history down (CG-17) and its
-      // emission record back up. Both travel as plain properties — on the args
-      // object down, on the ToolResult up — because either leg may cross a
-      // structured-clone boundary into a worker, where a closure or a handler
-      // field could not follow.
-      const dispatchArgs = this.withSessionView(toolName, args, sessionState);
       const raw = (this.queryPool && this.queryPool.healthy && this.queryPool.ready)
-        ? await this.queryPool.run(toolName, dispatchArgs)
-        : await this.executeReadTool(toolName, dispatchArgs);
-      // Record + STRIP before anything else touches the result: the emission is
-      // internal bookkeeping and must never reach the client, whether or not a
-      // caller passed session state.
-      const result = this.takeExploreEmission(raw, sessionState);
-      const withWorktree = this.withWorktreeNotice(result, args.projectPath as string | undefined);
+        ? await this.queryPool.run(toolName, args)
+        : await this.executeReadTool(toolName, args);
+      const withWorktree = this.withWorktreeNotice(raw, args.projectPath as string | undefined);
       return this.withStalenessNotice(withWorktree, args.projectPath as string | undefined);
     } catch (err) {
       return classifyToolFailure(err);
     }
-  }
-
-  /**
-   * Attach the caller's session view to an explore call's args (CG-17), on a
-   * COPY so the caller's object is never mutated. Nothing else sees it: a
-   * non-explore tool, or a caller with no session state, gets the args
-   * unchanged and pays nothing.
-   *
-   * A client that spells the internal key itself is stripped rather than
-   * trusted — the view decides what source a later call may withhold, so it has
-   * to come from the server's own record, never from the wire.
-   */
-  private withSessionView(
-    toolName: string,
-    args: Record<string, unknown>,
-    sessionState: ExploreSessionState | undefined,
-  ): Record<string, unknown> {
-    if (!(EXPLORE_SESSION_VIEW_ARG in args) && (!sessionState || toolName !== 'afyx_graph_explore')) {
-      return args;
-    }
-    const copy = { ...args };
-    delete copy[EXPLORE_SESSION_VIEW_ARG];
-    if (sessionState && toolName === 'afyx_graph_explore') {
-      copy[EXPLORE_SESSION_VIEW_ARG] = sessionState.view();
-    }
-    return copy;
-  }
-
-  /**
-   * Record an explore call's emission into the caller's session state and strip
-   * it from the result (CG-17).
-   *
-   * Unconditional strip: the property is internal, so it comes off even when
-   * there is no session state to record it into (the CLI path) — that is what
-   * keeps the agent-facing response byte-identical. Recording is wrapped
-   * because a bookkeeping bug must never fail a tool call that already
-   * succeeded.
-   */
-  private takeExploreEmission(
-    result: ToolResult,
-    sessionState: ExploreSessionState | undefined,
-  ): ToolResult {
-    const emission = result?.[EXPLORE_EMISSION_KEY];
-    if (emission === undefined) return result;
-    delete result[EXPLORE_EMISSION_KEY];
-    if (sessionState) {
-      try {
-        sessionState.record(emission);
-      } catch { /* bookkeeping only — never fail a served call */ }
-    }
-    return result;
   }
 
   /**

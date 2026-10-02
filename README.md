@@ -124,12 +124,13 @@ Sebagai pemeriksaan manual opsional, jalankan `python scripts/check-reference-st
 
 ## Dokumentasi
 
+Roadmap canonical menuju Afyx v1 tersedia di [docs/AFYX_V1_MASTER_ROADMAP.md](docs/AFYX_V1_MASTER_ROADMAP.md).
 Panduan lengkap, perilaku konflik, dan pemulihan ada di [docs/INSTALLATION.md](docs/INSTALLATION.md).
 Diagnostik, kontrak komponen, dan deteksi project dijelaskan di [docs/DIAGNOSTICS.md](docs/DIAGNOSTICS.md).
 Metodologi dan hasil campaign benchmark tersedia di [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
 Tracker penggunaan token Codex dan integrasi VS Code dijelaskan di [docs/CODEX_USAGE_TRACKER.md](docs/CODEX_USAGE_TRACKER.md).
 Kontrak arsitektur UI opsional Afyx Graph dijelaskan di [docs/AFYX_GRAPH_UI_ARCHITECTURE.md](docs/AFYX_GRAPH_UI_ARCHITECTURE.md).
-Audit technical independence dan urutan closure Afyx Graph tersedia di [docs/AFYX_INDEPENDENCE_PLAN.md](docs/AFYX_INDEPENDENCE_PLAN.md).
+Evidence historis technical independence Afyx Graph tersedia di [docs/AFYX_INDEPENDENCE_PLAN.md](docs/AFYX_INDEPENDENCE_PLAN.md).
 
 ## Lisensi dan atribusi
 

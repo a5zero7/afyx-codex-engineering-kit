@@ -19,7 +19,7 @@ import { parseToolCallParams } from './tool-registry';
 import { SERVER_INSTRUCTIONS, SERVER_INSTRUCTIONS_NO_ROOT_INDEX } from './server-instructions';
 import { AfyxGraphPackageVersion } from './version';
 import { resolveServerRoot } from '../directory';
-import { ExploreSessionState } from './explore-session-state';
+import { AfyxSessionContext } from './session-context';
 import { MCP_SERVER_NAME } from '../product';
 
 /**
@@ -87,15 +87,8 @@ export class MCPSession {
   private rootsAttempted = false;
   private resolvePromise: Promise<void> | null = null;
   private explicitProjectPath: string | null;
-  /**
-   * What `afyx_graph_explore` has already returned to THIS client, per project
-   * (CG-17). Owned by the session, not the engine: the daemon shares one engine
-   * (and one ToolHandler, and a pool of worker threads) across every connected
-   * client, so state kept over there would blend two agents' histories and let
-   * one session's calls suppress source the other has never seen. It dies with
-   * the session — a reconnecting client starts clean.
-   */
-  private readonly exploreSession = new ExploreSessionState();
+  /** Per-client runtime state. A reconnect receives a fresh context. */
+  private readonly context = new AfyxSessionContext();
 
   constructor(
     private transport: JsonRpcTransport,
@@ -126,13 +119,9 @@ export class MCPSession {
     return this.transport;
   }
 
-  /**
-   * This session's explore call history (CG-17). Exposed so tests can assert
-   * that two sessions on one daemon keep separate state; nothing in the server
-   * reaches for another session's copy.
-   */
-  getExploreSessionState(): ExploreSessionState {
-    return this.exploreSession;
+  /** Exposed for focused ownership diagnostics; never shared with another session. */
+  getContext(): AfyxSessionContext {
+    return this.context;
   }
 
   private async handleMessage(message: JsonRpcRequest | JsonRpcNotification): Promise<void> {
@@ -263,7 +252,12 @@ export class MCPSession {
     await this.retryInitIfNeeded();
 
     if (process.env.AFYX_GRAPH_MCP_DEBUG) process.stderr.write(`[mcp-debug] toolsCall ${toolName} id=${String(request.id)} dispatch\n`);
-    const result = await this.engine.getToolHandler().execute(toolName, toolArgs, this.exploreSession);
+    const handler = this.engine.getToolHandler();
+    const result = await this.context.execute(
+      toolName,
+      toolArgs,
+      (name, args) => handler.executeRuntime(name, args),
+    );
     if (process.env.AFYX_GRAPH_MCP_DEBUG) process.stderr.write(`[mcp-debug] toolsCall ${toolName} id=${String(request.id)} done\n`);
     this.transport.sendResult(request.id, result);
   }

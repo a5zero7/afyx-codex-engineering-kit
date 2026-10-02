@@ -1,5 +1,5 @@
 /**
- * Session-scoped `afyx_graph_explore` call state (CG-17).
+ * Session-scoped `afyx_graph_explore` call history.
  *
  * What it holds: for ONE MCP session, per project it queried, what explore has
  * already returned — the files, the line ranges of source inside them, the bytes
@@ -8,7 +8,8 @@
  * which is why a 4th call happily re-serves the same spine it already sent
  * (#1500) and why the tier's call budget can only be *asked* for rather than
  * enforced. This module is the record those two behaviours are built on
- * (CG-18 cross-call dedup, CG-19 budget decay). It changes no response itself.
+ * Cross-call dedup and budget decay consume this history. It changes no
+ * response itself.
  *
  * Four constraints shape the design, all of them from how the daemon actually
  * runs:
@@ -23,13 +24,13 @@
  *   3. **Bounded.** A long-lived session must not grow without limit, so
  *      everything is capped — see {@link EXPLORE_SESSION_LIMITS}. Eviction drops
  *      DETAIL only: `callCount` and `responseBytes` keep counting past it, since
- *      decay (CG-19) reads the count and must not be reset by its own bound.
+ *      decay reads the count and must not be reset by its own bound.
  *   4. **Daemon-safe.** The daemon shares ONE {@link ../mcp/tools.ToolHandler}
  *      (and a pool of worker threads) across every connected session, so this
- *      state can live neither on the handler nor in a worker. It lives on the
- *      session; the handler is handed it per call, and the record of what a call
- *      emitted travels back on the {@link ToolResult} so it can be recorded on
- *      the main thread whether dispatch ran in-process or on a worker.
+ *      state can live neither on the handler nor in a worker. It lives behind
+ *      the session context; a bounded view travels into the call and the record
+ *      of what was emitted returns on the {@link ToolResult}, so the main thread
+ *      can consume it whether dispatch ran in-process or on a worker.
  *
  * Over- vs under-reporting: where a bound forces a choice, this module keeps
  * FEWER ranges than were emitted, never more. A consumer that under-knows
@@ -42,19 +43,19 @@ import * as path from 'path';
 
 /**
  * Property on a {@link ../mcp/tools.ToolResult} carrying what an explore call
- * emitted. INTERNAL: `ToolHandler.execute` records it and deletes it before the
- * result reaches the wire, so the agent-facing response is unchanged. It is a
- * plain-object property (not a Symbol) on purpose — it has to survive the
- * structured clone back from a query-pool worker.
+ * emitted. INTERNAL: the owning session context records it and removes it
+ * before the result reaches the wire, so the agent-facing response is
+ * unchanged. It is a plain-object property (not a Symbol) on purpose — it has
+ * to survive the structured clone back from a query-pool worker.
  */
-export const EXPLORE_EMISSION_KEY = '_cgExploreEmission';
+export const EXPLORE_EMISSION_KEY = '_afyxExploreEmission';
 
 /**
  * Argument key carrying this session's prior-call view INTO a tool call. Same
  * reasoning as {@link EXPLORE_EMISSION_KEY}: it crosses the worker boundary, so
  * it must be a serializable property on the args object.
  */
-export const EXPLORE_SESSION_VIEW_ARG = '_cgExploreSession';
+export const EXPLORE_SESSION_VIEW_ARG = '_afyxExploreSession';
 
 /** An inclusive 1-based line span of a file that was emitted. */
 export interface ExploreLineRange {
@@ -71,7 +72,7 @@ export interface ExploreFileEmission {
   /** Source chars emitted for this file (excludes headers / fences). */
   bytes: number;
   /**
-   * Identity of the bytes those ranges were sliced from (CG-18). Cross-call
+   * Identity of the bytes those ranges were sliced from. Cross-call
    * dedup withholds a span only when the file still hashes to this, so an edit
    * between two calls re-serves instead of pointing at source the agent holds a
    * now-wrong copy of. Absent = unprovable, which dedup treats as "re-serve".
@@ -122,8 +123,8 @@ export interface ExploreSessionView {
 }
 
 /**
- * Memory bounds. Every one of them caps DETAIL; none caps the counters that
- * CG-19's decay reads.
+ * Memory bounds. Every one of them caps DETAIL; none caps the counters used by
+ * budget decay.
  *
  * Sized against how sessions actually behave: an agent explores one project
  * (occasionally a second in a monorepo) and the tier call budget is 1–5, so the
