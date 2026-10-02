@@ -33,7 +33,6 @@ import type { PendingFile } from '../sync';
 import type { Node, Edge, Subgraph, NodeKind } from '../types';
 import { isTestFile, normalizeNameToken } from '../search/query-utils';
 import { groupDefinitions, lastQualifierPart, matchesSymbol } from '../graph/symbol-lookup';
-import { mergeSymbolImpact } from '../impact';
 import { extractQueryPaths, queryMightContainPaths } from '../search/query-paths';
 import {
   existsSync,
@@ -87,6 +86,7 @@ import { boundToolOutput } from './tool-output';
 import { executeSearchTool } from './search-tool';
 import { executeFilesTool } from './files-tool';
 import { executeRelationshipTool, type RelationshipToolSource } from './relationship-tool';
+import { executeImpactTool, type ImpactToolSource } from './impact-tool';
 
 export { NotIndexedError } from './tool-results';
 
@@ -2313,42 +2313,20 @@ export class ToolHandler {
     if (typeof symbol !== 'string') return symbol;
 
     const cg = this.getAfyxGraph(args.projectPath as string | undefined);
-    const depth = clamp((args.depth as number) || 2, 1, 10);
-    const fileFilter = typeof args.file === 'string' ? args.file : undefined;
+    return executeImpactTool(this.impactToolSource(cg), {
+      symbol,
+      depth: args.depth,
+      file: args.file,
+    });
+  }
 
-    const allMatches = this.findAllSymbols(cg, symbol);
-    if (allMatches.nodes.length === 0) {
-      return this.textResult(`Symbol "${symbol}" not found in the codebase${allMatches.note}`);
-    }
-
-    const { groups, filteredOut } = this.groupDefinitions(allMatches.nodes, fileFilter);
-    const filterNote = filteredOut
-      ? `\n\n> **Note:** no definition of "${symbol}" matches file "${fileFilter}" — showing all definitions instead.`
-      : '';
-
-    const impactOf = (defNodes: Node[]) => mergeSymbolImpact(cg, defNodes, depth, 'first-seen');
-
-    // Single definition (or same-file overloads): the familiar merged report.
-    if (groups.length === 1) {
-      const formatted = this.formatImpact(symbol, impactOf(groups[0]!)) + (fileFilter && !filteredOut ? "" : allMatches.note) + filterNote;
-      return this.textResult(boundToolOutput(formatted));
-    }
-
-    // Multiple DISTINCT definitions (#764): a blast radius PER definition —
-    // merging unrelated same-named classes (one UserService per monorepo app)
-    // overstated impact and confused agents. Narrow with `file`.
-    const sections: string[] = [
-      `**Impact of ${symbol} — ${groups.length} distinct definitions (each with its own blast radius; narrow with \`file\`)**`,
-    ];
-    for (const group of groups) {
-      const head = group[0]!;
-      const line = head.startLine ? `:${head.startLine}` : '';
-      sections.push(
-        '',
-        this.formatImpact(`${head.qualifiedName} (${head.filePath}${line})`, impactOf(group))
-      );
-    }
-    return this.textResult(boundToolOutput(sections.join('\n') + filterNote));
+  /** Narrow wiring from the project graph to the MCP Impact adapter. */
+  private impactToolSource(cg: AfyxGraph): ImpactToolSource {
+    return {
+      resolveSymbols: (symbol) => this.findAllSymbols(cg, symbol),
+      groupDefinitions: (nodes, fileFilter) => this.groupDefinitions(nodes, fileFilter),
+      getImpactRadius: (nodeId, depth) => cg.getImpactRadius(nodeId, depth),
+    };
   }
 
   /**
@@ -6497,34 +6475,6 @@ export class ToolHandler {
   // =========================================================================
   // Formatting helpers (compact by default to reduce context usage)
   // =========================================================================
-
-  private formatImpact(symbol: string, impact: Subgraph): string {
-    const nodeCount = impact.nodes.size;
-
-    // Compact format: just list affected symbols grouped by file
-    const lines: string[] = [
-      `**Impact: "${symbol}" affects ${nodeCount} symbols**`,
-      '',
-    ];
-
-    // Group by file
-    const byFile = new Map<string, Node[]>();
-    for (const node of impact.nodes.values()) {
-      const existing = byFile.get(node.filePath) || [];
-      existing.push(node);
-      byFile.set(node.filePath, existing);
-    }
-
-    for (const [file, nodes] of byFile) {
-      lines.push(`**${file}:**`);
-      // Compact: inline list
-      const nodeList = nodes.map(n => `${n.name}:${n.startLine}`).join(', ');
-      lines.push(nodeList);
-      lines.push('');
-    }
-
-    return lines.join('\n');
-  }
 
   /**
    * Build a compact structural outline of a container symbol from its
