@@ -1,12 +1,12 @@
 import { PathRefusalError } from '../errors';
-import type { ExploreEmission } from './explore-session-state';
+import { EXPLORE_EMISSION_KEY, type ExploreEmission } from './explore-session-state';
 
 /** Agent-facing MCP tool result. */
 export interface ToolResult {
   content: Array<{ type: 'text'; text: string }>;
   isError?: boolean;
   /** Internal explore bookkeeping; stripped before the MCP response is sent. */
-  _cgExploreEmission?: ExploreEmission;
+  _afyxExploreEmission?: ExploreEmission;
 }
 
 /** Recoverable absence of an Afyx Graph index; intentionally success-shaped. */
@@ -21,6 +21,14 @@ export function errorToolResult(message: string): ToolResult {
     content: [{ type: 'text', text: `Error: ${message}` }],
     isError: true,
   };
+}
+
+/** Return an agent-facing result with all runtime bookkeeping removed. */
+export function stripInternalToolResult(result: ToolResult): ToolResult {
+  if (!(EXPLORE_EMISSION_KEY in result)) return result;
+  const publicResult = { ...result };
+  delete publicResult[EXPLORE_EMISSION_KEY];
+  return publicResult;
 }
 
 /** Map engine failures to the established agent-facing ToolResult contract. */

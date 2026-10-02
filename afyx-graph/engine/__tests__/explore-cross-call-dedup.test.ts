@@ -1,5 +1,5 @@
 /**
- * Cross-call source dedup (CG-18).
+ * Cross-call source dedup.
  *
  * A later `afyx_graph_explore` call in a session must not re-send source an
  * earlier call already delivered — but every byte it withholds has to be
@@ -24,7 +24,8 @@ import * as path from 'path';
 import * as os from 'os';
 import AfyxGraph from '../src/index';
 import { ToolHandler } from '../src/mcp/tools';
-import { ExploreSessionState, type ExploreProjectState } from '../src/mcp/explore-session-state';
+import type { ExploreProjectState } from '../src/mcp/explore-session-state';
+import { AfyxSessionContext } from '../src/mcp/session-context';
 import {
   EXPLORE_DEDUP,
   dedupeRange,
@@ -225,8 +226,13 @@ describe('a second call against a real index', () => {
     if (testDir && fs.existsSync(testDir)) fs.rmSync(testDir, { recursive: true, force: true });
   });
 
-  const explore = (query: string, session?: ExploreSessionState, args: Record<string, unknown> = {}) =>
-    handler.execute('afyx_graph_explore', { query, ...args }, session).then((r) => r.content[0]!.text);
+  const explore = (query: string, context?: AfyxSessionContext, args: Record<string, unknown> = {}) => {
+    const toolArgs = { query, ...args };
+    const result = context
+      ? context.execute('afyx_graph_explore', toolArgs, (name, prepared) => handler.executeRuntime(name, prepared))
+      : handler.execute('afyx_graph_explore', toolArgs);
+    return result.then((r) => r.content[0]!.text);
+  };
 
   /**
    * The line numbers actually inside each file's fenced source. Read off the
@@ -253,7 +259,7 @@ describe('a second call against a real index', () => {
   }
 
   it('never re-sends a line it already sent, and points at every line it withholds', async () => {
-    const session = new ExploreSessionState();
+    const session = new AfyxSessionContext();
     const first = await explore(QUERY, session);
     const second = await explore(QUERY, session);
 
@@ -274,7 +280,7 @@ describe('a second call against a real index', () => {
   }, 120_000);
 
   it('spends the reclaimed bytes on source the agent has not seen', async () => {
-    const session = new ExploreSessionState();
+    const session = new AfyxSessionContext();
     const first = await explore(QUERY, session);
     const second = await explore(QUERY, session);
 
@@ -289,7 +295,7 @@ describe('a second call against a real index', () => {
   }, 120_000);
 
   it('re-emits in full when the file changed between the two calls', async () => {
-    const session = new ExploreSessionState();
+    const session = new AfyxSessionContext();
     const target = path.join(testDir, 'internal/usecase/payroll/payslip_builder.go');
     const original = fs.readFileSync(target, 'utf-8');
     try {
@@ -311,7 +317,7 @@ describe('a second call against a real index', () => {
   }, 120_000);
 
   it('always returns real source, even when the session already holds everything', async () => {
-    const session = new ExploreSessionState();
+    const session = new AfyxSessionContext();
     await explore(QUERY, session);
     await explore(QUERY, session);
     const third = await explore(QUERY, session);
@@ -326,14 +332,14 @@ describe('a second call against a real index', () => {
   }, 180_000);
 
   it('leaves the first call of a session untouched', async () => {
-    const tracked = await explore(QUERY, new ExploreSessionState());
+    const tracked = await explore(QUERY, new AfyxSessionContext());
     const untracked = await explore(QUERY);
     expect(tracked).toBe(untracked);
   }, 120_000);
 
   it('keeps two sessions on one handler independent', async () => {
-    const a = new ExploreSessionState();
-    const b = new ExploreSessionState();
+    const a = new AfyxSessionContext();
+    const b = new AfyxSessionContext();
     const firstForA = await explore(QUERY, a);
     await explore(QUERY, a);
     // B's first call has seen nothing, whatever A has been served.
@@ -341,7 +347,7 @@ describe('a second call against a real index', () => {
   }, 180_000);
 
   it('is off entirely under AFYX_GRAPH_EXPLORE_DEDUP=0', async () => {
-    const session = new ExploreSessionState();
+    const session = new AfyxSessionContext();
     const previous = process.env.AFYX_GRAPH_EXPLORE_DEDUP;
     process.env.AFYX_GRAPH_EXPLORE_DEDUP = '0';
     try {
@@ -356,7 +362,7 @@ describe('a second call against a real index', () => {
   }, 120_000);
 
   it('re-serves source by default when a connection may outlive the current context', async () => {
-    const session = new ExploreSessionState();
+    const session = new AfyxSessionContext();
     const previous = process.env.AFYX_GRAPH_EXPLORE_DEDUP;
     delete process.env.AFYX_GRAPH_EXPLORE_DEDUP;
     try {
@@ -374,7 +380,7 @@ describe('a second call against a real index', () => {
 
   it('reports the reclaimed bytes through the CG-4 diagnostic', async () => {
     const sidecar = path.join(testDir, 'cg18-diagnostic.jsonl');
-    const session = new ExploreSessionState();
+    const session = new AfyxSessionContext();
     const previous = process.env.AFYX_GRAPH_EXPLORE_DEBUG;
     process.env.AFYX_GRAPH_EXPLORE_DEBUG = sidecar;
     try {

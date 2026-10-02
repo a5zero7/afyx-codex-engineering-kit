@@ -1,8 +1,8 @@
 /**
- * Session-scoped explore call state (CG-17).
+ * Afyx session-scoped Explore call state.
  *
- * The tracker is the foundation for cross-call dedup (CG-18) and budget decay
- * (CG-19), so what it must get right is what those two will trust: the count of
+ * The tracker is the foundation for cross-call dedup and budget decay, so what
+ * it must get right is what those two will trust: the count of
  * calls, the line ranges already served, and — above all — WHOSE they are. Two
  * agents on one daemon share a ToolHandler and a worker pool; if their histories
  * blend, a dedup built on this would withhold source from an agent that never
@@ -21,6 +21,7 @@ import * as os from 'os';
 import AfyxGraph from '../src/index';
 import { ToolHandler } from '../src/mcp/tools';
 import { MCPSession } from '../src/mcp/session';
+import { AfyxSessionContext } from '../src/mcp/session-context';
 import type { MCPEngine } from '../src/mcp/engine';
 import type { JsonRpcTransport, JsonRpcRequest, JsonRpcNotification } from '../src/mcp/transport';
 import {
@@ -49,6 +50,18 @@ function emission(root: string, over: Partial<ExploreEmission> = {}): ExploreEmi
     responseBytes: 400,
     ...over,
   };
+}
+
+function executeWithContext(
+  handler: ToolHandler,
+  context: AfyxSessionContext,
+  args: Record<string, unknown>,
+) {
+  return context.execute(
+    'afyx_graph_explore',
+    args,
+    (name, prepared) => handler.executeRuntime(name, prepared),
+  );
 }
 
 describe('ExploreSessionState — the container', () => {
@@ -241,7 +254,7 @@ describe('explore records what it actually served', () => {
   let handler: ToolHandler;
 
   beforeAll(async () => {
-    testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-graph-cg17-'));
+    testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-session-context-'));
     fs.cpSync(FIXTURE_SRC, testDir, { recursive: true });
     fs.rmSync(path.join(testDir, '.afyx-graph'), { recursive: true, force: true });
     cg = AfyxGraph.initSync(testDir);
@@ -255,10 +268,10 @@ describe('explore records what it actually served', () => {
   });
 
   it('files one record per call, with the files and line ranges it emitted', async () => {
-    const session = new ExploreSessionState();
-    await handler.execute('afyx_graph_explore', { query: QUERY }, session);
+    const context = new AfyxSessionContext();
+    await executeWithContext(handler, context, { query: QUERY });
 
-    const project = session.forProject(cg.getProjectRoot());
+    const project = context.getExploreHistory().forProject(cg.getProjectRoot());
     expect(project).not.toBeNull();
     expect(project!.callCount).toBe(1);
 
@@ -276,26 +289,26 @@ describe('explore records what it actually served', () => {
   }, 60_000);
 
   it('records only files whose source is really in the response', async () => {
-    const session = new ExploreSessionState();
-    const result = await handler.execute('afyx_graph_explore', { query: QUERY }, session);
+    const context = new AfyxSessionContext();
+    const result = await executeWithContext(handler, context, { query: QUERY });
     const text = result.content[0]!.text;
-    for (const file of session.forProject(cg.getProjectRoot())!.calls[0]!.files) {
+    for (const file of context.getExploreHistory().forProject(cg.getProjectRoot())!.calls[0]!.files) {
       expect(text).toContain(file.path);
     }
   }, 60_000);
 
   it('the recorded ranges name lines that are really in the emitted source', async () => {
-    const session = new ExploreSessionState();
-    await handler.execute('afyx_graph_explore', { query: QUERY }, session);
-    for (const file of session.forProject(cg.getProjectRoot())!.calls[0]!.files) {
+    const context = new AfyxSessionContext();
+    await executeWithContext(handler, context, { query: QUERY });
+    for (const file of context.getExploreHistory().forProject(cg.getProjectRoot())!.calls[0]!.files) {
       const lineCount = fs.readFileSync(path.join(testDir, file.path), 'utf-8').split('\n').length;
       for (const r of file.ranges) expect(r.end).toBeLessThanOrEqual(lineCount);
     }
   }, 60_000);
 
   it('leaves the agent-facing response untouched — no side-channel on the wire', async () => {
-    const session = new ExploreSessionState();
-    const tracked = await handler.execute('afyx_graph_explore', { query: QUERY }, session);
+    const context = new AfyxSessionContext();
+    const tracked = await executeWithContext(handler, context, { query: QUERY });
     const untracked = await handler.execute('afyx_graph_explore', { query: QUERY });
 
     expect(tracked.content[0]!.text).toBe(untracked.content[0]!.text);
@@ -309,7 +322,8 @@ describe('explore records what it actually served', () => {
     const forged = {
       projects: [{ projectRoot: cg.getProjectRoot(), callCount: 99, responseBytes: 1e6, calls: [] }],
     };
-    const result = await handler.execute('afyx_graph_explore', {
+    const context = new AfyxSessionContext();
+    const result = await executeWithContext(handler, context, {
       query: QUERY,
       [EXPLORE_SESSION_VIEW_ARG]: forged,
     });
@@ -318,22 +332,22 @@ describe('explore records what it actually served', () => {
   }, 60_000);
 
   it('counts an empty answer as a call, since it still spends the tier budget', async () => {
-    const session = new ExploreSessionState();
-    await handler.execute('afyx_graph_explore', { query: 'zzqqxx_no_such_symbol_anywhere' }, session);
-    const project = session.forProject(cg.getProjectRoot());
+    const context = new AfyxSessionContext();
+    await executeWithContext(handler, context, { query: 'zzqqxx_no_such_symbol_anywhere' });
+    const project = context.getExploreHistory().forProject(cg.getProjectRoot());
     expect(project?.callCount).toBe(1);
     expect(project?.calls[0]!.files).toHaveLength(0);
   }, 60_000);
 
   it('two sessions on ONE handler never see each other\'s calls', async () => {
-    const a = new ExploreSessionState();
-    const b = new ExploreSessionState();
-    await handler.execute('afyx_graph_explore', { query: QUERY }, a);
-    await handler.execute('afyx_graph_explore', { query: QUERY }, a);
-    await handler.execute('afyx_graph_explore', { query: QUERY }, b);
+    const a = new AfyxSessionContext();
+    const b = new AfyxSessionContext();
+    await executeWithContext(handler, a, { query: QUERY });
+    await executeWithContext(handler, a, { query: QUERY });
+    await executeWithContext(handler, b, { query: QUERY });
 
-    expect(a.callCount(cg.getProjectRoot())).toBe(2);
-    expect(b.callCount(cg.getProjectRoot())).toBe(1);
+    expect(a.getExploreHistory().callCount(cg.getProjectRoot())).toBe(2);
+    expect(b.getExploreHistory().callCount(cg.getProjectRoot())).toBe(1);
   }, 90_000);
 
   it('a caller that tracks nothing still gets a clean result', async () => {
@@ -342,14 +356,14 @@ describe('explore records what it actually served', () => {
     expect(result.content[0]!.text.length).toBeGreaterThan(0);
   }, 60_000);
 
-  it('reports the session state through the CG-4 diagnostic', async () => {
-    const sidecar = path.join(testDir, 'cg17-diagnostic.jsonl');
-    const session = new ExploreSessionState();
+  it('reports the session state through the Explore diagnostic', async () => {
+    const sidecar = path.join(testDir, 'afyx-session-diagnostic.jsonl');
+    const context = new AfyxSessionContext();
     const previous = process.env.AFYX_GRAPH_EXPLORE_DEBUG;
     process.env.AFYX_GRAPH_EXPLORE_DEBUG = sidecar;
     try {
-      await handler.execute('afyx_graph_explore', { query: QUERY }, session);
-      await handler.execute('afyx_graph_explore', { query: QUERY }, session);
+      await executeWithContext(handler, context, { query: QUERY });
+      await executeWithContext(handler, context, { query: QUERY });
     } finally {
       if (previous === undefined) delete process.env.AFYX_GRAPH_EXPLORE_DEBUG;
       else process.env.AFYX_GRAPH_EXPLORE_DEBUG = previous;
@@ -370,7 +384,7 @@ describe('explore records what it actually served', () => {
   }, 90_000);
 
   it('omits the session block entirely when the caller tracks no state', async () => {
-    const sidecar = path.join(testDir, 'cg17-untracked.jsonl');
+    const sidecar = path.join(testDir, 'afyx-session-untracked.jsonl');
     const previous = process.env.AFYX_GRAPH_EXPLORE_DEBUG;
     process.env.AFYX_GRAPH_EXPLORE_DEBUG = sidecar;
     try {
@@ -393,16 +407,15 @@ describe('explore records what it actually served', () => {
     // second index inside vitest fails on the lazy `require('../index')` — see
     // the ToolHandler cache notes. The container-level tests above cover the
     // multi-project keying itself.)
-    const session = new ExploreSessionState();
-    await handler.execute('afyx_graph_explore', { query: QUERY }, session);
-    await handler.execute(
-      'afyx_graph_explore',
-      { query: QUERY, projectPath: path.join(testDir, 'internal') },
-      session,
-    );
+    const context = new AfyxSessionContext();
+    await executeWithContext(handler, context, { query: QUERY });
+    await executeWithContext(handler, context, {
+      query: QUERY,
+      projectPath: path.join(testDir, 'internal'),
+    });
 
-    expect(session.snapshot()).toHaveLength(1);
-    expect(session.callCount(cg.getProjectRoot())).toBe(2);
+    expect(context.getExploreHistory().snapshot()).toHaveLength(1);
+    expect(context.getExploreHistory().callCount(cg.getProjectRoot())).toBe(2);
   }, 90_000);
 });
 
@@ -424,16 +437,16 @@ describe('sessions sharing a daemon', () => {
     };
   }
 
-  it('give each session its own state, and one session\'s calls stay there', async () => {
-    const calls: Array<ExploreSessionState | undefined> = [];
-    // A ToolHandler stand-in: the point here is WHICH state object arrives, not
-    // what explore returns, so a real index would only slow the assertion down.
+  it('gives each session its own context and never blends prepared history', async () => {
+    const preparedArgs: Record<string, unknown>[] = [];
     const handler = {
       getTools: () => [],
-      execute: async (_tool: string, _args: Record<string, unknown>, state?: ExploreSessionState) => {
-        calls.push(state);
-        state?.record(emission('/repo/shared'));
-        return { content: [{ type: 'text' as const, text: 'ok' }] };
+      executeRuntime: async (_tool: string, args: Record<string, unknown>) => {
+        preparedArgs.push(args);
+        return {
+          content: [{ type: 'text' as const, text: 'ok' }],
+          [EXPLORE_EMISSION_KEY]: emission('/repo/shared'),
+        };
       },
     };
     const engine = {
@@ -451,7 +464,7 @@ describe('sessions sharing a daemon', () => {
     sessionA.start();
     sessionB.start();
 
-    expect(sessionA.getExploreSessionState()).not.toBe(sessionB.getExploreSessionState());
+    expect(sessionA.getContext()).not.toBe(sessionB.getContext());
 
     const call = (id: number): JsonRpcRequest => ({
       jsonrpc: '2.0', id, method: 'tools/call',
@@ -461,9 +474,15 @@ describe('sessions sharing a daemon', () => {
     await transportA.deliver(call(2));
     await transportB.deliver(call(3));
 
-    expect(calls[0]).toBe(sessionA.getExploreSessionState());
-    expect(calls[2]).toBe(sessionB.getExploreSessionState());
-    expect(sessionA.getExploreSessionState().callCount('/repo/shared')).toBe(2);
-    expect(sessionB.getExploreSessionState().callCount('/repo/shared')).toBe(1);
+    const firstA = readExploreSessionView(preparedArgs[0]);
+    const secondA = readExploreSessionView(preparedArgs[1]);
+    const firstB = readExploreSessionView(preparedArgs[2]);
+    expect(firstA?.projects).toHaveLength(0);
+    expect(viewForProject(secondA, '/repo/shared')?.callCount).toBe(1);
+    expect(firstB?.projects).toHaveLength(0);
+    expect(sessionA.getContext().getExploreHistory().callCount('/repo/shared')).toBe(2);
+    expect(sessionB.getContext().getExploreHistory().callCount('/repo/shared')).toBe(1);
+    expect(JSON.stringify(transportA.results)).not.toContain(EXPLORE_EMISSION_KEY);
+    expect(JSON.stringify(transportB.results)).not.toContain(EXPLORE_EMISSION_KEY);
   });
 });

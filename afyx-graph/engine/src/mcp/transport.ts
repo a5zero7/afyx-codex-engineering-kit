@@ -329,7 +329,7 @@ export class StdioTransport extends LineBasedJsonRpcTransport {
   }
 
   protected idPrefix(): string {
-    return 'cg-srv';
+    return 'afyx-srv';
   }
 }
 
@@ -345,7 +345,7 @@ export class SocketTransport extends LineBasedJsonRpcTransport {
   private buffer = '';
   private closeHandlers: Array<() => void> = [];
 
-  constructor(private socket: Socket, private prefix: string = 'cg-sock') {
+  constructor(private socket: Socket, private prefix: string = 'afyx-sock') {
     super();
   }
 

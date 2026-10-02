@@ -11,6 +11,7 @@ import {
   type MessageHandler,
 } from '../src/mcp/transport';
 import type { MCPEngine } from '../src/mcp/engine';
+import { EXPLORE_SESSION_VIEW_ARG } from '../src/mcp/explore-session-state';
 import {
   REGISTERED_TOOL_NAMES,
   catalogMatchesRegistry,
@@ -56,7 +57,7 @@ function sessionHarness() {
   const result: ToolResult = { content: [{ type: 'text', text: 'handled' }] };
   const handler = {
     getTools: vi.fn(() => tools),
-    execute: vi.fn(async () => result),
+    executeRuntime: vi.fn(async () => result),
   };
   const engine = {
     hasDefaultAfyxGraph: vi.fn(() => true),
@@ -122,8 +123,11 @@ describe('MCP public semantic contract', () => {
       jsonrpc: '2.0', id: 3, method: 'tools/call',
       params: { name: 'afyx_graph_explore', arguments: args },
     });
-    expect(handler.execute).toHaveBeenCalledWith(
-      'afyx_graph_explore', args, expect.anything(),
+    expect(handler.executeRuntime).toHaveBeenCalledWith(
+      'afyx_graph_explore', {
+        ...args,
+        [EXPLORE_SESSION_VIEW_ARG]: { projects: [] },
+      },
     );
     expect(transport.responses[1]).toEqual({
       jsonrpc: '2.0', id: 3,
@@ -137,8 +141,8 @@ describe('MCP public semantic contract', () => {
       jsonrpc: '2.0', id: 4, method: 'tools/call',
       params: { name: 'afyx_graph_status', arguments: null },
     });
-    expect(handler.execute).toHaveBeenCalledWith(
-      'afyx_graph_status', {}, expect.anything(),
+    expect(handler.executeRuntime).toHaveBeenCalledWith(
+      'afyx_graph_status', {},
     );
   });
 
@@ -156,7 +160,7 @@ describe('MCP public semantic contract', () => {
       { jsonrpc: '2.0', id: 6, error: { code: ErrorCodes.InvalidParams, message: 'Unknown tool: afyx_graph_missing' } },
       { jsonrpc: '2.0', id: 7, error: { code: ErrorCodes.MethodNotFound, message: 'Method not found: unknown/method' } },
     ]);
-    expect(handler.execute).not.toHaveBeenCalled();
+    expect(handler.executeRuntime).not.toHaveBeenCalled();
   });
 
   it('answers standard capability probes and ping with stable empty shapes', async () => {
