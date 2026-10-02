@@ -85,6 +85,7 @@ import {
 import { dispatchReadTool, type ReadToolHandlers } from './tool-dispatch';
 import { boundToolOutput } from './tool-output';
 import { executeSearchTool } from './search-tool';
+import { executeFilesTool } from './files-tool';
 
 export { NotIndexedError } from './tool-results';
 
@@ -6524,198 +6525,13 @@ export class ToolHandler {
    */
   private async handleFiles(args: Record<string, unknown>): Promise<ToolResult> {
     const cg = this.getAfyxGraph(args.projectPath as string | undefined);
-    const pathFilter = args.path as string | undefined;
-    const pattern = args.pattern as string | undefined;
-    const format = (args.format as 'tree' | 'flat' | 'grouped') || 'tree';
-    const includeMetadata = args.includeMetadata !== false;
-    const maxDepth = args.maxDepth != null ? clamp(args.maxDepth as number, 1, 20) : undefined;
-
-    // Get all files from the index
-    const allFiles = cg.getFiles();
-
-    if (allFiles.length === 0) {
-      return this.textResult('No files indexed. Run `afyx-graph index` first.');
-    }
-
-    // Filter by path prefix. Stored paths are project-relative POSIX (e.g.
-    // "src/foo.ts"), but agents commonly pass project-root variants like "/",
-    // ".", "./", "" or Windows-style "src\foo" — and prefixes with leading
-    // "/", "./" or "\". Normalize all of those before matching so the agent
-    // gets results instead of falling back to Read/Glob (see #426).
-    const normalizedFilter = pathFilter
-      ? pathFilter
-          .replace(/\\/g, '/')
-          .replace(/^(?:\.?\/+)+/, '')
-          .replace(/^\.$/, '')
-          .replace(/\/+$/, '')
-      : '';
-    let files = normalizedFilter
-      ? allFiles.filter(f => f.path === normalizedFilter || f.path.startsWith(normalizedFilter + '/'))
-      : allFiles;
-
-    // Filter by glob pattern
-    if (pattern) {
-      const regex = this.globToRegex(pattern);
-      files = files.filter(f => regex.test(f.path));
-    }
-
-    if (files.length === 0) {
-      return this.textResult(`No files found matching the criteria.`);
-    }
-
-    // Format output
-    let output: string;
-    switch (format) {
-      case 'flat':
-        output = this.formatFilesFlat(files, includeMetadata);
-        break;
-      case 'grouped':
-        output = this.formatFilesGrouped(files, includeMetadata);
-        break;
-      case 'tree':
-      default:
-        output = this.formatFilesTree(files, includeMetadata, maxDepth);
-        break;
-    }
-
-    return this.textResult(boundToolOutput(output));
-  }
-
-  /**
-   * Convert glob pattern to regex
-   */
-  private globToRegex(pattern: string): RegExp {
-    const escaped = pattern
-      .replace(/[.+^${}()|[\]\\]/g, '\\$&')  // Escape special regex chars except * and ?
-      .replace(/\*\*/g, '{{GLOBSTAR}}')       // Temp placeholder for **
-      .replace(/\*/g, '[^/]*')                // * matches anything except /
-      .replace(/\?/g, '[^/]')                 // ? matches single char except /
-      .replace(/\{\{GLOBSTAR\}\}/g, '.*');    // ** matches anything including /
-    return new RegExp(escaped);
-  }
-
-  /**
-   * Format files as a flat list
-   */
-  private formatFilesFlat(files: { path: string; language: string; nodeCount: number }[], includeMetadata: boolean): string {
-    const lines: string[] = [`**Files (${files.length})**`, ''];
-
-    for (const file of files.sort((a, b) => a.path.localeCompare(b.path))) {
-      if (includeMetadata) {
-        lines.push(`- ${file.path} (${file.language}, ${file.nodeCount} symbols)`);
-      } else {
-        lines.push(`- ${file.path}`);
-      }
-    }
-
-    return lines.join('\n');
-  }
-
-  /**
-   * Format files grouped by language
-   */
-  private formatFilesGrouped(files: { path: string; language: string; nodeCount: number }[], includeMetadata: boolean): string {
-    const byLang = new Map<string, typeof files>();
-
-    for (const file of files) {
-      const existing = byLang.get(file.language) || [];
-      existing.push(file);
-      byLang.set(file.language, existing);
-    }
-
-    const lines: string[] = [`**Files by Language (${files.length} total)**`, ''];
-
-    // Sort languages by file count (descending)
-    const sortedLangs = [...byLang.entries()].sort((a, b) => b[1].length - a[1].length);
-
-    for (const [lang, langFiles] of sortedLangs) {
-      lines.push(`**${lang} (${langFiles.length})**`);
-      for (const file of langFiles.sort((a, b) => a.path.localeCompare(b.path))) {
-        if (includeMetadata) {
-          lines.push(`- ${file.path} (${file.nodeCount} symbols)`);
-        } else {
-          lines.push(`- ${file.path}`);
-        }
-      }
-      lines.push('');
-    }
-
-    return lines.join('\n');
-  }
-
-  /**
-   * Format files as a tree structure
-   */
-  private formatFilesTree(
-    files: { path: string; language: string; nodeCount: number }[],
-    includeMetadata: boolean,
-    maxDepth?: number
-  ): string {
-    // Build tree structure
-    interface TreeNode {
-      name: string;
-      children: Map<string, TreeNode>;
-      file?: { language: string; nodeCount: number };
-    }
-
-    const root: TreeNode = { name: '', children: new Map() };
-
-    for (const file of files) {
-      const parts = file.path.split('/');
-      let current = root;
-
-      for (let i = 0; i < parts.length; i++) {
-        const part = parts[i];
-        if (!part) continue;
-
-        if (!current.children.has(part)) {
-          current.children.set(part, { name: part, children: new Map() });
-        }
-        current = current.children.get(part)!;
-
-        // If this is the last part, it's a file
-        if (i === parts.length - 1) {
-          current.file = { language: file.language, nodeCount: file.nodeCount };
-        }
-      }
-    }
-
-    // Render tree
-    const lines: string[] = [`**Project Structure (${files.length} files)**`, ''];
-
-    const renderNode = (node: TreeNode, prefix: string, isLast: boolean, depth: number): void => {
-      if (maxDepth !== undefined && depth > maxDepth) return;
-
-      const connector = isLast ? '└── ' : '├── ';
-      const childPrefix = isLast ? '    ' : '│   ';
-
-      if (node.name) {
-        let line = prefix + connector + node.name;
-        if (node.file && includeMetadata) {
-          line += ` (${node.file.language}, ${node.file.nodeCount} symbols)`;
-        }
-        lines.push(line);
-      }
-
-      const children = [...node.children.values()];
-      // Sort: directories first, then files, both alphabetically
-      children.sort((a, b) => {
-        const aIsDir = a.children.size > 0 && !a.file;
-        const bIsDir = b.children.size > 0 && !b.file;
-        if (aIsDir !== bIsDir) return aIsDir ? -1 : 1;
-        return a.name.localeCompare(b.name);
-      });
-
-      for (let i = 0; i < children.length; i++) {
-        const child = children[i]!;
-        const nextPrefix = node.name ? prefix + childPrefix : prefix;
-        renderNode(child, nextPrefix, i === children.length - 1, depth + 1);
-      }
-    };
-
-    renderNode(root, '', true, 0);
-
-    return lines.join('\n');
+    return executeFilesTool(cg, {
+      path: args.path as string | undefined,
+      pattern: args.pattern as string | undefined,
+      format: args.format,
+      includeMetadata: args.includeMetadata,
+      maxDepth: args.maxDepth,
+    });
   }
 
   // =========================================================================
