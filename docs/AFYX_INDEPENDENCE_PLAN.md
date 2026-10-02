@@ -2702,6 +2702,113 @@ a legal conclusion.
 - **Freeze/build gates:** representative Search/Context, Graph, DB/WAL, Impact/Affected, Lifecycle, Extraction/Resolution, and CLI semantic tests record 1,176 pass. One real-`fs.watch` Windows cleanup assertion fails with `EPERM` identically on OLD and NEW (35/36 watcher assertions otherwise pass). TypeScript clean production build, clean UI build, semantic fixtures 6/6, and CLI/MCP smoke 21/21 pass. Catalog SHA-256 remains `4eaa5a29a1f93bcee7d6b9a77605aa221f53c5767ba26cf0c6d150a0b43d6b3a`; C07.2 dispatch, C07.4 output, C07.5 Search, C07.6 Files, C07.7 Relationship, C07.8 Impact, C07.9 Node, Explore, session, transport, engine/project selection, QueryPool/worker, CLI, and all frozen product subsystems remain unchanged.
 - **Residual map:** Status closes exactly one independently owned family; **8 C07 material residual families remain**, `UNKNOWN = 0`. Re-evaluation selects **MCP Explore Adapter Residual Closure** next because it is the next bounded family in the frozen dependency order and consumes the completed shared output/read-adapter seams. Exact next phase: **Phase 3B.12C.7.11 — MCP Explore Adapter Residual Closure**. It is not started here; IND-C07 remains active and IND-C08 remains not started.
 
+#### IND-C07.11 — MCP Explore adapter residual closure (2026-10-02)
+
+- **Immutable metadata:** phase `IND-C07.11`; title `MCP Explore Adapter
+  Residual Closure`; official baseline
+  `49fb7ffc904c8a6ea1d7a3d999e79364219adca4`; branch
+  `afyx/ind-c07-explore-adapter`; implementation/evidence HEAD
+  `40bca3c7c6a43484715745554948d57823467f88`; PR #52. Scratch-only
+  oracle, mutation, differential, deterministic, real-repository,
+  performance, and provenance evidence lives literally under
+  `C:\Users\afif\AppData\Local\Temp\afyx-ind-c07r11-20261002` and is excluded
+  from the PR.
+- **Ownership and architecture:** OLD `tools.ts` owned Explore query
+  normalization, adaptive call/output budgets, relevance/ranking/allocation,
+  source-range rendering, named flow, dynamic/polymorphic boundary
+  presentation, blast radius, dedup consumption, hard-ceiling fitting, and
+  emission assembly together with `ToolHandler.handleExplore`. New Afyx-owned
+  `src/mcp/explore-tool.ts` owns that cohesive policy/orchestration/
+  presentation surface. `ToolHandler.handleExplore` is now a thin facade that
+  retains generic query validation and project selection and injects only
+  shared stale detection, line numbering, and synthesized-edge presentation.
+  It does not move Session, QueryPool/worker, transport, project lifecycle,
+  or frozen Graph/Search algorithms into the seam.
+- **Frozen boundaries:** the public eight-tool schema/catalog and ordered
+  digest remain unchanged at
+  `4eaa5a29a1f93bcee7d6b9a77605aa221f53c5767ba26cf0c6d150a0b43d6b3a`.
+  Catch-up gating, allowlisting, worktree/staleness wrappers, worker routing,
+  and fallback remain host-owned. `ExploreSessionState`, session-view
+  injection, emission strip/record, project-key isolation, `explore-dedup.ts`,
+  and `ExploreDiagnostics` remain their existing single-source dependencies.
+  Named-symbol flow, dynamic boundaries, branch guards, type hierarchy, query
+  paths, symbol lookup, `numberSourceLines`, stale hashing, and synthesized
+  edge semantics remain frozen shared/domain capabilities.
+- **Behavior contract:** OLD/NEW preserve Erlang/query normalization; advisory
+  call tiers 1/2/3/4/5; adaptive 13k/18k/24k output tiers and runtime
+  `maxFiles` coercion/clamp; raw-query path extraction, pin order and 300-node
+  injection cap; exact relevant-context parameters; empty-result emissions;
+  named flow and dynamic/polymorphic boundaries; relevance penalties, score
+  floor, RWR, named/pinned priority and rescue policy; proportional allocation;
+  clustering, full/focused/skeleton rendering, oversize members, gap markers,
+  line numbers, config-secret and stale-source safety; cross-call dedup and
+  changed-file re-serve; hard-ceiling/section-safe truncation; pointers,
+  completeness/advisory notes, survivor-based summary, and exact
+  `ExploreEmission` accounting.
+- **Ground truth, mutation, and determinism:** the pre-edit Explore selection
+  passed **293/293**. The durable integration oracle captures 33 request,
+  path, budget, coercion, ranking, config, empty, stale, session, dedup, and
+  emission cases plus policy/allocation facts. Controlled OLD/NEW results are
+  **33/33 IDENTICAL** after canonicalizing only the random fixture root;
+  payload bytes are identical and `UNEXPLAINED = 0`. OLD and NEW focused
+  campaigns each kill **12/12** meaningful policy/orchestration/rendering/
+  dedup/emission mutants with zero survivors or invalid mutants. Three NEW
+  oracle runs produce one identical 33-case digest set. The new test also
+  invokes the seam directly with injected host capabilities and proves facade
+  parity.
+- **Integration, session, and payload:** all Explore plus required MCP,
+  QueryPool, input-limit, staleness/worktree, dispatch, dynamic-boundary,
+  field-name, and secret-safety suites pass **396/396**. Session state/dedup
+  coverage proves internal emission stripping, two-session isolation,
+  cross-project resolution, unchanged-source back-references, changed-source
+  re-serve, and diagnostic byte neutrality. Three real-repository OLD/NEW
+  queries are **3/3 byte-identical** at 19,639, 27,016, and 23,310 serialized
+  bytes. These are controlled Explore payload measurements, not a claim about
+  every MCP payload.
+- **Performance:** seven OLD→NEW pairs with 25 warm in-process Explore calls
+  per side (`AFYX_GRAPH_EXPLORE_DEDUP=0`) produced 175 samples each. Median/p95
+  milliseconds are **14.7015/16.7639 → 14.8418/16.4610**; median delta is
+  +0.1403 ms (+0.95%) while p95 delta is -0.3029 ms (-1.81%). Payloads are
+  identical and no material reproducible adapter regression exists.
+- **Provenance:** established normalization against historical reference
+  `b7a1aa2718dc1f6940e483043733f67020d9a62f` (trim/collapse whitespace,
+  >=20-character substantive/comment lines, exact five-line shingles,
+  `SequenceMatcher(autojunk=false)`) reports Scope A OLD selected Explore
+  regions: 2,494/2,522 substantive (98.89%), 2,686/2,717 comments (98.86%),
+  3,642/3,853 shingles (94.52%), longest block 932, 30 blocks >=8. Scope B
+  mechanically extracted Afyx seam: 1,552/1,600 substantive (97.00%),
+  1,681/1,704 comments (98.65%), 3,841/4,133 shingles (92.93%), longest block
+  590, 38 blocks >=8. Scope C remaining facade: 3/7 substantive (42.86%), no
+  comments, 0/6 shingles, longest block 3, zero blocks >=8. High Scope B
+  overlap is the expected byte-preserving mechanical extraction of one large,
+  accepted behavior surface—not evidence for a semantic rewrite. Scope C
+  retains only generic host wiring; material unexplained retained private
+  Explore implementation is zero. This is technical provenance evidence, not
+  a legal conclusion.
+- **Freeze and build gates:** direct completed-adapter and representative
+  Graph, Search/Context, DB, Impact/Affected, QueryPool, CLI, Extraction, and
+  Resolution suites pass **383/383**. Semantic fixtures pass 6/6; CLI/MCP
+  smoke passes 21/21 including all eight tools. TypeScript typecheck, clean
+  production build, and clean UI build pass. A maximum-concurrency Windows
+  full-suite observation reported 5,460 pass, 213 declared skips, and 36
+  temp-directory `EPERM`/5-second timeout failures; isolated serial reruns
+  confirmed the substantive Sync, daemon, multi-repository, freshness, and
+  Git-currency cases while some subprocess cleanup tests remain blocked by the
+  same Windows Temp handle condition. No failure implicated changed Explore
+  code; supported-platform PR CI remains the release gate.
+- **CI and classification:** exact final PR-head CI is recorded in PR #52
+  checks and the closure report after the documentation commit, avoiding a
+  self-referential documentation/CI claim. Current implementation evidence
+  supports `MCP_EXPLORE_ADAPTER_SLICE_COMPLETE` subject to that exact 7/7
+  final-head check.
+- **Residual map:** Explore closes exactly one independently owned family;
+  **7 C07 material residual families remain**, `UNKNOWN = 0`. Re-inventory
+  selects Session ownership next because the Explore seam now consumes the
+  established serializable session view/emission boundary without owning its
+  storage, eviction, project keys, counters, or wire stripping. Exact next
+  phase: **Phase 3B.12C.7.12 — MCP Session Residual Closure**. It is not
+  started here; IND-C07 remains active and IND-C08 remains not started.
+
 ### IND-C08 — Extraction closure
 
 - **Scope/ownership:** parser dispatch/control flow and language hosts after
