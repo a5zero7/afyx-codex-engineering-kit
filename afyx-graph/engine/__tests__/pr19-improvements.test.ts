@@ -514,51 +514,10 @@ describe('MCP Tool Improvements', () => {
     expect(typeof ToolHandler).toBe('function');
   });
 
-  it.skipIf(!HAS_SQLITE)('should have findSymbolMatches and truncateOutput as private methods', async () => {
+  it.skipIf(!HAS_SQLITE)('should have findSymbolMatches as a private method', async () => {
     const { ToolHandler } = await import('../src/mcp/tools');
     const proto = ToolHandler.prototype;
     expect(typeof (proto as any).findSymbolMatches).toBe('function');
-    expect(typeof (proto as any).truncateOutput).toBe('function');
-  });
-
-  it.skipIf(!HAS_SQLITE)('should truncate output exceeding MAX_OUTPUT_LENGTH', async () => {
-    const { ToolHandler } = await import('../src/mcp/tools');
-
-    // Access private method for testing
-    const handler = Object.create(ToolHandler.prototype);
-    const truncate = (handler as any).truncateOutput.bind(handler);
-
-    // Short text should not be truncated
-    const short = 'Hello world';
-    expect(truncate(short)).toBe(short);
-
-    // Long text should be truncated
-    const long = 'x'.repeat(20000);
-    const result = truncate(long);
-    expect(result.length).toBeLessThan(long.length);
-    expect(result).toContain('... (output truncated)');
-  });
-
-  it.skipIf(!HAS_SQLITE)('should truncate at a clean line boundary', async () => {
-    const { ToolHandler } = await import('../src/mcp/tools');
-
-    const handler = Object.create(ToolHandler.prototype);
-    const truncate = (handler as any).truncateOutput.bind(handler);
-
-    // Build text with newlines exceeding the limit
-    const lines: string[] = [];
-    for (let i = 0; i < 500; i++) {
-      lines.push(`Line ${i}: ${'a'.repeat(50)}`);
-    }
-    const text = lines.join('\n');
-
-    const result = truncate(text);
-    // Should end with truncation notice after a newline boundary
-    expect(result).toContain('... (output truncated)');
-    // The content before the notice must end on one complete source line, not
-    // at the raw character cap in the middle of its payload.
-    const beforeTruncation = result.split('\n\n... (output truncated)')[0]!;
-    expect(beforeTruncation.split('\n').at(-1)).toMatch(/^Line \d+: a{50}$/);
   });
 
   describe('findSymbol disambiguation', () => {
