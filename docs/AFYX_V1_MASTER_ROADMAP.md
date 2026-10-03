@@ -2,13 +2,13 @@
 
 Status: Phase 5 active  
 Canonical since: 2026-10-03  
-Current work: Phase 5D — Native Product Surfaces
-Task: `AFYX-73164`
-Validated baseline: `ab991951e8a4874088032e24a0ff14609d48f551`
-Branch: `afyx/native-phase5d-product-surfaces`
-Previous milestone: Phase 5C — **COMPLETE / MERGED / FROZEN**
-Previous pull request: [#54](https://github.com/a5zero7/afyx-codex-engineering-kit/pull/54)
-Canonical merge baseline: `ab991951e8a4874088032e24a0ff14609d48f551`
+Current work: Phase 5E — Native Optimization & Simplification
+Task: `AFYX-84627`
+Validated baseline: `f683b0225ee8e805fcd7b9ea98bea88574cf61f4`
+Branch: `afyx/native-phase5e-optimization`
+Previous milestone: Phase 5D — **COMPLETE / MERGED / FROZEN**
+Previous pull request: [#55](https://github.com/a5zero7/afyx-codex-engineering-kit/pull/55)
+Canonical merge baseline: `f683b0225ee8e805fcd7b9ea98bea88574cf61f4`
 
 This document is the forward-looking execution contract for Afyx v1. Historical
 closure evidence remains in `AFYX_INDEPENDENCE_PLAN.md`; it does not define new
@@ -24,8 +24,8 @@ implementation phases after C07.11.
   - 5A — Behavior Harvest & Contract Knowledge
   - 5B — Native MCP/CLI Runtime Reimplementation: **COMPLETE / MERGED / FROZEN**
   - 5C — Native Domain Core Reimplementation: **COMPLETE / MERGED / FROZEN**
-  - 5D — Native Product Surfaces: **REVIEW READY**
-  - 5E — Native Optimization & Simplification
+  - 5D — Native Product Surfaces: **COMPLETE / MERGED / FROZEN**
+  - 5E — Native Optimization & Simplification: **REVIEW READY CANDIDATE**
   - 5F — Third-Party Source / Runtime Replacement
   - 5G — Legacy Product Identity / Historical Artifact Eradication
   - 5H — Historical License Closure
@@ -110,10 +110,10 @@ the normal Windows CI job remains the acceptance gate for that platform.
 
 ### Remaining roadmap work
 
-Phase 5C is complete, merged and frozen at PR #54 / canonical baseline
-`ab991951e8a4874088032e24a0ff14609d48f551`. Phase 5D now owns provider,
-installer, UI and distribution surfaces. Optimization, third-party replacement,
-global historical-artifact eradication, license closure and the final
-independence audit remain in Phases 5E–5I. Existing legal notices remain required
+Phases 5C and 5D are complete, merged, and frozen; Phase 5D closed at PR #55 /
+canonical baseline `f683b0225ee8e805fcd7b9ea98bea88574cf61f4`. Phase 5E now owns
+measurement-driven optimization and simplification. Third-party replacement,
+global historical-artifact eradication, license closure, and the final
+independence audit remain in Phases 5F–5I. Existing legal notices remain required
 until the underlying obligations are legitimately removed.
 

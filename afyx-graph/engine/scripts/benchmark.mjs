@@ -34,6 +34,10 @@ const median = (values) => {
   const middle = sorted.length >> 1;
   return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 };
+const p95 = (values) => {
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.max(0, Math.ceil(sorted.length * 0.95) - 1)];
+};
 const round = (value) => Math.round(value * 100) / 100;
 
 function seeded(seed) {
@@ -139,7 +143,27 @@ function mcpFirstResponse(dir) {
   return new Promise((resolve, reject) => {
     const start = performance.now();
     const child = spawn(process.execPath, [cli, 'serve', '--mcp'], { cwd: dir, env: { ...process.env, NO_COLOR: '1' }, stdio: ['pipe', 'pipe', 'pipe'] });
-    const timer = setTimeout(() => { child.kill(); reject(new Error('MCP timed out')); }, 60_000);
+    let settled = false;
+    let responseComplete = false;
+    const fail = (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (!child.killed) child.kill();
+      reject(error);
+    };
+    const timer = setTimeout(() => fail(new Error('MCP timed out')), 60_000);
+    child.once('error', (error) => fail(error));
+    child.once('close', (code) => {
+      if (!responseComplete) {
+        fail(new Error(`MCP closed before first tool result (code ${code ?? 'unknown'})`));
+        return;
+      }
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(marks);
+    });
     let buffer = '';
     let stage = 0;
     const marks = {};
@@ -159,10 +183,9 @@ function mcpFirstResponse(dir) {
           stage = 1;
         } else if (message.id === 2 && stage === 1) {
           marks.first_tool_result_ms = performance.now() - start;
-          clearTimeout(timer);
+          responseComplete = true;
           child.stdin.end();
           child.kill();
-          resolve(marks);
         }
       }
     });
@@ -199,12 +222,17 @@ try {
     runs: RUNS,
     project: { files: cold[0].files, nodes: cold[0].nodes, edges: cold[0].edges },
     cold_index_ms: round(median(cold.map((sample) => sample.ms))),
+    cold_index_p95_ms: round(p95(cold.map((sample) => sample.ms))),
     cold_index_peak_rss_mb: round(median(cold.map((sample) => sample.maxRssKb)) / 1024),
+    cold_index_peak_rss_p95_mb: round(p95(cold.map((sample) => sample.maxRssKb)) / 1024),
     warm_sync_5_files_ms: round(median(syncs)),
+    warm_sync_5_files_p95_ms: round(p95(syncs)),
     query_latency: latency,
     db_size_mb: round(fs.statSync(dbPath).size / 1024 / 1024),
     mcp_initialize_ms: round(median(mcp.map((sample) => sample.initialize_ms))),
+    mcp_initialize_p95_ms: round(p95(mcp.map((sample) => sample.initialize_ms))),
     mcp_first_tool_result_ms: round(median(mcp.map((sample) => sample.first_tool_result_ms))),
+    mcp_first_tool_result_p95_ms: round(p95(mcp.map((sample) => sample.first_tool_result_ms))),
     dist_size_mb: round(directorySize(distRoot) / 1024 / 1024),
     bundle_size_mb: fs.existsSync(bundle) ? round(fs.statSync(bundle).size / 1024 / 1024) : null,
   };
