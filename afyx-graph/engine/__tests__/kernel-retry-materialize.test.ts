@@ -12,7 +12,7 @@
  * wiped that file's symbols (issue #1541: v1.5.0 indexes a valid Python file
  * as 0 symbols; v1.4.1, pre-kernel, indexed it correctly).
  *
- * This pins the store boundary: storeExtractionResult must materialize a
+ * This pins the store boundary: ExtractionAdmission must materialize a
  * buffer-transport result before persisting, so every caller — including the
  * retry passes — stores the real nodes.
  *
@@ -25,6 +25,7 @@ import * as os from 'node:os';
 import { AfyxGraph } from '../src';
 import { initGrammars, loadGrammarsForLanguages } from '../src/extraction/grammars';
 import { tryKernelExtractRaw } from '../src/extraction/kernel';
+import { ExtractionAdmission } from '../src/extraction/extraction-admission';
 import type { ExtractionResult } from '../src/types';
 
 const KERNEL_PATH = path.join(
@@ -53,7 +54,7 @@ describe.skipIf(!kernelBuilt)('kernel buffer-transport storage (#1541)', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  it('storeExtractionResult persists the decoded nodes of a raw kernel result', async () => {
+  it('ExtractionAdmission persists the decoded nodes of a raw kernel result', async () => {
     const source =
       'def target_fn(root, mission_path):\n' +
       '    return (root, mission_path)\n' +
@@ -79,8 +80,8 @@ describe.skipIf(!kernelBuilt)('kernel buffer-transport storage (#1541)', () => {
     };
 
     const stats = fs.statSync(path.join(dir, filePath));
-    const orchestrator = (cg as unknown as { orchestrator: { storeExtractionResult(f: string, c: string, l: string, s: fs.Stats, r: ExtractionResult): Promise<void> } }).orchestrator;
-    await orchestrator.storeExtractionResult(filePath, source, 'python', stats, transport);
+    const admission = new ExtractionAdmission((cg as any).queries);
+    await admission.admit(filePath, source, 'python', stats, transport);
 
     // The files row must carry the real symbol count, not the transport's
     // empty array — a 0 here is the #1541 "(python, 0 symbols)" wipe.

@@ -4,6 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import AfyxGraph from '../src/index';
 import { QueryBuilder } from '../src/db/queries';
+import { ExtractionAdmission } from '../src/extraction/extraction-admission';
 
 describe('large-corpus regression fixes', () => {
   it('collects a dense unresolved-reference chunk without spreading it onto the V8 stack (#1558)', () => {
@@ -27,7 +28,7 @@ describe('large-corpus regression fixes', () => {
   });
 
   it('records an oversized file during a fresh index so sync does not retry it (#1557)', async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-skipped-file-'));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-skipped-file-'));
     try {
       fs.writeFileSync(path.join(dir, 'oversized.py'), 'value = 1\n'.repeat(120_000));
       const cg = await AfyxGraph.init(dir, { silent: true });
@@ -43,7 +44,7 @@ describe('large-corpus regression fixes', () => {
   });
 
   it('records an oversized file through the single-file indexing path (#1557)', async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-single-skipped-file-'));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-single-skipped-file-'));
     try {
       fs.writeFileSync(path.join(dir, 'oversized.py'), 'value = 1\n'.repeat(120_000));
       const cg = await AfyxGraph.init(dir, { silent: true });
@@ -62,7 +63,7 @@ describe('large-corpus regression fixes', () => {
 
 describe('JSX synthesis language boundary (#1560)', () => {
   let dir: string;
-  beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-jsx-gate-')); });
+  beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-jsx-gate-')); });
   afterEach(() => { fs.rmSync(dir, { recursive: true, force: true }); });
 
   it('does not create jsx-render edges from JSX-looking text in a C-only project', async () => {
@@ -105,7 +106,7 @@ describe('JSX synthesis language boundary (#1560)', () => {
 
 describe('failure markers vs later real results (#1557 × #1541)', () => {
   it('a failure marker never blocks storing a later successful parse of the same bytes', async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-marker-override-'));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-marker-override-'));
     try {
       const rel = 'flaky.py';
       const content = 'def real_fn():\n    return 1\n\nclass RealClass:\n    def m(self):\n        return 2\n';
@@ -114,12 +115,12 @@ describe('failure markers vs later real results (#1557 × #1541)', () => {
       const { initGrammars, loadGrammarsForLanguages } = await import('../src/extraction/grammars');
       await initGrammars();
       await loadGrammarsForLanguages(['python']);
-      const orch = (cg as any).orchestrator;
+      const admission = new ExtractionAdmission((cg as any).queries);
       const stats = fs.statSync(path.join(dir, rel));
 
       // What recordParseFailure persists when a parse worker dies: a marker
       // row under the SAME content hash the retry will store with.
-      await orch.storeExtractionResult(rel, content, 'python', stats, {
+      await admission.admit(rel, content, 'python', stats, {
         nodes: [], edges: [], unresolvedReferences: [],
         errors: [{ message: 'Worker exited with code 1', filePath: rel, severity: 'error', code: 'parse_error' }],
         durationMs: 0,
@@ -131,7 +132,7 @@ describe('failure markers vs later real results (#1557 × #1541)', () => {
       const { extractFromSource } = await import('../src/extraction/tree-sitter');
       const real = extractFromSource(rel, content, 'python');
       expect(real.nodes.length).toBeGreaterThan(0);
-      await orch.storeExtractionResult(rel, content, 'python', stats, real);
+      await admission.admit(rel, content, 'python', stats, real);
 
       expect(cg.getFile(rel)?.nodeCount).toBe(real.nodes.length);
       expect(cg.getNodesInFile(rel).map((n: { name: string }) => n.name)).toContain('real_fn');
