@@ -24,7 +24,7 @@ implementation phases after C07.11.
   - 5A — Behavior Harvest & Contract Knowledge
   - 5B — Native MCP/CLI Runtime Reimplementation: **COMPLETE / MERGED / FROZEN**
   - 5C — Native Domain Core Reimplementation: **COMPLETE / MERGED / FROZEN**
-  - 5D — Native Product Surfaces
+  - 5D — Native Product Surfaces: **REVIEW READY**
   - 5E — Native Optimization & Simplification
   - 5F — Third-Party Source / Runtime Replacement
   - 5G — Legacy Product Identity / Historical Artifact Eradication

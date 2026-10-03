@@ -3,7 +3,7 @@
 Task: `AFYX-73164`  
 Canonical baseline: `ab991951e8a4874088032e24a0ff14609d48f551`  
 Branch: `afyx/native-phase5d-product-surfaces`  
-Status: implementation in progress
+Status: review-ready candidate; exact-head PR CI is the merge gate
 
 ## Ownership inventory
 
@@ -133,7 +133,33 @@ longer present.
 
 ## Validation evidence
 
-To be completed on the final implementation head: provider planning/apply,
-isolated provider matrix, UI security/API/model tests, distribution plan and
-staging, production/UI builds, semantic baseline, CLI/MCP smoke and exact-head
-supported-platform CI.
+Local evidence on the implementation candidate:
+
+- installer plan contract: 3/3 passed, including no mutation before apply,
+  unsupported-location handling and post-apply verification;
+- malformed Claude JSON: detect/plan left the file byte-identical and created
+  no backup; apply preserved the malformed input in `.backup` before repair;
+- real CLI `install --dry-run`: isolated temporary profile remained empty;
+- complete registered-target, legacy compatibility and install/init suites:
+  passed against temporary homes/project roots only;
+- UI server security/API/trails, adapter/package, view-model, highlighting and
+  CLI UI suites: passed; the CLI server suite had one declared platform skip;
+- distribution contract: 9/9 passed for target planning, identity, staged
+  bundle validation, deterministic manifest and negative cases;
+- release shell syntax: passed with Git Bash; the six target names are emitted
+  by the artifact plan used by the release workflow;
+- TypeScript typecheck and clean production/UI build: passed;
+- semantic baseline: 6/6 passed;
+- CLI/MCP smoke: 21/21 passed;
+- focused CLI/MCP public-contract suites passed. The Windows-local
+  `mcp-initialize` subprocess cases completed their assertions but encountered
+  the known temporary-directory teardown `EPERM`; production smoke passed and
+  supported-platform CI remains authoritative.
+
+No product hot path was materially expanded: planning is install-time only, UI
+runtime behavior is unchanged and distribution planning runs once per artifact.
+No microbenchmark was added.
+
+Touched active source/test scope contains no `CodeGraph`, `codegraph`, `CG-*`,
+`_cg*` or `cg-*` marker. Exact-head supported-platform CI is recorded on the
+pull request rather than through a self-referential documentation commit.
