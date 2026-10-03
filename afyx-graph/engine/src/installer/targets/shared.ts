@@ -50,13 +50,10 @@ export function getAfyxGraphPermissions(): string[] {
 }
 
 /**
- * Read a JSON file, returning `{}` when missing or unparseable.
- *
- * Unparseable files are backed up to `<path>.backup` BEFORE we return
- * `{}` — so an idempotent re-run never silently deletes a user's
- * existing config that happened to break JSON parse temporarily.
+ * Parse a JSON file, returning `{}` when missing or unparseable. Mutation
+ * callers request a backup; inspection callers remain side-effect free.
  */
-export function readJsonFile(filePath: string): Record<string, any> {
+function parseJsonFile(filePath: string, backupOnError: boolean): Record<string, any> {
   if (!fs.existsSync(filePath)) {
     return {};
   }
@@ -65,12 +62,27 @@ export function readJsonFile(filePath: string): Record<string, any> {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.warn(`  Warning: Could not parse ${path.basename(filePath)}: ${msg}`);
-    console.warn(`  A backup will be created before overwriting.`);
-    try {
-      fs.copyFileSync(filePath, filePath + '.backup');
-    } catch { /* ignore backup failure */ }
+    if (backupOnError) {
+      console.warn(`  A backup will be created before overwriting.`);
+      try {
+        fs.copyFileSync(filePath, filePath + '.backup');
+      } catch { /* ignore backup failure */ }
+    }
     return {};
   }
+}
+
+/** Side-effect-free JSON inspection for detect/plan operations. */
+export function inspectJsonFile(filePath: string): Record<string, any> {
+  return parseJsonFile(filePath, false);
+}
+
+/**
+ * Read JSON for a mutation path. Malformed input is backed up before a caller
+ * replaces it, preserving the installer's recovery contract.
+ */
+export function readJsonFile(filePath: string): Record<string, any> {
+  return parseJsonFile(filePath, true);
 }
 
 /**

@@ -65,6 +65,7 @@ import {
   WriteResult,
 } from './types';
 import {
+  inspectJsonFile,
   jsonDeepEqual,
   readJsonFile,
   writeJsonFile,
@@ -161,7 +162,7 @@ class AntigravityTarget implements AgentTarget {
       return { installed: false, alreadyConfigured: false };
     }
     const file = preferredMcpConfigPath();
-    const config = readJsonFile(file);
+    const config = inspectJsonFile(file);
     const alreadyConfigured = !!config.mcpServers?.[MCP_SERVER_NAME];
     // "Installed" heuristic: either the unified config dir, the legacy
     // config dir, or one of the config files exists. Antigravity creates

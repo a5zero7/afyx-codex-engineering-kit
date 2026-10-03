@@ -35,6 +35,7 @@ import {
 } from './types';
 import {
   getMcpServerConfig,
+  inspectJsonFile,
   jsonDeepEqual,
   readJsonFile,
   writeJsonFile,
@@ -64,7 +65,7 @@ class KiroTarget implements AgentTarget {
 
   detect(loc: Location): DetectionResult {
     const file = mcpJsonPath(loc);
-    const config = readJsonFile(file);
+    const config = inspectJsonFile(file);
     const alreadyConfigured = !!config.mcpServers?.[MCP_SERVER_NAME];
     const installed = loc === 'global'
       ? fs.existsSync(configDir('global')) || fs.existsSync(file)
