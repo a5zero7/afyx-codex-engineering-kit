@@ -106,11 +106,22 @@ const CASES = [
 ];
 
 function summarize(result) {
-  if (typeof result === 'string') return { digest: digest(result), size: result.length };
+  if (typeof result === 'string') {
+    return { digest: digest(result), size: result.length, response_bytes: Buffer.byteLength(result, 'utf8') };
+  }
   if (result.nodes instanceof Map) {
     return { digest: digest([result.roots, [...result.nodes.keys()], result.edges.map((edge) => `${edge.source}>${edge.target}:${edge.kind}`)]), roots: result.roots.length, nodes: result.nodes.size, edges: result.edges.length };
   }
-  return { digest: digest([result.entryPoints.map((node) => node.id), [...result.subgraph.nodes.keys()], result.codeBlocks.map((block) => block.content)]), nodes: result.subgraph.nodes.size, codeBlocks: result.codeBlocks.length };
+  const ranges = result.codeBlocks.map((block) => `${block.filePath}\0${block.startLine}\0${block.endLine}`);
+  return {
+    digest: digest([result.entryPoints.map((node) => node.id), [...result.subgraph.nodes.keys()], result.codeBlocks.map((block) => block.content)]),
+    nodes: result.subgraph.nodes.size,
+    codeBlocks: result.codeBlocks.length,
+    source_bytes: result.codeBlocks.reduce((total, block) => total + Buffer.byteLength(block.content, 'utf8'), 0),
+    files: new Set(result.codeBlocks.map((block) => block.filePath)).size,
+    ranges: ranges.length,
+    duplicate_ranges: ranges.length - new Set(ranges).size,
+  };
 }
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-graph-ctxbench-'));
