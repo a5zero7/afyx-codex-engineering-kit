@@ -14,16 +14,11 @@ import {
   FileRecord,
   ExtractionResult,
   ExtractionError,
-  Node,
-  Edge,
-  UnresolvedReference,
-  ReferenceKind,
 } from '../types';
 import { QueryBuilder } from '../db/queries';
 import { ParseWorkerPool, resolveParsePoolSize, resolveParseTimeoutMs } from './parse-pool';
-import { StoreWriter, StoreBundle, finalizeStoreBundle } from './store-writer';
+import { StoreWriter } from './store-writer';
 import { materializeKernelResult } from './kernel';
-import { detectGeneratedFile } from './generated-detection';
 import { detectLanguage, isSourceFile, isLanguageSupported, isFileLevelOnlyLanguage, initGrammars, loadGrammarsForLanguages, readGrammarWasmBytes } from './grammars';
 import { loadExtensionOverrides, loadIncludeIgnoredPatterns, loadExcludePatterns, loadIncludePatterns, PROJECT_CONFIG_FILENAME } from '../project-config';
 import { isAfyxGraphDataDir } from '../directory';
@@ -32,10 +27,14 @@ import { validatePathWithinRoot, normalizePath } from '../utils';
 import ignore, { Ignore } from 'ignore';
 import { detectFrameworks } from '../resolution/frameworks';
 import type { ResolutionContext } from '../resolution/types';
-import { createYielder, type MaybeYield } from '../resolution/cooperative-yield';
+import { createYielder } from '../resolution/cooperative-yield';
 import { hashContent } from './content-hash';
 import { ExtractorRegistry } from './extractor-registry';
 import { definitionDelta, reconcileSources } from './reconciliation';
+import {
+  ExtractionAdmission,
+  recoverUnresolvedReference,
+} from './extraction-admission';
 
 export { hashContent } from './content-hash';
 
@@ -139,7 +138,7 @@ export interface SyncResult {
    * Resolution picks among all same-named definitions project-wide,
    * so these are exactly the names whose already-resolved edges — in files this
    * sync never touched — may now bind elsewhere and must be re-resolved for the
-   * index to stay convergent with a full rebuild (CG-33).
+   * index to stay convergent with a full rebuild.
    *
    * A body-only edit leaves this empty, which is the common case and costs
    * nothing downstream.
@@ -1724,29 +1723,13 @@ function scanDirectoryWalk(
  * context the original text carried (`h.greet` → `greet`) and could rebind
  * somewhere a full re-index never would. Silent beats wrong.
  */
-function resurrectRefFromDroppedEdge(
-  e: Edge & { sourceFilePath: string; sourceLanguage: Language }
-): UnresolvedReference | null {
-  const refName = e.metadata?.refName;
-  if (typeof refName !== 'string' || refName.length === 0) return null;
-  const refKind = typeof e.metadata?.refKind === 'string' ? (e.metadata.refKind as ReferenceKind) : e.kind;
-  return {
-    fromNodeId: e.source,
-    referenceName: refName,
-    referenceKind: refKind,
-    line: e.line ?? 0,
-    column: e.column ?? 0,
-    filePath: e.sourceFilePath,
-    language: e.sourceLanguage,
-  };
-}
-
 /**
  * Extraction orchestrator
  */
 export class ExtractionOrchestrator {
   private rootDir: string;
   private queries: QueryBuilder;
+  private admission: ExtractionAdmission;
   /**
    * Names of frameworks detected for this project, populated by indexAll().
    * Passed to extractFromSource so framework-specific extractors (route nodes,
@@ -1764,6 +1747,7 @@ export class ExtractionOrchestrator {
   constructor(rootDir: string, queries: QueryBuilder) {
     this.rootDir = rootDir;
     this.queries = queries;
+    this.admission = new ExtractionAdmission(queries);
   }
 
   /**
@@ -1950,7 +1934,7 @@ export class ExtractionOrchestrator {
     // A re-index over an existing DB skips unchanged-hash files at the store,
     // which would preserve wiped zero-node rows (#1541) — drop them first so
     // this run stores their files fresh. No-op on a fresh DB.
-    this.healZeroNodeRows();
+    this.admission.healIncompleteFiles();
 
     // Detect frameworks once per indexAll run using the scanned file list.
     // Names are passed to each parse call so framework-specific extractors
@@ -2119,15 +2103,15 @@ export class ExtractionOrchestrator {
             filePath,
             language,
             buffers: result.kernelBuffers,
-            file: this.buildFileRecord(filePath, content, language, stats, nodeCount, result.errors),
+            file: this.admission.fileRecord(filePath, content, language, stats, nodeCount, result.errors),
           });
         } else {
-          storeWriter.send(this.buildFreshStoreBundle(filePath, content, language, stats, result));
+          storeWriter.send(this.admission.freshBundle(filePath, content, language, stats, result));
         }
         await storeWriter.waitBelow(STORE_WRITER_WINDOW);
       } else {
         const materialized = materializeKernelResult(result, filePath, language);
-        await this.storeExtractionResult(filePath, content, language, stats, materialized, commitYield);
+        await this.admission.admit(filePath, content, language, stats, materialized, commitYield);
       }
 
       if (result.errors.length > 0) {
@@ -2413,7 +2397,7 @@ export class ExtractionOrchestrator {
 
         if (result.nodes.length > 0 || result.errors.length === 0) {
           const stats = await fsp.stat(path.join(this.rootDir, filePath));
-          await this.storeExtractionResult(filePath, content, language, stats, result, commitYield);
+          await this.admission.admit(filePath, content, language, stats, result, commitYield);
 
           const idx = errors.indexOf(errEntry);
           if (idx >= 0) errors.splice(idx, 1);
@@ -2466,7 +2450,7 @@ export class ExtractionOrchestrator {
 
           if (result.nodes.length > 0 || result.errors.length === 0) {
             const stats = await fsp.stat(path.join(this.rootDir, filePath));
-            await this.storeExtractionResult(filePath, fullContent, language, stats, result, commitYield);
+            await this.admission.admit(filePath, fullContent, language, stats, result, commitYield);
 
             // Salvaged from comment-stripped source: keep a visible trace in
             // the summary instead of erasing the failure outright — the
@@ -2635,7 +2619,7 @@ export class ExtractionOrchestrator {
         ],
         durationMs: 0,
       };
-      await this.storeExtractionResult(relativePath, content, language, stats, result, createYielder());
+      await this.admission.admit(relativePath, content, language, stats, result, createYielder());
       return result;
     }
 
@@ -2657,299 +2641,14 @@ export class ExtractionOrchestrator {
     const result = registry.extract(relativePath, content);
 
     // Store in database
-    await this.storeExtractionResult(relativePath, content, language, stats, result, createYielder());
+    await this.admission.admit(relativePath, content, language, stats, result, createYielder());
 
     return result;
   }
 
   /**
-   * Store extraction result in database
-   */
-  /**
-   * Delete file rows recorded with ZERO nodes so their files re-index.
-   *
-   * No extraction path stores an empty, error-free result for a
-   * symbol-bearing language — even an empty file keeps its file node — so a
-   * zero-node row is a wiped one (#1541: an interrupted parse's retry stored
-   * an undecoded kernel transport). The wiped row's content hash matches the
-   * on-disk bytes, so every hash-based reconcile skips the file forever;
-   * deleting the row lets the normal add path repair it. File-level-only
-   * languages (yaml, twig, properties) are left alone. Deleting a zero-node
-   * row cascades nothing: it has no nodes, so no edges or refs either.
-   */
-  private healZeroNodeRows(): void {
-    for (const f of this.queries.getAllFiles()) {
-      // A zero-node row WITH recorded errors is a deliberate skip marker
-      // (#1557: oversized / repeatedly-unparseable files are persisted with
-      // their reason so syncs stop retrying them) — leave those alone. The
-      // #1541 wipe rows are the error-FREE zero-node rows.
-      if (
-        f.nodeCount === 0 &&
-        !isFileLevelOnlyLanguage(f.language) &&
-        (f.errors === undefined || f.errors.length === 0)
-      ) {
-        this.queries.deleteFile(f.path);
-      }
-    }
-  }
-
-  private async storeExtractionResult(
-    filePath: string,
-    content: string,
-    language: Language,
-    stats: fs.Stats,
-    result: ExtractionResult,
-    onYield?: MaybeYield
-  ): Promise<void> {
-    // A kernel result can arrive as an undecoded buffer transport (empty
-    // node/edge arrays, tables riding in kernelBuffers). Decode it before
-    // storing — persisting the transport as-is records the file as having no
-    // symbols at all (#1541). No-op for already-decoded results.
-    result = materializeKernelResult(result, filePath, language);
-
-    // Bulk inserts run in bounded sub-transactions with a yield between, so a
-    // giant generated file (tens of thousands of symbols) can't block the
-    // event loop — and the #850 watchdog heartbeat — for the whole store.
-    // The file was NEVER one atomic transaction (each insert call has its
-    // own), and the files-table record still lands last, so crash recovery
-    // is unchanged: a partially-stored file has no record and re-indexes.
-    const STORE_CHUNK = 2000;
-    const contentHash = hashContent(content);
-
-    // Check if file already exists and hasn't changed. A skip/failure MARKER
-    // row (zero nodes + recorded errors, #1557) never blocks a store carrying
-    // real content: markers are written BEFORE the retry pass under the same
-    // content hash, so treating them as "no changes" would silently discard a
-    // successful retry's symbols — a permanent empty file presented as
-    // recovered (the #1541 wipe, reintroduced through the marker path).
-    const existingFile = this.queries.getFileByPath(filePath);
-    if (existingFile && existingFile.contentHash === contentHash) {
-      const existingIsMarker =
-        existingFile.nodeCount === 0 && (existingFile.errors?.length ?? 0) > 0;
-      const incomingHasContent = result.nodes.length > 0;
-      if (!existingIsMarker || !incomingHasContent) {
-        return; // No changes
-      }
-    }
-
-    // Re-decided on every re-index of a changed file, so a banner added (or
-    // removed) by an edit is reflected on the next sync (#1500). Computed after
-    // the unchanged-file early return so untouched files pay nothing.
-    const generated = detectGeneratedFile(filePath, content);
-
-    // Snapshot incoming cross-file edges BEFORE deleting this file's nodes.
-    // `deleteFile` cascades to delete every edge whose source OR target is a
-    // node in this file (edges.FK ... ON DELETE CASCADE). Edges whose SOURCE is
-    // in this file are re-emitted by the extractor below, but edges whose SOURCE
-    // is in a *different* (unchanged) file are not — they would be silently
-    // dropped, which is issue #899: re-indexing a callee file severs `calls`/
-    // `references` edges from callers that import it via module-attribute
-    // access (`pkg.mod.fn(...)`).
-    //
-    // We snapshot the edge plus the target node's (name, kind) so we can
-    // re-resolve to the re-indexed target's NEW id. Node ids are
-    // `sha256(filePath:kind:name:line)`, so any line shift in the callee file
-    // (e.g. a docstring-only edit above the symbol) changes every target id and
-    // a naive re-insert by old id would silently drop every edge. Matching by
-    // (filePath, kind, name) is stable across line shifts; if the symbol was
-    // renamed/removed, no match is found and the edge stays dropped (correct).
-    const crossFileIncomingEdges = existingFile
-      ? this.queries.getCrossFileIncomingEdgesWithTarget(filePath)
-      : [];
-
-    // Delete existing data for this file
-    if (existingFile) {
-      this.queries.deleteFile(filePath);
-    }
-
-    // Filter out nodes with missing required fields before insertion.
-    // This prevents FK violations when edges reference nodes that would
-    // be silently skipped by insertNode() (see issue #42).
-    const validNodes = result.nodes.filter((n) => n.id && n.kind && n.name && n.filePath && n.language);
-    const insertedIds = new Set(validNodes.map((n) => n.id));
-    const validEdges = result.edges.filter(
-      (e) => insertedIds.has(e.source) && insertedIds.has(e.target)
-    );
-    const validRefs = result.unresolvedReferences
-      .filter((ref) => insertedIds.has(ref.fromNodeId))
-      .map((ref) => ({
-        ...ref,
-        filePath: ref.filePath ?? filePath,
-        language: ref.language ?? language,
-      }));
-
-    // Fast path for the common case (everything fits one chunk): the whole
-    // file — nodes, edges, refs, file record — lands in ONE transaction with
-    // no event-loop yields in between. Giant generated files keep the chunked
-    // + yielding path below so the #850 watchdog heartbeat stays serviced.
-    const fitsOneChunk =
-      validNodes.length <= STORE_CHUNK &&
-      validEdges.length <= STORE_CHUNK &&
-      validRefs.length <= STORE_CHUNK;
-    if (fitsOneChunk) {
-      // Snapshot/re-resolution of cross-file incoming edges (below) still runs
-      // for the sync path; on a fresh bulk index crossFileIncomingEdges is [].
-      this.queries.storeFileBundle({
-        nodes: validNodes,
-        edges: validEdges,
-        refs: validRefs,
-        file: {
-          path: filePath,
-          contentHash,
-          language,
-          size: stats.size,
-          modifiedAt: stats.mtimeMs,
-          indexedAt: Date.now(),
-          nodeCount: result.nodes.length,
-          errors: result.errors.length > 0 ? result.errors : undefined,
-          generated,
-        },
-      });
-      if (crossFileIncomingEdges.length > 0) {
-        this.reattachCrossFileEdges(crossFileIncomingEdges, validNodes);
-      }
-      return;
-    }
-
-    // Insert nodes (chunked — see STORE_CHUNK above)
-    for (let i = 0; i < validNodes.length; i += STORE_CHUNK) {
-      this.queries.insertNodes(validNodes.slice(i, i + STORE_CHUNK));
-      await onYield?.();
-    }
-
-    // Filter edges to only reference nodes that were actually inserted
-    if (validEdges.length > 0) {
-      for (let i = 0; i < validEdges.length; i += STORE_CHUNK) {
-        this.queries.insertEdges(validEdges.slice(i, i + STORE_CHUNK));
-        await onYield?.();
-      }
-    }
-
-    // Re-insert cross-file incoming edges snapshotted before the delete,
-    // re-resolving each edge's target to the re-indexed node's new id by
-    // (filePath, kind, name). Node ids include the source line, so any line
-    // shift in the callee file (e.g. a docstring-only edit above the symbol)
-    // changes every target id and a naive re-insert by old id would drop them
-    // all. `insertEdges` still filters to endpoints that exist. This closes
-    // the #899 edge-drop on `sync`.
-    //
-    // Edges whose callee (target) was renamed/removed during the re-index (no
-    // match in `newNodesByKindName`) are not silently dropped anymore: each is
-    // resurrected as its ORIGINAL unresolved ref (stamped on the edge as
-    // metadata.refName/refKind at creation) so the same sync's resolution
-    // sweep can rebind it to an alternative definition elsewhere, or park it
-    // as status='failed' to be retried when the symbol reappears — the
-    // removal-side counterpart of #1240. Edges without refName (built before
-    // the stamp existed, or synthesized) still drop silently: reconstructing
-    // a ref from the target's plain name would strip receiver/qualifier
-    // context and risk a rebind a full re-index would never make.
-    if (crossFileIncomingEdges.length > 0) {
-      this.reattachCrossFileEdges(crossFileIncomingEdges, validNodes);
-    }
-
-    // Insert unresolved references in batch with denormalized filePath/language
-    for (let i = 0; i < validRefs.length; i += STORE_CHUNK) {
-      this.queries.insertUnresolvedRefsBatch(validRefs.slice(i, i + STORE_CHUNK));
-      await onYield?.();
-    }
-
-    // Insert file record
-    const fileRecord: FileRecord = {
-      path: filePath,
-      contentHash,
-      language,
-      size: stats.size,
-      modifiedAt: stats.mtimeMs,
-      indexedAt: Date.now(),
-      nodeCount: result.nodes.length,
-      errors: result.errors.length > 0 ? result.errors : undefined,
-      generated,
-    };
-    this.queries.upsertFile(fileRecord);
-  }
-
-  /**
-   * Build one file's store bundle for the FRESH-DB path: no existing-file
-   * check, no cross-file edge snapshot (both are re-index concerns — a fresh
-   * database has neither). Filters mirror storeExtractionResult exactly.
-   */
-  /** The FileRecord for a fresh-index store (nodeCount is the PRE-filter count). */
-  private buildFileRecord(
-    filePath: string,
-    content: string,
-    language: Language,
-    stats: fs.Stats,
-    nodeCount: number,
-    resultErrors: ExtractionResult['errors']
-  ): FileRecord {
-    return {
-      path: filePath,
-      contentHash: hashContent(content),
-      language,
-      size: stats.size,
-      modifiedAt: stats.mtimeMs,
-      indexedAt: Date.now(),
-      nodeCount,
-      errors: resultErrors.length > 0 ? resultErrors : undefined,
-      // Decided here, once, while the content is already in memory — never at
-      // query time (#1500). The header scan short-circuits on a single
-      // substring test for ~every hand-written file.
-      generated: detectGeneratedFile(filePath, content),
-    };
-  }
-
-  private buildFreshStoreBundle(
-    filePath: string,
-    content: string,
-    language: Language,
-    stats: fs.Stats,
-    result: ExtractionResult
-  ): StoreBundle {
-    return finalizeStoreBundle(
-      result,
-      filePath,
-      language,
-      this.buildFileRecord(filePath, content, language, stats, result.nodes.length, result.errors)
-    );
-  }
-
-  /**
-   * Re-attach cross-file incoming edges snapshotted before a re-index delete
-   * (#899): re-resolve each edge's target to the re-indexed node's new id by
-   * (kind, name); targets that vanished are resurrected as their original
-   * unresolved ref (#1240's removal-side counterpart) when the edge carries
-   * its refName stamp.
-   */
-  private reattachCrossFileEdges(
-    crossFileIncomingEdges: Array<Edge & { targetKind: string; targetName: string; sourceFilePath: string; sourceLanguage: Language }>,
-    validNodes: Node[]
-  ): void {
-    const newNodesByKindName = new Map<string, string>();
-    for (const n of validNodes) {
-      newNodesByKindName.set(`${n.kind}\0${n.name}`, n.id);
-    }
-    const reinserted: Edge[] = [];
-    const resurrected: UnresolvedReference[] = [];
-    for (const e of crossFileIncomingEdges) {
-      const newTargetId = newNodesByKindName.get(`${e.targetKind}\0${e.targetName}`);
-      if (newTargetId) {
-        reinserted.push({ source: e.source, target: newTargetId, kind: e.kind, metadata: e.metadata, line: e.line, column: e.column, provenance: e.provenance });
-      } else {
-        const ref = resurrectRefFromDroppedEdge(e);
-        if (ref) resurrected.push(ref);
-      }
-    }
-    if (reinserted.length > 0) {
-      this.queries.insertEdges(reinserted);
-    }
-    if (resurrected.length > 0) {
-      this.queries.insertUnresolvedRefsBatch(resurrected);
-    }
-  }
-
-  /**
    * Re-open, for re-resolution, every resolution edge whose answer this sync
-   * may have changed — the fix for index drift (CG-33).
+   * may have changed, preventing incremental index drift.
    *
    * Incremental sync re-resolves only the references IN the changed files, but
    * resolution's answer is a function of the WHOLE graph: a reference binds to
@@ -2980,28 +2679,7 @@ export class ExtractionOrchestrator {
    * Returns the number of references resurrected.
    */
   resurrectStaleResolutionEdges(definitionDelta: string[], changedFilePaths: string[]): number {
-    if (definitionDelta.length === 0) return 0;
-    const alreadyFresh = new Set(changedFilePaths);
-    const candidates = this.queries.getResolutionEdgesByTargetName(definitionDelta);
-
-    const edgeIds: number[] = [];
-    const refs: UnresolvedReference[] = [];
-    for (const e of candidates) {
-      if (alreadyFresh.has(e.sourceFilePath)) continue;
-      const ref = resurrectRefFromDroppedEdge(e);
-      if (!ref) continue; // no stamp — never delete what we cannot restore
-      edgeIds.push(e.edgeId);
-      refs.push(ref);
-    }
-    if (refs.length === 0) return 0;
-
-    // Delete first. The sweep re-inserts whichever edge resolution now picks,
-    // and `insertEdges` is INSERT OR IGNORE against idx_edges_identity — so a
-    // rebind to the same target is a clean no-op, but leaving the old row in
-    // place for a rebind ELSEWHERE would keep both, turning drift into
-    // duplication.
-    this.queries.replaceResolutionEdgesWithUnresolvedRefs(edgeIds, refs);
-    return refs.length;
+    return this.admission.reopenAffectedResolutionEdges(definitionDelta, changedFilePaths);
   }
 
   /**
@@ -3041,7 +2719,7 @@ export class ExtractionOrchestrator {
     const changedFilePaths: string[] = [];
     // `file\0name` definition pairs for the files this sync touches, sampled
     // BEFORE their nodes are replaced/deleted. Compared against the post-store
-    // pairs below to derive `definitionDelta` (CG-33).
+    // pairs below to derive `definitionDelta`.
     const pairsBefore = new Set<string>();
 
     onProgress?.({
@@ -3106,7 +2784,7 @@ export class ExtractionOrchestrator {
 
       // Full reconcile only (scoped syncs must not touch rows outside their
       // scope): drop zero-node rows so the wiped files re-index as adds below.
-      this.healZeroNodeRows();
+      this.admission.healIncompleteFiles();
 
       const tTracked = Date.now();
       trackedFiles = this.queries.getAllFiles();
@@ -3140,8 +2818,8 @@ export class ExtractionOrchestrator {
         const incoming = this.queries.getCrossFileIncomingEdgesWithTarget(tracked.path);
         if (incoming.length > 0) {
           const resurrected = incoming
-            .map((edge) => resurrectRefFromDroppedEdge(edge))
-            .filter((ref): ref is UnresolvedReference => ref !== null);
+            .map((edge) => recoverUnresolvedReference(edge))
+            .filter((ref) => ref !== null);
           if (resurrected.length > 0) this.queries.insertUnresolvedRefsBatch(resurrected);
         }
         this.queries.deleteFile(tracked.path);
@@ -3158,7 +2836,7 @@ export class ExtractionOrchestrator {
     // Sampled here — after the add/modify classification, before any file is
     // re-extracted — because `storeExtractionResult` deletes a file's nodes
     // before inserting the new ones, so this is the last point the pre-edit
-    // definition set is readable (CG-33).
+    // definition set is readable.
     if (filesToIndex.length > 0) {
       for (const pair of this.queries.getNodeNamePairsByFiles(filesToIndex)) pairsBefore.add(pair);
     }
@@ -3193,7 +2871,7 @@ export class ExtractionOrchestrator {
     // (added). A pair on both sides is untouched as far as resolution's
     // candidate set is concerned — only its node id moved, which
     // reattachCrossFileEdges already follows — so an edit that only changes
-    // bodies yields an empty delta and no downstream rebind work (CG-33).
+    // bodies yields an empty delta and no downstream rebind work.
     //
     // Compared per FILE, not as one name set over the whole batch: a commit
     // that adds `collect` to a new file while an unrelated changed file already

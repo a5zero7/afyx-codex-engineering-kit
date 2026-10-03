@@ -34,6 +34,11 @@ import { lexicalPathWithinRoot } from '../utils';
 import type { ReExport } from './types';
 import { LRUCache } from './lru-cache';
 import { JS_BUILT_INS } from './js-builtins';
+import {
+  ResolutionAdmission,
+  failedCleanup,
+  resolvedCleanup,
+} from './resolution-admission';
 
 /** Node kinds that can declare supertypes (extends/implements). */
 const SUPERTYPE_BEARING_KINDS = new Set<Node['kind']>([
@@ -207,6 +212,7 @@ const CPP_BUILT_INS = new Set([
 export class ReferenceResolver {
   private projectRoot: string;
   private queries: QueryBuilder;
+  private admission: ResolutionAdmission;
   private context: ResolutionContext;
   private frameworks: FrameworkResolver[] = [];
   // Chained static-factory/fluent call refs the first pass couldn't resolve,
@@ -288,6 +294,7 @@ export class ReferenceResolver {
   constructor(projectRoot: string, queries: QueryBuilder) {
     this.projectRoot = projectRoot;
     this.queries = queries;
+    this.admission = new ResolutionAdmission(queries);
 
     const limit = resolveCacheLimit();
     // The content cache is heavier (full file text), so we give it a
@@ -1132,129 +1139,7 @@ export class ReferenceResolver {
    * Create edges from resolved references
    */
   createEdges(resolved: ResolvedRef[]): Edge[] {
-    return resolved.flatMap((ref) => {
-      // `function_ref` (#756) is internal-only: it persists as a `references`
-      // edge (the registration site depends on the callback), distinguishable
-      // by metadata.resolvedBy === 'function-ref'. callers/impact already
-      // traverse `references`, so registration sites surface with no
-      // graph-layer changes.
-      let kind: Edge['kind'] =
-        ref.edgeKind ??
-        (ref.original.referenceKind === 'function_ref' ? 'references' : ref.original.referenceKind);
-
-      // Promote "extends" to "implements" when a class/struct targets an interface
-      if (kind === 'extends') {
-        const targetNode = this.queries.getNodeById(ref.targetNodeId);
-        if (targetNode && (targetNode.kind === 'interface' || targetNode.kind === 'protocol')) {
-          const sourceNode = this.queries.getNodeById(ref.original.fromNodeId);
-          if (sourceNode && sourceNode.kind !== 'interface' && sourceNode.kind !== 'protocol') {
-            kind = 'implements';
-          }
-        }
-      }
-
-      // Promote "calls" to "instantiates" when the resolved target is a
-      // class/struct/union. Languages without a `new` keyword (Python, Ruby)
-      // express instantiation as `Foo()` — extraction can't tell that
-      // apart from a function call without symbol info, but resolution
-      // can: if `Foo` resolves to a class, the call IS an instantiation.
-      if (kind === 'calls') {
-        const targetNode = this.queries.getNodeById(ref.targetNodeId);
-        if (
-          targetNode &&
-          (targetNode.kind === 'class' || targetNode.kind === 'struct' || targetNode.kind === 'union')
-        ) {
-          kind = 'instantiates';
-        }
-      }
-
-      // One reference can name several targets — a navigation whose
-      // destination is a conditional reaches every arm. Each becomes its own
-      // edge, sharing this resolution's kind and confidence.
-      const targets = [
-        { targetNodeId: ref.targetNodeId, metadata: ref.metadata },
-        ...(ref.alsoTargets ?? []),
-      ];
-      return targets.map((t) => ({
-        source: ref.original.fromNodeId,
-        target: t.targetNodeId,
-        kind,
-        line: ref.original.line,
-        column: ref.original.column,
-        metadata: {
-          ...(t.metadata ?? {}),
-          confidence: ref.confidence,
-          resolvedBy: ref.resolvedBy,
-          // The ORIGINAL reference text (and kind, when edge-kind promotion
-          // rewrote it — calls→instantiates, extends→implements,
-          // function_ref→references). If this edge's target is later removed
-          // by a re-index, the edge is resurrected as exactly this ref and
-          // re-resolved (#1240 removal case) — a faithful resurrection, so
-          // re-resolution can never bind anywhere a full re-index wouldn't.
-          // Reconstruction from the target node's name instead would strip
-          // receiver/qualifier context (`h.greet` → `greet`) and risk a
-          // wrong rebind; edges without refName (pre-#1240, synthesized) are
-          // deliberately NOT resurrected for the same reason.
-          refName: ref.original.referenceName,
-          ...(ref.original.referenceKind !== kind ? { refKind: ref.original.referenceKind } : {}),
-          // Uniform marker for function-as-value edges (#756), regardless of
-          // which strategy resolved them (import vs matchFunctionRef) — lets
-          // tooling label "callback registration" and lets validation diff
-          // exactly the edges this feature added.
-          ...(ref.original.referenceKind === 'function_ref' ? { fnRef: true } : {}),
-        },
-      }));
-    });
-  }
-
-  /**
-   * Split resolved refs into rows deletable by id and hand-built refs that
-   * must fall back to the key-tuple delete. Rows loaded from the database
-   * carry their row id and are deleted by exactly that id; the key tuple
-   * omits line/col, so it also removes SIBLING rows — the same caller calling
-   * the same callee at other lines — that a later batch hadn't attempted yet:
-   * when a batch boundary split a caller's same-named call sites, the later
-   * sites' edges were silently never created (#1269).
-   */
-  private static partitionResolvedCleanup(resolved: ResolvedRef[]): {
-    rowIds: number[];
-    legacyKeys: Array<{ fromNodeId: string; referenceName: string; referenceKind: string }>;
-  } {
-    const rowIds: number[] = [];
-    const legacyKeys: Array<{ fromNodeId: string; referenceName: string; referenceKind: string }> = [];
-    for (const r of resolved) {
-      if (r.original.rowId != null) rowIds.push(r.original.rowId);
-      else legacyKeys.push({
-        fromNodeId: r.original.fromNodeId,
-        referenceName: r.original.referenceName,
-        referenceKind: r.original.referenceKind,
-      });
-    }
-    return { rowIds, legacyKeys };
-  }
-
-  /**
-   * Same row-id precision for parking unresolvable refs as status='failed'
-   * (#1240): the key-tuple fallback would flip same-key sibling rows in later
-   * batches to 'failed' before they were ever attempted, and resolution
-   * outcome can differ per call site (receiver-type inference reads the
-   * ref's line), so a sibling must not inherit this row's failure (#1269).
-   */
-  private static partitionFailedCleanup(unresolved: UnresolvedRef[]): {
-    byRowId: Array<{ rowId: number; referenceName: string }>;
-    legacyKeys: Array<{ fromNodeId: string; referenceName: string; referenceKind: string }>;
-  } {
-    const byRowId: Array<{ rowId: number; referenceName: string }> = [];
-    const legacyKeys: Array<{ fromNodeId: string; referenceName: string; referenceKind: string }> = [];
-    for (const r of unresolved) {
-      if (r.rowId != null) byRowId.push({ rowId: r.rowId, referenceName: r.referenceName });
-      else legacyKeys.push({
-        fromNodeId: r.fromNodeId,
-        referenceName: r.referenceName,
-        referenceKind: r.referenceKind,
-      });
-    }
-    return { byRowId, legacyKeys };
+    return this.admission.createEdges(resolved);
   }
 
   /** A deferred attempt is unfinished work, not a final failure (#1577). */
@@ -1285,35 +1170,7 @@ export class ReferenceResolver {
     }
     const result = this.resolveAll(unresolvedRefs, onProgress);
 
-    // Create edges from resolved references
-    const edges = this.createEdges(result.resolved);
-
-    // Insert edges into database
-    if (edges.length > 0) {
-      this.queries.insertEdges(edges);
-    }
-
-    // Clean up resolved refs from unresolved_refs table so metrics are accurate
-    if (result.resolved.length > 0) {
-      const { rowIds, legacyKeys } = ReferenceResolver.partitionResolvedCleanup(result.resolved);
-      this.queries.deleteReferencesByRowIds(rowIds);
-      this.queries.deleteSpecificResolvedReferences(legacyKeys);
-    }
-
-    // Park unresolvable refs as status='failed' — parity with
-    // resolveAndPersistBatched. Deleting them was wrong (#1240): a ref whose
-    // own file never changes is otherwise gone forever, so when a DIFFERENT
-    // file later gains the export/symbol that would satisfy it, no sync can
-    // recreate the edge — only a full re-index. Failed rows are excluded from
-    // the pending readers, which preserves the #1187 orphan sweep's
-    // invariant in status form: after a COMPLETED pass nothing it processed
-    // is still 'pending', so any pending row at rest belongs to an
-    // interrupted run and the sweep can key off the pending count.
-    if (result.unresolved.length > 0) {
-      const { byRowId, legacyKeys } = ReferenceResolver.partitionFailedCleanup(this.nonDeferredFailures(result.unresolved));
-      this.queries.markReferencesFailedByRowIds(byRowId);
-      this.queries.markReferencesFailed(legacyKeys);
-    }
+    this.admission.admit(result, this.nonDeferredFailures(result.unresolved));
 
     return result;
   }
@@ -1340,35 +1197,12 @@ export class ReferenceResolver {
     return result;
   }
 
-  private async persistResolutionResult(result: ResolutionResult, maybeYield: MaybeYield): Promise<number> {
-    const PERSIST_CHUNK = 1000;
-    const edges = this.createEdges(result.resolved);
-    for (let i = 0; i < edges.length; i += PERSIST_CHUNK) {
-      this.queries.insertEdges(edges.slice(i, i + PERSIST_CHUNK));
-      await maybeYield();
-    }
-
-    const resolvedCleanup = ReferenceResolver.partitionResolvedCleanup(result.resolved);
-    for (let i = 0; i < resolvedCleanup.rowIds.length; i += PERSIST_CHUNK) {
-      this.queries.deleteReferencesByRowIds(resolvedCleanup.rowIds.slice(i, i + PERSIST_CHUNK));
-      await maybeYield();
-    }
-    for (let i = 0; i < resolvedCleanup.legacyKeys.length; i += PERSIST_CHUNK) {
-      this.queries.deleteSpecificResolvedReferences(resolvedCleanup.legacyKeys.slice(i, i + PERSIST_CHUNK));
-      await maybeYield();
-    }
-
-    const failedCleanup = ReferenceResolver.partitionFailedCleanup(this.nonDeferredFailures(result.unresolved));
-    for (let i = 0; i < failedCleanup.byRowId.length; i += PERSIST_CHUNK) {
-      this.queries.markReferencesFailedByRowIds(failedCleanup.byRowId.slice(i, i + PERSIST_CHUNK));
-      await maybeYield();
-    }
-    for (let i = 0; i < failedCleanup.legacyKeys.length; i += PERSIST_CHUNK) {
-      this.queries.markReferencesFailed(failedCleanup.legacyKeys.slice(i, i + PERSIST_CHUNK));
-      await maybeYield();
-    }
-
-    return edges.length;
+  private persistResolutionResult(result: ResolutionResult, maybeYield: MaybeYield): Promise<number> {
+    return this.admission.admitYielding(
+      result,
+      this.nonDeferredFailures(result.unresolved),
+      maybeYield,
+    );
   }
 
   /** Finalize the durable queue only AFTER its edges have been inserted. */
@@ -1981,13 +1815,13 @@ export class ReferenceResolver {
       // attempt instead of being swept out with this batch's rows (#1269).
       tLp = Date.now();
       let removedThisBatch = 0;
-      const resolvedCleanup = ReferenceResolver.partitionResolvedCleanup(result.resolved);
-      for (let i = 0; i < resolvedCleanup.rowIds.length; i += PERSIST_CHUNK) {
-        removedThisBatch += this.queries.deleteReferencesByRowIds(resolvedCleanup.rowIds.slice(i, i + PERSIST_CHUNK));
+      const settled = resolvedCleanup(result.resolved);
+      for (let i = 0; i < settled.rowIds.length; i += PERSIST_CHUNK) {
+        removedThisBatch += this.queries.deleteReferencesByRowIds(settled.rowIds.slice(i, i + PERSIST_CHUNK));
         await maybeYield();
       }
-      for (let i = 0; i < resolvedCleanup.legacyKeys.length; i += PERSIST_CHUNK) {
-        removedThisBatch += this.queries.deleteSpecificResolvedReferences(resolvedCleanup.legacyKeys.slice(i, i + PERSIST_CHUNK));
+      for (let i = 0; i < settled.legacyKeys.length; i += PERSIST_CHUNK) {
+        removedThisBatch += this.queries.deleteSpecificResolvedReferences(settled.legacyKeys.slice(i, i + PERSIST_CHUNK));
         await maybeYield();
       }
       lp('deletes', tLp);
@@ -1999,13 +1833,13 @@ export class ReferenceResolver {
       tLp = Date.now();
       const failures = this.nonDeferredFailures(result.unresolved);
       const deferredCount = result.unresolved.length - failures.length;
-      const failedCleanup = ReferenceResolver.partitionFailedCleanup(failures);
-      for (let i = 0; i < failedCleanup.byRowId.length; i += PERSIST_CHUNK) {
-        removedThisBatch += this.queries.markReferencesFailedByRowIds(failedCleanup.byRowId.slice(i, i + PERSIST_CHUNK));
+      const failed = failedCleanup(failures);
+      for (let i = 0; i < failed.byRowId.length; i += PERSIST_CHUNK) {
+        removedThisBatch += this.queries.markReferencesFailedByRowIds(failed.byRowId.slice(i, i + PERSIST_CHUNK));
         await maybeYield();
       }
-      for (let i = 0; i < failedCleanup.legacyKeys.length; i += PERSIST_CHUNK) {
-        removedThisBatch += this.queries.markReferencesFailed(failedCleanup.legacyKeys.slice(i, i + PERSIST_CHUNK));
+      for (let i = 0; i < failed.legacyKeys.length; i += PERSIST_CHUNK) {
+        removedThisBatch += this.queries.markReferencesFailed(failed.legacyKeys.slice(i, i + PERSIST_CHUNK));
         await maybeYield();
       }
       lp('marks', tLp);
