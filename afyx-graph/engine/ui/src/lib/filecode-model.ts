@@ -1,5 +1,5 @@
 /**
- * The whole-file view's geometry (design spec §3.4, task CG-52).
+ * The whole-file view's geometry.
  *
  * The Symbol view *measures* the laid-out DOM to place a callee row beside its
  * line, because a body of 60 lines can be re-flowed by a fold, a font or a
@@ -61,8 +61,8 @@ export const OVERSCAN_LINES = 24;
  * Source lines fetched in one page.
  *
  * Measured on this repo's own TypeScript with the shipped classifier: a loaded
- * grammar classifies ~50 000 lines/second (CG-57 replaced the TextMate path,
- * which managed ~4 000), so a page plus its lead-in is ~20 ms of
+ * grammar classifies ~50 000 lines/second (the prior TextMate path managed
+ * ~4 000), so a page plus its lead-in is ~20 ms of
  * single-threaded server. Bigger pages mean fewer, longer stalls; smaller ones
  * mean the lead-in dominates. The scroll itself never waits on this — ports,
  * arcs and rail rows are already drawn from the graph, and the text arrives

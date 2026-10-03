@@ -2350,6 +2350,7 @@ program
   .option('-t, --target <ids>', 'Target agent(s): comma-separated ids, or "auto"|"all"|"none". Default: prompt')
   .option('-l, --location <where>', 'Install location: "global" or "local". Default: prompt')
   .option('-y, --yes', 'Non-interactive: defaults to --location=global --target=auto, auto-allow on')
+  .option('--dry-run', 'Inspect and print the provider plan without changing configuration')
   .option('-i, --init', `After wiring agents, also run \`${CLI_NAME} init\` in the current directory — builds this project’s index, so install + index is one command (combine with --yes for an unattended bootstrap)`)
   .option('--no-permissions', 'Skip writing the auto-allow permissions list (Claude Code only)')
   .option('--print-config <id>', 'Print MCP config snippet for the named agent and exit (no file writes)')
@@ -2362,7 +2363,13 @@ program
     permissions?: boolean;
     printConfig?: string;
     refresh?: boolean;
+    dryRun?: boolean;
   }) => {
+    if (opts.dryRun && opts.refresh) {
+      error('--dry-run cannot be combined with --refresh; refresh applies existing configuration.');
+      process.exitCode = 1;
+      return;
+    }
     if (opts.printConfig) {
       const { getTarget, listTargetIds } = await import('../installer/targets/registry');
       const target = getTarget(opts.printConfig);
@@ -2431,6 +2438,7 @@ program
         location: opts.location as 'global' | 'local' | undefined,
         autoAllow,
         yes: opts.yes,
+        dryRun: opts.dryRun,
       });
     } catch (err) {
       error(err instanceof Error ? err.message : String(err));
@@ -2445,7 +2453,7 @@ program
     // there), and shares every guard with `afyx-graph init`: an unsafe root
     // is refused (exit 1, no implied --force), an already-initialized
     // project just says so. `--yes` flows through so no offer prompts.
-    if (opts.init) {
+    if (opts.init && !opts.dryRun) {
       await runInit(process.cwd(), { yes: opts.yes });
     }
   });

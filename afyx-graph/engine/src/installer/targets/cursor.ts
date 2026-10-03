@@ -44,6 +44,7 @@ import {
 import {
   atomicWriteFileSync,
   getMcpServerConfig,
+  inspectJsonFile,
   jsonDeepEqual,
   readJsonFile,
   writeJsonFile,
@@ -96,7 +97,7 @@ class CursorTarget implements AgentTarget {
 
   detect(loc: Location): DetectionResult {
     const mcpPath = mcpJsonPath(loc);
-    const config = readJsonFile(mcpPath);
+    const config = inspectJsonFile(mcpPath);
     const alreadyConfigured = !!config.mcpServers?.[MCP_SERVER_NAME];
     // "Installed" heuristic: does ~/.cursor exist (global) or has the
     // user opted into a project-local cursor config dir?

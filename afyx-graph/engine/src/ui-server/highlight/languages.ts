@@ -1,5 +1,5 @@
 /**
- * Which engine language a file's source is classified with (CG-57).
+ * Which engine language a file's source is classified with for highlighting.
  *
  * There is no second grammar table any more. The viewer reads a file with the
  * grammar the *engine* parsed it with, so this is a question about coverage

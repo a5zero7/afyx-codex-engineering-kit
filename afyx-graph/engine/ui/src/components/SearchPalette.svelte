@@ -74,7 +74,7 @@
     if (!id) return;
     // A file result opens the File view, not the file node's Symbol view: the
     // outline is there either way, and only the File view carries the import
-    // rails. (CG-45 routed these at the Symbol view because #/file was a stub.)
+    // rails, so file results route to the file view rather than symbol detail.
     if (item.type === 'symbol' && item.node.kind === 'file') {
       navigate(fileHref(item.node.file));
       return;

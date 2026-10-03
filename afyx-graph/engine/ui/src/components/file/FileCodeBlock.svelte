@@ -1,6 +1,6 @@
 <!--
   The whole file's source, virtualised, with a gutter port on every line the
-  graph has an edge from (design spec §3.4, task CG-52).
+  graph has an edge from; domain edge semantics remain server-owned.
 
   The same line grid as the Symbol view — `44px | 1fr | 18px`, the same 6x6
   port, the same accent call-site links — with one difference that changes

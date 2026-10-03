@@ -144,7 +144,7 @@ export interface MapNodeLayout {
   id: string;
   module: WireMapModule;
   /**
-   * No link in the payload arrives here — an island (task CG-59).
+   * No link in the payload arrives here — an island.
    *
    * Computed from the WHOLE link set, not the filtered one, so hiding test
    * modules or raising the weight threshold cannot manufacture an island that

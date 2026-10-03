@@ -4,7 +4,13 @@ import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 // The production helper is intentionally plain ESM so release shells can invoke it directly.
 // @ts-expect-error JavaScript module has no declaration file.
-import { artifactManifest, verifyBundle } from '../scripts/distribution-contract.mjs';
+import {
+  artifactManifest,
+  artifactPlan,
+  DISTRIBUTION_PRODUCT,
+  distributionTargets,
+  verifyBundle,
+} from '../scripts/distribution-contract.mjs';
 
 const grammars = [
   'typescript', 'tsx', 'javascript', 'go', 'python', 'rust', 'swift', 'c_sharp', 'ruby', 'php',
@@ -42,6 +48,34 @@ afterEach(() => {
 });
 
 describe('Afyx distribution contract', () => {
+  it('owns the supported targets, identity and platform artifact plan', () => {
+    expect(distributionTargets()).toEqual([
+      'darwin-arm64', 'darwin-x64', 'linux-arm64',
+      'linux-x64', 'win32-arm64', 'win32-x64',
+    ]);
+    expect(DISTRIBUTION_PRODUCT).toMatchObject({
+      productName: 'Afyx Graph',
+      packageName: '@a5zero7/afyx-graph',
+      cli: 'afyx-graph',
+      defaultNodeVersion: 'v24.16.0',
+    });
+    expect(artifactPlan('linux-x64')).toMatchObject({
+      family: 'linux',
+      arch: 'x64',
+      bundleName: 'afyx-graph-linux-x64',
+      archiveName: 'afyx-graph-linux-x64.tar.gz',
+      launcherPath: 'bin/afyx-graph',
+    });
+    expect(artifactPlan('win32-arm64')).toMatchObject({
+      family: 'win32',
+      arch: 'arm64',
+      archiveName: 'afyx-graph-win32-arm64.zip',
+      runtimeName: 'node.exe',
+      launcherPath: 'bin/afyx-graph.cmd',
+    });
+    expect(() => artifactPlan('unsupported-x64')).toThrow(/unsupported target/);
+  });
+
   it('accepts a complete staged bundle and emits a stable sorted manifest', () => {
     const root = bundle();
     expect(verifyBundle(root, 'win32-x64')).toMatchObject({ legalFiles: 2, target: 'win32-x64' });

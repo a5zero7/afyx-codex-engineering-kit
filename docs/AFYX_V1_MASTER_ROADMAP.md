@@ -2,12 +2,13 @@
 
 Status: Phase 5 active  
 Canonical since: 2026-10-03  
-Current work: Phase 5C — Native Domain Core Reimplementation (**REVIEW READY**)
-Task: `AFYX-68421`
-Validated baseline: `3c5da1c148756ea47ecc31691f886307c6d38641`
-Branch: `afyx/native-phase5c-domain-core`
-Previous milestone: Phase 5B — **COMPLETE / MERGED / FROZEN**
-Previous pull request: [#53](https://github.com/a5zero7/afyx-codex-engineering-kit/pull/53)
+Current work: Phase 5D — Native Product Surfaces
+Task: `AFYX-73164`
+Validated baseline: `ab991951e8a4874088032e24a0ff14609d48f551`
+Branch: `afyx/native-phase5d-product-surfaces`
+Previous milestone: Phase 5C — **COMPLETE / MERGED / FROZEN**
+Previous pull request: [#54](https://github.com/a5zero7/afyx-codex-engineering-kit/pull/54)
+Canonical merge baseline: `ab991951e8a4874088032e24a0ff14609d48f551`
 
 This document is the forward-looking execution contract for Afyx v1. Historical
 closure evidence remains in `AFYX_INDEPENDENCE_PLAN.md`; it does not define new
@@ -22,8 +23,8 @@ implementation phases after C07.11.
 - Phase 5 — Afyx Native Full Independence: **ACTIVE**
   - 5A — Behavior Harvest & Contract Knowledge
   - 5B — Native MCP/CLI Runtime Reimplementation: **COMPLETE / MERGED / FROZEN**
-  - 5C — Native Domain Core Reimplementation: **REVIEW READY**
-  - 5D — Native Product Surfaces
+  - 5C — Native Domain Core Reimplementation: **COMPLETE / MERGED / FROZEN**
+  - 5D — Native Product Surfaces: **REVIEW READY**
   - 5E — Native Optimization & Simplification
   - 5F — Third-Party Source / Runtime Replacement
   - 5G — Legacy Product Identity / Historical Artifact Eradication
@@ -109,10 +110,10 @@ the normal Windows CI job remains the acceptance gate for that platform.
 
 ### Remaining roadmap work
 
-Phase 5C must reimplement the native domain core, followed by product surfaces,
-optimization, third-party replacement, global historical-artifact eradication,
-license closure, and the final independence audit in Phases 5D–5I. Existing
-legal notices remain required until the underlying obligations are legitimately
-removed. The next phase after Phase 5B review/merge is Phase 5C — Native Domain
-Core Reimplementation.
+Phase 5C is complete, merged and frozen at PR #54 / canonical baseline
+`ab991951e8a4874088032e24a0ff14609d48f551`. Phase 5D now owns provider,
+installer, UI and distribution surfaces. Optimization, third-party replacement,
+global historical-artifact eradication, license closure and the final
+independence audit remain in Phases 5E–5I. Existing legal notices remain required
+until the underlying obligations are legitimately removed.
 

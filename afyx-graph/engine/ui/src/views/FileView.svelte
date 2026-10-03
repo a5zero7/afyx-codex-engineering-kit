@@ -1,6 +1,6 @@
 <!--
   The File view: imported by | outline in source order | imports
-  (design spec §3.4, task CG-46).
+  (the stable file-summary presentation contract).
 
   A file is the one unit of the graph that has no body worth printing and no
   single caller — so the screen is three lists rather than the Symbol view's
@@ -13,7 +13,7 @@
 
   The whole file's source, with the same gutter ports and an arc diagram for the
   calls that stay inside it, is the other reading of this screen — `?src=1`,
-  `FileCodeView.svelte` (CG-52). The tabs in the header switch between them.
+  `FileCodeView.svelte`. The tabs in the header switch between them.
 -->
 <script lang="ts">
   import { tick, untrack } from 'svelte';

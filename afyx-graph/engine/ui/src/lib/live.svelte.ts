@@ -1,5 +1,5 @@
 /**
- * The live channel — the viewer's end of `/api/events` (CG-53).
+ * The live channel — the viewer's end of `/api/events`.
  *
  * The server watches two things and says so; this module turns that into two
  * counters every screen can read:

@@ -1,7 +1,7 @@
 /**
  * The wire shapes of the graph API — types only, no runtime.
  *
- * These mirror the server's payloads (`src/ui-server/api/`, CG-42) rather than
+ * These mirror the server's payloads (`src/ui-server/api/`) rather than
  * re-deriving them: the API is versioned with the binary that serves it, so a
  * field the server stopped sending should break the type-check here, not
  * surface as `undefined` in a rail three screens later.

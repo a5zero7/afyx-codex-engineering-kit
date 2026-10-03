@@ -22,6 +22,7 @@ import {
   resolveTargetFlag,
 } from './targets/registry';
 import type { AgentTarget, Location, TargetId } from './targets/types';
+import { applyInstallPlan, createInstallPlan, describeInstallPlan } from './plan';
 // Import the lightweight submodules directly (not the ../sync barrel, which
 // re-exports FileWatcher and would transitively pull in ../extraction — the
 // installer must stay importable even when native modules can't load).
@@ -69,6 +70,8 @@ export interface RunInstallerOptions {
    * autoAllow=true, target=auto. For scripting / CI.
    */
   yes?: boolean;
+  /** Inspect and render the plan without writing provider configuration. */
+  dryRun?: boolean;
 }
 
 /**
@@ -179,17 +182,37 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
     }
   }
 
-  // Step 5: per-target install loop.
-  const installedIds: TargetId[] = [];
-  for (const target of targets) {
-    if (!target.supportsLocation(location)) {
+  // Step 5: build one side-effect-free plan. Interactive and scripted installs
+  // share the same apply/verify path; prompts never own config semantics.
+  const plan = createInstallPlan(targets, location, { autoAllow, promptHook });
+  if (opts.dryRun) {
+    const preview = describeInstallPlan(plan);
+    for (const target of preview.targets) {
+      if (!target.supported) {
+        clack.log.warn(`${target.displayName}: unsupported at --location=${location}`);
+        continue;
+      }
+      clack.log.info(
+        `${target.displayName}: ${target.operation}; ` +
+        `${target.paths.length > 0 ? target.paths.map(tildify).join(', ') : 'no owned paths'}`,
+      );
+    }
+    clack.outro('Dry run complete — no provider configuration was changed.');
+    return;
+  }
+
+  for (const report of applyInstallPlan(plan)) {
+    const target = report.entry;
+    if (report.status === 'unsupported') {
       clack.log.warn(
         `${target.displayName}: skipped — does not support --location=${location}.`,
       );
       continue;
     }
-    const result = target.install(location, { autoAllow, promptHook });
-    installedIds.push(target.id);
+    if (report.status === 'verification-failed' || report.result === null) {
+      throw new Error(`${target.displayName}: install verification failed.`);
+    }
+    const result = report.result;
     for (const file of result.files) {
       const verb = file.action === 'unchanged'
         ? 'Unchanged'

@@ -33,6 +33,7 @@ import {
 import {
   getAfyxGraphPermissions,
   getMcpServerConfig,
+  inspectJsonFile,
   jsonDeepEqual,
   readJsonFile,
   removeMarkedSection,
@@ -111,7 +112,7 @@ class ClaudeCodeTarget implements AgentTarget {
 
   detect(loc: Location): DetectionResult {
     const mcpPath = mcpJsonPath(loc);
-    const config = readJsonFile(mcpPath);
+    const config = inspectJsonFile(mcpPath);
     const alreadyConfigured = !!config.mcpServers?.[MCP_SERVER_NAME];
     // For "installed" we infer from the existence of either the dir
     // (global) or the project marker file (local). Cheap and avoids

@@ -40,6 +40,7 @@ import {
 } from './types';
 import {
   getMcpServerConfig,
+  inspectJsonFile,
   jsonDeepEqual,
   readJsonFile,
   writeJsonFile,
@@ -121,7 +122,7 @@ class CopilotCliTarget implements AgentTarget {
       return { installed: false, alreadyConfigured: false };
     }
     const file = mcpConfigPath();
-    const config = readJsonFile(file);
+    const config = inspectJsonFile(file);
     const alreadyConfigured = !!config.mcpServers?.[MCP_SERVER_NAME];
     const installed = cliConfigDirPresent() || copilotOnPath();
     return { installed, alreadyConfigured, configPath: file };

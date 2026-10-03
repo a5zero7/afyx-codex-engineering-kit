@@ -1,7 +1,7 @@
 /**
  * Server-side syntax classification for the viewer's code block.
  *
- * The classes come off the engine's OWN tree-sitter parse (CG-57). Until then
+ * The classes come off the engine's own tree-sitter parse. Before this boundary
  * the viewer ran a second highlighter — Shiki, plus 56 pruned TextMate grammars
  * shipped beside the binary — over source the engine had already parsed with a
  * real grammar. That is gone: one grammar set, one opinion about what a `.ts`

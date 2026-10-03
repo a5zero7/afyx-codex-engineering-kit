@@ -1,6 +1,6 @@
 <!--
   The sticky navigation rail beside the whole-file source (design spec §3.4,
-  task CG-52). Shown when there is room for it — under 1400px the view drops it
+  presentation contract). Shown when there is room for it — under 1400px the view drops it
   rather than squeezing the code.
 
   The same rows as the File view's outline, at navigation weight: a click

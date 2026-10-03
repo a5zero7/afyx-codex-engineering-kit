@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly TARGET="${1:?usage: build-bundle.sh <target> [node-version]}"
-readonly NODE_VERSION="${2:-v24.16.0}"
 readonly ENGINE_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+readonly CONTRACT="$ENGINE_ROOT/scripts/distribution-contract.mjs"
+readonly TARGET="${1:?usage: build-bundle.sh <target> [node-version]}"
+readonly NODE_VERSION="${2:-$(node "$CONTRACT" default-node-version)}"
 readonly RELEASE_ROOT="$ENGINE_ROOT/release"
 readonly TEMP_ROOT="$(mktemp -d)"
 readonly ARCH="${TARGET##*-}"
 readonly FAMILY="${TARGET%-*}"
-readonly BUNDLE_NAME="afyx-graph-${TARGET}"
+readonly BUNDLE_NAME="$(node "$CONTRACT" plan --target "$TARGET" --node-version "$NODE_VERSION" --field bundleName)"
 readonly STAGE="$TEMP_ROOT/$BUNDLE_NAME"
 RUNTIME_SOURCE=""
 ARCHIVE=""
@@ -17,10 +18,7 @@ cleanup() { rm -rf "$TEMP_ROOT"; }
 trap cleanup EXIT
 
 validate_target() {
-  case "$TARGET" in
-    darwin-arm64|darwin-x64|linux-arm64|linux-x64|win32-arm64|win32-x64) ;;
-    *) echo "[bundle] unsupported target: $TARGET" >&2; exit 2 ;;
-  esac
+  node "$CONTRACT" plan --target "$TARGET" --node-version "$NODE_VERSION" >/dev/null
 }
 
 fetch_runtime() {
@@ -52,9 +50,11 @@ stage_application() {
   cp -R "$ENGINE_ROOT/dist" "$STAGE/lib/dist"
   cp "$ENGINE_ROOT/package.json" "$ENGINE_ROOT/package-lock.json" "$STAGE/lib/"
   cp "$ENGINE_ROOT/../afyx-graph.json" "$STAGE/metadata.json"
-  # Required attribution contract; keep these exact bundle paths.
-  cp "$ENGINE_ROOT/../THIRD_PARTY_NOTICES.md" "$STAGE/licenses/THIRD_PARTY_NOTICES.md"
-  cp "$ENGINE_ROOT/../LICENSES/THIRD_PARTY_ENGINE_MIT.txt" "$STAGE/licenses/THIRD_PARTY_ENGINE_MIT.txt"
+  # Required attribution contract is owned by the artifact plan.
+  while IFS='|' read -r source destination; do
+    mkdir -p "$STAGE/$(dirname "$destination")"
+    cp "$ENGINE_ROOT/$source" "$STAGE/$destination"
+  done < <(node "$CONTRACT" legal-files)
   echo "[bundle] installing production dependencies"
   (cd "$STAGE/lib" && npm ci --omit=dev --ignore-scripts >/dev/null 2>&1)
   rm -f "$STAGE/lib/package-lock.json"
@@ -120,5 +120,5 @@ build_application
 stage_application
 stage_optional_kernel
 write_launcher
-node "$ENGINE_ROOT/scripts/distribution-contract.mjs" verify-bundle --root "$STAGE" --target "$TARGET" >/dev/null
+node "$CONTRACT" verify-bundle --root "$STAGE" --target "$TARGET" >/dev/null
 archive_bundle
