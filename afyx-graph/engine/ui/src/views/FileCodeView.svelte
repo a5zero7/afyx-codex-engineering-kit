@@ -1,6 +1,6 @@
 <!--
   The whole-file view: the file's own source, top to bottom, with the graph
-  drawn into its margins (design spec §3.4, task CG-52).
+  drawn into its margins as one bounded presentation model.
 
   Four columns, all scrolling as one document because all four are readings of
   the same line numbers:

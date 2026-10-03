@@ -1,6 +1,6 @@
 /**
  * The data seam: everything these components know about a project arrives
- * through one {@link GraphAdapter} (task CG-61).
+ * through one {@link GraphAdapter}.
  *
  * The viewer shipped by `afyx-graph ui` uses {@link createHttpAdapter}, which is
  * the JSON API over loopback. A host that already holds the graph — Afyx Graph

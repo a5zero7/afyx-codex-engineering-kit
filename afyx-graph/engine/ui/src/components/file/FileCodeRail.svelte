@@ -1,6 +1,6 @@
 <!--
   The whole-file view's callee rail: one row per (calling symbol, called symbol)
-  pair, beside the line that makes the call (design spec §3.4, task CG-52).
+  pair, beside the line that makes the call.
 
   The Symbol view's rail annotates one body. This one annotates a whole file, so
   the unit is the PAIR rather than the callee: the same helper called from two

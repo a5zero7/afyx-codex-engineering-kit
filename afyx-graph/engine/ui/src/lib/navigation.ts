@@ -1,6 +1,6 @@
 /**
  * The navigation seam: where a click on a symbol, a file, a flow or the map
- * takes the reader (task CG-61).
+ * takes the reader.
  *
  * The standalone viewer is a hash app — `#/s/<id>`, `#/file/<path>`, `#/map` —
  * and that is the default driver below. A host embedding these components has

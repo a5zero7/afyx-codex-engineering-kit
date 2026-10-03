@@ -873,7 +873,7 @@ function boundarySeeds(
  *
  * "Not connected" is a real answer about this index, not a failure — a flow
  * that runs through a dynamic dispatch the resolver could not bridge genuinely
- * has no static path, and saying so is the honest end of the search. CG-51
+ * has no static path, and saying so is the honest end of the search. The UI
  * turns this sentence into the boundary end cap that names the dispatch site.
  */
 function noFlowReason(

@@ -1,6 +1,6 @@
 <!--
   The Symbol view: callers | verbatim source with gutter ports | line-anchored
-  callee rail (design spec §3.2, task CG-44).
+  callee rail, all derived from the typed adapter payload.
 
   The geometry is the point of the screen, and it is the one thing that cannot
   be derived from the payload: where a callee row belongs depends on where its

@@ -1,6 +1,6 @@
 <!--
   The intra-file call arcs — the left margin of the whole-file view
-  (design spec §3.4, task CG-52).
+  owned by the whole-file presentation contract.
 
   One arc per call whose callee is defined in this same file, drawn from the
   calling line to the definition line. This is the one place in the app where a

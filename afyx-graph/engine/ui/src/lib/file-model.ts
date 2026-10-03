@@ -1,5 +1,5 @@
 /**
- * The File view's models (design spec §3.4, task CG-46).
+ * The File view's presentation models.
  *
  * Pure functions over `/api/file`'s payload, kept out of the components so the
  * decisions below can be tested without a browser.
