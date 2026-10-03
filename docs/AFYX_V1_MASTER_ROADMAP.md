@@ -2,12 +2,12 @@
 
 Status: Phase 5 active  
 Canonical since: 2026-10-03  
-Current work: Phase 5B — Native MCP/CLI Runtime Reimplementation (**REVIEW READY**)
-Task: `AFYX-57384`  
-Validated baseline: `2a82886d282c35756f9f17431ff473d14d83bcb7`  
-Branch: `afyx/native-phase5b-mcp-cli-runtime`
-Implementation HEAD: `e82e27f0f3ac0d92134d217e200f6213328df819`
-Pull request: [#53](https://github.com/a5zero7/afyx-codex-engineering-kit/pull/53)
+Current work: Phase 5C — Native Domain Core Reimplementation (**REVIEW READY**)
+Task: `AFYX-68421`
+Validated baseline: `3c5da1c148756ea47ecc31691f886307c6d38641`
+Branch: `afyx/native-phase5c-domain-core`
+Previous milestone: Phase 5B — **COMPLETE / MERGED / FROZEN**
+Previous pull request: [#53](https://github.com/a5zero7/afyx-codex-engineering-kit/pull/53)
 
 This document is the forward-looking execution contract for Afyx v1. Historical
 closure evidence remains in `AFYX_INDEPENDENCE_PLAN.md`; it does not define new
@@ -21,8 +21,8 @@ implementation phases after C07.11.
 - Phase 4 — Afyx Graph Functional Core: **FUNCTIONALLY COMPLETE**
 - Phase 5 — Afyx Native Full Independence: **ACTIVE**
   - 5A — Behavior Harvest & Contract Knowledge
-  - 5B — Native MCP/CLI Runtime Reimplementation: **REVIEW READY**
-  - 5C — Native Domain Core Reimplementation
+  - 5B — Native MCP/CLI Runtime Reimplementation: **COMPLETE / MERGED / FROZEN**
+  - 5C — Native Domain Core Reimplementation: **REVIEW READY**
   - 5D — Native Product Surfaces
   - 5E — Native Optimization & Simplification
   - 5F — Third-Party Source / Runtime Replacement
@@ -49,6 +49,12 @@ their underlying code, assets, runtime, and obligations are legitimately
 eliminated in Phases 5F–5H.
 
 ## Phase 5B
+
+Status: **COMPLETE / MERGED / FROZEN**
+
+Pull request: [#53](https://github.com/a5zero7/afyx-codex-engineering-kit/pull/53)
+
+Canonical merge baseline: `3c5da1c148756ea47ecc31691f886307c6d38641`
 
 The active implementation contract is documented in
 `AFYX_PHASE5B_RUNTIME_DESIGN.md`. Completion requires an Afyx-owned session,
