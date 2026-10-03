@@ -139,12 +139,12 @@ planned_legal_paths = {
 for legal_file in LEGAL_FILES:
     if f"licenses/{legal_file}" not in planned_legal_paths:
         fail(f"distribution-product.json does not ship licenses/{legal_file}")
-if "legal-files" not in bundle_script:
-    fail("build-bundle.sh does not consume the artifact plan's legal files")
     for installer in installer_paths:
         installer_text = installer.read_text(encoding="utf-8")
         if legal_file not in installer_text:
             fail(f"{installer.name} does not require licenses/{legal_file} in a staged bundle")
+if "legal-files" not in bundle_script:
+    fail("build-bundle.sh does not consume the artifact plan's legal files")
 
 # Any locally built bundle must contain both legal files.
 if release_dir.is_dir():
