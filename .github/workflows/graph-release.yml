@@ -19,7 +19,7 @@ jobs:
         run: npm ci && npm run build:clean && npm test && npm run test:semantic && npm run test:smoke
       - working-directory: afyx-graph/engine
         run: |
-          for target in win32-x64 win32-arm64 linux-x64 linux-arm64 darwin-x64 darwin-arm64; do
+          for target in $(node scripts/distribution-contract.mjs targets); do
             bash scripts/build-bundle.sh "$target"
           done
           (cd release && sha256sum afyx-graph-* > SHA256SUMS)

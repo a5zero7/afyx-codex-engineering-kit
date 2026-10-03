@@ -1,0 +1,42 @@
+{
+  "productName": "Afyx Graph",
+  "packageName": "@a5zero7/afyx-graph",
+  "cli": "afyx-graph",
+  "bundlePrefix": "afyx-graph",
+  "defaultNodeVersion": "v24.16.0",
+  "targets": [
+    "darwin-arm64",
+    "darwin-x64",
+    "linux-arm64",
+    "linux-x64",
+    "win32-arm64",
+    "win32-x64"
+  ],
+  "engineSentinels": [
+    "bin/afyx-graph.js",
+    "index.js",
+    "ui/shimmer-progress.js"
+  ],
+  "requiredGrammars": [
+    "tree-sitter-typescript.wasm",
+    "tree-sitter-tsx.wasm",
+    "tree-sitter-javascript.wasm",
+    "tree-sitter-go.wasm",
+    "tree-sitter-python.wasm",
+    "tree-sitter-rust.wasm",
+    "tree-sitter-swift.wasm",
+    "tree-sitter-c_sharp.wasm",
+    "tree-sitter-ruby.wasm",
+    "tree-sitter-php.wasm"
+  ],
+  "legalFiles": [
+    {
+      "source": "../THIRD_PARTY_NOTICES.md",
+      "bundlePath": "licenses/THIRD_PARTY_NOTICES.md"
+    },
+    {
+      "source": "../LICENSES/THIRD_PARTY_ENGINE_MIT.txt",
+      "bundlePath": "licenses/THIRD_PARTY_ENGINE_MIT.txt"
+    }
+  ]
+}

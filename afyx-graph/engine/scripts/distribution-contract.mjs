@@ -5,14 +5,35 @@ import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const SCRIPT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const REQUIRED_GRAMMARS = [
-  'tree-sitter-typescript.wasm', 'tree-sitter-tsx.wasm', 'tree-sitter-javascript.wasm',
-  'tree-sitter-go.wasm', 'tree-sitter-python.wasm', 'tree-sitter-rust.wasm',
-  'tree-sitter-swift.wasm', 'tree-sitter-c_sharp.wasm', 'tree-sitter-ruby.wasm',
-  'tree-sitter-php.wasm',
-];
-const ENGINE_SENTINELS = ['bin/afyx-graph.js', 'index.js', 'ui/shimmer-progress.js'];
-const LEGAL_FILES = ['THIRD_PARTY_NOTICES.md', 'THIRD_PARTY_ENGINE_MIT.txt'];
+const PRODUCT_FILE = join(SCRIPT_ROOT, 'scripts', 'distribution-product.json');
+export const DISTRIBUTION_PRODUCT = Object.freeze(
+  JSON.parse(readFileSync(PRODUCT_FILE, 'utf8')),
+);
+
+export function distributionTargets() {
+  return [...DISTRIBUTION_PRODUCT.targets];
+}
+
+export function artifactPlan(target, nodeVersion = DISTRIBUTION_PRODUCT.defaultNodeVersion) {
+  if (!DISTRIBUTION_PRODUCT.targets.includes(target)) {
+    throw new DistributionError(`unsupported target: ${target}`);
+  }
+  const separator = target.indexOf('-');
+  const family = target.slice(0, separator);
+  const arch = target.slice(separator + 1);
+  const bundleName = `${DISTRIBUTION_PRODUCT.bundlePrefix}-${target}`;
+  return {
+    target,
+    family,
+    arch,
+    nodeVersion,
+    bundleName,
+    archiveName: `${bundleName}.${family === 'win32' ? 'zip' : 'tar.gz'}`,
+    runtimeName: family === 'win32' ? 'node.exe' : 'node',
+    launcherPath: `bin/${family === 'win32' ? `${DISTRIBUTION_PRODUCT.cli}.cmd` : DISTRIBUTION_PRODUCT.cli}`,
+    legalFiles: DISTRIBUTION_PRODUCT.legalFiles.map((entry) => ({ ...entry })),
+  };
+}
 
 export class DistributionError extends Error {}
 
@@ -40,11 +61,13 @@ export function verifyEngineDistribution(root = SCRIPT_ROOT, { staged = false } 
   const assets = localAssetPaths(html);
   if (assets.length === 0) throw new DistributionError('dist/viewer/index.html references no bundled assets');
   for (const asset of assets) requireFile(join(viewer, ...asset.split('/')), `dist/viewer/${asset}`);
-  for (const file of ENGINE_SENTINELS) requireFile(join(dist, ...file.split('/')), `dist/${file}`);
+  for (const file of DISTRIBUTION_PRODUCT.engineSentinels) {
+    requireFile(join(dist, ...file.split('/')), `dist/${file}`);
+  }
 
   const wasm = join(dist, 'extraction', 'wasm');
   if (!existsSync(wasm)) throw new DistributionError('missing dist/extraction/wasm');
-  const expected = new Set(REQUIRED_GRAMMARS);
+  const expected = new Set(DISTRIBUTION_PRODUCT.requiredGrammars);
   const sourceWasm = join(resolve(root), 'src', 'extraction', 'wasm');
   if (!staged && existsSync(sourceWasm)) {
     for (const file of readdirSync(sourceWasm)) if (file.endsWith('.wasm')) expected.add(file);
@@ -61,25 +84,27 @@ export function verifyEngineDistribution(root = SCRIPT_ROOT, { staged = false } 
 
 export function verifyBundle(root, target) {
   const bundle = resolve(root);
-  const windows = target.startsWith('win32-');
+  const plan = artifactPlan(target);
+  const windows = plan.family === 'win32';
   const lib = join(bundle, 'lib');
   const engine = verifyEngineDistribution(lib, { staged: true });
   const manifest = JSON.parse(readFileSync(requireFile(join(lib, 'package.json'), 'lib/package.json'), 'utf8'));
-  if (manifest.name !== '@a5zero7/afyx-graph' || manifest.bin?.['afyx-graph'] !== './dist/bin/afyx-graph.js') {
+  if (manifest.name !== DISTRIBUTION_PRODUCT.packageName ||
+      manifest.bin?.[DISTRIBUTION_PRODUCT.cli] !== `./dist/bin/${DISTRIBUTION_PRODUCT.cli}.js`) {
     throw new DistributionError('lib/package.json has the wrong package identity or CLI entrypoint');
   }
   const metadata = JSON.parse(readFileSync(requireFile(join(bundle, 'metadata.json'), 'metadata.json'), 'utf8'));
-  if (metadata.product_name !== 'Afyx Graph' || metadata.cli !== 'afyx-graph') {
+  if (metadata.product_name !== DISTRIBUTION_PRODUCT.productName || metadata.cli !== DISTRIBUTION_PRODUCT.cli) {
     throw new DistributionError('metadata.json has the wrong operational identity');
   }
-  for (const legal of LEGAL_FILES) {
-    const file = requireFile(join(bundle, 'licenses', legal), `licenses/${legal}`);
-    if (statSync(file).size === 0) throw new DistributionError(`licenses/${legal} is empty`);
+  for (const legal of plan.legalFiles) {
+    const file = requireFile(join(bundle, ...legal.bundlePath.split('/')), legal.bundlePath);
+    if (statSync(file).size === 0) throw new DistributionError(`${legal.bundlePath} is empty`);
   }
   requireFile(join(bundle, windows ? 'node.exe' : 'node'), windows ? 'node.exe' : 'node');
   const launcher = requireFile(
-    join(bundle, 'bin', windows ? 'afyx-graph.cmd' : 'afyx-graph'),
-    windows ? 'bin/afyx-graph.cmd' : 'bin/afyx-graph',
+    join(bundle, ...plan.launcherPath.split('/')),
+    plan.launcherPath,
   );
   const launcherText = readFileSync(launcher, 'utf8');
   if (!launcherText.includes('lib') || !launcherText.includes('dist') || !launcherText.includes('afyx-graph.js')) {
@@ -89,7 +114,7 @@ export function verifyBundle(root, target) {
   for (const forbidden of ['src', '__tests__', 'ui']) {
     if (existsSync(join(lib, forbidden))) throw new DistributionError(`development-only lib/${forbidden} is packaged`);
   }
-  return { ...engine, legalFiles: LEGAL_FILES.length, target };
+  return { ...engine, legalFiles: plan.legalFiles.length, target };
 }
 
 function walkFiles(root) {
@@ -130,10 +155,20 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   try {
     const command = process.argv[2];
     const root = resolve(argument('--root', SCRIPT_ROOT));
-    if (command === 'verify-dist') console.log(JSON.stringify(verifyEngineDistribution(root), null, 2));
+    if (command === 'targets') console.log(distributionTargets().join(' '));
+    else if (command === 'default-node-version') console.log(DISTRIBUTION_PRODUCT.defaultNodeVersion);
+    else if (command === 'plan') {
+      const plan = artifactPlan(argument('--target', ''), argument('--node-version', DISTRIBUTION_PRODUCT.defaultNodeVersion));
+      const field = argument('--field', '');
+      console.log(field ? String(plan[field] ?? '') : JSON.stringify(plan, null, 2));
+    }
+    else if (command === 'legal-files') {
+      for (const file of DISTRIBUTION_PRODUCT.legalFiles) console.log(`${file.source}|${file.bundlePath}`);
+    }
+    else if (command === 'verify-dist') console.log(JSON.stringify(verifyEngineDistribution(root), null, 2));
     else if (command === 'verify-bundle') console.log(JSON.stringify(verifyBundle(root, argument('--target', '')), null, 2));
     else if (command === 'manifest') console.log(JSON.stringify(artifactManifest(root), null, 2));
-    else throw new DistributionError('usage: distribution-contract.mjs verify-dist|verify-bundle|manifest --root <dir> [--target <target>]');
+    else throw new DistributionError('usage: distribution-contract.mjs targets|default-node-version|plan|legal-files|verify-dist|verify-bundle|manifest [options]');
   } catch (error) {
     console.error(`[distribution] ${error instanceof Error ? error.message : String(error)}`);
     process.exitCode = 1;
