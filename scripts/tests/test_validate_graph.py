@@ -32,6 +32,7 @@ COPIED = (
     "afyx-graph/engine/src/product.ts",
     "afyx-graph/engine/src/bin/afyx-graph.ts",
     "afyx-graph/engine/scripts/build-bundle.sh",
+    "afyx-graph/engine/scripts/distribution-product.json",
 )
 BUNDLE = "afyx-graph-win32-x64"
 
