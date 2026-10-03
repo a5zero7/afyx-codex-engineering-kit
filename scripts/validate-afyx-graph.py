@@ -26,6 +26,7 @@ license_path = GRAPH / "LICENSES" / "THIRD_PARTY_ENGINE_MIT.txt"
 engine_license_path = ENGINE / "LICENSE"
 notices_path = GRAPH / "THIRD_PARTY_NOTICES.md"
 bundle_script_path = ENGINE / "scripts" / "build-bundle.sh"
+distribution_product_path = ENGINE / "scripts" / "distribution-product.json"
 release_dir = ENGINE / "release"
 installer_paths = (ROOT / "scripts" / "install-afyx-graph.ps1", ROOT / "scripts" / "install-afyx-graph.sh")
 
@@ -126,11 +127,20 @@ if "Colby Mchenry" not in notices_text or "LICENSES/THIRD_PARTY_ENGINE_MIT.txt" 
 if re.search(r"https?://", notices_text):
     fail("THIRD_PARTY_NOTICES.md must not carry operational URLs")
 
-# Every bundle must ship both legal files: the build script copies them and both installers require them.
+# Every bundle must ship both legal files. The artifact plan is the source of
+# truth and the shell must consume its legal-file staging command.
 bundle_script = bundle_script_path.read_text(encoding="utf-8")
+distribution_product = json.loads(distribution_product_path.read_text(encoding="utf-8"))
+planned_legal_paths = {
+    entry.get("bundlePath")
+    for entry in distribution_product.get("legalFiles", [])
+    if isinstance(entry, dict)
+}
 for legal_file in LEGAL_FILES:
-    if f"licenses/{legal_file}" not in bundle_script:
-        fail(f"build-bundle.sh does not ship licenses/{legal_file}")
+    if f"licenses/{legal_file}" not in planned_legal_paths:
+        fail(f"distribution-product.json does not ship licenses/{legal_file}")
+if "legal-files" not in bundle_script:
+    fail("build-bundle.sh does not consume the artifact plan's legal files")
     for installer in installer_paths:
         installer_text = installer.read_text(encoding="utf-8")
         if legal_file not in installer_text:

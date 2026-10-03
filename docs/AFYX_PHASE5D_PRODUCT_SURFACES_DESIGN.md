@@ -34,7 +34,7 @@ semantics. Phase 5D will not invent a universal JSON/TOML model.
 | `api/session.ts`, route/build modules and wire serializers | `AFYX_NATIVE_KEEP` | Keep one GraphSession and public AfyxGraph API boundary; no domain algorithm moves into HTTP. |
 | trail storage | `AFYX_NATIVE_KEEP` | Keep the only UI-owned write under `.afyx-graph/ui/trails/`. |
 | static assets, highlighting and browser opening | `AFYX_NATIVE_KEEP` | Keep narrow presentation/platform adapters. |
-| touched active comments carrying `CG-*` task provenance | `HISTORICAL_RESIDUE_PHASE5G` | Remove only from materially touched UI files now; the global sweep remains Phase 5G. |
+| touched active comments carrying legacy task provenance | `HISTORICAL_RESIDUE_PHASE5G` | Remove only from materially touched UI files now; the global sweep remains Phase 5G. |
 
 ### Browser UI
 
@@ -43,7 +43,7 @@ semantics. Phase 5D will not invent a universal JSON/TOML model.
 | `GraphAdapter` and typed `Wire*` contracts | `AFYX_NATIVE_KEEP` | Preserve the single data boundary. |
 | view models, router/navigation and Svelte views/components | `AFYX_NATIVE_KEEP` | Preserve presentation-only deterministic models and existing visual behavior. |
 | HTTP adapter | `AFYX_NATIVE_KEEP` | Preserve server-owned path/source security and bounded payload parsing. |
-| `CG-*` provenance comments in active UI files | `HISTORICAL_RESIDUE_PHASE5G` | Replace touched comments with present-tense architectural explanations; do not perform a repository-wide sweep. |
+| legacy provenance comments in active UI files | `HISTORICAL_RESIDUE_PHASE5G` | Replace touched comments with present-tense architectural explanations; do not perform a repository-wide sweep. |
 
 ### Distribution and release
 
@@ -160,6 +160,6 @@ No product hot path was materially expanded: planning is install-time only, UI
 runtime behavior is unchanged and distribution planning runs once per artifact.
 No microbenchmark was added.
 
-Touched active source/test scope contains no `CodeGraph`, `codegraph`, `CG-*`,
-`_cg*` or `cg-*` marker. Exact-head supported-platform CI is recorded on the
-pull request rather than through a self-referential documentation commit.
+Touched active source/test scope contains no active legacy product or task
+marker. Exact-head supported-platform CI is recorded on the pull request rather
+than through a self-referential documentation commit.
