@@ -272,7 +272,13 @@ export function extractNativeFacts(filePath: string, source: string, language: L
   }
 
   const addBlockDeclaration = (kind: NodeKind, keyword: number, nameIndex: number): Declaration | undefined => {
-    const open = findNext(tokens, nameIndex + 1, '{');
+    let searchFrom = nameIndex + 1;
+    if (kind === 'function') {
+      const params = findNext(tokens, nameIndex + 1, '(');
+      const paramsEnd = params < 0 ? undefined : scan.pairs.get(params);
+      if (paramsEnd !== undefined) searchFrom = paramsEnd + 1;
+    }
+    const open = findNext(tokens, searchFrom, '{');
     if (open < 0) return undefined;
     const close = scan.pairs.get(open);
     const modifierStart = declarationStart(tokens, keyword);
@@ -603,7 +609,79 @@ export function extractNativeFacts(filePath: string, source: string, language: L
     return (owners[0] && nodeByDeclaration.get(owners[0])) ?? fileNode;
   };
 
+  if (['typescript', 'tsx', 'javascript', 'jsx', 'python', 'go', 'java'].includes(language)) {
+    const definedHere = new Set(declarations
+      .filter((declaration) => declaration.kind === 'function' || declaration.kind === 'method' ||
+        (language === 'python' && declaration.kind === 'class'))
+      .map((declaration) => declaration.name));
+    const seen = new Set<string>();
+    const emitFunctionRef = (from: Node, name: string, token: NativeToken): void => {
+      const key = `${from.id}\0${name}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      refs.push({
+        fromNodeId: from.id, referenceName: name, referenceKind: 'function_ref',
+        line: token.start.line, column: token.start.column,
+      });
+    };
+
+    if (language === 'java') {
+      for (let i = 0; i < tokens.length - 2; i += 1) {
+        const receiver = tokens[i]!;
+        const member = tokens[i + 2]!;
+        if (tokens[i + 1]?.text !== '::' || member.kind !== 'identifier') continue;
+        if (receiver.text === 'this' || receiver.text === 'super') {
+          emitFunctionRef(ownerAt(i), `this.${member.text}`, member);
+        } else if (receiver.kind === 'identifier' && /^[A-Z]/.test(receiver.text) && member.text !== 'new') {
+          emitFunctionRef(ownerAt(i), `${receiver.text}::${member.text}`, member);
+        }
+      }
+    } else {
+      const valueIntroducers = new Set(['(', ',', ':', '=', '[', '{', 'return']);
+      for (let i = 0; i < tokens.length; i += 1) {
+        const token = tokens[i]!;
+        if (token.kind !== 'identifier') continue;
+        if (['typescript', 'tsx', 'javascript', 'jsx'].includes(language) &&
+            token.text === 'this' && tokens[i + 1]?.text === '.' && tokens[i + 2]?.kind === 'identifier') {
+          const member = tokens[i + 2]!;
+          if (tokens[i + 3]?.text !== '(') emitFunctionRef(ownerAt(i), `this.${member.text}`, member);
+          continue;
+        }
+        if (!definedHere.has(token.text) && !importedNames.has(token.text)) continue;
+        if (tokens.slice(0, i).some((item) => item.start.line === token.start.line && item.text === 'import')) continue;
+        if (tokens[i + 1]?.text === '(' || tokens[i - 1]?.text === '.' || tokens[i - 1]?.text === 'function' ||
+            tokens[i - 1]?.text === 'def' || tokens[i - 1]?.text === 'class') continue;
+        const previous = tokens[i - 1]?.text;
+        if (!previous || !valueIntroducers.has(previous)) continue;
+        const owner = ownerAt(i);
+        if (language === 'python' && (owner.kind === 'variable' || owner.kind === 'constant')) {
+          if (previous === ':') emitFunctionRef(owner, token.text, token);
+          emitFunctionRef(fileNode, token.text, token);
+        } else {
+          emitFunctionRef(owner, token.text, token);
+        }
+      }
+    }
+  }
+
   if (['typescript', 'tsx', 'javascript', 'jsx'].includes(language)) {
+    for (const declaration of declarations) {
+      if (!['class', 'interface'].includes(declaration.kind) || declaration.bodyStart === undefined) continue;
+      const from = nodeByDeclaration.get(declaration);
+      if (!from) continue;
+      let relation: 'extends' | 'implements' | undefined;
+      for (let i = declaration.start + 1; i < declaration.bodyStart; i += 1) {
+        if (tokens[i]!.text === 'extends' || tokens[i]!.text === 'implements') {
+          relation = tokens[i]!.text as 'extends' | 'implements';
+          continue;
+        }
+        if (!relation || tokens[i]!.kind !== 'identifier' || tokens[i]!.text === declaration.name) continue;
+        refs.push({
+          fromNodeId: from.id, referenceName: tokens[i]!.text, referenceKind: relation,
+          line: tokens[i]!.start.line, column: tokens[i]!.start.column,
+        });
+      }
+    }
     const seenTypeRefs = new Set<string>();
     for (let i = 0; i < tokens.length - 1; i += 1) {
       if (tokens[i]!.text !== ':') continue;
