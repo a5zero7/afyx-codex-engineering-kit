@@ -518,3 +518,59 @@ parser-coupled SFC/template/special-format internals. Established branch guards
 still pending native migration are Swift, C#, C, C++, and Objective-C. Kernel,
 bootstrap/dependency/WASM removal, after-state artifact audit, and the parser
 major PR remain later Phase 5F work.
+
+### C-family native semantic and branch-guard checkpoint
+
+Commit `ef66aff` adds an Afyx-owned, dependency-free semantic fact route for
+C, C++, Objective-C, and C# behind `AFYX_GRAPH_NATIVE_PARSER=1`. Successful
+gated extraction for these languages now enters `c-family-facts.ts` directly;
+it does not invoke their Tree-sitter language adapters. Normal ungated routing
+is intentionally unchanged until the full parser migration is complete.
+
+The bounded product contracts covered by this route are:
+
+- C functions and calls, aggregate and typedef ownership, includes, type
+  dependencies, function-pointer aliases, and function-value references.
+- C++ namespaces, aggregates and enums, inheritance, owned and out-of-line
+  methods, constructors/destructors, required template/type relationships,
+  qualified/chained/operator calls, stack/heap construction, and member
+  references.
+- Objective-C protocols, interfaces/implementations, properties, instance and
+  class methods, imports, inheritance/protocol conformance, message sends, and
+  nested factory-message calls. Interface declarations and implementation
+  bodies converge on one owned method fact.
+- C# namespaces, classes/structs/interfaces/records/enums, properties, fields,
+  methods, inheritance/interface relationships, nullable/generic type
+  dependencies, qualified/factory calls, and callable references.
+
+The shared scanner now handles bounded C++ raw strings and C# verbatim and
+interpolated string forms, including deterministic incomplete-string
+reporting. Native syntax classification includes all four languages. Their
+established `if`/`else`, switch/case, loop, catch, logical-condition, and
+early-exit branch guards now use the Afyx-native token view, with C-family
+function/method boundaries and Objective-C message syntax kept distinct.
+
+Validation for this checkpoint passed 155/155 shared native, syntax,
+function-reference, and branch-guard tests in both gated and normal modes. The
+focused scanner/C-family contracts passed 15/15. The selected C-family
+extraction/resolution campaign completed 153 semantic assertions; its two
+reported failures occurred only in post-assertion Windows temporary-directory
+`fs.rmSync` cleanup with the established `EPERM` behavior. Typecheck, clean
+production/UI build, the normal six-fixture semantic baseline, and all 21
+CLI/MCP smoke checks passed.
+
+The native semantic route set is now fourteen languages: TypeScript, TSX,
+JavaScript, JSX, Python, Go, Java, Rust, Kotlin, Scala, C, C++, Objective-C,
+and C#. Active `web-tree-sitter`/`SyntaxNode` source coupling remains 34 files
+(baseline 34): the superseded C-family adapters cannot yet be deleted because
+ungated mode and pending parser-coupled paths still use the shared fallback
+registry. No package, lockfile, grammar WASM, legal record, or runtime
+dependency was removed. `web-tree-sitter` and `tree-sitter-wasms` remain
+required until all remaining production routes converge.
+
+Remaining parser work includes ArkTS and Solidity; PHP, Ruby, Swift, Dart,
+Lua/Luau, R, and Nix; Pascal, CFML/CFScript/CFQuery, COBOL, VB.NET, and Erlang;
+Terraform/OpenTofu parser-backed semantics; and parser-coupled
+SFC/template/special-format internals. The established Swift branch guards
+remain pending. Kernel, bootstrap/dependency/WASM removal, after-state artifact
+audit, and the parser major PR remain later Phase 5F boundaries.
