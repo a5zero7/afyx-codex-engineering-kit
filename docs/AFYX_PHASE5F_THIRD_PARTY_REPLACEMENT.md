@@ -353,7 +353,7 @@ detected in the shipped viewer.
 | Before-state release | local `win32-x64` build plus distribution verifier and manifest | PASS |
 | Utility replacement | Afyx CLI/terminal/matchers/JSONC; clean dependency closure; scope parity; controlled bundle | PASS |
 | UI replacement | Native DOM/SVG runtime, zero production UI dependencies, controlled viewer artifact audit | PASS |
-| Parser/grammar replacement | Ownership frozen; native scanner foundation validated | ACTIVE |
+| Parser/grammar replacement | Ownership frozen; native scanner plus initial TypeScript/JavaScript, Python, Go, and Java fact routes validated behind the opt-in gate | ACTIVE |
 | Kernel closure | Not started | PENDING |
 | Runtime/distribution after-state | Not started | PENDING |
 | Full regression and CI | Not started | PENDING |
@@ -383,3 +383,22 @@ The first native foundation is a dependency-free bounded lexical scanner. It
 uses UTF-16 offsets/columns, treats strings and comments as opaque, records
 balanced delimiters without constructing a Tree-sitter-compatible AST, and
 reports incomplete strings/comments/delimiters without throwing or looping.
+
+### Native semantic convergence checkpoints
+
+- `a904901` converges the initial TypeScript/JavaScript, Python, and Go fact
+  routes. The native unit/differential suites pass, and the native-enabled
+  extraction campaign has 651/655 passing assertions; the four remaining
+  failures are the established Windows temporary-directory cleanup `EPERM`
+  class rather than semantic assertions.
+- `7f409dc` adds the Java route with package containment, imports, methods,
+  fields, anonymous classes, inheritance, instantiation, annotation, and
+  static-member references. Java focused contracts pass 12/12 and the
+  representative OLD/NEW Java semantic fixture is identical. The subsequent
+  full campaign exposed one static-member assertion, which was corrected and
+  revalidated directly; the native unit/differential suite passes 10/10.
+
+`AFYX_GRAPH_NATIVE_PARSER=1` remains required. This is an active convergence
+checkpoint, not parser-boundary completion: other language families, syntax
+tokens, function references, branch guards, bootstrap/package removal, and
+grammar-WASM removal remain pending.
