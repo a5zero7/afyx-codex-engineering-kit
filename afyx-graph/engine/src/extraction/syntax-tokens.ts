@@ -43,6 +43,8 @@ import { Language } from '../types';
 import { EXTRACTORS } from './languages';
 import { getParser, loadGrammarsForLanguages } from './grammars';
 import type { LanguageExtractor } from './tree-sitter-types';
+import { extractNativeFacts } from './native/fact-extractor';
+import { scanSource, type NativeToken } from './native/scanner';
 
 /* ------------------------------------------------------------- the classes -- */
 
@@ -405,6 +407,109 @@ export interface TokenizeResult {
   grammars: string[];
 }
 
+const NATIVE_SYNTAX_LANGUAGES: ReadonlySet<Language> = new Set([
+  'typescript', 'tsx', 'javascript', 'jsx', 'python', 'go', 'java',
+]);
+
+const NATIVE_KEYWORDS: Readonly<Record<string, ReadonlySet<string>>> = {
+  typescript: new Set('as async await break case catch class const continue debugger default delete do else enum export extends false finally for from function get if implements import in instanceof interface let new null of package private protected public readonly return set static super switch this throw true try type typeof undefined var void while with yield'.split(' ')),
+  javascript: new Set('as async await break case catch class const continue debugger default delete do else export extends false finally for from function get if import in instanceof let new null of return set static super switch this throw true try typeof undefined var void while with yield'.split(' ')),
+  python: new Set('False None True and as assert async await break class continue def del elif else except finally for from global if import in is lambda nonlocal not or pass raise return try while with yield'.split(' ')),
+  go: new Set('break case chan const continue default defer else fallthrough for func go goto if import interface map package range return select struct switch type var'.split(' ')),
+  java: new Set('abstract assert boolean break byte case catch char class const continue default do double else enum exports extends final finally float for goto if implements import instanceof int interface long module native new non-sealed null open opens package permits private protected provides public record requires return sealed short static strictfp super switch synchronized this throw throws to transient transitive true try uses var void volatile while with yield false'.split(' ')),
+};
+
+const NATIVE_BUILTIN_TYPES: Readonly<Record<string, ReadonlySet<string>>> = {
+  typescript: new Set('any bigint boolean never number object string symbol unknown void'.split(' ')),
+  javascript: new Set(),
+  python: new Set(),
+  go: new Set('any bool byte complex64 complex128 error float32 float64 int int8 int16 int32 int64 rune string uint uint8 uint16 uint32 uint64 uintptr'.split(' ')),
+  java: new Set('boolean byte char double float int long short void String Object'.split(' ')),
+};
+
+function nativeLanguageKey(language: Language): string {
+  if (language === 'tsx') return 'typescript';
+  if (language === 'jsx') return 'javascript';
+  return language;
+}
+
+function nativeDefinitionOffsets(source: string, language: Language, tokens: readonly NativeToken[]): Set<number> {
+  const facts = extractNativeFacts('__syntax__', source, language);
+  const definitionKinds = new Set(['function', 'method', 'class', 'interface', 'struct', 'enum', 'type_alias', 'trait']);
+  const definitions = facts.nodes.filter((node) =>
+    definitionKinds.has(node.kind));
+  const offsets = new Set<number>();
+  for (const node of definitions) {
+    const match = tokens.find((token) => token.kind === 'identifier' && token.text === node.name &&
+      token.start.line === node.startLine && token.start.column >= node.startColumn);
+    if (match) offsets.add(match.start.offset);
+  }
+  return offsets;
+}
+
+function classifyNativeRegion(source: string, language: Language, offset: number): SyntaxSpan[] {
+  const key = nativeLanguageKey(language);
+  const scan = scanSource(source, { hashComments: key === 'python' });
+  const definitions = nativeDefinitionOffsets(source, language, scan.tokens);
+  const keywords = NATIVE_KEYWORDS[key] ?? new Set<string>();
+  const builtins = NATIVE_BUILTIN_TYPES[key] ?? new Set<string>();
+  const out: SyntaxSpan[] = [];
+  const appendAbsolute = (from: number, to: number, cls: SyntaxTokenClass): void => {
+    if (to <= from) return;
+    const last = out.at(-1);
+    if (last && last.cls === cls && last.end === from) last.end = to;
+    else out.push({ start: from, end: to, cls });
+  };
+  const append = (start: number, end: number, cls: SyntaxTokenClass): void =>
+    appendAbsolute(start + offset, end + offset, cls);
+  for (let index = 0; index < scan.tokens.length; index += 1) {
+    const token = scan.tokens[index]!;
+    let cls: SyntaxTokenClass = 'other';
+    if (token.kind === 'comment') cls = 'comment';
+    else if (token.kind === 'string') {
+      if (['typescript', 'javascript'].includes(key) && token.text.startsWith('`') && token.text.includes('${')) {
+        let cursor = 0;
+        while (cursor < token.text.length) {
+          const marker = token.text.indexOf('${', cursor);
+          if (marker < 0) {
+            append(token.start.offset + cursor, token.end.offset, 'string');
+            break;
+          }
+          append(token.start.offset + cursor, token.start.offset + marker, 'string');
+          append(token.start.offset + marker, token.start.offset + marker + 2, 'other');
+          let end = marker + 2;
+          let depth = 1;
+          while (end < token.text.length && depth > 0) {
+            if (token.text[end] === '{') depth += 1;
+            else if (token.text[end] === '}') depth -= 1;
+            end += 1;
+          }
+          const expressionEnd = depth === 0 ? end - 1 : token.text.length;
+          for (const span of classifyNativeRegion(token.text.slice(marker + 2, expressionEnd), language,
+            offset + token.start.offset + marker + 2)) {
+            appendAbsolute(span.start, span.end, span.cls);
+          }
+          if (depth === 0) append(token.start.offset + expressionEnd, token.start.offset + end, 'other');
+          cursor = end;
+        }
+        continue;
+      }
+      cls = 'string';
+    }
+    else if (token.kind === 'number') cls = 'number';
+    else if (token.kind === 'identifier') {
+      const previous = scan.tokens[index - 1]?.text;
+      if (definitions.has(token.start.offset)) cls = 'def';
+      else if (builtins.has(token.text)) cls = 'type';
+      else if ((previous === ':' && key !== 'python') || previous === 'extends' || previous === 'implements' || previous === 'new') cls = 'type';
+      else if (keywords.has(token.text)) cls = ['true', 'false', 'null', 'undefined', 'None', 'True', 'False', 'nil'].includes(token.text) ? 'number' : 'keyword';
+      else cls = 'ident';
+    }
+    append(token.start.offset, token.end.offset, cls);
+  }
+  return out;
+}
+
 /**
  * Parse `source` and classify it.
  *
@@ -446,6 +551,9 @@ async function tokenizeRegion(
   language: Language,
   offset: number
 ): Promise<SyntaxSpan[] | null> {
+  if (process.env.AFYX_GRAPH_NATIVE_PARSER === '1' && NATIVE_SYNTAX_LANGUAGES.has(language)) {
+    return classifyNativeRegion(source, language, offset);
+  }
   try {
     await loadGrammarsForLanguages([language]);
     const parser = getParser(language);

@@ -19,6 +19,11 @@ export interface NativeScanResult {
   readonly unterminated: readonly ('string' | 'comment' | 'delimiter')[];
 }
 
+export interface NativeScanOptions {
+  /** Treat `#` through end-of-line as a comment (Python/Ruby/R-style). */
+  readonly hashComments?: boolean;
+}
+
 const OPEN_TO_CLOSE: Readonly<Record<string, string>> = { '(': ')', '[': ']', '{': '}' };
 const CLOSE = new Set(Object.values(OPEN_TO_CLOSE));
 
@@ -38,7 +43,7 @@ function isIdentifierContinue(char: string): boolean {
  * Comments and strings are consumed as opaque regions so syntax-looking text
  * inside them cannot become declarations or references.
  */
-export function scanSource(source: string): NativeScanResult {
+export function scanSource(source: string, options: NativeScanOptions = {}): NativeScanResult {
   const tokens: NativeToken[] = [];
   const pairs = new Map<number, number>();
   const stack: Array<{ token: number; close: string }> = [];
@@ -99,7 +104,7 @@ export function scanSource(source: string): NativeScanResult {
       continue;
     }
 
-    if (char === '#') {
+    if (char === '#' && options.hashComments !== false) {
       const start = position();
       while (offset < source.length && source[offset] !== '\n') advance();
       emit('comment', start);

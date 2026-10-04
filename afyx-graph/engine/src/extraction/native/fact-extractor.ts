@@ -91,7 +91,7 @@ function visibility(tokens: readonly NativeToken[], start: number, keyword: numb
  */
 export function extractNativeFacts(filePath: string, source: string, language: Language): ExtractionResult {
   const started = Date.now();
-  const scan = scanSource(source);
+  const scan = scanSource(source, { hashComments: ['python', 'ruby', 'r'].includes(language) });
   const tokens = scan.tokens;
   const declarations: Declaration[] = [];
   const importedNames = new Set<string>();
