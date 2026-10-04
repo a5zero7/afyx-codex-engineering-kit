@@ -33,4 +33,3 @@ describe('native UI viewport', () => {
     viewport.dispose();
   });
 });
-

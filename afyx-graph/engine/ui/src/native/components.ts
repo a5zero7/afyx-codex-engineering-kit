@@ -122,4 +122,3 @@ export function ExportButtons(target: HTMLElement, props: { svg: () => string; f
   root.append(button);
   return mount(target, root);
 }
-

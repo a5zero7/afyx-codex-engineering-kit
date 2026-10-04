@@ -84,4 +84,3 @@ export function SearchPalette(target: HTMLElement): SearchPaletteMount {
     focus(): void { input.focus(); input.select(); palette.show(); },
   };
 }
-

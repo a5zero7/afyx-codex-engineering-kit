@@ -88,4 +88,3 @@ export const router = {
     return () => listeners.delete(listener);
   },
 };
-

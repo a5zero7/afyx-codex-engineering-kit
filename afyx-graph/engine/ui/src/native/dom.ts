@@ -104,4 +104,3 @@ export function button(label: string, action: () => void, title?: string): HTMLB
   node.addEventListener('click', action);
   return node;
 }
-

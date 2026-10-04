@@ -1,10 +1,10 @@
 # Phase 5F — Third-Party Source / Runtime Replacement
 
-Task: `AFYX-91852`  
-Inventory date: 2026-10-04  
-Canonical baseline: `48b6078ed37349e405213258819fa5225bcdb3fb`  
-Branch: `afyx/native-phase5f-third-party-replacement`  
-Status: **IN PROGRESS — UTILITY RUNTIME CHECKPOINT COMPLETE**
+Task: `AFYX-91852`
+Inventory date: 2026-10-04
+Canonical baseline: `48b6078ed37349e405213258819fa5225bcdb3fb`
+Branch: `afyx/native-phase5f-third-party-replacement`
+Status: **IN PROGRESS — UI RUNTIME CHECKPOINT COMPLETE**
 
 This document is the Phase 5F technical source of truth. The target is no
 third-party product/runtime ownership in the shipped Afyx Graph boundary. It is

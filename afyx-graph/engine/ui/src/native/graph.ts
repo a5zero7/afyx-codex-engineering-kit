@@ -96,4 +96,3 @@ export function renderMapGraph(
   queueMicrotask(() => viewport.fit());
   return { element: host, dispose: () => viewport.dispose() };
 }
-
