@@ -412,15 +412,43 @@ grammar-WASM removal remain pending.
 - `9dbf892` migrates function-reference candidates for those native routes,
   including scoped `this` references, Java method references, Python
   class-as-value references, and import/same-file ownership filtering.
-- The current branch-guard checkpoint adds an Afyx-owned token/source reader
-  for TypeScript, TSX, JavaScript, and JSX. Only guard lookup is native;
-  call-site arguments, triggers, loops, pending languages, and the fallback
-  policy remain on the established route. OLD/NEW differential coverage is
-  4/4 and the focused branch-guard suites pass 59/59.
+- `9d0101e` adds an Afyx-owned token/source branch-guard reader for TypeScript,
+  TSX, JavaScript, and JSX.
+- `c3fe36b3823bbcb1f28ed49f0a9a760cbe0565f7` extends that reader to Python,
+  Java, and Go. Python uses bounded token/line/indentation recognition; Java
+  and Go reuse the bounded delimiter reader. The established forms are
+  preserved: if/else/elif, early exits, conditional/logical expressions,
+  match/switch cases, catch/except, Go init conditions and terminal calls,
+  plus named function/lambda boundaries. Java switch rules retain the OLD
+  oracle's behavior (no case guard) rather than adding new semantics here.
+  Call-site arguments, triggers, loops, pending languages, and the fallback
+  policy remain on the established route.
+
+The authoritative focused branch-guard suite is now 68/68 PASS (correcting
+the earlier 59/59 note; the prior checkpoint actually ran 63 tests). OLD/NEW
+differential coverage is 7/7 PASS with no intentional output differences:
+
+| Language | OLD SHA-256 | NEW SHA-256 |
+| --- | --- | --- |
+| TypeScript / TSX / JavaScript / JSX (each) | `ac44b990fdd504bf44fed0e10f5954b86f0c84aaa8dd0dc848742eb8dc9a3583` | identical |
+| Python | `fbd070d81c4a246faa62576f849b07a6cfda1461e513384f1f7b1696edc19282` | identical |
+| Java | `6f2330a123d82d36b7a6457440dd769988ba994f6f9e95ec5b7740ef0ad01c2d` | identical |
+| Go | `9ad182f55ed0c1bbf04e061fe8f6fe6f28715fa834ff17548906c6fb4154dcf5` | identical |
+
+The combined native cross-cutting gate passes 139/139 and typecheck/build
+pass. Native-enabled extraction completes all 651 functional assertions; its
+four reported failures remain Windows temporary-directory `fs.rmSync` EPERM
+after assertions. CLI/MCP smoke passes 21/21. The semantic gate's graph
+structure is unchanged, but native-enabled runs differ from the frozen file
+only in two floating search scores; the same build without the native gate
+passes all six fixtures, so no search/baseline change was made in this parser
+sub-boundary.
 
 The native-complete fact and syntax-token set is TypeScript, TSX, JavaScript,
-JSX, Python, Go, and Java. Branch guards are native only for the four JS/TS
-dialects. ArkTS and the remaining systems, JVM, dynamic, enterprise, and
+JSX, Python, Go, and Java. Branch guards are native for all seven routes.
+Swift, Kotlin, C#, C, C++, and Objective-C guard profiles remain on the safe
+fallback because their fact routes are not native-complete. ArkTS and the
+remaining systems, JVM, dynamic, enterprise, and
 parser-coupled special-format routes remain pending. Afyx-owned file-level or
 special format routes remain unchanged.
 
