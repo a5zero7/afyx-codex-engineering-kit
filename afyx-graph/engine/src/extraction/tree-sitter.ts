@@ -7156,7 +7156,7 @@ export function extractFromSource(
 
   // During semantic convergence the native route is opt-in. The flag is
   // removed when every language family has passed OLD/NEW parity.
-  if (useNativeParser && ['typescript', 'tsx', 'javascript', 'jsx', 'python', 'go'].includes(detectedLanguage)) {
+  if (useNativeParser && ['typescript', 'tsx', 'javascript', 'jsx', 'python', 'go', 'java'].includes(detectedLanguage)) {
     result = extractNativeFacts(filePath, source, detectedLanguage);
   // Use custom extractor for Svelte
   } else if (detectedLanguage === 'svelte') {

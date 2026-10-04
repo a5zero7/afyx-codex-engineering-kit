@@ -5,7 +5,7 @@ import type { Language } from '../src/types';
 
 beforeAll(async () => {
   await initGrammars();
-  await loadGrammarsForLanguages(['typescript', 'python', 'go']);
+  await loadGrammarsForLanguages(['typescript', 'python', 'go', 'java']);
 });
 
 function canonical(filePath: string, source: string, language: Language, native: boolean) {
@@ -51,6 +51,10 @@ describe('native parser semantic differential', () => {
     ['worker.go', 'go', [
       'package worker', '', 'import "fmt"', '', 'type Job struct {', '  ID int', '}', '',
       'func Process(job Job) string {', '  return fmt.Sprint(job.ID)', '}',
+    ].join('\n')],
+    ['Ledger.java', 'java', [
+      'package com.example;', '', 'public class Ledger {',
+      '  public int total() {', '    return 1;', '  }', '}',
     ].join('\n')],
   ] as const)('preserves %s ground-truth facts', (filePath, language, source) => {
     expect(canonical(filePath, source, language, true)).toEqual(canonical(filePath, source, language, false));

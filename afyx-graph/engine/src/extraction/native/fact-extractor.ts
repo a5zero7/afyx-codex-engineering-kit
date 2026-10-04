@@ -26,6 +26,7 @@ interface Declaration {
   readonly static?: boolean;
   readonly visibility?: Node['visibility'];
   readonly signature?: string;
+  readonly extendsName?: string;
 }
 
 function cleanDocComment(text: string): string {
@@ -100,6 +101,19 @@ export function extractNativeFacts(filePath: string, source: string, language: L
       const token = tokens[j]!;
       if (token.kind === 'string') break;
       if (token.kind === 'identifier' && token.text !== 'from' && token.text !== 'as') importedNames.add(token.text);
+    }
+  }
+
+  if (language === 'java') {
+    const packageIndex = tokens.findIndex((token) => token.text === 'package');
+    if (packageIndex >= 0) {
+      const end = findNext(tokens, packageIndex + 1, ';');
+      if (end > packageIndex + 1) {
+        const name = tokens.slice(packageIndex + 1, end)
+          .filter((token) => token.kind === 'identifier' || token.text === '.')
+          .map((token) => token.text).join('');
+        if (name) declarations.push({ kind: 'namespace', name, start: packageIndex, end });
+      }
     }
   }
 
@@ -265,11 +279,11 @@ export function extractNativeFacts(filePath: string, source: string, language: L
     const declaration: Declaration = {
       kind,
       name: tokens[nameIndex]!.text,
-      start: keyword,
+      start: language === 'java' ? modifierStart : keyword,
       end: close ?? open,
       bodyStart: open,
       bodyEnd: close,
-      exported: tokens.slice(modifierStart, keyword).some((token) => token.text === 'export'),
+      exported: language === 'java' ? undefined : tokens.slice(modifierStart, keyword).some((token) => token.text === 'export'),
       async: tokens.slice(modifierStart, keyword).some((token) => token.text === 'async'),
       static: tokens.slice(modifierStart, keyword).some((token) => token.text === 'static'),
       visibility: visibility(tokens, modifierStart, keyword),
@@ -287,6 +301,40 @@ export function extractNativeFacts(filePath: string, source: string, language: L
     else if (token.text === 'interface') addBlockDeclaration('interface', i, i + 1);
     else if (token.text === 'enum') addBlockDeclaration('enum', i, i + 1);
     else if (token.text === 'function') addBlockDeclaration('function', i, nameIndex);
+  }
+
+  if (language === 'java') {
+    const javaTypes = declarations.filter((declaration) =>
+      declaration.bodyStart !== undefined && ['class', 'interface', 'enum'].includes(declaration.kind));
+    for (const parent of javaTypes) {
+      const begin = parent.bodyStart! + 1;
+      const end = parent.bodyEnd ?? tokens.length;
+      for (let i = begin; i < end; i += 1) {
+        if (tokens[i]!.text !== '=') continue;
+        const nested = [...scan.pairs.entries()].some(([open, close]) =>
+          tokens[open]?.text === '{' && open > parent.bodyStart! && close < end && open < i && close > i);
+        if (nested) continue;
+        let nameIndex = i - 1;
+        while (nameIndex >= begin && tokens[nameIndex]!.kind !== 'identifier') nameIndex -= 1;
+        let statementEnd = -1;
+        for (let candidate = i + 1; candidate < end; candidate += 1) {
+          if (tokens[candidate]!.text !== ';') continue;
+          const nested = [...scan.pairs.entries()].some(([open, close]) =>
+            open > i && open < candidate && close > candidate);
+          if (!nested) { statementEnd = candidate; break; }
+        }
+        if (nameIndex < begin || statementEnd < 0) continue;
+        let start = nameIndex;
+        while (start > begin && ![';', '{', '}'].includes(tokens[start - 1]!.text)) start -= 1;
+        declarations.push({
+          kind: 'field', name: tokens[nameIndex]!.text, start, end: statementEnd,
+          bodyStart: i, bodyEnd: statementEnd, parent,
+          static: tokens.slice(start, nameIndex).some((token) => token.text === 'static'),
+          visibility: visibility(tokens, start, nameIndex),
+        });
+        i = statementEnd;
+      }
+    }
   }
 
   const containers = declarations.filter((declaration) =>
@@ -330,10 +378,15 @@ export function extractNativeFacts(filePath: string, source: string, language: L
       if (prior === 'function' || prior === 'new') continue;
       const closeParen = scan.pairs.get(i + 1);
       if (closeParen === undefined) continue;
-      const bodyStart = findNext(tokens, closeParen + 1, '{', end);
+      let terminator = closeParen + 1;
+      while (terminator < end && tokens[terminator]!.text !== '{' && tokens[terminator]!.text !== ';') terminator += 1;
+      const bodyStart = tokens[terminator]?.text === '{' ? terminator : -1;
       if (bodyStart < 0) {
-        if (parent.kind === 'interface' || parent.kind === 'type_alias') {
-          const statementEnd = findNext(tokens, closeParen + 1, ';', end);
+        const start = declarationStart(tokens, i);
+        const bodiless = parent.kind === 'interface' || parent.kind === 'type_alias' ||
+          tokens.slice(start, i).some((item) => item.text === 'abstract' || item.text === 'native');
+        if (bodiless) {
+          const statementEnd = tokens[terminator]?.text === ';' ? terminator : -1;
           declarations.push({
             kind: 'method', name: name.text, start: i, end: statementEnd < 0 ? closeParen : statementEnd,
             parent, visibility: visibility(tokens, declarationStart(tokens, i), i),
@@ -344,18 +397,86 @@ export function extractNativeFacts(filePath: string, source: string, language: L
       const bodyEnd = scan.pairs.get(bodyStart);
       if (bodyEnd === undefined || bodyEnd > end) continue;
       const start = declarationStart(tokens, i);
+      let memberStart = start;
+      if (language === 'java') {
+        while (memberStart > begin && tokens[memberStart - 1]!.start.line === name.start.line &&
+               ![';', '{', '}'].includes(tokens[memberStart - 1]!.text)) memberStart -= 1;
+      }
       declarations.push({
         kind: 'method',
         name: name.text,
-        start,
+        start: memberStart,
         end: bodyEnd,
         bodyStart,
         bodyEnd,
         parent,
         async: tokens.slice(start, i).some((item) => item.text === 'async'),
-        static: tokens.slice(start, i).some((item) => item.text === 'static'),
-        visibility: visibility(tokens, start, i),
+        static: tokens.slice(memberStart, i).some((item) => item.text === 'static'),
+        visibility: visibility(tokens, memberStart, i),
       });
+      i = bodyEnd;
+    }
+  }
+
+  if (language === 'java') {
+    for (let i = 0; i < tokens.length - 3; i += 1) {
+      if (tokens[i]!.text !== 'new') continue;
+      let typeIndex = i + 1;
+      let base: NativeToken | undefined;
+      while (typeIndex < tokens.length && tokens[typeIndex]!.text !== '(') {
+        if (tokens[typeIndex]!.kind === 'identifier') base = tokens[typeIndex];
+        typeIndex += 1;
+      }
+      if (!base || tokens[typeIndex]?.text !== '(') continue;
+      const argsEnd = scan.pairs.get(typeIndex);
+      if (argsEnd === undefined || tokens[argsEnd + 1]?.text !== '{') continue;
+      const bodyStart = argsEnd + 1;
+      const bodyEnd = scan.pairs.get(bodyStart);
+      if (bodyEnd === undefined) continue;
+      const parent = declarations
+        .filter((declaration) => declaration.start <= i && declaration.end >= bodyEnd)
+        .sort((left, right) => (left.end - left.start) - (right.end - right.start))[0];
+      const anonymous: Declaration = {
+        kind: 'class', name: `<${base.text}$anon@${base.start.line}:${base.start.column}>`,
+        start: base === tokens[typeIndex - 1] ? typeIndex - 1 : i + 1,
+        end: bodyEnd, bodyStart, bodyEnd, parent, extendsName: base.text,
+      };
+      declarations.push(anonymous);
+      for (let memberIndex = bodyStart + 1; memberIndex < bodyEnd; memberIndex += 1) {
+        const memberName = tokens[memberIndex]!;
+        if (memberName.kind !== 'identifier' || tokens[memberIndex + 1]?.text !== '(' ||
+            CALL_EXCLUSIONS.has(memberName.text)) continue;
+        const paramsEnd = scan.pairs.get(memberIndex + 1);
+        if (paramsEnd === undefined) continue;
+        let terminator = paramsEnd + 1;
+        while (terminator < bodyEnd && !['{', ';'].includes(tokens[terminator]!.text)) terminator += 1;
+        if (tokens[terminator]?.text !== '{') continue;
+        const memberEnd = scan.pairs.get(terminator);
+        if (memberEnd === undefined || memberEnd > bodyEnd) continue;
+        const existingIndex = declarations.findIndex((declaration) =>
+          declaration.kind === 'method' && declaration.name === memberName.text && declaration.start <= memberIndex && declaration.end === memberEnd);
+        if (existingIndex >= 0) {
+          declarations[existingIndex] = { ...declarations[existingIndex]!, parent: anonymous };
+        } else {
+          let memberStart = memberIndex;
+          while (memberStart > bodyStart + 1 && tokens[memberStart - 1]!.start.line === memberName.start.line &&
+                 ![';', '{', '}'].includes(tokens[memberStart - 1]!.text)) memberStart -= 1;
+          declarations.push({
+            kind: 'method', name: memberName.text, start: memberStart, end: memberEnd,
+            bodyStart: terminator, bodyEnd: memberEnd, parent: anonymous,
+            static: tokens.slice(memberStart, memberIndex).some((token) => token.text === 'static'),
+            visibility: visibility(tokens, memberStart, memberIndex),
+          });
+        }
+        memberIndex = memberEnd;
+      }
+      for (let j = 0; j < declarations.length; j += 1) {
+        const declaration = declarations[j]!;
+        if (declaration !== anonymous && declaration.kind === 'method' &&
+            declaration.start > bodyStart && declaration.end < bodyEnd) {
+          declarations[j] = { ...declaration, parent: anonymous };
+        }
+      }
       i = bodyEnd;
     }
   }
@@ -367,6 +488,30 @@ export function extractNativeFacts(filePath: string, source: string, language: L
       candidate !== declaration && (candidate.kind === 'function' || candidate.kind === 'method') &&
       candidate.bodyStart !== undefined && candidate.bodyStart < declaration.start && candidate.end >= declaration.end);
     if (enclosingCallable) declarations.splice(i, 1);
+  }
+
+  if (language === 'java') {
+    const namespace = declarations.find((declaration) => declaration.kind === 'namespace');
+    if (namespace) {
+      const replacements = new Map<Declaration, Declaration>();
+      for (let i = 0; i < declarations.length; i += 1) {
+        const declaration = declarations[i]!;
+        if (!declaration.parent && ['class', 'interface', 'enum'].includes(declaration.kind)) {
+          const replacement = { ...declaration, parent: namespace };
+          declarations[i] = replacement;
+          replacements.set(declaration, replacement);
+        }
+      }
+      for (let i = 0; i < declarations.length; i += 1) {
+        const declaration = declarations[i]!;
+        const replacement = declaration.parent && replacements.get(declaration.parent);
+        if (replacement) {
+          const updated = { ...declaration, parent: replacement };
+          declarations[i] = updated;
+          replacements.set(declaration, updated);
+        }
+      }
+    }
   }
 
   declarations.sort((left, right) => left.start - right.start || right.end - left.end);
@@ -406,6 +551,12 @@ export function extractNativeFacts(filePath: string, source: string, language: L
     nodes.push(node);
     nodeByDeclaration.set(declaration, node);
     edges.push({ source: parentNode?.id ?? fileNode.id, target: node.id, kind: 'contains' });
+    if (declaration.extendsName) {
+      refs.push({
+        fromNodeId: node.id, referenceName: declaration.extendsName, referenceKind: 'extends',
+        line: start.start.line, column: start.start.column,
+      });
+    }
   }
 
   if (['typescript', 'tsx'].includes(language)) {
@@ -506,9 +657,67 @@ export function extractNativeFacts(filePath: string, source: string, language: L
     }
   }
 
+
+  if (language === 'java') {
+    for (const declaration of declarations) {
+      if (!['class', 'interface', 'enum'].includes(declaration.kind) || declaration.bodyStart === undefined) continue;
+      const from = nodeByDeclaration.get(declaration);
+      if (!from) continue;
+      let relation: 'extends' | 'implements' | undefined;
+      for (let i = declaration.start + 1; i < declaration.bodyStart; i += 1) {
+        if (tokens[i]!.text === 'extends' || tokens[i]!.text === 'implements') {
+          relation = tokens[i]!.text as 'extends' | 'implements';
+          continue;
+        }
+        if (!relation || tokens[i]!.kind !== 'identifier' || tokens[i]!.text === declaration.name) continue;
+        refs.push({
+          fromNodeId: from.id, referenceName: tokens[i]!.text, referenceKind: relation,
+          line: tokens[i]!.start.line, column: tokens[i]!.start.column,
+        });
+      }
+    }
+    for (let i = 0; i < tokens.length - 1; i += 1) {
+      if (tokens[i]!.text !== 'new') continue;
+      let cursor = i + 1;
+      let typeName: NativeToken | undefined;
+      while (cursor < tokens.length && tokens[cursor]!.text !== '(') {
+        if (tokens[cursor]!.kind === 'identifier') typeName = tokens[cursor];
+        cursor += 1;
+      }
+      if (!typeName) continue;
+      refs.push({
+        fromNodeId: ownerAt(i).id, referenceName: typeName.text, referenceKind: 'instantiates',
+        line: typeName.start.line, column: typeName.start.column,
+      });
+    }
+    for (let i = 0; i < tokens.length - 1; i += 1) {
+      if (tokens[i]!.text !== '@' || tokens[i + 1]!.kind !== 'identifier' || tokens[i + 1]!.text === 'interface') continue;
+      const decorated = declarations
+        .filter((declaration) => declaration.start > i && tokens[declaration.start]!.start.line - tokens[i]!.start.line <= 3)
+        .sort((left, right) => left.start - right.start)[0];
+      const owner = decorated && nodeByDeclaration.get(decorated);
+      if (!owner) continue;
+      refs.push({
+        fromNodeId: owner.id, referenceName: tokens[i + 1]!.text, referenceKind: 'decorates',
+        line: tokens[i]!.start.line, column: tokens[i]!.start.column,
+      });
+    }
+    for (let i = 0; i < tokens.length - 2; i += 1) {
+      const receiver = tokens[i]!;
+      if (receiver.kind !== 'identifier' || !/^[A-Z]/.test(receiver.text) ||
+          tokens[i + 1]?.text !== '.' || tokens[i + 2]?.kind !== 'identifier') continue;
+      const linePrefix = tokens.slice(0, i).filter((token) => token.start.line === receiver.start.line);
+      if (linePrefix.some((token) => token.text === 'package' || token.text === 'import')) continue;
+      refs.push({
+        fromNodeId: ownerAt(i).id, referenceName: receiver.text, referenceKind: 'references',
+        line: receiver.start.line, column: receiver.start.column,
+      });
+    }
+  }
+
   for (const declaration of declarations) {
     const callable = declaration.kind === 'function' || declaration.kind === 'method';
-    const value = declaration.kind === 'constant' || declaration.kind === 'variable';
+    const value = declaration.kind === 'constant' || declaration.kind === 'variable' || declaration.kind === 'field';
     if (!callable && !value) continue;
     const scanStart = declaration.bodyStart ?? (value ? declaration.start : undefined);
     const scanEnd = declaration.bodyEnd ?? (value ? declaration.end : undefined);
@@ -520,6 +729,8 @@ export function extractNativeFacts(filePath: string, source: string, language: L
       if (callee.kind !== 'identifier' || tokens[i + 1]?.text !== '(' || CALL_EXCLUSIONS.has(callee.text)) continue;
       if (declarations.some((item) => item !== declaration && item.start === i)) continue;
       if (declarations.some((item) => item.parent === declaration && item.start <= i && item.end >= i)) continue;
+      if (declarations.some((item) => item !== declaration && item.start > declaration.start &&
+          item.end <= declaration.end && item.start <= i && item.end >= i)) continue;
       const receiver = tokens[i - 2]?.kind === 'identifier' && tokens[i - 1]?.text === '.' ? tokens[i - 2] : undefined;
       refs.push({
         fromNodeId: from.id,
@@ -599,6 +810,36 @@ export function extractNativeFacts(filePath: string, source: string, language: L
         fromNodeId: fileNode.id, referenceName: binding.text, referenceKind: 'imports',
         line: binding.start.line, column: binding.start.column,
       });
+    }
+  }
+
+
+  if (language === 'java') {
+    for (let i = 0; i < tokens.length; i += 1) {
+      if (tokens[i]!.text !== 'import') continue;
+      const end = findNext(tokens, i + 1, ';');
+      if (end < 0) continue;
+      let start = i + 1;
+      if (tokens[start]?.text === 'static') start += 1;
+      const raw = tokens.slice(start, end)
+        .filter((token) => token.kind === 'identifier' || token.text === '.' || token.text === '*')
+        .map((token) => token.text).join('');
+      const name = raw.replace(/\.\*$/, '');
+      if (!name) continue;
+      const importNode: Node = {
+        id: generateNodeId(filePath, 'import', name, tokens[i]!.start.line),
+        kind: 'import', name, qualifiedName: name, filePath, language,
+        startLine: tokens[i]!.start.line, endLine: tokens[end]!.end.line,
+        startColumn: tokens[i]!.start.column, endColumn: tokens[end]!.end.column,
+        signature: source.slice(tokens[i]!.start.offset, tokens[end]!.end.offset), updatedAt: Date.now(),
+      };
+      nodes.push(importNode);
+      edges.push({ source: fileNode.id, target: importNode.id, kind: 'contains' });
+      refs.push({
+        fromNodeId: fileNode.id, referenceName: name, referenceKind: 'imports',
+        line: tokens[i]!.start.line, column: tokens[i]!.start.column,
+      });
+      i = end;
     }
   }
 
