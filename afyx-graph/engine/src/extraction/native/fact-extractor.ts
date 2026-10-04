@@ -27,6 +27,8 @@ interface Declaration {
   readonly visibility?: Node['visibility'];
   readonly signature?: string;
   readonly extendsName?: string;
+  readonly returnType?: string;
+  readonly decorators?: string[];
 }
 
 function cleanDocComment(text: string): string {
@@ -91,9 +93,56 @@ function visibility(tokens: readonly NativeToken[], start: number, keyword: numb
  */
 export function extractNativeFacts(filePath: string, source: string, language: Language): ExtractionResult {
   const started = Date.now();
-  const scan = scanSource(source, { hashComments: ['python', 'ruby', 'r'].includes(language) });
+  const scan = scanSource(source, {
+    hashComments: ['python', 'ruby', 'r'].includes(language),
+    rustSyntax: language === 'rust',
+    tripleQuotedStrings: language === 'kotlin' || language === 'scala',
+    backtickIdentifiers: language === 'kotlin',
+  });
   const tokens = scan.tokens;
   const declarations: Declaration[] = [];
+  const tokenLineEnd = (from: number): number => {
+    const line = tokens[from]?.start.line;
+    let end = from;
+    while (end + 1 < tokens.length && tokens[end + 1]!.start.line === line) end += 1;
+    return end;
+  };
+  const statementEnd = (from: number): number => {
+    let end = tokenLineEnd(from);
+    for (let i = from; i < tokens.length; i += 1) {
+      if (tokens[i]!.text === ';') return i;
+      if (tokens[i]!.start.line > (tokens[from]?.start.line ?? 0) && tokens[i]!.start.column <= (tokens[from]?.start.column ?? 0)) break;
+      end = i;
+    }
+    return end;
+  };
+  const pairedBody = (from: number): { start: number; end: number } | undefined => {
+    const open = findNext(tokens, from, '{');
+    if (open < 0) return undefined;
+    const end = scan.pairs.get(open);
+    return end === undefined ? { start: open, end: open } : { start: open, end };
+  };
+  const indentationBody = (header: number, marker: number): { start: number; end: number } | undefined => {
+    const baseColumn = tokens[header]?.start.column ?? 0;
+    const headerLine = tokens[header]?.start.line ?? 0;
+    let first = marker + 1;
+    while (first < tokens.length && tokens[first]!.start.line === headerLine) first += 1;
+    if (first >= tokens.length || tokens[first]!.start.column <= baseColumn) return undefined;
+    let end = first;
+    while (end + 1 < tokens.length) {
+      const next = tokens[end + 1]!;
+      if (next.start.line > headerLine && next.start.column <= baseColumn) break;
+      end += 1;
+    }
+    return { start: marker, end };
+  };
+  const kotlinMarkers = (index: number): string[] | undefined => {
+    const line = tokens[index]?.start.line;
+    const values = tokens.slice(Math.max(0, index - 8), index)
+      .filter((token) => token.start.line === line && (token.text === 'expect' || token.text === 'actual'))
+      .map((token) => token.text);
+    return values.length > 0 ? values : undefined;
+  };
   const importedNames = new Set<string>();
   for (let i = 0; i < tokens.length; i += 1) {
     if (tokens[i]!.text !== 'import') continue;
@@ -271,6 +320,401 @@ export function extractNativeFacts(filePath: string, source: string, language: L
     }
   }
 
+  const rustImpls: Array<{
+    keyword: number;
+    bodyStart: number;
+    bodyEnd: number;
+    typeName?: string;
+    traitName?: string;
+  }> = [];
+
+  if (language === 'rust') {
+    const rustVisibility = (index: number): Node['visibility'] =>
+      tokens.slice(Math.max(0, index - 3), index).some((token) => token.text === 'pub') ? 'public' : 'private';
+    const rustEnd = (keyword: number, nameIndex: number): { bodyStart?: number; bodyEnd?: number; end: number } => {
+      for (let i = nameIndex + 1; i < tokens.length; i += 1) {
+        const text = tokens[i]!.text;
+        if (text === '{') {
+          const close = scan.pairs.get(i);
+          return { bodyStart: i, bodyEnd: close, end: close ?? i };
+        }
+        if (text === '(') {
+          const close = scan.pairs.get(i);
+          if (close !== undefined && tokens[close + 1]?.text === ';') return { end: close + 1 };
+        }
+        if (text === ';') return { end: i };
+        if (tokens[i]!.start.line > tokens[keyword]!.start.line + 40) break;
+      }
+      return { end: nameIndex };
+    };
+
+    for (let i = 0; i < tokens.length - 1; i += 1) {
+      const keyword = tokens[i]!.text;
+      if (!['struct', 'union', 'enum', 'trait'].includes(keyword)) continue;
+      const nameIndex = i + 1;
+      if (tokens[nameIndex]?.kind !== 'identifier') continue;
+      const range = rustEnd(i, nameIndex);
+      declarations.push({
+        kind: keyword === 'trait' ? 'trait' : keyword as 'struct' | 'union' | 'enum',
+        name: tokens[nameIndex]!.text,
+        start: tokens[i - 1]?.text === 'pub' ? i - 1 : i,
+        end: range.end,
+        bodyStart: range.bodyStart,
+        bodyEnd: range.bodyEnd,
+        exported: rustVisibility(i) === 'public',
+        visibility: rustVisibility(i),
+      });
+    }
+
+    const rustTypes = () => declarations.filter((item) =>
+      ['struct', 'union', 'enum', 'trait'].includes(item.kind));
+    for (let i = 0; i < tokens.length; i += 1) {
+      if (tokens[i]!.text !== 'impl') continue;
+      let bodyStart = i + 1;
+      while (bodyStart < tokens.length && tokens[bodyStart]!.text !== '{') bodyStart += 1;
+      if (tokens[bodyStart]?.text !== '{') continue;
+      const bodyEnd = scan.pairs.get(bodyStart);
+      if (bodyEnd === undefined) continue;
+      let forIndex = -1;
+      for (let cursor = i + 1; cursor < bodyStart; cursor += 1) {
+        if (tokens[cursor]!.text === 'for') forIndex = cursor;
+      }
+      const typeStart = forIndex >= 0 ? forIndex + 1 : i + 1;
+      let genericDepth = 0;
+      const candidates: NativeToken[] = [];
+      for (let cursor = typeStart; cursor < bodyStart; cursor += 1) {
+        const token = tokens[cursor]!;
+        if (token.text === '<') { genericDepth += 1; continue; }
+        if (token.text === '>') { genericDepth = Math.max(0, genericDepth - 1); continue; }
+        if (genericDepth === 0 && token.kind === 'identifier' && !['mut', 'dyn', 'where'].includes(token.text)) candidates.push(token);
+      }
+      const typeToken = [...candidates].reverse().find((token) => /^[A-Z]/.test(token.text));
+      let traitName: string | undefined;
+      if (forIndex >= 0) {
+        let traitStart = i + 1;
+        if (tokens[traitStart]?.text === '<') {
+          let depth = 0;
+          while (traitStart < forIndex) {
+            if (tokens[traitStart]!.text === '<') depth += 1;
+            else if (tokens[traitStart]!.text === '>') {
+              depth -= 1;
+              if (depth === 0) { traitStart += 1; break; }
+            }
+            traitStart += 1;
+          }
+        }
+        const first = tokens[traitStart];
+        const last = tokens[forIndex - 1];
+        if (first && last) traitName = source.slice(first.start.offset, last.end.offset).trim();
+      }
+      rustImpls.push({ keyword: i, bodyStart, bodyEnd, typeName: typeToken?.text, traitName });
+      i = bodyStart;
+    }
+
+    for (let i = 0; i < tokens.length - 1; i += 1) {
+      const keyword = tokens[i]!.text;
+      if (keyword === 'type' && tokens[i + 1]?.kind === 'identifier') {
+        declarations.push({
+          kind: 'type_alias', name: tokens[i + 1]!.text,
+          start: tokens[i - 1]?.text === 'pub' ? i - 1 : i,
+          end: statementEnd(i), exported: rustVisibility(i) === 'public', visibility: rustVisibility(i),
+        });
+        continue;
+      }
+      if ((keyword === 'const' || keyword === 'static') && tokens[i + 1]?.kind === 'identifier') {
+        const end = statementEnd(i);
+        const equals = findNext(tokens, i + 2, '=', end + 1);
+        declarations.push({
+          kind: 'variable', name: tokens[i + 1]!.text,
+          start: tokens[i - 1]?.text === 'pub' ? i - 1 : i, end,
+          bodyStart: equals >= 0 ? equals : undefined, bodyEnd: equals >= 0 ? end : undefined,
+          exported: rustVisibility(i) === 'public', visibility: rustVisibility(i),
+        });
+      }
+    }
+
+    const rustReturnType = (from: number, to: number): string | undefined => {
+      const arrow = findNext(tokens, from, '->', to);
+      if (arrow < 0) return undefined;
+      const rawTokens = tokens.slice(arrow + 1, to).filter((token) => !['&', 'mut'].includes(token.text) && !token.text.startsWith("'"));
+      if (rawTokens.some((token) => token.text === '(' || token.text === '[' || token.text === '*')) return undefined;
+      const base = rawTokens.find((token) => token.kind === 'identifier');
+      if (!base) return undefined;
+      const primitive = new Set(['bool', 'char', 'str', 'u8', 'u16', 'u32', 'u64', 'u128', 'usize', 'i8', 'i16', 'i32', 'i64', 'i128', 'isize', 'f32', 'f64']);
+      if (primitive.has(base.text)) return undefined;
+      const identifiers = rawTokens.filter((token) => token.kind === 'identifier');
+      const name = identifiers.find((token) => token.text === 'Self') ?? identifiers.at(-1);
+      return name?.text === 'Self' ? 'self' : name?.text;
+    };
+
+    for (let i = 0; i < tokens.length - 1; i += 1) {
+      if (tokens[i]!.text !== 'fn' || tokens[i + 1]?.kind !== 'identifier') continue;
+      const nameIndex = i + 1;
+      const params = findNext(tokens, nameIndex + 1, '(');
+      const paramsEnd = params < 0 ? undefined : scan.pairs.get(params);
+      if (paramsEnd === undefined) continue;
+      let bodyStart = paramsEnd + 1;
+      while (bodyStart < tokens.length && !['{', ';'].includes(tokens[bodyStart]!.text)) bodyStart += 1;
+      const bodyEnd = tokens[bodyStart]?.text === '{' ? scan.pairs.get(bodyStart) : undefined;
+      const end = bodyEnd ?? (tokens[bodyStart]?.text === ';' ? bodyStart : paramsEnd);
+      const impl = rustImpls.find((item) => item.bodyStart < i && i < item.bodyEnd);
+      const trait = rustTypes().find((item) => item.kind === 'trait' && item.bodyStart !== undefined && item.bodyStart < i && item.end >= end);
+      const owner = impl?.typeName
+        ? rustTypes().find((item) => item.name === impl.typeName && item.kind !== 'trait')
+        : trait;
+      const signatureEnd = tokens[bodyStart]?.text === '{' || tokens[bodyStart]?.text === ';' ? bodyStart : paramsEnd + 1;
+      declarations.push({
+        kind: owner || trait ? 'method' : 'function', name: tokens[nameIndex]!.text,
+        start: tokens[i - 1]?.text === 'pub' || tokens[i - 1]?.text === 'async' ? i - 1 : i,
+        end, bodyStart: bodyEnd === undefined ? undefined : bodyStart, bodyEnd,
+        parent: owner ?? trait,
+        exported: rustVisibility(i) === 'public', visibility: rustVisibility(i),
+        async: tokens[i - 1]?.text === 'async',
+        signature: source.slice(tokens[params]!.start.offset, tokens[signatureEnd - 1]?.end.offset ?? tokens[paramsEnd]!.end.offset).trim(),
+        returnType: rustReturnType(paramsEnd + 1, bodyStart),
+      });
+    }
+
+    for (const parent of rustTypes().filter((item) => item.kind === 'enum' && item.bodyStart !== undefined && item.bodyEnd !== undefined)) {
+      let cursor = parent.bodyStart! + 1;
+      while (cursor < parent.bodyEnd!) {
+        const token = tokens[cursor]!;
+        if (token.kind === 'identifier') {
+          declarations.push({ kind: 'enum_member', name: token.text, start: cursor, end: cursor, parent });
+          cursor += 1;
+          if (tokens[cursor]?.text === '(' || tokens[cursor]?.text === '{') cursor = (scan.pairs.get(cursor) ?? cursor) + 1;
+          while (cursor < parent.bodyEnd! && tokens[cursor]!.text !== ',') cursor += 1;
+        }
+        cursor += 1;
+      }
+    }
+  }
+
+  const kotlinSingletons = new Set<Declaration>();
+  if (language === 'kotlin') {
+    const typeDeclarations: Declaration[] = [];
+    const packageIndex = tokens.findIndex((token) => token.text === 'package');
+    if (packageIndex >= 0) {
+      const end = statementEnd(packageIndex);
+      const name = tokens.slice(packageIndex + 1, end + 1)
+        .filter((token) => token.kind === 'identifier' || token.text === '.')
+        .map((token) => token.text).join('');
+      if (name) declarations.push({ kind: 'namespace', name, start: packageIndex, end });
+    }
+    for (let i = 0; i < tokens.length; i += 1) {
+      let keyword = tokens[i]!.text;
+      let nameIndex = i + 1;
+      let kind: NodeKind | undefined;
+      let singleton = false;
+      if (keyword === 'fun' && tokens[i + 1]?.text === 'interface') {
+        keyword = 'interface'; nameIndex = i + 2; kind = 'interface';
+      } else if (keyword === 'enum' && tokens[i + 1]?.text === 'class') {
+        nameIndex = i + 2; kind = 'enum';
+      } else if (keyword === 'class') kind = 'class';
+      else if (keyword === 'interface' && tokens[i - 1]?.text !== 'fun') kind = 'interface';
+      else if (keyword === 'object' && tokens[i - 1]?.text !== 'companion') { kind = 'class'; singleton = true; }
+      else if (keyword === 'companion' && tokens[i + 1]?.text === 'object') {
+        nameIndex = tokens[i + 2]?.kind === 'identifier' ? i + 2 : -1;
+        kind = 'class'; singleton = true;
+      }
+      if (!kind) continue;
+      const name = nameIndex >= 0 ? tokens[nameIndex] : undefined;
+      const search = nameIndex >= 0 ? nameIndex + 1 : i + 2;
+      const body = pairedBody(search);
+      const end = body?.end ?? statementEnd(i);
+      const parent = typeDeclarations.filter((item) => item.bodyStart !== undefined && item.bodyStart < i && item.end >= end)
+        .sort((a, b) => (a.end - a.start) - (b.end - b.start))[0];
+      const declaration: Declaration = {
+        kind, name: name?.kind === 'identifier' ? name.text : 'Companion', start: i, end,
+        bodyStart: body?.start, bodyEnd: body?.end, parent, visibility: visibility(tokens, declarationStart(tokens, i), i),
+        decorators: kotlinMarkers(i),
+      };
+      declarations.push(declaration); typeDeclarations.push(declaration);
+      if (singleton) kotlinSingletons.add(declaration);
+    }
+
+    for (let i = 0; i < tokens.length - 1; i += 1) {
+      if (tokens[i]!.text === 'typealias' && tokens[i + 1]?.kind === 'identifier') {
+        declarations.push({
+          kind: 'type_alias', name: tokens[i + 1]!.text, start: i, end: statementEnd(i),
+          decorators: kotlinMarkers(i),
+        });
+      }
+      if (tokens[i]!.text !== 'fun') continue;
+      if (tokens[i + 1]?.text === 'interface') continue;
+      const params = findNext(tokens, i + 1, '(');
+      const paramsEnd = params < 0 ? undefined : scan.pairs.get(params);
+      if (paramsEnd === undefined) continue;
+      let nameIndex = params - 1;
+      while (nameIndex > i && tokens[nameIndex]!.kind !== 'identifier') nameIndex -= 1;
+      if (nameIndex <= i) continue;
+      let bodyMarker = paramsEnd + 1;
+      while (bodyMarker < tokens.length && !['{', '=', ';', '}'].includes(tokens[bodyMarker]!.text) &&
+             tokens[bodyMarker]!.start.line <= tokens[i]!.start.line + 1) bodyMarker += 1;
+      let bodyStart: number | undefined;
+      let bodyEnd: number | undefined;
+      let end = paramsEnd;
+      if (tokens[bodyMarker]?.text === '{') {
+        bodyStart = bodyMarker; bodyEnd = scan.pairs.get(bodyMarker); end = bodyEnd ?? bodyMarker;
+      } else if (tokens[bodyMarker]?.text === '=') {
+        bodyStart = bodyMarker; bodyEnd = statementEnd(bodyMarker); end = bodyEnd;
+      }
+      const lexicalParent = typeDeclarations.filter((item) => item.bodyStart !== undefined && item.bodyStart < i && item.end >= end)
+        .sort((a, b) => (a.end - a.start) - (b.end - b.start))[0];
+      const parent = lexicalParent?.name === 'Companion' && lexicalParent.parent ? lexicalParent.parent : lexicalParent;
+      const returnColon = findNext(tokens, paramsEnd + 1, ':', bodyMarker);
+      const returnToken = returnColon >= 0
+        ? tokens.slice(returnColon + 1, bodyMarker).find((token) => token.kind === 'identifier')
+        : undefined;
+      const returnType = returnToken && !['Unit', 'Nothing'].includes(returnToken.text) ? returnToken.text : undefined;
+      declarations.push({
+        kind: parent ? 'method' : 'function', name: tokens[nameIndex]!.text, start: i, end,
+        bodyStart, bodyEnd, parent, visibility: visibility(tokens, declarationStart(tokens, i), i),
+        async: tokens.slice(Math.max(0, i - 4), i).some((token) => token.text === 'suspend'),
+        decorators: kotlinMarkers(i),
+        signature: source.slice(tokens[params]!.start.offset, tokens[bodyMarker]?.start.offset ?? tokens[paramsEnd]!.end.offset).trim(),
+        returnType,
+      });
+    }
+
+    for (let i = 0; i < tokens.length - 1; i += 1) {
+      if (!['val', 'var'].includes(tokens[i]!.text)) continue;
+      if (tokens[i + 1]?.text === '(') continue;
+      const name = tokens[i + 1];
+      if (name?.kind !== 'identifier') continue;
+      const callable = declarations.find((item) => (item.kind === 'function' || item.kind === 'method') &&
+        item.bodyStart !== undefined && item.bodyStart < i && item.end >= i);
+      const inInit = [...scan.pairs.entries()].some(([open, close]) =>
+        tokens[open]?.text === '{' && open < i && i < close && tokens[open - 1]?.text === 'init');
+      if (callable || inInit) continue;
+      const parent = typeDeclarations.filter((item) => item.bodyStart !== undefined && item.bodyStart < i && item.end >= i)
+        .sort((a, b) => (a.end - a.start) - (b.end - b.start))[0];
+      let end = statementEnd(i);
+      const equals = findNext(tokens, i + 2, '=', end + 1);
+      if (equals >= 0) {
+        const lambdaOpen = findNext(tokens, equals + 1, '{', Math.min(tokens.length, end + 20));
+        const lambdaEnd = lambdaOpen >= 0 ? scan.pairs.get(lambdaOpen) : undefined;
+        if (lambdaEnd !== undefined) end = Math.max(end, lambdaEnd);
+      }
+      const isVal = tokens[i]!.text === 'val';
+      const kind: NodeKind = parent && !kotlinSingletons.has(parent) ? 'field' : isVal ? 'constant' : 'variable';
+      declarations.push({
+        kind, name: name.text, start: i, end, bodyStart: equals >= 0 ? equals : undefined,
+        bodyEnd: equals >= 0 ? end : undefined, parent,
+        visibility: visibility(tokens, declarationStart(tokens, i), i),
+      });
+    }
+
+    for (const parent of typeDeclarations.filter((item) => item.kind === 'enum' && item.bodyStart !== undefined && item.bodyEnd !== undefined)) {
+      for (let i = parent.bodyStart! + 1; i < parent.bodyEnd!; i += 1) {
+        const token = tokens[i]!;
+        if (token.kind !== 'identifier' || !/^[A-Z]/.test(token.text)) continue;
+        if (tokens[i - 1]?.text !== '{' && tokens[i - 1]?.text !== ',') continue;
+        declarations.push({ kind: 'enum_member', name: token.text, start: i, end: i, parent });
+      }
+    }
+  }
+
+  const scalaSingletons = new Set<Declaration>();
+  if (language === 'scala') {
+    const typeDeclarations: Declaration[] = [];
+    const scalaBody = (keyword: number, nameIndex: number): { start: number; end: number } | undefined => {
+      const brace = findNext(tokens, nameIndex + 1, '{', Math.min(tokens.length, nameIndex + 80));
+      if (brace >= 0 && tokens[brace]!.start.line <= tokens[keyword]!.start.line + 3) {
+        const end = scan.pairs.get(brace);
+        if (end !== undefined) return { start: brace, end };
+      }
+      const colon = findNext(tokens, nameIndex + 1, ':', tokenLineEnd(keyword) + 1);
+      return colon >= 0 ? indentationBody(keyword, colon) : undefined;
+    };
+    for (let i = 0; i < tokens.length - 1; i += 1) {
+      const keyword = tokens[i]!.text;
+      if (!['class', 'object', 'trait', 'enum'].includes(keyword) || tokens[i + 1]?.kind !== 'identifier') continue;
+      const body = scalaBody(i, i + 1);
+      const end = body?.end ?? statementEnd(i);
+      const parent = typeDeclarations.filter((item) => item.bodyStart !== undefined && item.bodyStart < i && item.end >= end)
+        .sort((a, b) => (a.end - a.start) - (b.end - b.start))[0];
+      const declaration: Declaration = {
+        kind: keyword === 'trait' ? 'trait' : keyword === 'enum' ? 'enum' : 'class',
+        name: tokens[i + 1]!.text, start: tokens[i - 1]?.text === 'case' ? i - 1 : i, end,
+        bodyStart: body?.start, bodyEnd: body?.end, parent,
+        visibility: visibility(tokens, declarationStart(tokens, i), i) ?? 'public',
+      };
+      declarations.push(declaration); typeDeclarations.push(declaration);
+      if (keyword === 'object') scalaSingletons.add(declaration);
+    }
+    for (let i = 0; i < tokens.length - 1; i += 1) {
+      if (tokens[i]!.text === 'type' && tokens[i + 1]?.kind === 'identifier') {
+        declarations.push({ kind: 'type_alias', name: tokens[i + 1]!.text, start: i, end: statementEnd(i), visibility: 'public' });
+      }
+      if (tokens[i]!.text !== 'def' || tokens[i + 1]?.kind !== 'identifier') continue;
+      const nameIndex = i + 1;
+      const params = tokens[nameIndex + 1]?.text === '(' ? nameIndex + 1 : findNext(tokens, nameIndex + 1, '(');
+      const paramsEnd = params < 0 ? nameIndex : (scan.pairs.get(params) ?? params);
+      let marker = paramsEnd + 1;
+      while (marker < tokens.length && !['{', '=', ':'].includes(tokens[marker]!.text) &&
+             tokens[marker]!.start.line <= tokens[i]!.start.line + 2) marker += 1;
+      const returnColon = tokens[marker]?.text === ':' ? marker : -1;
+      if (returnColon >= 0) {
+        marker += 1;
+        while (marker < tokens.length && !['{', '='].includes(tokens[marker]!.text) &&
+               tokens[marker]!.start.line <= tokens[i]!.start.line + 3) marker += 1;
+      }
+      let bodyStart: number | undefined;
+      let bodyEnd: number | undefined;
+      let end = paramsEnd;
+      if (tokens[marker]?.text === '{') {
+        bodyStart = marker; bodyEnd = scan.pairs.get(marker); end = bodyEnd ?? marker;
+      } else if (tokens[marker]?.text === '=') {
+        bodyStart = marker;
+        const indentation = indentationBody(i, marker);
+        bodyEnd = indentation?.end ?? statementEnd(marker);
+        end = bodyEnd;
+      }
+      const parent = typeDeclarations.filter((item) => item.bodyStart !== undefined && item.bodyStart < i && item.end >= end)
+        .sort((a, b) => (a.end - a.start) - (b.end - b.start))[0];
+      const inExtension = [...scan.pairs.entries()].some(([open, close]) =>
+        tokens[open]?.text === '{' && open < i && i < close &&
+        tokens.slice(Math.max(0, open - 20), open).some((token) => token.text === 'extension'));
+      const returnTokens = returnColon >= 0 ? tokens.slice(returnColon + 1, marker) : [];
+      const returnType = returnTokens.some((token) => token.text === 'this') ? undefined
+        : returnTokens.filter((token) => token.kind === 'identifier').at(-1)?.text;
+      declarations.push({
+        kind: parent || inExtension ? 'method' : 'function', name: tokens[nameIndex]!.text, start: i, end, bodyStart, bodyEnd, parent,
+        visibility: visibility(tokens, declarationStart(tokens, i), i) ?? 'public',
+        signature: params >= 0 ? source.slice(tokens[params]!.start.offset, tokens[marker]?.start.offset ?? tokens[paramsEnd]!.end.offset).trim() : undefined,
+        returnType,
+      });
+    }
+    for (let i = 0; i < tokens.length - 1; i += 1) {
+      if (!['val', 'var'].includes(tokens[i]!.text) || tokens[i + 1]?.kind !== 'identifier') continue;
+      const callable = declarations.find((item) => (item.kind === 'function' || item.kind === 'method') &&
+        item.bodyStart !== undefined && item.bodyStart < i && item.end >= i);
+      if (callable) continue;
+      const parent = typeDeclarations.filter((item) => item.bodyStart !== undefined && item.bodyStart < i && item.end >= i)
+        .sort((a, b) => (a.end - a.start) - (b.end - b.start))[0];
+      const end = statementEnd(i);
+      const equals = findNext(tokens, i + 2, '=', end + 1);
+      const isVal = tokens[i]!.text === 'val';
+      const kind: NodeKind = parent && !scalaSingletons.has(parent) ? 'field' : isVal ? 'constant' : 'variable';
+      declarations.push({
+        kind, name: tokens[i + 1]!.text, start: i, end,
+        bodyStart: equals >= 0 ? equals : undefined, bodyEnd: equals >= 0 ? end : undefined,
+        parent, visibility: visibility(tokens, declarationStart(tokens, i), i) ?? 'public',
+      });
+    }
+    for (const parent of typeDeclarations.filter((item) => item.kind === 'enum' && item.bodyStart !== undefined && item.bodyEnd !== undefined)) {
+      for (let i = parent.bodyStart! + 1; i <= parent.bodyEnd!; i += 1) {
+        if (tokens[i]!.text !== 'case' || tokens[i + 1]?.kind !== 'identifier') continue;
+        const line = tokens[i]!.start.line;
+        for (let cursor = i + 1; cursor <= parent.bodyEnd! && tokens[cursor]!.start.line === line; cursor += 1) {
+          if (tokens[cursor]!.kind !== 'identifier' || (cursor > i + 1 && tokens[cursor - 1]?.text !== ',')) continue;
+          declarations.push({ kind: 'enum_member', name: tokens[cursor]!.text, start: cursor, end: cursor, parent });
+        }
+      }
+    }
+  }
+
   const addBlockDeclaration = (kind: NodeKind, keyword: number, nameIndex: number): Declaration | undefined => {
     let searchFrom = nameIndex + 1;
     if (kind === 'function') {
@@ -299,6 +743,7 @@ export function extractNativeFacts(filePath: string, source: string, language: L
   };
 
   for (let i = 0; i < tokens.length; i += 1) {
+    if (!['typescript', 'tsx', 'javascript', 'jsx', 'java'].includes(language)) continue;
     const token = tokens[i]!;
     const nameIndex = token.text === 'function' && tokens[i + 1]?.text === '*' ? i + 2 : i + 1;
     const name = tokens[nameIndex];
@@ -347,6 +792,7 @@ export function extractNativeFacts(filePath: string, source: string, language: L
     declaration.bodyStart !== undefined && ['class', 'interface', 'struct', 'trait', 'type_alias', 'constant', 'variable'].includes(declaration.kind));
 
   for (const parent of containers) {
+    if (['rust', 'kotlin', 'scala'].includes(language)) continue;
     const begin = parent.bodyStart! + 1;
     const end = parent.bodyEnd ?? tokens.length;
     for (let i = begin; i < end; i += 1) {
@@ -381,7 +827,7 @@ export function extractNativeFacts(filePath: string, source: string, language: L
       }
       if (name.kind !== 'identifier' || openParen?.text !== '(' || CALL_EXCLUSIONS.has(name.text)) continue;
       const prior = previousWord(tokens, i);
-      if (prior === 'function' || prior === 'new') continue;
+      if (prior === 'function' || prior === 'fn' || prior === 'fun' || prior === 'def' || prior === 'new') continue;
       const closeParen = scan.pairs.get(i + 1);
       if (closeParen === undefined) continue;
       let terminator = closeParen + 1;
@@ -496,13 +942,13 @@ export function extractNativeFacts(filePath: string, source: string, language: L
     if (enclosingCallable) declarations.splice(i, 1);
   }
 
-  if (language === 'java') {
+  if (language === 'java' || language === 'kotlin' || language === 'scala') {
     const namespace = declarations.find((declaration) => declaration.kind === 'namespace');
     if (namespace) {
       const replacements = new Map<Declaration, Declaration>();
       for (let i = 0; i < declarations.length; i += 1) {
         const declaration = declarations[i]!;
-        if (!declaration.parent && ['class', 'interface', 'enum'].includes(declaration.kind)) {
+        if (!declaration.parent && ['class', 'interface', 'enum', 'trait', 'function', 'constant', 'variable', 'type_alias'].includes(declaration.kind)) {
           const replacement = { ...declaration, parent: namespace };
           declarations[i] = replacement;
           replacements.set(declaration, replacement);
@@ -548,6 +994,8 @@ export function extractNativeFacts(filePath: string, source: string, language: L
       isAsync: declaration.async || undefined,
       isStatic: declaration.static || undefined,
       visibility: declaration.visibility,
+      returnType: declaration.returnType,
+      decorators: declaration.decorators,
       signature: declaration.signature ?? (declaration.bodyStart === undefined
         ? undefined
         : source.slice(start.start.offset, tokens[declaration.bodyStart]!.start.offset).trim()),
@@ -609,7 +1057,7 @@ export function extractNativeFacts(filePath: string, source: string, language: L
     return (owners[0] && nodeByDeclaration.get(owners[0])) ?? fileNode;
   };
 
-  if (['typescript', 'tsx', 'javascript', 'jsx', 'python', 'go', 'java'].includes(language)) {
+  if (['typescript', 'tsx', 'javascript', 'jsx', 'python', 'go', 'java', 'rust', 'kotlin', 'scala'].includes(language)) {
     const definedHere = new Set(declarations
       .filter((declaration) => declaration.kind === 'function' || declaration.kind === 'method' ||
         (language === 'python' && declaration.kind === 'class'))
@@ -636,6 +1084,13 @@ export function extractNativeFacts(filePath: string, source: string, language: L
           emitFunctionRef(ownerAt(i), `${receiver.text}::${member.text}`, member);
         }
       }
+    } else if (language === 'kotlin') {
+      for (let i = 0; i < tokens.length - 1; i += 1) {
+        if (tokens[i]!.text !== '::' || tokens[i + 1]?.kind !== 'identifier') continue;
+        const member = tokens[i + 1]!;
+        const receiver = tokens[i - 1]?.kind === 'identifier' ? tokens[i - 1] : undefined;
+        emitFunctionRef(ownerAt(i), receiver ? `${receiver.text}::${member.text}` : member.text, member);
+      }
     } else {
       const valueIntroducers = new Set(['(', ',', ':', '=', '[', '{', 'return']);
       for (let i = 0; i < tokens.length; i += 1) {
@@ -648,7 +1103,8 @@ export function extractNativeFacts(filePath: string, source: string, language: L
           continue;
         }
         if (!definedHere.has(token.text) && !importedNames.has(token.text)) continue;
-        if (tokens.slice(0, i).some((item) => item.start.line === token.start.line && item.text === 'import')) continue;
+        if (tokens.slice(0, i).some((item) => item.start.line === token.start.line &&
+            (item.text === 'import' || (language === 'rust' && item.text === 'use')))) continue;
         if (tokens[i + 1]?.text === '(' || tokens[i - 1]?.text === '.' || tokens[i - 1]?.text === 'function' ||
             tokens[i - 1]?.text === 'def' || tokens[i - 1]?.text === 'class') continue;
         const previous = tokens[i - 1]?.text;
@@ -659,6 +1115,17 @@ export function extractNativeFacts(filePath: string, source: string, language: L
           emitFunctionRef(fileNode, token.text, token);
         } else {
           emitFunctionRef(owner, token.text, token);
+        }
+      }
+      if (language === 'rust') {
+        for (let i = 1; i < tokens.length - 1; i += 1) {
+          if (tokens[i]!.text !== '::' || tokens[i - 1]?.kind !== 'identifier' || tokens[i + 1]?.kind !== 'identifier') continue;
+          if (tokens[i + 2]?.text === '(' || tokens[i + 2]?.text === '::') continue;
+          const lineTokens = tokens.slice(0, i).filter((token) => token.start.line === tokens[i]!.start.line);
+          if (lineTokens.some((token) => token.text === 'use' || token.text === '->')) continue;
+          const context = tokens[i - 2]?.text;
+          if (context && !['=', '(', ',', '[', '{', 'return'].includes(context)) continue;
+          emitFunctionRef(ownerAt(i), `${tokens[i - 1]!.text}::${tokens[i + 1]!.text}`, tokens[i + 1]!);
         }
       }
     }
@@ -793,6 +1260,88 @@ export function extractNativeFacts(filePath: string, source: string, language: L
     }
   }
 
+  if (language === 'rust') {
+    const typeDeclarations = declarations.filter((item) => ['struct', 'union', 'enum', 'trait'].includes(item.kind));
+    for (const declaration of typeDeclarations) {
+      const from = nodeByDeclaration.get(declaration);
+      if (!from || declaration.bodyStart === undefined) continue;
+      if (declaration.kind === 'trait') {
+        const colon = findNext(tokens, declaration.start + 1, ':', declaration.bodyStart);
+        if (colon >= 0) {
+          for (let i = colon + 1; i < declaration.bodyStart; i += 1) {
+            const token = tokens[i]!;
+            if (token.kind !== 'identifier' || ['where', 'for'].includes(token.text)) continue;
+            refs.push({
+              fromNodeId: from.id, referenceName: token.text, referenceKind: 'extends',
+              line: token.start.line, column: token.start.column,
+            });
+          }
+        }
+      }
+    }
+    for (const impl of rustImpls) {
+      if (!impl.typeName || !impl.traitName) continue;
+      const owner = typeDeclarations.find((item) => item.name === impl.typeName && item.kind !== 'trait');
+      const from = owner && nodeByDeclaration.get(owner);
+      if (!from) continue;
+      refs.push({
+        fromNodeId: from.id, referenceName: impl.traitName, referenceKind: 'implements',
+        line: tokens[impl.keyword]!.start.line, column: tokens[impl.keyword]!.start.column,
+      });
+    }
+  }
+
+  if (language === 'kotlin' || language === 'scala') {
+    const builtins = new Set(language === 'kotlin'
+      ? ['Any', 'Unit', 'Nothing', 'String', 'Int', 'Long', 'Short', 'Byte', 'Float', 'Double', 'Boolean', 'Char']
+      : ['Int', 'Long', 'Short', 'Byte', 'Float', 'Double', 'Boolean', 'Char', 'Unit', 'String', 'Any', 'AnyRef', 'AnyVal', 'Nothing', 'Null']);
+    for (const declaration of declarations) {
+      const from = nodeByDeclaration.get(declaration);
+      if (!from) continue;
+      if (['class', 'interface', 'trait', 'enum'].includes(declaration.kind) && declaration.bodyStart !== undefined) {
+        const marker = language === 'kotlin'
+          ? findNext(tokens, declaration.start + 1, ':', declaration.bodyStart)
+          : findNext(tokens, declaration.start + 1, 'extends', declaration.bodyStart);
+        if (marker >= 0) {
+          for (let i = marker + 1; i < declaration.bodyStart; i += 1) {
+            const token = tokens[i]!;
+            if (token.kind !== 'identifier' || builtins.has(token.text) ||
+                ['with', 'by', 'where'].includes(token.text) || token.text === declaration.name) continue;
+            refs.push({
+              fromNodeId: from.id, referenceName: token.text, referenceKind: 'extends',
+              line: token.start.line, column: token.start.column,
+            });
+          }
+        }
+      }
+      if (declaration.kind === 'function' || declaration.kind === 'method') {
+        const headerEnd = declaration.bodyStart ?? declaration.end + 1;
+        const seenTypes = new Set<string>();
+        for (let i = declaration.start + 1; i < headerEnd; i += 1) {
+          const token = tokens[i]!;
+          if (token.kind !== 'identifier' || !/^[A-Z]/.test(token.text) || builtins.has(token.text) ||
+              token.text === declaration.name || seenTypes.has(token.text)) continue;
+          seenTypes.add(token.text);
+          refs.push({
+            fromNodeId: from.id, referenceName: token.text, referenceKind: 'references',
+            line: token.start.line, column: token.start.column,
+          });
+        }
+      }
+      if (!['field', 'constant', 'variable'].includes(declaration.kind)) continue;
+      const colon = findNext(tokens, declaration.start + 1, ':', declaration.bodyStart ?? declaration.end + 1);
+      if (colon < 0) continue;
+      for (let i = colon + 1; i < (declaration.bodyStart ?? declaration.end + 1); i += 1) {
+        const token = tokens[i]!;
+        if (token.kind !== 'identifier' || builtins.has(token.text)) continue;
+        refs.push({
+          fromNodeId: from.id, referenceName: token.text, referenceKind: 'references',
+          line: token.start.line, column: token.start.column,
+        });
+      }
+    }
+  }
+
   for (const declaration of declarations) {
     const callable = declaration.kind === 'function' || declaration.kind === 'method';
     const value = declaration.kind === 'constant' || declaration.kind === 'variable' || declaration.kind === 'field';
@@ -804,17 +1353,31 @@ export function extractNativeFacts(filePath: string, source: string, language: L
     if (!from) continue;
     for (let i = scanStart + 1; i < scanEnd; i += 1) {
       const callee = tokens[i]!;
-      if (callee.kind !== 'identifier' || tokens[i + 1]?.text !== '(' || CALL_EXCLUSIONS.has(callee.text)) continue;
+      if (callee.kind !== 'identifier' || tokens[i + 1]?.text !== '(' ||
+          (CALL_EXCLUSIONS.has(callee.text) && !(language === 'rust' && callee.text === 'new' && tokens[i - 1]?.text === '::'))) continue;
       if (declarations.some((item) => item !== declaration && item.start === i)) continue;
       if (declarations.some((item) => item.parent === declaration && item.start <= i && item.end >= i)) continue;
       if (declarations.some((item) => item !== declaration && item.start > declaration.start &&
           item.end <= declaration.end && item.start <= i && item.end >= i)) continue;
       const receiver = tokens[i - 2]?.kind === 'identifier' && tokens[i - 1]?.text === '.' ? tokens[i - 2] : undefined;
+      const rustPath = language === 'rust' && tokens[i - 2]?.kind === 'identifier' && tokens[i - 1]?.text === '::'
+        ? tokens[i - 2]
+        : undefined;
+      let rustPathName: string | undefined;
+      if (rustPath) {
+        let pathStart = i - 2;
+        while (pathStart >= 2 && tokens[pathStart - 1]?.text === '::' && tokens[pathStart - 2]?.kind === 'identifier') pathStart -= 2;
+        rustPathName = tokens.slice(pathStart, i + 1).map((token) => token.text).join('');
+      }
+      const rustSelfField = language === 'rust' && receiver && tokens[i - 4]?.text === 'self' &&
+        tokens[i - 3]?.text === '.' ? `self.${receiver.text}.${callee.text}` : undefined;
+      const rustDeepChain = language === 'rust' && receiver && tokens[i - 3]?.text === '.' &&
+        tokens[i - 4]?.text !== 'self';
       refs.push({
         fromNodeId: from.id,
-        referenceName: receiver ? `${receiver.text}.${callee.text}` : callee.text,
+        referenceName: rustSelfField ?? (rustDeepChain ? callee.text : rustPathName ?? (receiver ? `${receiver.text}.${callee.text}` : callee.text)),
         referenceKind: 'calls', line: callee.start.line,
-        column: receiver?.start.column ?? callee.start.column,
+        column: rustSelfField ? tokens[i - 4]!.start.column : rustPath?.start.column ?? receiver?.start.column ?? callee.start.column,
       });
     }
     if (language === 'go') {
@@ -826,6 +1389,58 @@ export function extractNativeFacts(filePath: string, source: string, language: L
           line: typeToken.start.line, column: typeToken.start.column,
         });
       }
+    }
+  }
+
+  if (language === 'rust') {
+    const seen = new Set(refs.filter((ref) => ref.referenceKind === 'calls')
+      .map((ref) => `${ref.fromNodeId}\0${ref.referenceName}\0${ref.line}\0${ref.column}`));
+    for (let i = 0; i < tokens.length - 3; i += 1) {
+      if (!['routes', 'catchers'].includes(tokens[i]!.text) || tokens[i + 1]?.text !== '!' || tokens[i + 2]?.text !== '[') continue;
+      const close = scan.pairs.get(i + 2);
+      if (close === undefined) continue;
+      let segmentStart = i + 3;
+      for (let cursor = segmentStart; cursor <= close; cursor += 1) {
+        if (cursor < close && tokens[cursor]!.text !== ',') continue;
+        const candidate = tokens.slice(segmentStart, cursor).filter((token) => token.kind === 'identifier').at(-1);
+        if (candidate) {
+          const from = ownerAt(i);
+          const key = `${from.id}\0${candidate.text}\0${candidate.start.line}\0${candidate.start.column}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            refs.push({
+              fromNodeId: from.id, referenceName: candidate.text, referenceKind: 'calls',
+              line: candidate.start.line, column: candidate.start.column,
+            });
+          }
+        }
+        segmentStart = cursor + 1;
+      }
+      i = close;
+    }
+  }
+
+  if (language === 'kotlin') {
+    const seenCalls = new Set(refs.filter((ref) => ref.referenceKind === 'calls')
+      .map((ref) => `${ref.fromNodeId}\0${ref.referenceName}\0${ref.line}\0${ref.column}`));
+    for (let i = 0; i < tokens.length - 1; i += 1) {
+      const callee = tokens[i]!;
+      if (callee.kind !== 'identifier' || tokens[i + 1]?.text !== '(' || CALL_EXCLUSIONS.has(callee.text)) continue;
+      if (['fun', 'class', 'interface'].includes(tokens[i - 1]?.text ?? '')) continue;
+      const receiver = tokens[i - 2]?.kind === 'identifier' && tokens[i - 1]?.text === '.' ? tokens[i - 2] : undefined;
+      const referenceName = receiver ? `${receiver.text}.${callee.text}` : callee.text;
+      const column = receiver?.start.column ?? callee.start.column;
+      const lexicalFrom = ownerAt(i);
+      const from = lexicalFrom.kind === 'file'
+        ? nodes.find((node) => node.kind === 'namespace') ?? lexicalFrom
+        : lexicalFrom;
+      const key = `${from.id}\0${referenceName}\0${callee.start.line}\0${column}`;
+      if (seenCalls.has(key)) continue;
+      seenCalls.add(key);
+      refs.push({
+        fromNodeId: from.id, referenceName, referenceKind: 'calls',
+        line: callee.start.line, column,
+      });
     }
   }
 
@@ -1012,6 +1627,43 @@ export function extractNativeFacts(filePath: string, source: string, language: L
           line: binding.start.line, column: binding.start.column,
         });
       }
+    }
+  }
+
+  if (language === 'rust' || language === 'kotlin' || language === 'scala') {
+    const keyword = language === 'rust' ? 'use' : 'import';
+    for (let i = 0; i < tokens.length; i += 1) {
+      if (tokens[i]!.text !== keyword) continue;
+      const end = statementEnd(i);
+      const alias = language === 'kotlin' ? findNext(tokens, i + 1, 'as', end + 1) : -1;
+      const pathTokens = tokens.slice(i + 1, alias >= 0 ? alias : end + 1)
+        .filter((token) => token.kind === 'identifier' || ['.', '::'].includes(token.text));
+      if (pathTokens.length === 0) continue;
+      const fullName = pathTokens.map((token) => token.text).join('').replace(/(?:\.|::)+$/, '');
+      const importName = language === 'rust' || language === 'scala'
+        ? pathTokens.find((token) => token.kind === 'identifier')?.text ?? fullName
+        : fullName;
+      if (!importName) continue;
+      const last = tokens[end] ?? pathTokens.at(-1)!;
+      const importOwner = language === 'kotlin'
+        ? nodes.find((node) => node.kind === 'namespace') ?? fileNode
+        : fileNode;
+      const importNode: Node = {
+        id: generateNodeId(filePath, 'import', importName, tokens[i]!.start.line),
+        kind: 'import', name: importName,
+        qualifiedName: importOwner.kind === 'namespace' ? `${importOwner.qualifiedName}::${importName}` : importName,
+        filePath, language,
+        startLine: tokens[i]!.start.line, endLine: last.end.line,
+        startColumn: tokens[i]!.start.column, endColumn: last.end.column,
+        signature: source.slice(tokens[i]!.start.offset, last.end.offset), updatedAt: Date.now(),
+      };
+      nodes.push(importNode);
+      edges.push({ source: importOwner.id, target: importNode.id, kind: 'contains' });
+      refs.push({
+        fromNodeId: importOwner.id, referenceName: importName, referenceKind: 'imports',
+        line: tokens[i]!.start.line, column: tokens[i]!.start.column,
+      });
+      i = end;
     }
   }
 

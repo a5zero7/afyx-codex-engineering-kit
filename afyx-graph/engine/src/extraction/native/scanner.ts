@@ -22,6 +22,12 @@ export interface NativeScanResult {
 export interface NativeScanOptions {
   /** Treat `#` through end-of-line as a comment (Python/Ruby/R-style). */
   readonly hashComments?: boolean;
+  /** Recognize Rust lifetimes, raw strings, and nested block comments. */
+  readonly rustSyntax?: boolean;
+  /** Consume Kotlin/Scala-style triple-quoted strings as one opaque token. */
+  readonly tripleQuotedStrings?: boolean;
+  /** Treat Kotlin backtick-escaped names as identifier tokens. */
+  readonly backtickIdentifiers?: boolean;
 }
 
 const OPEN_TO_CLOSE: Readonly<Record<string, string>> = { '(': ')', '[': ']', '{': '}' };
@@ -90,12 +96,23 @@ export function scanSource(source: string, options: NativeScanOptions = {}): Nat
       advance();
       advance();
       let closed = false;
+      let depth = 1;
       while (offset < source.length) {
+        if (options.rustSyntax && source[offset] === '/' && source[offset + 1] === '*') {
+          advance();
+          advance();
+          depth += 1;
+          continue;
+        }
         if (source[offset] === '*' && source[offset + 1] === '/') {
           advance();
           advance();
-          closed = true;
-          break;
+          depth -= 1;
+          if (depth === 0) {
+            closed = true;
+            break;
+          }
+          continue;
         }
         advance();
       }
@@ -108,6 +125,79 @@ export function scanSource(source: string, options: NativeScanOptions = {}): Nat
       const start = position();
       while (offset < source.length && source[offset] !== '\n') advance();
       emit('comment', start);
+      continue;
+    }
+
+    if (options.rustSyntax && char === 'r' && (next === '"' || next === '#')) {
+      let hashCount = 0;
+      let quoteOffset = offset + 1;
+      while (source[quoteOffset] === '#') {
+        hashCount += 1;
+        quoteOffset += 1;
+      }
+      if (source[quoteOffset] === '"') {
+        const start = position();
+        while (offset <= quoteOffset) advance();
+        let closed = false;
+        const suffix = `"${'#'.repeat(hashCount)}`;
+        while (offset < source.length) {
+          if (source.startsWith(suffix, offset)) {
+            for (let i = 0; i < suffix.length; i += 1) advance();
+            closed = true;
+            break;
+          }
+          advance();
+        }
+        emit('string', start);
+        if (!closed) unterminated.push('string');
+        continue;
+      }
+    }
+
+    if (options.tripleQuotedStrings && char === '"' && source.startsWith('"""', offset)) {
+      const start = position();
+      advance();
+      advance();
+      advance();
+      let closed = false;
+      while (offset < source.length) {
+        if (source.startsWith('"""', offset)) {
+          advance();
+          advance();
+          advance();
+          closed = true;
+          break;
+        }
+        advance();
+      }
+      emit('string', start);
+      if (!closed) unterminated.push('string');
+      continue;
+    }
+
+    if (options.rustSyntax && char === "'" && next && isIdentifierStart(next)) {
+      let cursor = offset + 2;
+      while (cursor < source.length && isIdentifierContinue(source[cursor]!)) cursor += 1;
+      if (source[cursor] !== "'") {
+        const start = position();
+        advance();
+        emit('punctuation', start);
+        continue;
+      }
+    }
+
+    if (options.backtickIdentifiers && char === '`') {
+      const start = position();
+      advance();
+      let closed = false;
+      while (offset < source.length) {
+        if (advance() === '`') {
+          closed = true;
+          break;
+        }
+      }
+      emit('identifier', start);
+      if (!closed) unterminated.push('string');
       continue;
     }
 
@@ -152,7 +242,7 @@ export function scanSource(source: string, options: NativeScanOptions = {}): Nat
     const compound2 = source.slice(offset, offset + 2);
     const operator = ['>>=', '<<=', '===', '!==', '...', '??=', '&&=', '||='].includes(compound)
       ? compound
-      : ['=>', '::', '?.', '??', '&&', '||', '==', '!=', '<=', '>=', '++', '--', '+=', '-=', '*=', '/=', '**', '<<', '>>'].includes(compound2)
+      : ['=>', '->', '::', '?.', '??', '&&', '||', '==', '!=', '<=', '>=', '++', '--', '+=', '-=', '*=', '/=', '**', '<<', '>>'].includes(compound2)
         ? compound2
         : undefined;
     if (operator) {

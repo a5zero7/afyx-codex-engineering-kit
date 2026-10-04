@@ -3,7 +3,7 @@ import type { Language } from '../types';
 import type { BranchGuard, GuardExit, GuardForm } from './branch-guard-policy';
 
 const NATIVE_GUARD_LANGUAGES: ReadonlySet<Language> = new Set([
-  'typescript', 'tsx', 'javascript', 'jsx', 'python', 'java', 'go',
+  'typescript', 'tsx', 'javascript', 'jsx', 'python', 'java', 'go', 'kotlin',
 ]);
 const TEXT_LIMIT = 80;
 
@@ -40,7 +40,11 @@ export function supportsNativeBranchGuards(language: Language): boolean {
 }
 
 function viewOf(source: string, language: Language): NativeView {
-  const scanned = scanSource(source, { hashComments: language === 'python' });
+  const scanned = scanSource(source, {
+    hashComments: language === 'python',
+    tripleQuotedStrings: language === 'kotlin',
+    backtickIdentifiers: language === 'kotlin',
+  });
   const tokens = scanned.tokens.filter((token) => token.kind !== 'comment');
   const pairs = new Map<number, number>();
   const stack: number[] = [];
@@ -102,6 +106,7 @@ function bodyAt(view: NativeView, start: number, language: Language = 'typescrip
   while (end < view.tokens.length) {
     const current = view.tokens[end]!;
     if (current.text === ';') return { start, end: end + 1, after: end + 1 };
+    if (current.text === 'else') break;
     if (current.text === '}' || current.start.line > line) break;
     end += 1;
   }
@@ -237,6 +242,27 @@ function functionBoundary(view: NativeView, siteToken: number, language: Languag
           const text = view.tokens[index]!.text;
           if (text === '=') { named = true; break; }
           if (text === ';') break;
+        }
+      }
+    } else if (language === 'kotlin') {
+      if (before === '=') named = true;
+      if (before === ')') {
+        const params = view.pairs.get(open - 1);
+        named = params !== undefined && view.tokens[params - 2]?.text === 'fun';
+      }
+      if (!named) {
+        const floor = containingBrace(view, open) ?? -1;
+        const arrow = view.tokens.slice(open + 1, close).findIndex((token) => token.text === '->');
+        if (arrow >= 0) {
+          for (let index = open - 1; index > floor; index -= 1) {
+            const text = view.tokens[index]!.text;
+            if (text === '=') { named = true; break; }
+            if ([';', '{', '}'].includes(text)) break;
+          }
+        }
+        for (let index = open - 1; !named && index > floor; index -= 1) {
+          if (['class', 'interface', 'object'].includes(view.tokens[index]!.text)) { named = true; break; }
+          if ([';', '{', '}'].includes(view.tokens[index]!.text)) break;
         }
       }
     } else if (before === ')') {
@@ -386,6 +412,47 @@ function switchGuards(view: NativeView, siteToken: number, boundary: number, lan
     const item = guard(view, 'case', isDefault ? `${subject}: default` : subject ? `${subject} ${equality} ${value}` : value, false, index, {
       lineIndex: isDefault && language !== 'java' ? index : active,
     });
+    if (item) found.push(item);
+  }
+  return found;
+}
+
+function kotlinWhenGuards(view: NativeView, siteToken: number, boundary: number): BranchGuard[] {
+  const found: BranchGuard[] = [];
+  for (let index = boundary + 1; index < siteToken; index += 1) {
+    if (view.tokens[index]!.text !== 'when') continue;
+    let subject = '';
+    let blockOpen = index + 1;
+    if (view.tokens[blockOpen]?.text === '(') {
+      const close = view.pairs.get(blockOpen);
+      if (close === undefined) continue;
+      subject = slice(view, blockOpen + 1, close);
+      blockOpen = close + 1;
+    }
+    if (view.tokens[blockOpen]?.text !== '{') continue;
+    const blockClose = view.pairs.get(blockOpen);
+    if (blockClose === undefined || siteToken >= blockClose) continue;
+    let activeArrow = -1;
+    let activeStart = blockOpen + 1;
+    let candidateStart = blockOpen + 1;
+    for (let cursor = blockOpen + 1; cursor < blockClose; cursor += 1) {
+      const text = view.tokens[cursor]!.text;
+      if (text === '->' && cursor < siteToken) {
+        activeArrow = cursor;
+        activeStart = candidateStart;
+      }
+      if ((text === ',' || text === '}') && cursor < siteToken) candidateStart = cursor + 1;
+      if (text === '->' && cursor > siteToken) break;
+    }
+    if (activeArrow < 0) continue;
+    activeStart = activeArrow - 1;
+    const armLine = view.tokens[activeArrow]!.start.line;
+    while (activeStart > blockOpen + 1 && view.tokens[activeStart - 1]!.start.line === armLine) activeStart -= 1;
+    while (activeStart < activeArrow && [',', ';'].includes(view.tokens[activeStart]!.text)) activeStart += 1;
+    const value = slice(view, activeStart, activeArrow);
+    const isElse = value === 'else';
+    const text = isElse ? `${subject}: else` : subject ? `${subject} == ${value}` : value;
+    const item = guard(view, 'case', text, false, index, { branchIndex: index, lineIndex: isElse ? null : activeStart });
     if (item) found.push(item);
   }
   return found;
@@ -738,6 +805,7 @@ function guardsInView(view: NativeView, language: Language, line: number, column
     ...ifGuards(view, offset, siteToken, boundary, language),
     ...catchGuards(view, offset, boundary, language),
     ...switchGuards(view, siteToken, boundary, language),
+    ...(language === 'kotlin' ? kotlinWhenGuards(view, siteToken, boundary) : []),
     ...ternaryGuards(view, siteToken, boundary),
     ...logicalGuards(view, siteToken, boundary),
   ]);

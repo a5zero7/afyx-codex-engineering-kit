@@ -113,6 +113,24 @@ func route(mode string, ready bool) {
 `,
     sites: ['first()', 'second()', 'third()', 'fourth()', 'fifth()', 'later()', 'fallback()', 'afterFatal()'],
   },
+  {
+    language: 'kotlin',
+    source: `
+class OwnerController {
+  fun run(owner: Owner, result: Result) {
+    if (result.hasErrors()) { return }
+    try { save(owner) } catch (error: IllegalStateException) { report(error) }
+    when (owner.kind) {
+      A -> remove(owner)
+      else -> fallback()
+    }
+    val value = if (ready) yes() else no()
+    ready && later()
+  }
+}
+`,
+    sites: ['save(owner)', 'report(error)', 'remove(owner)', 'fallback()', 'yes()', 'no()', 'later()'],
+  },
 ];
 
 async function results(fixture: Fixture, native: boolean) {
@@ -148,6 +166,7 @@ describe('native branch guard differential', () => {
       { language: 'python', source: 'def f():\n    if outer: return\n    callback = lambda: run()\n', site: 'run()' },
       { language: 'java', source: 'class A { void f(){ if(outer)return; Runnable callback=()->{ run(); }; } }', site: 'run()' },
       { language: 'go', source: 'func f(){ if outer { return }; callback := func(){ run() }; _ = callback }', site: 'run()' },
+      { language: 'kotlin', source: 'class A { fun f(){ if(outer)return; val callback = { run() } } }', site: 'run()' },
     ];
     for (const item of cases) {
       const lines = item.source.split('\n');

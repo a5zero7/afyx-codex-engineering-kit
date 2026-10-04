@@ -408,7 +408,7 @@ export interface TokenizeResult {
 }
 
 const NATIVE_SYNTAX_LANGUAGES: ReadonlySet<Language> = new Set([
-  'typescript', 'tsx', 'javascript', 'jsx', 'python', 'go', 'java',
+  'typescript', 'tsx', 'javascript', 'jsx', 'python', 'go', 'java', 'rust', 'kotlin', 'scala',
 ]);
 
 const NATIVE_KEYWORDS: Readonly<Record<string, ReadonlySet<string>>> = {
@@ -417,6 +417,9 @@ const NATIVE_KEYWORDS: Readonly<Record<string, ReadonlySet<string>>> = {
   python: new Set('False None True and as assert async await break class continue def del elif else except finally for from global if import in is lambda nonlocal not or pass raise return try while with yield'.split(' ')),
   go: new Set('break case chan const continue default defer else fallthrough for func go goto if import interface map package range return select struct switch type var'.split(' ')),
   java: new Set('abstract assert boolean break byte case catch char class const continue default do double else enum exports extends final finally float for goto if implements import instanceof int interface long module native new non-sealed null open opens package permits private protected provides public record requires return sealed short static strictfp super switch synchronized this throw throws to transient transitive true try uses var void volatile while with yield false'.split(' ')),
+  rust: new Set('as async await break const continue crate dyn else enum extern false fn for if impl in let loop match mod move mut pub ref return self Self static struct super trait true type unsafe use where while union'.split(' ')),
+  kotlin: new Set('as break class continue do else false for fun if in interface is null object package return super this throw true try typealias typeof val var when while by catch constructor delegate dynamic field file finally get import init param property receiver set setparam where actual abstract annotation companion const crossinline data enum expect external final infix inline inner internal lateinit noinline open operator out override private protected public reified sealed suspend tailrec vararg'.split(' ')),
+  scala: new Set('abstract case catch class def do else enum export extends false final finally for forSome given if implicit import lazy match new null object opaque open override package private protected return sealed super then this throw trait transparent true try type val var while with yield extension inline using end derives'.split(' ')),
 };
 
 const NATIVE_BUILTIN_TYPES: Readonly<Record<string, ReadonlySet<string>>> = {
@@ -425,6 +428,9 @@ const NATIVE_BUILTIN_TYPES: Readonly<Record<string, ReadonlySet<string>>> = {
   python: new Set(),
   go: new Set('any bool byte complex64 complex128 error float32 float64 int int8 int16 int32 int64 rune string uint uint8 uint16 uint32 uint64 uintptr'.split(' ')),
   java: new Set('boolean byte char double float int long short void String Object'.split(' ')),
+  rust: new Set('bool char str u8 u16 u32 u64 u128 usize i8 i16 i32 i64 i128 isize f32 f64'.split(' ')),
+  kotlin: new Set('Any Unit Nothing String Int Long Short Byte Float Double Boolean Char'.split(' ')),
+  scala: new Set('Int Long Short Byte Float Double Boolean Char Unit String Any AnyRef AnyVal Nothing Null'.split(' ')),
 };
 
 function nativeLanguageKey(language: Language): string {
@@ -449,7 +455,12 @@ function nativeDefinitionOffsets(source: string, language: Language, tokens: rea
 
 function classifyNativeRegion(source: string, language: Language, offset: number): SyntaxSpan[] {
   const key = nativeLanguageKey(language);
-  const scan = scanSource(source, { hashComments: key === 'python' });
+  const scan = scanSource(source, {
+    hashComments: key === 'python',
+    rustSyntax: key === 'rust',
+    tripleQuotedStrings: key === 'kotlin' || key === 'scala',
+    backtickIdentifiers: key === 'kotlin',
+  });
   const definitions = nativeDefinitionOffsets(source, language, scan.tokens);
   const keywords = NATIVE_KEYWORDS[key] ?? new Set<string>();
   const builtins = NATIVE_BUILTIN_TYPES[key] ?? new Set<string>();
