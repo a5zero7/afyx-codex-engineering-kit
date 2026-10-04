@@ -574,3 +574,54 @@ Terraform/OpenTofu parser-backed semantics; and parser-coupled
 SFC/template/special-format internals. The established Swift branch guards
 remain pending. Kernel, bootstrap/dependency/WASM removal, after-state artifact
 audit, and the parser major PR remain later Phase 5F boundaries.
+
+### Swift native semantic and branch-guard checkpoint
+
+Commit `54eae35` adds the fifteenth feature-gated native semantic route. With
+`AFYX_GRAPH_NATIVE_PARSER=1`, Swift now enters the Afyx-owned
+`swift-facts.ts` recognizer directly and no longer executes the Swift
+Tree-sitter semantic adapter. Ungated extraction remains on the established
+fallback until the complete parser migration is ready for cutover.
+
+The bounded Swift contract includes module imports; classes, structs,
+protocols, enums, actors, extensions, type aliases and associated types;
+owned functions, methods, initializers, properties, fields and enum cases;
+inheritance/protocol conformance and extension-target references; generic,
+optional, return and property-wrapper/metatype dependencies; calls, qualified
+and factory-chain calls; and scoped callable values. Computed-property calls
+remain owned by the property, while locals remain outside the definition
+graph.
+
+The scanner now consumes Swift raw and multiline strings and nested block
+comments as bounded opaque regions, reporting incomplete strings without
+hanging or throwing. Swift syntax highlighting uses the native classifier.
+Native branch guards preserve `guard` continuation versus exit-arm polarity,
+`if`/`else`, ternary, switch/case/default, catch, logical and early-exit
+semantics. Function, assigned-closure, parameterized-closure and trailing-
+closure boundaries prevent conditions from leaking between execution scopes.
+
+The focused native Swift suite passes 6/6 and the expanded scanner suite
+passes 7/7. The frozen Swift semantic/guard oracle passes 21/21 under the
+native gate; the broader Swift extraction/resolution selection passes 19/19.
+Shared native, syntax, function-reference and branch-guard regression coverage
+passes 164/164 in native mode and 164/164 in normal mode. Typecheck, clean
+production/UI build, the normal six-fixture semantic baseline and all 21
+CLI/MCP smoke checks pass. No semantic failure or cleanup-only Windows
+`EPERM` occurred in this boundary.
+
+The native semantic set is now fifteen languages: TypeScript, TSX,
+JavaScript, JSX, Python, Go, Java, Rust, Kotlin, Scala, C, C++, Objective-C,
+C#, and Swift. The previously identified established native branch-guard
+backlog is now closed. Active `web-tree-sitter`/`SyntaxNode` source coupling
+remains 34 files (34 → 34), because normal ungated mode and the remaining
+parser-backed languages still share the fallback registry and adapters. No
+Swift grammar asset, package, lockfile entry, runtime dependency, legal record,
+or attribution file is removed at this checkpoint.
+
+Remaining parser boundaries include ArkTS and Solidity; PHP, Ruby, Dart,
+Lua/Luau, R, and Nix; Pascal, CFML/CFScript/CFQuery, COBOL, VB.NET, and Erlang;
+Terraform/OpenTofu semantics; and parser-coupled SFC/template/special-format
+internals. `web-tree-sitter`, `tree-sitter-wasms`, grammar WASM and parser
+bootstrap removal remain blocked until those production routes converge. The
+next dependency-safe language boundary is ArkTS, reusing the proven native
+TypeScript-family scanner/fact surface without starting that work here.
