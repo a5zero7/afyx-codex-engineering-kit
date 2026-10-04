@@ -458,3 +458,63 @@ remove the fallback modules yet. Production dependencies remain
 `web-tree-sitter` and `tree-sitter-wasms`; grammar WASM, bootstrap removal,
 artifact audit, and the parser PR remain deferred until every real route is
 native and validated.
+
+### Rust, Kotlin, and Scala native semantic checkpoint
+
+The parser branch incorporated canonical `main` at
+`5349c4a184e539f0ac0752d895ff3262c6326e29` through merge commit
+`01fb8153e3bab4dcac0ce6463a8ed3513c9b769c`; the earlier parser checkpoint
+`d9039bf784c33bb494fbc24c5eaa72a97b43c61e` remains in its ancestry. Commit
+`b321ca7` adds dependency-free Rust, Kotlin, and Scala fact recognition and
+extends the native syntax route to all three languages. Kotlin also joins the
+native branch-guard route.
+
+The native scanner now treats Rust lifetimes, raw strings, and nested block
+comments deterministically; Kotlin backtick identifiers and Kotlin/Scala
+triple-quoted strings remain opaque to declaration scanning. The recognizers
+preserve the Afyx-required graph surface:
+
+- Rust types, enum variants, traits, associated/impl methods, implementing-type
+  ownership, trait relations, use roots, const/static initializers, qualified
+  calls, Rocket handler macros, declared return types, and function values.
+- Kotlin package/import ownership, classes/interfaces/objects/companions/enums,
+  `fun interface`, methods/functions, `expect`/`actual`, field versus shared
+  property ownership, initializer/accessor calls, destructuring RHS calls,
+  inheritance/type refs, nullable return types, callable refs, and established
+  `if`/`when`/catch/early-exit branch guards.
+- Scala classes/objects/traits/enums/cases, top-level and owned definitions,
+  field versus object/top-level val/var ownership, type aliases and annotation
+  refs, extension methods, imports, visibility, calls/function values, and
+  declared return types, including bounded Scala 3 indentation bodies.
+
+The native route set is now ten languages: TypeScript, TSX, JavaScript, JSX,
+Python, Go, Java, Rust, Kotlin, and Scala. The final affected focused candidate
+passed 92/92 cross-cutting tests and 61/61 selected extraction/resolution tests;
+the function-reference campaign passed 20/20. Typecheck, clean production/UI
+build, and the 21-check CLI/MCP smoke passed. The native extraction campaign
+reached all 655 functional assertions: 647 tests completed normally, seven
+completed their assertions and then hit the established Windows temporary-dir
+cleanup `EPERM`, and the remaining Kotlin backtick-identifier assertion was
+corrected and passed on its focused rerun.
+
+The normal six-fixture semantic baseline passes. The native-gated structural
+graph remains unchanged; its only frozen-baseline differences are still the
+same two TypeScript floating search scores recorded above, so the limitation is
+`SAME`, not expanded.
+
+No package, lockfile, grammar WASM, old language adapter, generated parser
+artifact, or legal record is removed by this checkpoint. The safe fallback is
+still needed for languages not yet migrated and when the opt-in gate is off.
+Active `web-tree-sitter`/`SyntaxNode` source coupling remains 34 files and the
+two production parser dependencies remain `web-tree-sitter` and
+`tree-sitter-wasms`. Removing those dependencies, their grammar assets, and the
+bootstrap belongs to final parser closure after every parser-coupled route is
+native.
+
+Remaining parser work includes ArkTS; C, C++, Objective-C, C#, and Solidity;
+PHP, Ruby, Swift, Dart, Lua/Luau, R, and Nix; Pascal, CFML/CFScript/CFQuery,
+COBOL, VB.NET, and Erlang; Terraform/OpenTofu parser-backed semantics; and
+parser-coupled SFC/template/special-format internals. Established branch guards
+still pending native migration are Swift, C#, C, C++, and Objective-C. Kernel,
+bootstrap/dependency/WASM removal, after-state artifact audit, and the parser
+major PR remain later Phase 5F work.
