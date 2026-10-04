@@ -410,6 +410,7 @@ export interface TokenizeResult {
 const NATIVE_SYNTAX_LANGUAGES: ReadonlySet<Language> = new Set([
   'typescript', 'tsx', 'javascript', 'jsx', 'python', 'go', 'java', 'rust', 'kotlin', 'scala',
   'c', 'cpp', 'objc', 'csharp',
+  'swift',
 ]);
 
 const NATIVE_KEYWORDS: Readonly<Record<string, ReadonlySet<string>>> = {
@@ -425,6 +426,7 @@ const NATIVE_KEYWORDS: Readonly<Record<string, ReadonlySet<string>>> = {
   cpp: new Set('alignas alignof and and_eq asm auto bitand bitor bool break case catch char class compl concept const consteval constexpr constinit const_cast continue co_await co_return co_yield decltype default delete do double dynamic_cast else enum explicit export extern false float for friend goto if inline int long mutable namespace new noexcept not nullptr operator or override private protected public register reinterpret_cast requires return short signed sizeof static static_assert static_cast struct switch template this thread_local throw true try typedef typeid typename union unsigned using virtual void volatile while xor'.split(' ')),
   objc: new Set('auto break case char const continue default do double else enum extern float for goto if inline int long register restrict return short signed sizeof static struct switch typedef union unsigned void volatile while interface implementation protocol property end selector'.split(' ')),
   csharp: new Set('abstract as async await base bool break byte case catch char checked class const continue decimal default delegate do double else enum event explicit extern false finally fixed float for foreach goto if implicit in int interface internal is lock long namespace new null object operator out override params partial private protected public readonly record ref return sbyte sealed short sizeof stackalloc static string struct switch this throw true try typeof uint ulong unchecked unsafe ushort using virtual void volatile while yield'.split(' ')),
+  swift: new Set('actor any as associatedtype async await break case catch class continue convenience default defer deinit do dynamic else enum extension fallthrough false fileprivate final for func guard if import indirect init in inout internal is isolated let nil nonisolated open operator optional override precedencegroup private protocol public repeat required rethrows return self Self some static struct subscript super switch throw throws true try typealias unowned var weak where while'.split(' ')),
 };
 
 const NATIVE_BUILTIN_TYPES: Readonly<Record<string, ReadonlySet<string>>> = {
@@ -440,6 +442,7 @@ const NATIVE_BUILTIN_TYPES: Readonly<Record<string, ReadonlySet<string>>> = {
   cpp: new Set('void bool char short int long float double signed unsigned size_t wchar_t'.split(' ')),
   objc: new Set('void BOOL char short int long float double id instancetype NSInteger NSUInteger'.split(' ')),
   csharp: new Set('void bool byte sbyte char short ushort int uint long ulong float double decimal string object dynamic'.split(' ')),
+  swift: new Set('Any AnyObject Bool Character Double Float Int Int8 Int16 Int32 Int64 Never String Substring UInt UInt8 UInt16 UInt32 UInt64 Void'.split(' ')),
 };
 
 function nativeLanguageKey(language: Language): string {
@@ -471,6 +474,7 @@ function classifyNativeRegion(source: string, language: Language, offset: number
     backtickIdentifiers: key === 'kotlin',
     cppRawStrings: key === 'cpp',
     csharpStrings: key === 'csharp',
+    swiftSyntax: key === 'swift',
   });
   const definitions = nativeDefinitionOffsets(source, language, scan.tokens);
   const keywords = NATIVE_KEYWORDS[key] ?? new Set<string>();

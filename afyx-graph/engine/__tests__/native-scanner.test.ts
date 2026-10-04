@@ -51,4 +51,12 @@ describe('Afyx-native source scanner', () => {
       .toEqual(['var', 'text', 'Real']);
     expect(result.unterminated).toEqual([]);
   });
+
+  it('keeps Swift raw/multiline strings and nested comments opaque and bounded', () => {
+    const source = '#"fake()"#; """hidden()"""; /* outer /* inner */ done */ real()';
+    const result = scanSource(source, { hashComments: false, swiftSyntax: true });
+    expect(result.tokens.filter((token) => token.kind === 'identifier').map((token) => token.text)).toEqual(['real']);
+    expect(result.unterminated).toEqual([]);
+    expect(scanSource('##"unfinished', { hashComments: false, swiftSyntax: true }).unterminated).toEqual(['string']);
+  });
 });

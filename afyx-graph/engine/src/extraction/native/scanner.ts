@@ -32,6 +32,8 @@ export interface NativeScanOptions {
   readonly cppRawStrings?: boolean;
   /** Consume C# verbatim/interpolated string prefixes and doubled quotes. */
   readonly csharpStrings?: boolean;
+  /** Recognize Swift raw/multiline strings and nested block comments. */
+  readonly swiftSyntax?: boolean;
 }
 
 const OPEN_TO_CLOSE: Readonly<Record<string, string>> = { '(': ')', '[': ']', '{': '}' };
@@ -102,7 +104,7 @@ export function scanSource(source: string, options: NativeScanOptions = {}): Nat
       let closed = false;
       let depth = 1;
       while (offset < source.length) {
-        if (options.rustSyntax && source[offset] === '/' && source[offset + 1] === '*') {
+        if ((options.rustSyntax || options.swiftSyntax) && source[offset] === '/' && source[offset + 1] === '*') {
           advance();
           advance();
           depth += 1;
@@ -177,6 +179,36 @@ export function scanSource(source: string, options: NativeScanOptions = {}): Nat
       emit('string', start);
       if (!closed) unterminated.push('string');
       continue;
+    }
+
+    if (options.swiftSyntax && (char === '"' || char === '#')) {
+      let hashCount = 0;
+      while (source[offset + hashCount] === '#') hashCount += 1;
+      const quoteOffset = offset + hashCount;
+      const triple = source.startsWith('"""', quoteOffset);
+      if (source[quoteOffset] === '"') {
+        const start = position();
+        const opening = hashCount + (triple ? 3 : 1);
+        for (let i = 0; i < opening; i += 1) advance();
+        const suffix = `${triple ? '"""' : '"'}${'#'.repeat(hashCount)}`;
+        let closed = false;
+        while (offset < source.length) {
+          if (source.startsWith(suffix, offset)) {
+            for (let i = 0; i < suffix.length; i += 1) advance();
+            closed = true;
+            break;
+          }
+          if (hashCount === 0 && !triple && source[offset] === '\\' && offset + 1 < source.length) {
+            advance();
+            advance();
+            continue;
+          }
+          advance();
+        }
+        emit('string', start);
+        if (!closed) unterminated.push('string');
+        continue;
+      }
     }
 
     if (options.cppRawStrings) {

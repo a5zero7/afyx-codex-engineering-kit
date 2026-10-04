@@ -5,6 +5,7 @@ import type { BranchGuard, GuardExit, GuardForm } from './branch-guard-policy';
 const NATIVE_GUARD_LANGUAGES: ReadonlySet<Language> = new Set([
   'typescript', 'tsx', 'javascript', 'jsx', 'python', 'java', 'go', 'kotlin',
   'c', 'cpp', 'objc', 'csharp',
+  'swift',
 ]);
 const TEXT_LIMIT = 80;
 
@@ -47,6 +48,7 @@ function viewOf(source: string, language: Language): NativeView {
     backtickIdentifiers: language === 'kotlin',
     cppRawStrings: language === 'cpp',
     csharpStrings: language === 'csharp',
+    swiftSyntax: language === 'swift',
   });
   const tokens = scanned.tokens.filter((token) => token.kind !== 'comment');
   const pairs = new Map<number, number>();
@@ -127,7 +129,7 @@ function ifAt(view: NativeView, keyword: number, language: Language = 'typescrip
     conditionStart += 1;
     conditionEnd = close;
     bodyStart = close + 1;
-  } else if (language === 'go') {
+  } else if (language === 'go' || language === 'swift') {
     bodyStart = conditionStart;
     let depth = 0;
     let lastSemicolon = -1;
@@ -141,7 +143,7 @@ function ifAt(view: NativeView, keyword: number, language: Language = 'typescrip
     }
     if (view.tokens[bodyStart]?.text !== '{') return null;
     conditionEnd = bodyStart;
-    if (lastSemicolon >= 0) conditionStart = lastSemicolon + 1;
+    if (language === 'go' && lastSemicolon >= 0) conditionStart = lastSemicolon + 1;
   } else return null;
   const consequence = bodyAt(view, bodyStart, language);
   if (!consequence) return null;
@@ -251,6 +253,24 @@ function functionBoundary(view: NativeView, siteToken: number, language: Languag
         for (let index = open - 1; index >= 0 && view.tokens[index]!.start.line === line; index -= 1) {
           if (view.tokens[index]!.text === '-' || view.tokens[index]!.text === '+') { named = true; break; }
         }
+      }
+    } else if (language === 'swift') {
+      const floor = containingBrace(view, open) ?? -1;
+      for (let index = open - 1; index > floor; index -= 1) {
+        const text = view.tokens[index]!.text;
+        if (['func', 'init', 'deinit'].includes(text)) { named = true; break; }
+        if ([';', '{', '}'].includes(text)) break;
+      }
+      if (!named) {
+        const firstNested = view.tokens.slice(open + 1, close).findIndex((token) => token.text === '{');
+        const closureLimit = firstNested < 0 ? close : open + 1 + firstNested;
+        const hasIn = view.tokens.slice(open + 1, closureLimit).some((token) => token.text === 'in');
+        const previous = view.tokens[open - 1];
+        const header = view.tokens.slice(Math.max(floor + 1, open - 16), open).map((token) => token.text);
+        const controlHeader = header.some((text) => ['if', 'else', 'guard', 'switch', 'for', 'while', 'catch', 'do'].includes(text));
+        const trailing = !controlHeader && (previous?.text === ')' || previous?.kind === 'identifier');
+        const assigned = previous?.text === '=';
+        named = hasIn || trailing || assigned;
       }
     } else if (language === 'kotlin') {
       if (before === '=') named = true;
@@ -365,6 +385,35 @@ function catchGuards(view: NativeView, siteOffset: number, boundary: number, lan
   return found;
 }
 
+function swiftGuardGuards(view: NativeView, siteOffset: number, siteToken: number, boundary: number): BranchGuard[] {
+  const found: BranchGuard[] = [];
+  for (let index = boundary + 1; index < view.tokens.length; index += 1) {
+    if (view.tokens[index]!.text !== 'guard') continue;
+    let elseIndex = index + 1;
+    let depth = 0;
+    while (elseIndex < view.tokens.length) {
+      const text = view.tokens[elseIndex]!.text;
+      if (depth === 0 && text === 'else') break;
+      if (text === '(' || text === '[') depth += 1;
+      else if (text === ')' || text === ']') depth = Math.max(0, depth - 1);
+      else if (depth === 0 && ['{', '}', ';'].includes(text)) break;
+      elseIndex += 1;
+    }
+    if (view.tokens[elseIndex]?.text !== 'else') continue;
+    const arm = bodyAt(view, elseIndex + 1, 'swift');
+    if (!arm) continue;
+    const condition = slice(view, index + 1, elseIndex);
+    if (contains(view, arm, siteOffset)) {
+      const item = guard(view, 'else', condition, true, index, { armExit: exitIn(view, arm, 'swift') });
+      if (item) found.push(item);
+    } else if (arm.after <= siteToken && laterInContainingBlock(view, index, siteToken)) {
+      const item = guard(view, 'guard', condition, false, index, { exit: exitIn(view, arm, 'swift') ?? 'exit' });
+      if (item) found.push(item);
+    }
+  }
+  return found;
+}
+
 function switchGuards(view: NativeView, siteToken: number, boundary: number, language: Language): BranchGuard[] {
   const found: BranchGuard[] = [];
   for (let index = boundary + 1; index < siteToken; index += 1) {
@@ -376,7 +425,7 @@ function switchGuards(view: NativeView, siteToken: number, boundary: number, lan
       conditionClose = view.pairs.get(conditionStart);
       blockOpen = conditionClose === undefined ? undefined : conditionClose + 1;
       conditionStart += 1;
-    } else if (language === 'go') {
+    } else if (language === 'go' || language === 'swift') {
       blockOpen = conditionStart;
       let depth = 0;
       let lastSemicolon = -1;
@@ -389,7 +438,7 @@ function switchGuards(view: NativeView, siteToken: number, boundary: number, lan
         blockOpen += 1;
       }
       conditionClose = blockOpen;
-      if (lastSemicolon >= 0) conditionStart = lastSemicolon + 1;
+      if (language === 'go' && lastSemicolon >= 0) conditionStart = lastSemicolon + 1;
     }
     const blockClose = blockOpen === undefined ? undefined : view.pairs.get(blockOpen);
     if (conditionClose === undefined || blockOpen === undefined || blockClose === undefined || siteToken >= blockClose) continue;
@@ -416,7 +465,7 @@ function switchGuards(view: NativeView, siteToken: number, boundary: number, lan
     // The established Java oracle currently emits no guard for switch rules.
     if (language === 'java' && arrow) continue;
     const value = isDefault ? '' : slice(view, active + 1, colon);
-    const equality = ['java', 'go', 'c', 'cpp', 'objc', 'csharp'].includes(language) ? '==' : '===';
+    const equality = ['java', 'go', 'c', 'cpp', 'objc', 'csharp', 'swift'].includes(language) ? '==' : '===';
     const item = guard(view, 'case', isDefault ? `${subject}: default` : subject ? `${subject} ${equality} ${value}` : value, false, index, {
       lineIndex: isDefault && language !== 'java' ? index : active,
     });
@@ -811,6 +860,7 @@ function guardsInView(view: NativeView, language: Language, line: number, column
   const boundary = functionBoundary(view, siteToken, language);
   return dedupeAndOrder([
     ...ifGuards(view, offset, siteToken, boundary, language),
+    ...(language === 'swift' ? swiftGuardGuards(view, offset, siteToken, boundary) : []),
     ...catchGuards(view, offset, boundary, language),
     ...switchGuards(view, siteToken, boundary, language),
     ...(language === 'kotlin' ? kotlinWhenGuards(view, siteToken, boundary) : []),
