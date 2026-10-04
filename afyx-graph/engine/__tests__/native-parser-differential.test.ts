@@ -13,12 +13,12 @@ function canonical(filePath: string, source: string, language: Language, native:
   else delete process.env.AFYX_GRAPH_NATIVE_PARSER;
   const result = extractFromSource(filePath, source, language);
   return {
-    nodes: result.nodes.map((node) => ({
+    nodes: Object.fromEntries(result.nodes.map((node) => [`${node.kind}:${node.name}`, {
       id: node.id, kind: node.kind, name: node.name, qualifiedName: node.qualifiedName,
       filePath: node.filePath, language: node.language, startLine: node.startLine,
       endLine: node.endLine, startColumn: node.startColumn, endColumn: node.endColumn,
       isExported: node.isExported,
-    })).sort((left, right) => left.startLine - right.startLine || left.startColumn - right.startColumn),
+    }])),
     edges: result.edges.map(({ source, target, kind }) => ({ source, target, kind }))
       .sort((left, right) => left.target.localeCompare(right.target)),
     refs: result.unresolvedReferences.map((ref) => ({

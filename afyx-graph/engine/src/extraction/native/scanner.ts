@@ -1,4 +1,4 @@
-export type NativeTokenKind = 'identifier' | 'number' | 'string' | 'punctuation';
+export type NativeTokenKind = 'identifier' | 'number' | 'string' | 'comment' | 'punctuation';
 
 export interface NativePosition {
   readonly offset: number;
@@ -72,13 +72,16 @@ export function scanSource(source: string): NativeScanResult {
     }
 
     if (char === '/' && next === '/') {
+      const start = position();
       advance();
       advance();
       while (offset < source.length && source[offset] !== '\n') advance();
+      emit('comment', start);
       continue;
     }
 
     if (char === '/' && next === '*') {
+      const start = position();
       advance();
       advance();
       let closed = false;
@@ -91,12 +94,15 @@ export function scanSource(source: string): NativeScanResult {
         }
         advance();
       }
+      emit('comment', start);
       if (!closed) unterminated.push('comment');
       continue;
     }
 
     if (char === '#') {
+      const start = position();
       while (offset < source.length && source[offset] !== '\n') advance();
+      emit('comment', start);
       continue;
     }
 
@@ -137,6 +143,18 @@ export function scanSource(source: string): NativeScanResult {
     }
 
     const start = position();
+    const compound = source.slice(offset, offset + 3);
+    const compound2 = source.slice(offset, offset + 2);
+    const operator = ['>>=', '<<=', '===', '!==', '...', '??=', '&&=', '||='].includes(compound)
+      ? compound
+      : ['=>', '::', '?.', '??', '&&', '||', '==', '!=', '<=', '>=', '++', '--', '+=', '-=', '*=', '/=', '**', '<<', '>>'].includes(compound2)
+        ? compound2
+        : undefined;
+    if (operator) {
+      for (let i = 0; i < operator.length; i += 1) advance();
+      emit('punctuation', start);
+      continue;
+    }
     advance();
     emit('punctuation', start);
     const tokenIndex = tokens.length - 1;
