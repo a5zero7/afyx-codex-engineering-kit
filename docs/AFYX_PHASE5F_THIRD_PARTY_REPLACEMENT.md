@@ -2,9 +2,12 @@
 
 Task: `AFYX-91852`
 Inventory date: 2026-10-04
-Canonical baseline: `48b6078ed37349e405213258819fa5225bcdb3fb`
-Branch: `afyx/native-phase5f-third-party-replacement`
-Status: **IN PROGRESS — UI RUNTIME CHECKPOINT COMPLETE**
+Canonical baseline: `ebe34a2b3781c664713a362714ccb92bba2bc8e6`
+Branch: `afyx/native-phase5f-parser-grammar`
+Status: **IN PROGRESS — PARSER / GRAMMAR REPLACEMENT ACTIVE**
+
+PR #57 (inventory, utility runtime, and UI runtime) is **MERGED / FROZEN** at
+`ebe34a2b3781c664713a362714ccb92bba2bc8e6`.
 
 This document is the Phase 5F technical source of truth. The target is no
 third-party product/runtime ownership in the shipped Afyx Graph boundary. It is
@@ -350,9 +353,33 @@ detected in the shipped viewer.
 | Before-state release | local `win32-x64` build plus distribution verifier and manifest | PASS |
 | Utility replacement | Afyx CLI/terminal/matchers/JSONC; clean dependency closure; scope parity; controlled bundle | PASS |
 | UI replacement | Native DOM/SVG runtime, zero production UI dependencies, controlled viewer artifact audit | PASS |
-| Parser/grammar replacement | Not started | PENDING |
+| Parser/grammar replacement | Ownership frozen; native scanner foundation validated | ACTIVE |
 | Kernel closure | Not started | PENDING |
 | Runtime/distribution after-state | Not started | PENDING |
 | Full regression and CI | Not started | PENDING |
 
 Phase 5F is not complete at this checkpoint.
+
+## Parser / grammar ownership freeze
+
+The parser boundary started from 29 tracked grammar WASM files totaling
+68,192,092 bytes and two production packages (`web-tree-sitter` and
+`tree-sitter-wasms`). Forty-eight active TypeScript modules reference the old
+runtime, its syntax-node model, parser loading, or shared traversal helpers.
+
+| Ownership | Current modules | Migration rule |
+| --- | --- | --- |
+| `PARSER_RUNTIME_REMOVE` | `grammars.ts`, `web-tree-sitter.d.ts`, parser bootstrap/cache, grammar WASM | Remove after native semantic gates pass. |
+| `SYNTAX_COUPLED_REWRITE` | `tree-sitter.ts`, `tree-sitter-types.ts`, `function-ref.ts`, `syntax-tokens.ts`, `cfml-extractor.ts`, language configs, branch guards/policy | Replace traversal mechanics with Afyx-native scanners and fact recognizers; retain semantic policy. |
+| `GRAPH_FACT_LOGIC_KEEP` | graph node/edge/reference schemas, resolution, reconciliation, extraction admission | Preserve public graph meaning and ordering. |
+| `FORMAT_EXTRACTOR_KEEP` | Liquid, Razor, MyBatis XML, DFM/FMX, YAML/Twig/properties file-level paths | Keep independently owned format parsing; remove only actual old-parser coupling. |
+| `ROUTING_KEEP` | extension/content detection, extractor registry, worker/store boundaries | Preserve supported-language and orchestration contracts while simplifying grammar bootstrap. |
+| `FRAMEWORK_LOGIC_KEEP` | framework resolvers and SFC source-offset mapping | Preserve framework facts; embedded JS/TS moves to the native recognizer. |
+| `TEST_ORACLE_REWRITE` | kernel parity and grammar/bootstrap tests | Compare semantic facts against native output; do not retain the old runtime as a committed oracle. |
+| `DEAD_AFTER_NATIVE_PARSER` | grammar loaders/copy checks and add-language AST/WASM diagnostics | Remove only after all language routes are accounted for. |
+| `DEFER_KERNEL` | Rust kernel sources, Cargo dependencies, vendored kernel grammars | Remain a later Phase 5F boundary. |
+
+The first native foundation is a dependency-free bounded lexical scanner. It
+uses UTF-16 offsets/columns, treats strings and comments as opaque, records
+balanced delimiters without constructing a Tree-sitter-compatible AST, and
+reports incomplete strings/comments/delimiters without throwing or looping.
