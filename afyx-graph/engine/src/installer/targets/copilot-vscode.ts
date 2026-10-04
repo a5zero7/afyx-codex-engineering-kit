@@ -38,7 +38,7 @@
  * ## JSONC
  *
  * VS Code parses its config files as JSONC (comments + trailing commas
- * allowed), so reads + writes go through `jsonc-parser` — surgical
+ * allowed), so reads + writes go through the Afyx JSONC editor — surgical
  * edits that preserve sibling servers, user comments, and formatting
  * across install / re-install / uninstall (same approach as opencode).
  */
@@ -46,7 +46,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { parse as parseJsonc, modify, applyEdits } from 'jsonc-parser';
+import { parseJsonc, updateJsoncPath } from '../../runtime/jsonc';
 import {
   AgentTarget,
   DetectionResult,
@@ -105,15 +105,12 @@ function readConfigText(file: string): string {
 
 function parseConfig(text: string): Record<string, any> {
   if (!text.trim()) return {};
-  const errors: any[] = [];
-  const result = parseJsonc(text, errors, { allowTrailingComma: true });
+  const result = parseJsonc(text);
   if (result == null || typeof result !== 'object' || Array.isArray(result)) {
     return {};
   }
   return result as Record<string, any>;
 }
-
-const FORMATTING = { tabSize: 2, insertSpaces: true, eol: '\n' };
 
 class CopilotVscodeTarget implements AgentTarget {
   readonly id = 'copilot-vscode' as const;
@@ -175,10 +172,7 @@ function writeMcpEntry(loc: Location): WriteResult['files'][number] {
 
   // Surgical edit — preserves comments, formatting, and sibling
   // servers ("servers" is created when missing).
-  const edits = modify(text, ['servers', MCP_SERVER_NAME], after, {
-    formattingOptions: FORMATTING,
-  });
-  const updated = applyEdits(text, edits);
+  const updated = updateJsoncPath(text, ['servers', MCP_SERVER_NAME], after);
   atomicWriteFileSync(file, updated);
 
   return { path: file, action: existed ? 'updated' : 'created' };
@@ -191,10 +185,7 @@ function removeMcpEntry(loc: Location): WriteResult['files'][number] {
   const config = parseConfig(text);
   if (!config.servers?.[MCP_SERVER_NAME]) return { path: file, action: 'not-found' };
 
-  let edits = modify(text, ['servers', MCP_SERVER_NAME], undefined, {
-    formattingOptions: FORMATTING,
-  });
-  let updated = applyEdits(text, edits);
+  let updated = updateJsoncPath(text, ['servers', MCP_SERVER_NAME], undefined);
 
   // Drop an emptied `servers` wrapper; the file itself is left in
   // place — VS Code recreates/reads it and siblings like `inputs`
@@ -202,8 +193,7 @@ function removeMcpEntry(loc: Location): WriteResult['files'][number] {
   const afterParsed = parseConfig(updated);
   if (afterParsed.servers && typeof afterParsed.servers === 'object' &&
       Object.keys(afterParsed.servers).length === 0) {
-    edits = modify(updated, ['servers'], undefined, { formattingOptions: FORMATTING });
-    updated = applyEdits(updated, edits);
+    updated = updateJsoncPath(updated, ['servers'], undefined);
   }
 
   atomicWriteFileSync(file, updated);

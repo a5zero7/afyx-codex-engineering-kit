@@ -4,7 +4,7 @@
  * The usage header has advertised `afyx-graph context <task>  Build context for
  * a task` since the first release, and the ContextBuilder behind the public
  * `buildContext` API has always shipped in the package — but the command was
- * never registered with commander, so external integrations built against the
+ * never registered with Afyx CLI, so external integrations built against the
  * documented contract (`afyx-graph context --path <root> --format json
  * --max-nodes 8 --no-code <task>`, e.g. Memorix) got `unknown command
  * 'context'` and fell back to their own heuristics.

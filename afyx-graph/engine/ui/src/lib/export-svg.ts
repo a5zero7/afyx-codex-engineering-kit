@@ -100,9 +100,8 @@ export const EXPORT_COLORS = {
 } as const;
 
 export const MONO_STACK =
-  "'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace";
-export const SANS_STACK =
-  "'Archivo Variable', 'Archivo', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif";
+  "ui-monospace, 'Cascadia Code', 'SFMono-Regular', Menlo, Consolas, monospace";
+export const SANS_STACK = "system-ui, -apple-system, 'Segoe UI', sans-serif";
 
 /** Clear space between the drawing and the edge of the image (design spec §3.9). */
 export const EXPORT_PADDING = 24;
@@ -320,7 +319,7 @@ function document_(frame: Frame, defs: string, body: string, options: ExportOpti
 
 /* ------------------------------------------------------------ flow strip -- */
 
-/** Card header: glyph box, name, `file:line` — mirrors `FlowCard.svelte`. */
+/** Card header: glyph box, name, `file:line` — mirrors the native flow card. */
 const CARD_PAD_X = 12;
 const GLYPH_SIZE = 16;
 const GLYPH_TOP = 9;

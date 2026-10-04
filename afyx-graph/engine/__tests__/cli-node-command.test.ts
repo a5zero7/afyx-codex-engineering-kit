@@ -2,7 +2,7 @@
  * `afyx-graph node` argument handling (#1044).
  *
  * File-read mode (`afyx-graph node -f <file>`) carries no symbol name, but the
- * command was defined with a REQUIRED `<name>` positional, so commander.js
+ * command was defined with a REQUIRED `<name>` positional, so the previous CLI parser
  * rejected the call with "missing required argument 'name'" before the action
  * ever ran — making file mode unreachable from the CLI. `name` is now optional
  * (`[name]`); the action validates that a symbol OR a file is supplied.
@@ -71,7 +71,7 @@ describe('afyx-graph node — argument handling (#1044)', () => {
     expect(stdout).toContain('Location:');
   });
 
-  it('neither symbol nor file gives a usage error, not commander\'s cryptic one', () => {
+  it('neither symbol nor file gives a usage error, not Afyx CLI\'s cryptic one', () => {
     const { stderr, code } = runNode(tempDir, []);
     expect(code).not.toBe(0);
     expect(stderr).toMatch(/symbol name|file/i);

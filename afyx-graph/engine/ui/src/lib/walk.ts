@@ -14,7 +14,8 @@
  */
 
 import { fileHref, navigate, symbolHref } from './navigation';
-import { encodeTrail, trail, type HopDirection } from './trail.svelte';
+import { trail } from './native-state';
+import { encodeTrail, type HopDirection } from './trail-codec';
 import type { EntryTarget } from './entry-model';
 
 export interface WalkTarget {

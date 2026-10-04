@@ -34,7 +34,7 @@ import { lastSegment, relationWords, synthesizedBy, type LineRef } from './symbo
 
 /* ------------------------------------------------------------- constants -- */
 
-/** Height of one source line. Pinned in `FileCodeBlock.svelte`'s CSS. */
+/** Height of one source line. Pinned in the native source renderer's CSS. */
 export const CODE_LINE_HEIGHT = 20;
 
 /** Blank space above line 1, so the first line is not flush against the rule. */

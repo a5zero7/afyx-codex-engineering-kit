@@ -92,7 +92,7 @@ describe('CLI color handling (#1281)', () => {
   });
 
   it('--color / --no-color are accepted in any argv position (not rejected by subcommands)', () => {
-    // Would exit non-zero with "unknown option" if the flag reached commander.
+    // Would exit non-zero with "unknown option" if the flag reached Afyx CLI.
     const out = run(['query', 'alpha', '--no-color'], colorEnv(), tempDir);
     expect(out).toContain('alpha');
   });

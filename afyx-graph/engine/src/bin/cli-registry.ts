@@ -1,4 +1,4 @@
-import type { Command, CommandOptions } from 'commander';
+import type { AfyxCli, AfyxRouteOptions } from './cli-parser';
 
 export interface CliCommandDefinition {
   name: string;
@@ -38,10 +38,10 @@ const BY_NAME = new Map<CliCommandName, CliCommandDefinition>(
   DEFINITIONS.map((definition) => [definition.name, definition]),
 );
 
-/** Canonical command order. Commander preserves this order in root help. */
+/** Canonical command order. Afyx CLI preserves this order in root help. */
 export const CLI_COMMANDS: readonly CliCommandDefinition[] = Object.freeze(DEFINITIONS);
 
-/** Build a Commander signature from a registered public route. */
+/** Build a Afyx CLI signature from a registered public route. */
 export function cliCommand(name: CliCommandName, operands = ''): string {
   return operands ? `${name} ${operands}` : name;
 }
@@ -50,7 +50,7 @@ export function cliAliases(name: CliCommandName): readonly string[] {
   return BY_NAME.get(name)?.aliases ?? [];
 }
 
-export function cliCommandOptions(name: CliCommandName): CommandOptions | undefined {
+export function cliCommandOptions(name: CliCommandName): AfyxRouteOptions | undefined {
   return BY_NAME.get(name)?.hidden ? { hidden: true } : undefined;
 }
 
@@ -69,12 +69,8 @@ export function prepareCliInvocation(argv: readonly string[]): PreparedCliInvoca
 }
 
 /** Fail fast if registration order, aliases, or hidden-state metadata drift. */
-export function assertCliCatalog(program: Command): void {
-  const actual = program.commands.map((command) => ({
-    name: command.name(),
-    aliases: command.aliases(),
-    hidden: Boolean((command as Command & { _hidden?: boolean })._hidden),
-  }));
+export function assertCliCatalog(program: AfyxCli): void {
+  const actual = program.catalog();
   const expected = CLI_COMMANDS.map(({ name, aliases, hidden }) => ({
     name,
     aliases: [...aliases],

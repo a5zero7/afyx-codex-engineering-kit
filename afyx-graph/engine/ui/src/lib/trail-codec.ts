@@ -1,7 +1,7 @@
 /**
  * The trail's wire format — the part with no state in it.
  *
- * Split out of `trail.svelte.ts` so it can be tested without a Svelte runtime:
+ * Split from live state so it can be tested as a pure codec:
  * the round-trip through the URL is the whole reason the trail is shareable,
  * and it is the one part of the trail that can be silently wrong.
  *

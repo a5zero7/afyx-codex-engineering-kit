@@ -24,7 +24,7 @@ import { loadExtensionOverrides, loadIncludeIgnoredPatterns, loadExcludePatterns
 import { isAfyxGraphDataDir } from '../directory';
 import { logDebug, logWarn } from '../errors';
 import { validatePathWithinRoot, normalizePath } from '../utils';
-import ignore, { Ignore } from 'ignore';
+import { createIgnoreMatcher, type AfyxIgnoreMatcher } from '../runtime/ignore-matcher';
 import { detectFrameworks } from '../resolution/frameworks';
 import type { ResolutionContext } from '../resolution/types';
 import { createYielder } from '../resolution/cooperative-yield';
@@ -284,7 +284,7 @@ function readGitignorePatterns(giPath: string): string {
   // Fast path: one `.ignores()` call forces the library to compile EVERY rule,
   // so if it doesn't throw, the whole file is safe to use verbatim.
   try {
-    ignore().add(content).ignores('.afyx-graph-probe');
+    createIgnoreMatcher().add(content).ignores('.afyx-graph-probe');
     return content;
   } catch {
     // Fall through: a line is uncompilable — keep the good ones, drop the bad.
@@ -293,7 +293,7 @@ function readGitignorePatterns(giPath: string): string {
   let dropped = 0;
   for (const line of content.split(/\r?\n/)) {
     try {
-      ignore().add(line).ignores('.afyx-graph-probe');
+      createIgnoreMatcher().add(line).ignores('.afyx-graph-probe');
       kept.push(line);
     } catch {
       dropped++;
@@ -413,8 +413,8 @@ function listGitIgnoredDirectories(rootDir: string): string[] {
  * doesn't make it project code; the explicit `.gitignore` negation is the only
  * opt-in).
  */
-export function buildDefaultIgnore(rootDir: string): Ignore {
-  const ig = ignore().add(DEFAULT_IGNORE_PATTERNS);
+export function buildDefaultIgnore(rootDir: string): AfyxIgnoreMatcher {
+  const ig = createIgnoreMatcher().add(DEFAULT_IGNORE_PATTERNS);
   const rootGitignore = path.join(rootDir, '.gitignore');
   if (fs.existsSync(rootGitignore)) ig.add(readGitignorePatterns(rootGitignore));
   const extra = readGitExcludeExtraPatterns(rootDir);
@@ -427,8 +427,8 @@ export function buildDefaultIgnore(rootDir: string): Ignore {
  * parent repo's own ignore rules must NOT apply — inside embedded child repos,
  * whose gitignore semantics their own `git ls-files` already enforced (#514).
  */
-function defaultsOnlyIgnore(): Ignore {
-  return ignore().add(DEFAULT_IGNORE_PATTERNS);
+function defaultsOnlyIgnore(): AfyxIgnoreMatcher {
+  return createIgnoreMatcher().add(DEFAULT_IGNORE_PATTERNS);
 }
 
 /**
@@ -440,9 +440,9 @@ function defaultsOnlyIgnore(): Ignore {
  * indexed (#970, #976). Built once per scan/sync/scope operation from the scan
  * root and threaded down — never global, so multi-project daemons stay isolated.
  */
-function loadIncludeIgnoredMatcher(rootDir: string): Ignore | null {
+function loadIncludeIgnoredMatcher(rootDir: string): AfyxIgnoreMatcher | null {
   const patterns = loadIncludeIgnoredPatterns(rootDir);
-  return patterns.length > 0 ? ignore().add(patterns) : null;
+  return patterns.length > 0 ? createIgnoreMatcher().add(patterns) : null;
 }
 
 /**
@@ -454,9 +454,9 @@ function loadIncludeIgnoredMatcher(rootDir: string): Ignore | null {
  * workspace, including inside embedded repos (excluding `static/` means gone
  * everywhere). Built once per scan/sync/scope operation from the scan root.
  */
-function loadExcludeMatcher(rootDir: string): Ignore | null {
+function loadExcludeMatcher(rootDir: string): AfyxIgnoreMatcher | null {
   const patterns = loadExcludePatterns(rootDir);
-  return patterns.length > 0 ? ignore().add(patterns) : null;
+  return patterns.length > 0 ? createIgnoreMatcher().add(patterns) : null;
 }
 
 /**
@@ -469,9 +469,9 @@ function loadExcludeMatcher(rootDir: string): Ignore | null {
  * default → no overhead, no extra walk). Built once per scan/sync/scope
  * operation from the scan root.
  */
-function loadIncludeMatcher(rootDir: string): Ignore | null {
+function loadIncludeMatcher(rootDir: string): AfyxIgnoreMatcher | null {
   const patterns = loadIncludePatterns(rootDir);
-  return patterns.length > 0 ? ignore().add(patterns) : null;
+  return patterns.length > 0 ? createIgnoreMatcher().add(patterns) : null;
 }
 
 /** Glob metacharacters that end the static (literal) prefix of an `include` pattern. */
@@ -531,8 +531,8 @@ function includeStaticRoots(patterns: string[]): string[] {
  */
 function collectIncludedFiles(
   rootDir: string,
-  include: Ignore,
-  exclude: Ignore | null,
+  include: AfyxIgnoreMatcher,
+  exclude: AfyxIgnoreMatcher | null,
   roots: string[],
   overrides: Record<string, Language>,
 ): Set<string> {
@@ -774,17 +774,17 @@ export function preloadLanguagesForFiles(
 }
 
 export class ScopeIgnore {
-  private embedded: Array<{ root: string; matcher: Ignore }>;
-  private defaults: Ignore = defaultsOnlyIgnore();
+  private embedded: Array<{ root: string; matcher: AfyxIgnoreMatcher }>;
+  private defaults: AfyxIgnoreMatcher = defaultsOnlyIgnore();
   constructor(
-    private rootMatcher: Ignore,
-    embedded: Array<{ root: string; matcher: Ignore }>,
+    private rootMatcher: AfyxIgnoreMatcher,
+    embedded: Array<{ root: string; matcher: AfyxIgnoreMatcher }>,
     /**
      * Project `afyx-graph.json` `exclude` patterns (#999), matched against the
      * full root-relative path. Wins over everything else — an explicit user
      * exclude applies even to tracked files and even inside embedded repos.
      */
-    private exclude: Ignore | null = null,
+    private exclude: AfyxIgnoreMatcher | null = null,
     /**
      * Project `afyx-graph.json` `include` patterns — first-party source forced
      * INTO the index despite `.gitignore`. When a path matches, it is NOT
@@ -794,7 +794,7 @@ export class ScopeIgnore {
      * directory of an included subtree still isn't pruned by the directory
      * walker/watcher.
      */
-    private include: Ignore | null = null,
+    private include: AfyxIgnoreMatcher | null = null,
     private includeRoots: string[] = [],
   ) {
     // Longest root first so paths in nested embedded repos hit the innermost matcher.
@@ -884,9 +884,9 @@ export function buildScopeIgnore(rootDir: string, embeddedRoots?: Iterable<strin
 function gitlinkEmbeddedRepoSkipped(
   relDir: string,
   prefix: string,
-  defaults: Ignore,
-  repoIgnore: Ignore,
-  includeIgnored: Ignore | null,
+  defaults: AfyxIgnoreMatcher,
+  repoIgnore: AfyxIgnoreMatcher,
+  includeIgnored: AfyxIgnoreMatcher | null,
 ): boolean {
   if (defaults.ignores(relDir)) return true;        // default-ignored — never index, opt-in can't revive
   if (!repoIgnore.ignores(relDir)) return false;    // not ignored at all — index as before (#1031/#1033)
@@ -1020,7 +1020,7 @@ export function findUnindexedIgnoredRepos(rootDir: string): string[] {
  * `services/` opts that whole subtree in at any recursion depth. Built-in
  * default excludes (`node_modules`, …) are always skipped.
  */
-function findIgnoredEmbeddedRepos(repoDir: string, includeIgnored: Ignore | null, prefix: string): string[] {
+function findIgnoredEmbeddedRepos(repoDir: string, includeIgnored: AfyxIgnoreMatcher | null, prefix: string): string[] {
   if (!includeIgnored) return [];
   const defaults = defaultsOnlyIgnore();
   const repos: string[] = [];
@@ -1088,7 +1088,7 @@ function lsFilesStaged(gitOpts: Parameters<typeof execFileSync>[2]): string {
  * found) is recorded in `embeddedRoots` so callers can exempt its files from the
  * parent's own gitignore rules.
  */
-function collectGitFiles(repoDir: string, prefix: string, files: Set<string>, embeddedRoots?: Set<string>, includeIgnored: Ignore | null = null): void {
+function collectGitFiles(repoDir: string, prefix: string, files: Set<string>, embeddedRoots?: Set<string>, includeIgnored: AfyxIgnoreMatcher | null = null): void {
   const gitOpts = { cwd: repoDir, encoding: 'utf-8' as const, timeout: 30000, maxBuffer: 50 * 1024 * 1024, stdio: ['pipe', 'pipe', 'pipe'] as ['pipe', 'pipe', 'pipe'], windowsHide: true };
 
   // Tracked files. --recurse-submodules pulls in files from active submodules,
@@ -1370,7 +1370,7 @@ export function canTrustGitFastPath(rootDir: string, sinceCommit?: string | null
   }
 }
 
-function collectGitStatus(repoDir: string, prefix: string, out: GitChanges, overrides?: Record<string, Language>, includeIgnored: Ignore | null = null, exclude: Ignore | null = null, sinceCommit?: string): void {
+function collectGitStatus(repoDir: string, prefix: string, out: GitChanges, overrides?: Record<string, Language>, includeIgnored: AfyxIgnoreMatcher | null = null, exclude: AfyxIgnoreMatcher | null = null, sinceCommit?: string): void {
   const output = execFileSync(
     'git',
     // `-uall` lists individual untracked files instead of collapsing an
@@ -1579,7 +1579,7 @@ function scanDirectoryWalk(
   // applies .gitignore files at every level.
   interface ScopedIgnore {
     dir: string;
-    ig: Ignore;
+    ig: AfyxIgnoreMatcher;
   }
 
   const loadIgnore = (dir: string): ScopedIgnore | null => {
@@ -1589,7 +1589,7 @@ function scanDirectoryWalk(
     // uncompilable .gitignore is skipped/filtered with a warning, never thrown
     // (issue #682) — so the per-file `.ignores()` calls below can't crash.
     const patterns = readGitignorePatterns(giPath);
-    return patterns ? { dir, ig: ignore().add(patterns) } : null;
+    return patterns ? { dir, ig: createIgnoreMatcher().add(patterns) } : null;
   };
 
   const isIgnored = (fullPath: string, isDir: boolean, matchers: ScopedIgnore[]): boolean => {

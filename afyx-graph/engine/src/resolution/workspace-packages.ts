@@ -27,6 +27,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { logDebug } from '../errors';
+import { parseJsonc } from '../runtime/jsonc';
 
 export interface WorkspacePackages {
   /** Member package `name` → directory relative to projectRoot (posix). */
@@ -92,7 +93,7 @@ function readOhpmMain(projectRoot: string, dirRel: string): string | null {
   let parsed: unknown;
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    parsed = require('jsonc-parser').parse(
+    parsed = parseJsonc(
       fs.readFileSync(path.join(projectRoot, dirRel, OHPM_MANIFEST), 'utf-8')
     );
   } catch {
@@ -180,10 +181,9 @@ function readOhpmFileDeps(manifestAbs: string): Array<[string, string]> {
   const out: Array<[string, string]> = [];
   let parsed: unknown;
   try {
-    // JSON5 tolerates comments and trailing commas; jsonc-parser (already a
-    // dependency, used by the opencode installer target) handles both.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    parsed = require('jsonc-parser').parse(fs.readFileSync(manifestAbs, 'utf-8'));
+    // The Afyx JSONC reader handles the comment/trailing-comma subset used by
+    // oh-package manifests without rewriting those user-owned files.
+    parsed = parseJsonc(fs.readFileSync(manifestAbs, 'utf-8'));
   } catch {
     return out;
   }

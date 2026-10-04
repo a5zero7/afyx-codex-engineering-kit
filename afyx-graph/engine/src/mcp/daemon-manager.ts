@@ -3,7 +3,7 @@
  * daemons, let the operator choose one (or "stop all"), stop it, and loop
  * until nothing is left or the operator backs out.
  *
- * The CLI owns the real `@clack/prompts` wiring (the actual TTY select box);
+ * The CLI owns the real `the Afyx terminal` wiring (the actual TTY select box);
  * everything here takes that behind a small injected interface instead, so
  * the whole selection/stop loop runs against a fake `select` in tests — no
  * TTY, no clack, no real daemon processes.

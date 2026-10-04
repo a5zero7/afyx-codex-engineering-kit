@@ -2,7 +2,7 @@
  * `afyx-graph ui` — the CLI face of the viewer server (CG-41).
  *
  * Exercised end-to-end against the built binary, because the things worth
- * pinning here are the ones that only exist once commander, the project
+ * pinning here are the ones that only exist once Afyx CLI, the project
  * resolver and the server are wired together: the help text, the friendly
  * "not indexed" guidance, the sensitive-directory refusal, and whether
  * `--no-open` actually stops a browser from being launched.

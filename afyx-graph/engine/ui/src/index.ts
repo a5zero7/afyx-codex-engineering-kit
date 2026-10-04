@@ -1,5 +1,5 @@
 /**
- * `@a5zero7/afyx-graph-ui` — the Afyx Graph reader as Svelte components.
+ * `@a5zero7/afyx-graph-ui` — the Afyx Graph reader over native browser APIs.
  *
  * The same Symbol view, Flow strip and Map that `afyx-graph ui` serves, behind
  * one seam: a {@link GraphAdapter}. The CLI's viewer runs them on
@@ -9,16 +9,11 @@
  * Nothing is forked, so the two can never draw different answers from the same
  * graph.
  *
- * ```svelte
- * <script>
- *   import { AfyxGraphUi, SymbolView, FlowStrip, ArchitectureMap }
- *     from '@a5zero7/afyx-graph-ui';
- *   import '@a5zero7/afyx-graph-ui/theme.css';
- * </script>
- *
- * <AfyxGraphUi adapter={myAdapter} nav={myNavigation}>
- *   <SymbolView id={symbolId} line={null} />
- * </AfyxGraphUi>
+ * ```ts
+ * import { SymbolView, setGraphAdapter } from '@a5zero7/afyx-graph-ui';
+ * setGraphAdapter(myAdapter);
+ * const view = SymbolView(host, { id: symbolId, line: null });
+ * // Later: view.dispose();
  * ```
  *
  * Three things a host has to know, all of them in the docs and repeated here
@@ -37,7 +32,9 @@
 
 /* ------------------------------------------------------------ the seams -- */
 
-export { default as AfyxGraphUi } from './components/AfyxGraphUi.svelte';
+export { AfyxGraphUi, mountApp } from './native/app';
+export type { AfyxGraphUiOptions } from './native/app';
+export type { NativeMount, Dispose } from './native/dom';
 
 export {
   ApiFailure,
@@ -87,54 +84,48 @@ export * from './lib/wire';
 /* ----------------------------------------------------------- the screens -- */
 
 /** Callers | verbatim source with gutter ports | line-anchored callee rail. */
-export { default as SymbolView } from './views/SymbolView.svelte';
+export { SymbolView } from './native/views';
 /** How one symbol reaches another, one card per hop, opened at the call line. */
-export { default as FlowStrip } from './views/FlowView.svelte';
+export { FlowStrip } from './native/views';
 /** The repository at module granularity, layered so dependencies point down. */
-export { default as ArchitectureMap } from './views/MapView.svelte';
+export { ArchitectureMap } from './native/views';
 /** One file: the outline in source order between two dependency rails. */
-export { default as FileView } from './views/FileView.svelte';
+export { FileView } from './native/views';
 /** One file's whole source, with gutter ports and intra-file call arcs. */
-export { default as FileSourceView } from './views/FileCodeView.svelte';
+export { FileSourceView } from './native/views';
 /** Where a reader starts: routes, files that run something, tests, hubs. */
-export { default as EntryPointsView } from './views/EntryView.svelte';
+export { EntryPointsView } from './native/views';
 /** Symbols nothing reaches, grouped by file, with every exclusion printed. */
-export { default as DeadCodeView } from './views/DeadCodeView.svelte';
+export { DeadCodeView, ScreensView, StepsView } from './native/views';
 
 /* -------------------------------------------------------- the furniture -- */
 
 /** The path walked, with its arrows, its "read as flow" and its Save. */
-export { default as TrailBar } from './components/TrailBar.svelte';
+export { TrailBar } from './native/components';
 /** The trails somebody kept, each hop re-resolved against the current graph. */
-export { default as SavedTrails } from './components/SavedTrails.svelte';
+export { SavedTrails } from './native/components';
 /** The search box, its keyboard and its results panel — one component. */
-export { default as SearchPalette } from './components/SearchPalette.svelte';
+export { SearchPalette } from './native/search';
 /** The results panel alone, for a host that owns the input. */
-export { default as PalettePanel } from './components/PalettePanel.svelte';
+export { PalettePanel } from './native/components';
 /** The rows inside the panel, for a host that owns the whole shell. */
-export { default as PaletteRows } from './components/PaletteRows.svelte';
+export { PaletteRows } from './native/components';
 /** "This file changed on disk since it was indexed." */
-export { default as DriftBanner } from './components/DriftBanner.svelte';
+export { DriftBanner } from './native/components';
 /** The one-letter square that stands for a symbol's kind. */
-export { default as KindGlyph } from './components/KindGlyph.svelte';
+export { KindGlyph } from './native/components';
 /** Copy image / download SVG for a Flow strip or a Map layout. */
-export { default as ExportButtons } from './components/ExportButtons.svelte';
+export { ExportButtons } from './native/components';
 /** Ancestors up, subtypes down, and the fan an interface call dispatches into. */
-export { default as TypeHierarchy } from './components/symbol/TypeHierarchy.svelte';
+export { TypeHierarchy } from './native/components';
 
 /* ------------------------------------------------------------- the state -- */
 
-export { trail, resolveTrailNames } from './lib/trail.svelte';
+export { trail, resolveTrailNames } from './lib/native-state';
 export { encodeTrail, decodeTrail, hopLabel } from './lib/trail-codec';
 export type { HopDirection, TrailHop } from './lib/trail-codec';
-export { trails } from './lib/trails.svelte';
-export { live, liveRefresh, touchesFile } from './lib/live.svelte';
-export type { LiveChanged, LiveHello, LiveIndexEvent, LiveIndexRevision } from './lib/live.svelte';
-export { project } from './lib/project.svelte';
-export { hot, railFocus } from './lib/focus.svelte';
-export type { RailSide } from './lib/focus.svelte';
-export { palette } from './lib/palette.svelte';
-export { toast } from './lib/toast.svelte';
+export { trails, live, liveRefresh, touchesFile, project, hot, railFocus, palette, toast } from './lib/native-state';
+export type { LiveChanged, LiveHello, LiveIndexEvent, LiveIndexRevision, RailSide } from './lib/native-state';
 export { walkTo, arrivedFrom, openEntryTarget } from './lib/walk';
 export type { WalkTarget } from './lib/walk';
 

@@ -7,7 +7,7 @@
  * into workspace member crates.
  */
 
-import picomatch from 'picomatch';
+import { matchesPathPattern } from '../../runtime/path-pattern';
 import { ResolutionContext } from '../types';
 
 const GLOB_CHARS = /[*?[\]{}!]/;
@@ -175,7 +175,6 @@ function expandGlobMember(member: string, context: ResolutionContext): string[] 
     .replace(/[^/]*$/, '')
     .replace(/\/$/, '');
 
-  const matcher = picomatch(member, { dot: false });
   const matches: string[] = [];
   const seen = new Set<string>();
 
@@ -185,7 +184,7 @@ function expandGlobMember(member: string, context: ResolutionContext): string[] 
     for (const child of children) {
       if (SKIP_DIRS.has(child) || child.startsWith('.')) continue;
       const rel = dir === '.' ? child : `${dir}/${child}`;
-      if (matcher(rel) && !seen.has(rel)) {
+      if (matchesPathPattern(member, rel) && !seen.has(rel)) {
         seen.add(rel);
         matches.push(rel);
       }
@@ -218,7 +217,7 @@ function expandMembers(members: string[], context: ResolutionContext): string[] 
  * Build a map from crate-name aliases to workspace member directory paths.
  * Example: "mytool-core" and "mytool_core" -> "crates/mytool-core"
  *
- * Supports glob members (e.g. `members = ["crates/*"]`) via picomatch
+ * Supports the bounded Afyx path-pattern grammar (for example `crates/*`)
  * when the context exposes `listDirectories`.
  */
 export function getCargoWorkspaceCrateMap(context: ResolutionContext): Map<string, string> {

@@ -8,7 +8,7 @@
  * Defaults to the Claude-only behavior for backwards compatibility
  * when no targets are explicitly chosen and nothing else is detected.
  *
- * Uses @clack/prompts for the interactive UI; `runInstallerWithOptions`
+ * Uses the bounded Afyx terminal UI; `runInstallerWithOptions`
  * is the non-interactive entry point used by the `--target` /
  * `--print-config` CLI flags.
  */
@@ -29,6 +29,7 @@ import { applyInstallPlan, createInstallPlan, describeInstallPlan } from './plan
 import { watchDisabledReason } from '../sync/watch-policy';
 import { isGitRepo, isSyncHookInstalled, installGitSyncHook } from '../sync/git-hooks';
 import { getAfyxGraphDir, afyxGraphDirName } from '../directory';
+import { afyxTerminal, type AfyxTerminal } from '../runtime/terminal';
 
 // Backwards-compat: keep these named exports — downstream code may
 // import them. The shim in `config-writer.ts` continues to re-export
@@ -40,13 +41,6 @@ export {
   hasPermissions,
 } from './config-writer';
 export type { InstallLocation } from './config-writer';
-
-// Dynamic import helper — tsc compiles import() to require() in CJS mode,
-// which fails for ESM-only packages. This bypasses the transformation.
-// eslint-disable-next-line @typescript-eslint/no-implied-eval
-const importESM = new Function('specifier', 'return import(specifier)') as
-  (specifier: string) => Promise<typeof import('@clack/prompts')>;
-
 
 function getVersion(): string {
   try {
@@ -84,7 +78,7 @@ export async function runInstaller(): Promise<void> {
 }
 
 export async function runInstallerWithOptions(opts: RunInstallerOptions): Promise<void> {
-  const clack = await importESM('@clack/prompts');
+  const clack = afyxTerminal;
 
   clack.intro(`Afyx Graph v${getVersion()}`);
 
@@ -387,7 +381,7 @@ export function refreshTargets(
  * uninit` owns.
  */
 export async function runUninstaller(opts: RunUninstallerOptions): Promise<void> {
-  const clack = await importESM('@clack/prompts');
+  const clack = afyxTerminal;
 
   clack.intro(`Afyx Graph v${getVersion()} — uninstall`);
 
@@ -477,7 +471,7 @@ function tildify(p: string): string {
 }
 
 async function resolveTargets(
-  clack: typeof import('@clack/prompts'),
+  clack: AfyxTerminal,
   opts: RunInstallerOptions,
   location: Location,
   useDefaults: boolean,
@@ -537,7 +531,7 @@ async function resolveTargets(
  * call unconditionally after init.
  */
 export async function offerWatchFallback(
-  clack: typeof import('@clack/prompts'),
+  clack: AfyxTerminal,
   projectPath: string,
   opts: { yes?: boolean } = {},
 ): Promise<void> {
