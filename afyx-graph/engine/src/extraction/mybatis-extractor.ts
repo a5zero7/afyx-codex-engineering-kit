@@ -1,5 +1,5 @@
 import { Edge, ExtractionError, ExtractionResult, Node, UnresolvedReference } from '../types';
-import { generateNodeId } from './tree-sitter-helpers';
+import { generateNodeId } from './node-id';
 
 /**
  * MyBatisExtractor — parses MyBatis mapper XML files.

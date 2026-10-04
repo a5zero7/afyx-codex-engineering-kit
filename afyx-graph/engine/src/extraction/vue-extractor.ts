@@ -1,5 +1,5 @@
 import { Node, Edge, ExtractionResult, ExtractionError, UnresolvedReference, Language } from '../types';
-import { generateNodeId } from './tree-sitter-helpers';
+import { generateNodeId } from './node-id';
 import { TreeSitterExtractor } from './tree-sitter';
 import { isLanguageSupported } from './grammars';
 

@@ -6,28 +6,7 @@
  */
 
 import { Node as SyntaxNode } from 'web-tree-sitter';
-import * as crypto from 'crypto';
-import { NodeKind } from '../types';
-
-/**
- * Generate a unique node ID
- *
- * Uses a 32-character (128-bit) hash to avoid collisions when indexing
- * large codebases with many files containing similar symbols.
- */
-export function generateNodeId(
-  filePath: string,
-  kind: NodeKind,
-  name: string,
-  line: number
-): string {
-  const hash = crypto
-    .createHash('sha256')
-    .update(`${filePath}:${kind}:${name}:${line}`)
-    .digest('hex')
-    .substring(0, 32);
-  return `${kind}:${hash}`;
-}
+export { generateNodeId } from './node-id';
 
 /**
  * Extract text from a syntax node

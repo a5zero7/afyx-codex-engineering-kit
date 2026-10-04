@@ -1,5 +1,5 @@
 import { Node, Edge, ExtractionResult, ExtractionError, UnresolvedReference } from '../types';
-import { generateNodeId } from './tree-sitter-helpers';
+import { generateNodeId } from './node-id';
 
 /**
  * Custom extractor for Delphi DFM/FMX form files.

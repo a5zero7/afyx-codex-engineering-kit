@@ -32,6 +32,7 @@ import { VueExtractor } from './vue-extractor';
 import { MyBatisExtractor } from './mybatis-extractor';
 import { CfmlExtractor } from './cfml-extractor';
 import { tryKernelExtract, takeDeferredPreParse } from './kernel';
+import { extractNativeFacts } from './native/fact-extractor';
 import {
   getAllFrameworkResolvers,
   getApplicableFrameworks,
@@ -7151,8 +7152,14 @@ export function extractFromSource(
 
   let result: ExtractionResult;
 
+  const useNativeParser = process.env.AFYX_GRAPH_NATIVE_PARSER === '1';
+
+  // During semantic convergence the native route is opt-in. The flag is
+  // removed when every language family has passed OLD/NEW parity.
+  if (useNativeParser && ['typescript', 'tsx', 'javascript', 'jsx', 'python', 'go'].includes(detectedLanguage)) {
+    result = extractNativeFacts(filePath, source, detectedLanguage);
   // Use custom extractor for Svelte
-  if (detectedLanguage === 'svelte') {
+  } else if (detectedLanguage === 'svelte') {
     const extractor = new SvelteExtractor(filePath, source);
     result = extractor.extract();
   } else if (detectedLanguage === 'vue') {

@@ -1,5 +1,5 @@
 import { Node, Edge, ExtractionResult, ExtractionError, UnresolvedReference } from '../types';
-import { generateNodeId } from './tree-sitter-helpers';
+import { generateNodeId } from './node-id';
 
 /**
  * LiquidExtractor - Extracts relationships from Liquid template files

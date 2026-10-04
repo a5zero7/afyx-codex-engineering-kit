@@ -95,7 +95,7 @@ export function scanSource(source: string): NativeScanResult {
       continue;
     }
 
-    if (char === '#' && (column === 0 || source[offset - 1] === '\n')) {
+    if (char === '#') {
       while (offset < source.length && source[offset] !== '\n') advance();
       continue;
     }
