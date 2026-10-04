@@ -4,6 +4,7 @@ import type { BranchGuard, GuardExit, GuardForm } from './branch-guard-policy';
 
 const NATIVE_GUARD_LANGUAGES: ReadonlySet<Language> = new Set([
   'typescript', 'tsx', 'javascript', 'jsx', 'python', 'java', 'go', 'kotlin',
+  'c', 'cpp', 'objc', 'csharp',
 ]);
 const TEXT_LIMIT = 80;
 
@@ -44,6 +45,8 @@ function viewOf(source: string, language: Language): NativeView {
     hashComments: language === 'python',
     tripleQuotedStrings: language === 'kotlin',
     backtickIdentifiers: language === 'kotlin',
+    cppRawStrings: language === 'cpp',
+    csharpStrings: language === 'csharp',
   });
   const tokens = scanned.tokens.filter((token) => token.kind !== 'comment');
   const pairs = new Map<number, number>();
@@ -231,17 +234,22 @@ function functionBoundary(view: NativeView, siteToken: number, language: Languag
         }
         named = declaration || assigned;
       }
-    } else if (language === 'java') {
+    } else if (language === 'java' || language === 'c' || language === 'cpp' || language === 'objc' || language === 'csharp') {
       if (before === ')') {
         const params = view.pairs.get(open - 1);
         const name = params === undefined ? undefined : view.tokens[params - 1]?.text;
         named = !!name && !['if', 'for', 'while', 'switch', 'catch', 'synchronized'].includes(name);
-      } else if (before === '->' || (before === '>' && view.tokens[open - 2]?.text === '-')) {
+      } else if (before === '->' || before === '=>' || (before === '>' && view.tokens[open - 2]?.text === '-')) {
         const floor = containingBrace(view, open) ?? -1;
-        for (let index = open - (before === '->' ? 2 : 3); index > floor; index -= 1) {
+        for (let index = open - (before === '->' || before === '=>' ? 2 : 3); index > floor; index -= 1) {
           const text = view.tokens[index]!.text;
           if (text === '=') { named = true; break; }
           if (text === ';') break;
+        }
+      } else if (language === 'objc') {
+        const line = view.tokens[open]!.start.line;
+        for (let index = open - 1; index >= 0 && view.tokens[index]!.start.line === line; index -= 1) {
+          if (view.tokens[index]!.text === '-' || view.tokens[index]!.text === '+') { named = true; break; }
         }
       }
     } else if (language === 'kotlin') {
@@ -408,7 +416,7 @@ function switchGuards(view: NativeView, siteToken: number, boundary: number, lan
     // The established Java oracle currently emits no guard for switch rules.
     if (language === 'java' && arrow) continue;
     const value = isDefault ? '' : slice(view, active + 1, colon);
-    const equality = language === 'java' || language === 'go' ? '==' : '===';
+    const equality = ['java', 'go', 'c', 'cpp', 'objc', 'csharp'].includes(language) ? '==' : '===';
     const item = guard(view, 'case', isDefault ? `${subject}: default` : subject ? `${subject} ${equality} ${value}` : value, false, index, {
       lineIndex: isDefault && language !== 'java' ? index : active,
     });

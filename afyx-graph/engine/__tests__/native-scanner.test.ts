@@ -36,4 +36,19 @@ describe('Afyx-native source scanner', () => {
     expect(scanSource('const text = "unfinished').unterminated).toEqual(['string']);
     expect(scanSource('/* unfinished').unterminated).toEqual(['comment']);
   });
+
+  it('keeps C++ raw-string contents opaque and reports an incomplete raw string', () => {
+    const complete = scanSource('auto text = R"tag({ fake(); })tag"; real();', { cppRawStrings: true });
+    expect(complete.tokens.filter((token) => token.kind === 'identifier').map((token) => token.text))
+      .toEqual(['auto', 'text', 'real']);
+    expect(complete.unterminated).toEqual([]);
+    expect(scanSource('R"tag(unfinished', { cppRawStrings: true }).unterminated).toEqual(['string']);
+  });
+
+  it('keeps C# verbatim/interpolated strings opaque, including doubled quotes', () => {
+    const result = scanSource('var text = $@"{{ fake() }} says ""hi"""; Real();', { csharpStrings: true });
+    expect(result.tokens.filter((token) => token.kind === 'identifier').map((token) => token.text))
+      .toEqual(['var', 'text', 'Real']);
+    expect(result.unterminated).toEqual([]);
+  });
 });

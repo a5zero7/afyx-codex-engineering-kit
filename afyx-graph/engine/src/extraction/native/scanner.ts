@@ -28,6 +28,10 @@ export interface NativeScanOptions {
   readonly tripleQuotedStrings?: boolean;
   /** Treat Kotlin backtick-escaped names as identifier tokens. */
   readonly backtickIdentifiers?: boolean;
+  /** Consume C++ raw string literals, including custom delimiters. */
+  readonly cppRawStrings?: boolean;
+  /** Consume C# verbatim/interpolated string prefixes and doubled quotes. */
+  readonly csharpStrings?: boolean;
 }
 
 const OPEN_TO_CLOSE: Readonly<Record<string, string>> = { '(': ')', '[': ']', '{': '}' };
@@ -173,6 +177,61 @@ export function scanSource(source: string, options: NativeScanOptions = {}): Nat
       emit('string', start);
       if (!closed) unterminated.push('string');
       continue;
+    }
+
+    if (options.cppRawStrings) {
+      const raw = /^(?:u8|u|U|L)?R"([^ ()\\\t\r\n]{0,16})\(/.exec(source.slice(offset));
+      if (raw) {
+        const start = position();
+        const prefixLength = raw[0].length;
+        for (let i = 0; i < prefixLength; i += 1) advance();
+        const terminator = `)${raw[1] ?? ''}"`;
+        const end = source.indexOf(terminator, offset);
+        if (end < 0) {
+          while (offset < source.length) advance();
+          emit('string', start);
+          unterminated.push('string');
+        } else {
+          while (offset < end + terminator.length) advance();
+          emit('string', start);
+        }
+        continue;
+      }
+    }
+
+    if (options.csharpStrings) {
+      const prefix = source.startsWith('$@"', offset) || source.startsWith('@$"', offset)
+        ? 3
+        : source.startsWith('@"', offset) || source.startsWith('$"', offset)
+          ? 2
+          : 0;
+      if (prefix > 0) {
+        const start = position();
+        const verbatim = source.slice(offset, offset + prefix).includes('@');
+        for (let i = 0; i < prefix; i += 1) advance();
+        let closed = false;
+        while (offset < source.length) {
+          if (source[offset] === '"') {
+            if (verbatim && source[offset + 1] === '"') {
+              advance();
+              advance();
+              continue;
+            }
+            advance();
+            closed = true;
+            break;
+          }
+          if (!verbatim && source[offset] === '\\' && offset + 1 < source.length) {
+            advance();
+            advance();
+            continue;
+          }
+          advance();
+        }
+        emit('string', start);
+        if (!closed) unterminated.push('string');
+        continue;
+      }
     }
 
     if (options.rustSyntax && char === "'" && next && isIdentifierStart(next)) {

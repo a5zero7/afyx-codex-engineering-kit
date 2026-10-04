@@ -409,6 +409,7 @@ export interface TokenizeResult {
 
 const NATIVE_SYNTAX_LANGUAGES: ReadonlySet<Language> = new Set([
   'typescript', 'tsx', 'javascript', 'jsx', 'python', 'go', 'java', 'rust', 'kotlin', 'scala',
+  'c', 'cpp', 'objc', 'csharp',
 ]);
 
 const NATIVE_KEYWORDS: Readonly<Record<string, ReadonlySet<string>>> = {
@@ -420,6 +421,10 @@ const NATIVE_KEYWORDS: Readonly<Record<string, ReadonlySet<string>>> = {
   rust: new Set('as async await break const continue crate dyn else enum extern false fn for if impl in let loop match mod move mut pub ref return self Self static struct super trait true type unsafe use where while union'.split(' ')),
   kotlin: new Set('as break class continue do else false for fun if in interface is null object package return super this throw true try typealias typeof val var when while by catch constructor delegate dynamic field file finally get import init param property receiver set setparam where actual abstract annotation companion const crossinline data enum expect external final infix inline inner internal lateinit noinline open operator out override private protected public reified sealed suspend tailrec vararg'.split(' ')),
   scala: new Set('abstract case catch class def do else enum export extends false final finally for forSome given if implicit import lazy match new null object opaque open override package private protected return sealed super then this throw trait transparent true try type val var while with yield extension inline using end derives'.split(' ')),
+  c: new Set('auto break case char const continue default do double else enum extern float for goto if inline int long register restrict return short signed sizeof static struct switch typedef union unsigned void volatile while'.split(' ')),
+  cpp: new Set('alignas alignof and and_eq asm auto bitand bitor bool break case catch char class compl concept const consteval constexpr constinit const_cast continue co_await co_return co_yield decltype default delete do double dynamic_cast else enum explicit export extern false float for friend goto if inline int long mutable namespace new noexcept not nullptr operator or override private protected public register reinterpret_cast requires return short signed sizeof static static_assert static_cast struct switch template this thread_local throw true try typedef typeid typename union unsigned using virtual void volatile while xor'.split(' ')),
+  objc: new Set('auto break case char const continue default do double else enum extern float for goto if inline int long register restrict return short signed sizeof static struct switch typedef union unsigned void volatile while interface implementation protocol property end selector'.split(' ')),
+  csharp: new Set('abstract as async await base bool break byte case catch char checked class const continue decimal default delegate do double else enum event explicit extern false finally fixed float for foreach goto if implicit in int interface internal is lock long namespace new null object operator out override params partial private protected public readonly record ref return sbyte sealed short sizeof stackalloc static string struct switch this throw true try typeof uint ulong unchecked unsafe ushort using virtual void volatile while yield'.split(' ')),
 };
 
 const NATIVE_BUILTIN_TYPES: Readonly<Record<string, ReadonlySet<string>>> = {
@@ -431,6 +436,10 @@ const NATIVE_BUILTIN_TYPES: Readonly<Record<string, ReadonlySet<string>>> = {
   rust: new Set('bool char str u8 u16 u32 u64 u128 usize i8 i16 i32 i64 i128 isize f32 f64'.split(' ')),
   kotlin: new Set('Any Unit Nothing String Int Long Short Byte Float Double Boolean Char'.split(' ')),
   scala: new Set('Int Long Short Byte Float Double Boolean Char Unit String Any AnyRef AnyVal Nothing Null'.split(' ')),
+  c: new Set('void char short int long float double signed unsigned size_t'.split(' ')),
+  cpp: new Set('void bool char short int long float double signed unsigned size_t wchar_t'.split(' ')),
+  objc: new Set('void BOOL char short int long float double id instancetype NSInteger NSUInteger'.split(' ')),
+  csharp: new Set('void bool byte sbyte char short ushort int uint long ulong float double decimal string object dynamic'.split(' ')),
 };
 
 function nativeLanguageKey(language: Language): string {
@@ -460,6 +469,8 @@ function classifyNativeRegion(source: string, language: Language, offset: number
     rustSyntax: key === 'rust',
     tripleQuotedStrings: key === 'kotlin' || key === 'scala',
     backtickIdentifiers: key === 'kotlin',
+    cppRawStrings: key === 'cpp',
+    csharpStrings: key === 'csharp',
   });
   const definitions = nativeDefinitionOffsets(source, language, scan.tokens);
   const keywords = NATIVE_KEYWORDS[key] ?? new Set<string>();

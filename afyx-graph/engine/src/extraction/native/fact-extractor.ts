@@ -1,6 +1,7 @@
 import * as path from 'path';
 import type { Edge, ExtractionResult, Language, Node, NodeKind, UnresolvedReference } from '../../types';
 import { generateNodeId } from '../node-id';
+import { extractNativeCFamilyFacts, isNativeCFamilyLanguage } from './c-family-facts';
 import { scanSource, type NativeToken } from './scanner';
 
 const CALL_EXCLUSIONS = new Set([
@@ -92,6 +93,7 @@ function visibility(tokens: readonly NativeToken[], start: number, keyword: numb
  * or emulate a Tree-sitter node API.
  */
 export function extractNativeFacts(filePath: string, source: string, language: Language): ExtractionResult {
+  if (isNativeCFamilyLanguage(language)) return extractNativeCFamilyFacts(filePath, source, language);
   const started = Date.now();
   const scan = scanSource(source, {
     hashComments: ['python', 'ruby', 'r'].includes(language),
