@@ -3,7 +3,7 @@
  *
  * The version should be reachable however a user reaches for it — the bare
  * `version` subcommand, lowercase `-v`, single-dash `-version`, plus
- * commander's stock `--version` / `-V`. All of them print the exact
+ * Afyx CLI's stock `--version` / `-V`. All of them print the exact
  * package.json version and nothing else.
  *
  * Exercised end-to-end against the built binary (same approach as

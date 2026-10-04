@@ -4,7 +4,7 @@ Task: `AFYX-91852`
 Inventory date: 2026-10-04  
 Canonical baseline: `48b6078ed37349e405213258819fa5225bcdb3fb`  
 Branch: `afyx/native-phase5f-third-party-replacement`  
-Status: **IN PROGRESS — INVENTORY AND BEFORE-STATE FROZEN**
+Status: **IN PROGRESS — UTILITY RUNTIME CHECKPOINT COMPLETE**
 
 This document is the Phase 5F technical source of truth. The target is no
 third-party product/runtime ownership in the shipped Afyx Graph boundary. It is
@@ -191,6 +191,72 @@ The committed machine-readable summary is
    `node_modules`, grammar WASM, optional kernel, and third-party browser assets.
 6. Audit a real after-state artifact and run full supported-platform CI.
 
+## Utility / product runtime checkpoint
+
+Checkpoint date: 2026-10-04. The utility boundary is complete; UI, parser,
+kernel, and final distribution/runtime replacement remain pending.
+
+### Usage map and Afyx-owned replacements
+
+| Removed dependency | Previous use | Preserved product contract | Afyx owner | Risk / focused evidence |
+| --- | --- | --- | --- | --- |
+| `commander` | `src/bin/afyx-graph.ts`, `src/bin/cli-registry.ts` | Fixed command grammar, aliases, positional/variadic arguments, flags, help/version, parse errors, exit behavior | `src/bin/cli-parser.ts` | High; CLI semantic, version, context, node, UI, and color suites |
+| `@clack/prompts` | CLI installer flow in `src/installer/index.ts` | Select/multiselect/confirm, cancellation, `--yes`, redirected-input safety | `src/runtime/terminal.ts` | High; terminal contract and installer matrix |
+| `fast-string-width`, `fast-wrap-ansi`, `sisteransi` | Transitive prompt presentation | Predictable readable terminal output without decorative framework behavior | Eliminated with the prompt stack | Low; terminal and CLI presentation suites |
+| `ignore` | `src/index.ts`, `src/extraction/index.ts` | Ordered ignore rules, negation/re-inclusion, rooted/directory patterns, separators, traversal refusal | `src/runtime/ignore-matcher.ts` | High; matcher corpus, config suites, and OLD/NEW real scope parity |
+| `picomatch` | Cargo/workspace path matching | Only the observed `*`, `**`, `?`, class, and normalized-path subset; unsupported syntax is rejected | `src/runtime/path-pattern.ts` | Medium; matcher corpus and framework/workspace suites |
+| `jsonc-parser` | provider installers and workspace/package configuration | Comments, trailing commas, surgical nested set/remove, formatting and line-ending preservation, malformed-input refusal | `src/runtime/jsonc.ts` | Very high; JSONC golden corpus and 242-case installer/provider matrix |
+
+No replacement package was added. Direct production dependencies are now
+only `tree-sitter-wasms` and `web-tree-sitter`, which belong to the later
+parser boundary. The non-dev lock closure, excluding the UI workspace root
+record itself, fell from 51 entries to 41. `@clack/core` and
+`fast-string-truncated-width` disappeared with their owning runtime.
+
+### Final behavior and scope evidence
+
+- Clean lockfile install: PASS (`npm ci`).
+- Focused final candidate: 517 passed, 4 declared skips, 0 failed.
+- CLI semantic contract: root and query help digests unchanged; missing option
+  values and the `--` terminator are covered.
+- JSONC golden corpus: 7/7 PASS.
+- Matcher corpus: 14/14 PASS.
+- Installer/provider matrix: 242 passed, 3 declared skips.
+- OLD/NEW engine-root scope on the same final worktree: 981 files each;
+  sorted relative-path SHA-256
+  `1f1e836b3a28e4e0ced2d710412a886b5ecf26a429903f4c16ea8f32143ea8c1`;
+  no OLD-only or NEW-only paths. This final rerun supersedes the earlier
+  provisional 979-file capture.
+- TypeScript typecheck, clean production/UI build, six semantic fixtures,
+  21-check CLI/MCP smoke, and repository validator: PASS.
+- Full high-parallel Windows run: 5,503 passed, 213 skipped, 35 failures in
+  13 files. Isolated reruns cleared all timeout/contention cases. Six files
+  completed functional assertions and then failed only while deleting Windows
+  temporary directories (`EPERM`). `extraction-old-git.test.ts` retains its
+  baseline-local Windows separator assertion (`dir_b\\b.ts` versus the
+  established normalized `dir_b/b.ts`); the exact OLD checkpoint fails the
+  same assertion. No utility product regression remains unexplained.
+
+### Controlled utility artifact
+
+The controlled `win32-x64` bundle was built with Node v24.16.0 and passed the
+distribution verifier (2 viewer references, 29 copied grammars, 343 engine
+source maps, 2 historical legal files).
+
+| Measure | Before | Utility checkpoint |
+| --- | ---: | ---: |
+| Archive bytes | 49,828,770 | 49,566,958 |
+| Archive SHA-256 | `f90524e7df219ea3d60786d70a329cd5a0c2426ba9207ef30cf7379195db5bbe` | `db56aa351284ecd56645724fe2635bde3d6e3ce1c0a9c2da8cf33083be503efb` |
+| Bundle files | 1,628 | 1,560 |
+| Uncompressed bytes | 229,341,184 | 228,429,183 |
+| `node_modules` files | 194 | 106 |
+| `node_modules` bytes | 58,527,055 | 57,543,696 |
+
+The staged production package set is exactly `tree-sitter-wasms` and
+`web-tree-sitter`; all removed utility packages and prompt transitives are
+absent. Bundled Node, `node_modules`, parser WASM, viewer runtime, and historical
+legal files are intentionally still present for later Phase 5F boundaries.
+
 No third-party implementation will be copied or translated, no replacement
 dependency will be introduced, and behavior tests will not be weakened.
 
@@ -214,7 +280,7 @@ dependency will be introduced, and behavior tests will not be weakened.
 | Precondition | branch and `main` at canonical baseline; clean worktree | PASS |
 | Inventory | package/lock imports, UI artifact, Cargo/lock, grammar assets, scripts/workflows/legal files | PASS |
 | Before-state release | local `win32-x64` build plus distribution verifier and manifest | PASS |
-| Utility replacement | Not started | PENDING |
+| Utility replacement | Afyx CLI/terminal/matchers/JSONC; clean dependency closure; scope parity; controlled bundle | PASS |
 | UI replacement | Not started | PENDING |
 | Parser/grammar replacement | Not started | PENDING |
 | Kernel closure | Not started | PENDING |

@@ -57,7 +57,7 @@ import { writeFreshness } from './freshness';
 export { getFreshness } from './freshness';
 export type { FreshnessState, FreshnessReport } from './freshness';
 import { deriveProjectNameTokens } from './search/query-utils';
-import ignore from 'ignore';
+import { createIgnoreMatcher, type AfyxIgnoreMatcher } from './runtime/ignore-matcher';
 import { loadDeprioritizePatterns } from './project-config';
 import { AfyxGraphPackageVersion } from './mcp/version';
 import { extractSegmentSearchWords, segmentLookupVariants, splitIdentifierSegments } from './search/identifier-segments';
@@ -205,14 +205,14 @@ export class AfyxGraph {
     // mtime-cached, so this costs one `stat`; the compiled matcher is memoized
     // on the pattern array's identity, which the cache keeps stable.
     let cachedPatterns: string[] | undefined;
-    let cachedMatcher: ReturnType<typeof ignore> | undefined;
+    let cachedMatcher: AfyxIgnoreMatcher | undefined;
     this.queries.setDeprioritizedPathMatcher((filePath: string): boolean => {
       try {
         const patterns = loadDeprioritizePatterns(this.projectRoot);
         if (patterns.length === 0) return false;
         if (patterns !== cachedPatterns) {
           cachedPatterns = patterns;
-          cachedMatcher = ignore().add(patterns);
+          cachedMatcher = createIgnoreMatcher().add(patterns);
         }
         const rel = path.isAbsolute(filePath)
           ? path.relative(this.projectRoot, filePath)

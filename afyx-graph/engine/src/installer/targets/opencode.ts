@@ -40,7 +40,7 @@
  * tool list (#1698). Pre-#1698 installs wrote the v1 `mcp.afyx-graph` +
  * `enabled` shape; re-install migrates, uninstall removes either.
  *
- * Reads + writes go through `jsonc-parser` so any `//` and `/* *\/`
+ * Reads + writes go through the Afyx JSONC editor so any `//` and `/* *\/`
  * comments the user has added to their `.jsonc` survive idempotent
  * re-runs.
  */
@@ -48,7 +48,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { parse as parseJsonc, modify, applyEdits } from 'jsonc-parser';
+import { parseJsonc, updateJsoncPath } from '../../runtime/jsonc';
 import {
   AgentTarget,
   DetectionResult,
@@ -119,8 +119,7 @@ function readConfigText(file: string): string {
 
 function parseConfig(text: string): Record<string, any> {
   if (!text.trim()) return {};
-  const errors: any[] = [];
-  const result = parseJsonc(text, errors, { allowTrailingComma: true });
+  const result = parseJsonc(text);
   if (result == null || typeof result !== 'object' || Array.isArray(result)) {
     return {};
   }
@@ -147,8 +146,6 @@ function getOpencodeServerEntry(): {
 function hasAfyxGraphEntry(config: Record<string, any>): boolean {
   return !!(config.mcp?.servers?.[MCP_SERVER_NAME] || config.mcp?.[MCP_SERVER_NAME]);
 }
-
-const FORMATTING = { tabSize: 2, insertSpaces: true, eol: '\n' };
 
 class OpencodeTarget implements AgentTarget {
   readonly id = 'opencode' as const;
@@ -235,27 +232,18 @@ function writeMcpEntry(loc: Location): WriteResult['files'][number] {
 
   // Add $schema if the user's existing file is missing it.
   if (!config.$schema) {
-    const schemaEdits = modify(text, ['$schema'], 'https://opencode.ai/config.json', {
-      formattingOptions: FORMATTING,
-    });
-    text = applyEdits(text, schemaEdits);
+    text = updateJsoncPath(text, ['$schema'], 'https://opencode.ai/config.json');
   }
 
   // Migrate pre-#1698 `mcp.afyx-graph` (+ enabled) off the file so OpenCode 2
   // keeps only the native entry where `codemode` survives normalization.
   if (hasLegacy) {
-    const legacyEdits = modify(text, ['mcp', MCP_SERVER_NAME], undefined, {
-      formattingOptions: FORMATTING,
-    });
-    text = applyEdits(text, legacyEdits);
+    text = updateJsoncPath(text, ['mcp', MCP_SERVER_NAME], undefined);
   }
 
   // Surgical edit — preserves comments, formatting, and order of
   // every key we don't touch.
-  const edits = modify(text, ['mcp', 'servers', MCP_SERVER_NAME], after, {
-    formattingOptions: FORMATTING,
-  });
-  const updated = applyEdits(text, edits);
+  const updated = updateJsoncPath(text, ['mcp', 'servers', MCP_SERVER_NAME], after);
   atomicWriteFileSync(file, updated);
 
   return { path: file, action: existed ? 'updated' : 'created' };
@@ -276,37 +264,27 @@ function removeMcpEntryAt(file: string): WriteResult['files'][number] {
 
   let updated = text;
   if (config.mcp?.servers?.[MCP_SERVER_NAME]) {
-    const edits = modify(updated, ['mcp', 'servers', MCP_SERVER_NAME], undefined, {
-      formattingOptions: FORMATTING,
-    });
-    updated = applyEdits(updated, edits);
+    updated = updateJsoncPath(updated, ['mcp', 'servers', MCP_SERVER_NAME], undefined);
   }
   // Re-parse after the native removal so a file that held BOTH shapes
   // (unusual, but possible mid-migration) still drops the v1 leftover.
   const mid = parseConfig(updated);
   if (mid.mcp?.[MCP_SERVER_NAME]) {
-    const edits = modify(updated, ['mcp', MCP_SERVER_NAME], undefined, {
-      formattingOptions: FORMATTING,
-    });
-    updated = applyEdits(updated, edits);
+    updated = updateJsoncPath(updated, ['mcp', MCP_SERVER_NAME], undefined);
   }
 
   // If `mcp.servers` is now an empty object, drop that wrapper.
   let afterParsed = parseConfig(updated);
   if (afterParsed.mcp?.servers && typeof afterParsed.mcp.servers === 'object' &&
       Object.keys(afterParsed.mcp.servers).length === 0) {
-    const edits = modify(updated, ['mcp', 'servers'], undefined, {
-      formattingOptions: FORMATTING,
-    });
-    updated = applyEdits(updated, edits);
+    updated = updateJsoncPath(updated, ['mcp', 'servers'], undefined);
     afterParsed = parseConfig(updated);
   }
 
   // If `mcp` is now an empty object, drop the wrapper too.
   if (afterParsed.mcp && typeof afterParsed.mcp === 'object' &&
       Object.keys(afterParsed.mcp).length === 0) {
-    const edits = modify(updated, ['mcp'], undefined, { formattingOptions: FORMATTING });
-    updated = applyEdits(updated, edits);
+    updated = updateJsoncPath(updated, ['mcp'], undefined);
   }
 
   atomicWriteFileSync(file, updated);

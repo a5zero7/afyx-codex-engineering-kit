@@ -75,7 +75,7 @@ describe('supportsUnicode', () => {
     });
   });
 
-  // The Windows allowlist must match @clack/prompts' bundled detection —
+  // The Windows allowlist must match the Afyx terminal' bundled detection —
   // wherever clack draws its Unicode frame, our rails must be Unicode too,
   // or `afyx-graph index` mixes `|` and `│` in one output block (#398).
   it.each([

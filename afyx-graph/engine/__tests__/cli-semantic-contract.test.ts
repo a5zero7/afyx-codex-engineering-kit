@@ -144,7 +144,7 @@ describe('CLI public semantic contract', () => {
     expect(result.stdout).toContain(`Afyx Graph v${PACKAGE_VERSION}`);
   });
 
-  it('routes unknown commands and Commander parse errors to stderr with exit one', () => {
+  it('routes unknown commands and Afyx CLI parse errors to stderr with exit one', () => {
     const cases = [
       { args: ['definitely-not-a-command'], message: "error: unknown command 'definitely-not-a-command'" },
       { args: ['query'], message: "error: missing required argument 'search'" },
@@ -163,6 +163,18 @@ describe('CLI public semantic contract', () => {
     expect(result.code).toBe(1);
     expect(result.stdout).toBe('');
     expect(result.stderr).toContain('--max-nodes expects a positive integer');
+  });
+
+  it('reports missing option values and honors the option terminator', () => {
+    const missing = runCli(['query', 'needle', '--path']);
+    expect(missing.code).toBe(1);
+    expect(missing.stdout).toBe('');
+    expect(missing.stderr.trim()).toBe("error: option '--path' argument missing");
+
+    const terminated = runCli(['query', '--', 'cliContractNeedle'], { cwd: project });
+    expect(terminated.code).toBe(0);
+    expect(terminated.stderr).toBe('');
+    expect(terminated.stdout).toContain('cliContractNeedle');
   });
 
   it('keeps not-indexed diagnostics on stderr with exit one', () => {
