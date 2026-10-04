@@ -127,8 +127,8 @@ grammar source, or runtime. Legal files are not removed here.
 | --- | --- | --- |
 | TypeScript, `@types/*` | `BUILD_ONLY` | Compiler/types; no intended product runtime. |
 | Vitest, jsdom | `TEST_ONLY` | Test runner and DOM test environment. |
-| Vite/Rollup/esbuild, Svelte compiler/plugin/package | `BUILD_ONLY` today | Build tools, but their emitted browser runtime is product scope and audited separately. |
-| Fontsource packages | `BUILD_ONLY` package plus `SHIPPED_ASSET` output | Emitted font files make them Phase 5F product scope. |
+| Vite/Rollup/esbuild | `BUILD_ONLY` | Native TypeScript/CSS bundling only; not present in the viewer artifact. |
+| System UI/monospace stacks | `PLATFORM_RUNTIME` | No font package or emitted font asset. |
 | GitHub Actions checkout/setup-node | `TOOLCHAIN_EXTERNAL` | CI orchestration, not copied into release. |
 | Prompt Master, Headroom | `EXPLICIT_EXTERNAL_EXCEPTION` | Separately managed and outside Afyx Graph release. |
 
@@ -260,6 +260,74 @@ legal files are intentionally still present for later Phase 5F boundaries.
 No third-party implementation will be copied or translated, no replacement
 dependency will be introduced, and behavior tests will not be weakened.
 
+## UI runtime checkpoint
+
+Checkpoint date: 2026-10-04. The browser presentation boundary is now Afyx-owned;
+parser/grammar, native-kernel, and bundled-runtime work remain pending.
+
+### Ownership map and architecture
+
+| Classification | Modules / responsibility |
+| --- | --- |
+| `PURE_ADAPTER_KEEP` | `ui/src/lib/adapter.ts`, `api.ts`, `wire.ts`, `navigation.ts` |
+| `PURE_MODEL_KEEP` | symbol/file/file-code/flow/map/screens/steps/search/entry/dead-code/trail/export models |
+| `NATIVE_DOM_REWRITE` | `native/app.ts`, `native/search.ts`, `native/components.ts`, `native/views.ts`, `native/dom.ts` |
+| `NATIVE_SVG_REWRITE` | `native/graph.ts`, `native/viewport.ts`; consumes existing deterministic layout output |
+| `STYLING_KEEP_OR_ADAPT` | `theme.css` tokens plus native `app.css`; system font stacks |
+| `THIRD_PARTY_RUNTIME_REMOVE` | Svelte component/runtime/compiler integration and XYFlow/D3 presentation closure |
+| `THIRD_PARTY_ASSET_REMOVE` | Archivo and IBM Plex packages and emitted font files |
+| `DEAD_AFTER_REWRITE` | all active `.svelte`, rune-state `.svelte.ts`, and Svelte build configuration |
+
+The browser remains presentation-only: `GraphAdapter` and the typed wire
+contract are unchanged data boundaries. Native views use explicit mount/dispose
+lifecycles. Hash routing, deep links, search, trail state, live EventSource
+updates, keyboard navigation, loading/error/empty states, and all major views
+remain available. Flow, Map, Screens, and Steps use bounded native SVG pan/zoom
+over the existing Afyx layout models; extraction, traversal, ranking, impact,
+indexing, and database semantics remain in the core.
+
+### Dependency and artifact closure
+
+- UI production dependencies and peer dependencies: zero.
+- Active `.svelte` / `.svelte.ts` product source: zero.
+- Removed packages: Svelte, Svelte compiler/plugin/package/check tooling,
+  `@xyflow/svelte`, `@xyflow/system`, their D3 transitives, and both fontsource
+  packages.
+- Retained build-only tools: TypeScript and Vite/Rollup/esbuild. The generated
+  viewer contains one HTML file, one Afyx JavaScript asset, and one Afyx CSS
+  asset; it contains no build-tool runtime.
+- Viewer before: 46 files / 1,077,326 bytes; 506,225 JS bytes; 100,782 CSS bytes;
+  43 font files / 469,752 font bytes.
+- Viewer checkpoint: 3 files / 85,615 bytes; 77,003 JS bytes; 8,045 CSS bytes;
+  zero font files and zero source maps.
+- Controlled `win32-x64` archive: 48,932,591 bytes; SHA-256
+  `a422fe665596a1fbfcecef77092401e3440d193b0bed0f6f316c2b821dbd2517`;
+  1,517 files / 227,437,426 uncompressed bytes. Distribution verification
+  passed with 2 viewer asset references, 29 grammars, 343 engine source maps,
+  and 2 historical legal files.
+- Viewer byte scan found no Svelte, XYFlow, D3, fontsource, bundled font-name,
+  third-party banner, package URL, or `node_modules` signature.
+
+### Validation
+
+- Clean lockfile install: PASS (`npm ci`; the local Node 26 engine-range warning
+  is environmental—the controlled bundle uses Node 24.16.0).
+- Native/package/UI model/API/security campaign: 687 passed, 4 declared skips.
+- Native package-specific tests: 20 passed, including loading/error, routing,
+  search, required views, deterministic SVG structure, viewport bounds, and
+  cleanup/dispose behavior.
+- Clean TypeScript/UI/production build: PASS.
+- Semantic baseline: PASS (6 fixtures).
+- CLI/MCP smoke: PASS (21 checks).
+- Repository static validator: PASS.
+- Real-browser automation was not added because none exists in the repository;
+  jsdom DOM/SVG tests, live HTTP server/security tests, built-asset fetches, and
+  CLI UI serving are the supported smoke evidence.
+
+Historical legal files were not modified. This checkpoint makes no legal
+conclusion; it records only that third-party UI runtime/source/assets were not
+detected in the shipped viewer.
+
 ## Target after-state gates
 
 - production npm runtime dependency tree: zero
@@ -281,7 +349,7 @@ dependency will be introduced, and behavior tests will not be weakened.
 | Inventory | package/lock imports, UI artifact, Cargo/lock, grammar assets, scripts/workflows/legal files | PASS |
 | Before-state release | local `win32-x64` build plus distribution verifier and manifest | PASS |
 | Utility replacement | Afyx CLI/terminal/matchers/JSONC; clean dependency closure; scope parity; controlled bundle | PASS |
-| UI replacement | Not started | PENDING |
+| UI replacement | Native DOM/SVG runtime, zero production UI dependencies, controlled viewer artifact audit | PASS |
 | Parser/grammar replacement | Not started | PENDING |
 | Kernel closure | Not started | PENDING |
 | Runtime/distribution after-state | Not started | PENDING |

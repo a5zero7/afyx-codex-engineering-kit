@@ -19,7 +19,7 @@
  *   building one is a thing the components must be able to do, not just ask
  *   for.
  *
- * The live route (`router.svelte.ts`) is the *app's* half and is deliberately
+ * The live route (`router.ts`) is the *app's* half and is deliberately
  * not imported here: it attaches `hashchange`/`popstate` listeners at module
  * scope, which a host must never inherit just by rendering a Symbol view.
  */
@@ -204,7 +204,7 @@ export const hashNavigation: NavigationDriver = {
 };
 
 /**
- * The live route's re-read hook, registered by `router.svelte.ts`.
+ * The live route's re-read hook, registered by `router.ts`.
  *
  * The driver has to tell the route store that the hash moved, and the store
  * has to attach window listeners — but a component importing the driver must

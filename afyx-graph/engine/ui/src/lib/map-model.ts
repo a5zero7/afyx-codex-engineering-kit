@@ -87,7 +87,7 @@ export const MIN_WEIGHT_WITH_TESTS = 6;
  */
 const DECLARED_BASIS_COVERAGE = 0.4;
 
-/** Approximate advance of the 11px sans meta line, measured against Archivo. */
+/** Approximate advance of the 11px system-sans meta line. */
 const META_CHAR_WIDTH = 5.9;
 const META_PADDING = 24;
 
@@ -289,7 +289,7 @@ export function strokeWidthFor(count: number): number {
 }
 
 /**
- * A link's stable identity, and the id Svelte Flow keys its edge on.
+ * A link's stable identity, used by the native SVG edge renderer.
  *
  * NUL is the separator because a module id is a path and a path may contain
  * anything else — including the spaces, arrows and colons that read nicer.

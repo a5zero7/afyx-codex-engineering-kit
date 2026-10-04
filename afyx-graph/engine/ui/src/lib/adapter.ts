@@ -20,7 +20,7 @@
  *
  * ## One adapter per page
  *
- * The current adapter is module-level state, not Svelte context. Two reasons:
+ * The current adapter is module-level state, not component context. Two reasons:
  * the pure model modules (`symbol-model`, `flow-model`, the palette store) are
  * plain TypeScript and cannot read a component's context, and a reader is
  * looking at one project at a time — the screens are a reading of *a* graph.
@@ -164,7 +164,7 @@ export interface SaveTrailRequest {
 /* ----------------------------------------------------------------- live -- */
 
 /**
- * The live channel's events, as the viewer's `live.svelte.ts` consumes them.
+ * The live channel's events, as the native viewer state consumes them.
  *
  * An adapter that has no way to know the graph moved simply omits
  * {@link GraphAdapter.events}; the screens then render once and stay put, which

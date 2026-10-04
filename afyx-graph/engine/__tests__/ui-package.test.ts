@@ -1,7 +1,7 @@
 /**
  * `@a5zero7/afyx-graph-ui` — the package's own test (task CG-61).
  *
- * A minimal Svelte host mounts the three headline components from the package
+ * A minimal DOM host mounts the headline native views from the package
  * entry against a MOCK adapter and asserts what lands in the document. That is
  * the whole promise of the package in one file: Afyx Graph Pro renders these
  * same components over its own in-process engine reads, so if a screen can be
@@ -19,13 +19,16 @@
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { flushSync, mount, unmount } from 'svelte';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   ArchitectureMap,
   AfyxGraphUi,
   FlowStrip,
+  FileView,
+  FileSourceView,
+  ScreensView,
+  StepsView,
   SearchPalette,
   SymbolView,
   SavedTrails,
@@ -51,6 +54,7 @@ import {
   type WireStats,
   type WireHierarchy,
   type WireSymbolPayload,
+  type NativeMount,
 } from '../ui/src/index';
 
 /* ---------------------------------------------------------------- fixtures */
@@ -372,6 +376,31 @@ function mockAdapter(): { adapter: GraphAdapter; calls: string[] } {
       }),
     flow: () => seen('flow', FLOW),
     map: () => seen('map', MAP),
+    screens: () => seen('screens', {
+      routed: false,
+      entry: null,
+      screens: [],
+      origins: [],
+      links: [],
+      dropped: 0,
+      index: { lastIndexedAt: null, edges: 0, files: 3 },
+      timing: { elapsedMs: 1 },
+    }),
+    steps: () => seen('steps', {
+      anchor: SYMBOL.node,
+      ambiguous: [],
+      project: 'app' as const,
+      steps: [],
+      links: [],
+      program: null,
+      defaultView: 'tree' as const,
+      depth: 4,
+      limit: 80,
+      through: false,
+      truncated: { steps: 0, hubs: 0, chrome: 0 },
+      index: { lastIndexedAt: null, edges: 0, files: 3 },
+      timing: { elapsedMs: 1 },
+    }),
     routes: () =>
       seen('routes', {
         routed: false,
@@ -430,7 +459,7 @@ function mockAdapter(): { adapter: GraphAdapter; calls: string[] } {
 /* ----------------------------------------------------------------- harness */
 
 let host: HTMLDivElement;
-let mounted: Record<string, unknown> | null = null;
+let mounted: NativeMount | null = null;
 
 /** jsdom has none of the observers a canvas library expects. */
 beforeAll(() => {
@@ -446,9 +475,7 @@ beforeAll(() => {
   globals.requestAnimationFrame ??= (fn: FrameRequestCallback) =>
     setTimeout(() => fn(0), 0) as unknown as number;
   globals.cancelAnimationFrame ??= (handle: number) => clearTimeout(handle);
-  // jsdom's own `matchMedia` is a stub that is not callable here, and Svelte's
-  // `MediaQuery` (which `@xyflow/svelte`'s store constructs eagerly) calls it
-  // the moment a canvas mounts. Replace it outright rather than guarding.
+  // Keep platform media queries deterministic for the native runtime.
   const media = (query: string) => ({
     media: query,
     matches: false,
@@ -472,7 +499,7 @@ beforeEach(() => {
 
 afterEach(() => {
   if (mounted) {
-    void unmount(mounted);
+    mounted.dispose();
     mounted = null;
   }
   host.remove();
@@ -483,20 +510,17 @@ afterEach(() => {
 /**
  * Mount a component and let its data effects settle.
  *
- * Every screen fetches inside an `$effect`, so a render is not finished until
- * the promise the adapter returned has resolved and the follow-up render has
- * flushed. Two macrotask turns cover the deepest chain any of them has (the
- * Symbol view: node, then its source).
+ * Every screen fetches asynchronously. Four macrotask turns cover the deepest
+ * chain (the Symbol view: node, then source) without framework-specific flushes.
  */
 async function render(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  component: any,
+  component: (target: HTMLElement, props: any) => NativeMount,
   props: Record<string, unknown>
 ): Promise<void> {
-  mounted = mount(component, { target: host, props }) as Record<string, unknown>;
+  mounted = component(host, props);
   for (let turn = 0; turn < 4; turn += 1) {
     await new Promise((resolve) => setTimeout(resolve, 0));
-    flushSync();
   }
 }
 
@@ -520,6 +544,19 @@ describe('@a5zero7/afyx-graph-ui — a host renders the package', () => {
     expect(text).toContain('expiresAt');
     // The honesty badge: nothing in the fixture's graph tests this symbol.
     expect(text.toLowerCase()).toContain('test');
+  });
+
+  it('native views expose loading and API failure states without leaking stale DOM', async () => {
+    const { adapter } = mockAdapter();
+    let rejectNode: ((cause: Error) => void) | null = null;
+    const pending = new Promise<WireSymbolPayload>((_resolve, reject) => { rejectNode = reject; });
+    setGraphAdapter({ ...adapter, node: () => pending });
+    mounted = SymbolView(host, { id: SYMBOL.node.id, line: null });
+    expect(host.textContent).toContain('Loading');
+    rejectNode?.(new Error('controlled node failure'));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(host.textContent).toContain('Could not load this view');
+    expect(host.textContent).toContain('controlled node failure');
   });
 
   it('TypeHierarchy draws the fan, its wiring and its fold from a payload alone', async () => {
@@ -600,6 +637,37 @@ describe('@a5zero7/afyx-graph-ui — a host renders the package', () => {
     expect(text).toContain('http');
   });
 
+  it('File and File Source views preserve outline/source adapter boundaries', async () => {
+    const { adapter, calls } = mockAdapter();
+    setGraphAdapter(adapter);
+    await render(FileView, { path: 'src/auth/token.ts', line: null });
+    expect(calls).toContain('file');
+    expect(host.textContent).toContain('token.ts');
+
+    mounted?.dispose();
+    mounted = null;
+    host.replaceChildren();
+    await render(FileSourceView, { path: 'src/auth/token.ts', line: null });
+    expect(calls).toContain('fileCode');
+    expect(calls).toContain('source:src/auth/token.ts');
+    expect(host.textContent).toContain('expiresAt');
+  });
+
+  it('Screens and Steps render honest empty states from their native SVG models', async () => {
+    const { adapter, calls } = mockAdapter();
+    setGraphAdapter(adapter);
+    await render(ScreensView, {});
+    expect(calls).toContain('screens');
+    expect(host.textContent).toContain('No screens found');
+
+    mounted?.dispose();
+    mounted = null;
+    host.replaceChildren();
+    await render(StepsView, { anchor: SYMBOL.node.id, symbol: null, depth: null, through: false });
+    expect(calls).toContain('steps');
+    expect(host.textContent).toContain('No steps found');
+  });
+
   it('TrailBar and SearchPalette mount and read through the same adapter', async () => {
     const { adapter } = mockAdapter();
     setGraphAdapter(adapter);
@@ -608,7 +676,7 @@ describe('@a5zero7/afyx-graph-ui — a host renders the package', () => {
     await render(TrailBar, {});
     expect(host.textContent ?? '').toContain('parseToken');
 
-    void unmount(mounted as Record<string, unknown>);
+    mounted.dispose();
     mounted = null;
     host.innerHTML = '';
 
@@ -627,7 +695,7 @@ describe('@a5zero7/afyx-graph-ui — a host renders the package', () => {
     // fails.
     expect(host.textContent ?? '').not.toContain('Save trail');
 
-    void unmount(mounted as Record<string, unknown>);
+    mounted.dispose();
     mounted = null;
     host.innerHTML = '';
 
@@ -642,8 +710,7 @@ describe('@a5zero7/afyx-graph-ui — a host renders the package', () => {
     // NOT installed by hand — the provider is the only thing that installs it.
     expect(getGraphAdapter()).not.toBe(adapter);
 
-    mounted = mount(AfyxGraphUi, { target: host, props: { adapter } }) as Record<string, unknown>;
-    flushSync();
+    mounted = AfyxGraphUi(host, { adapter });
     expect(getGraphAdapter()).toBe(adapter);
     expect(calls).toEqual([]);
   });
@@ -675,7 +742,7 @@ describe('@a5zero7/afyx-graph-ui — the seams', () => {
   });
 
   it('gives the Symbol tab an address of its own when no symbol is chosen', async () => {
-    const { parseHash } = await import('../ui/src/lib/router.svelte');
+    const { parseHash } = await import('../ui/src/lib/router');
 
     // The regression this pins: the tab used to fall back to `#/`, and `#/` is
     // the landing page — which renders the SCREENS tab on any project that has
@@ -693,7 +760,7 @@ describe('@a5zero7/afyx-graph-ui — the seams', () => {
   });
 
   it('sends every nav tab to its own view', async () => {
-    const { parseHash } = await import('../ui/src/lib/router.svelte');
+    const { parseHash } = await import('../ui/src/lib/router');
     const { entryHref, screensHref, stepsHref, deadHref } = await import(
       '../ui/src/lib/navigation'
     );
@@ -772,15 +839,12 @@ describe('@a5zero7/afyx-graph-ui — the published shape', () => {
 
   it('exports the entry, the theme and nothing else', () => {
     expect(Object.keys(manifest.exports).sort()).toEqual(['.', './package.json', './theme.css']);
-    expect(manifest.exports['.'].svelte).toBe('./dist/index.js');
+    expect(manifest.exports['.'].default).toBe('./dist/index.js');
     expect(manifest.exports['.'].types).toBe('./dist/index.d.ts');
   });
 
-  it('takes svelte as a peer, so a host never gets a second copy', () => {
-    expect(manifest.peerDependencies.svelte).toBeDefined();
-    expect(manifest.dependencies?.svelte).toBeUndefined();
-    // The canvas library is a real dependency: the Map and the Flow strip are
-    // unusable without it and a host must not have to know its version.
-    expect(manifest.dependencies['@xyflow/svelte']).toBeDefined();
+  it('ships no browser runtime dependency', () => {
+    expect(manifest.peerDependencies ?? {}).toEqual({});
+    expect(manifest.dependencies ?? {}).toEqual({});
   });
 });

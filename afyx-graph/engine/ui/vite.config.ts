@@ -1,6 +1,5 @@
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
-import { svelte } from '@sveltejs/vite-plugin-svelte';
 
 // The viewer is emitted straight into the engine's `dist/` tree so it ships
 // with everything else: `build-bundle.sh` copies `dist` wholesale and
@@ -16,15 +15,10 @@ import { svelte } from '@sveltejs/vite-plugin-svelte';
 const outDir = fileURLToPath(new URL('../dist/viewer', import.meta.url));
 
 export default defineConfig(({ command }) => {
-  // `vite build` does NOT override an ambient NODE_ENV, and Svelte compiles in
-  // dev mode when it sees one — a shell (or a CI runner) with
-  // NODE_ENV=development silently ships a viewer carrying Svelte's dev-only
-  // runtime checks: ~13 kB larger, slower, and warning in the user's console.
   // A release artifact must not depend on the machine that built it.
   if (command === 'build') process.env.NODE_ENV = 'production';
 
   return {
-    plugins: [svelte()],
     // Relative asset URLs: the CLI serves this at '/', but a relative base also
     // survives being opened from the filesystem or mounted under a sub-path.
     base: './',

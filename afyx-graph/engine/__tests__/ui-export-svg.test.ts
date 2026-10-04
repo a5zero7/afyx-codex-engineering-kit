@@ -277,7 +277,10 @@ describe('flowSvg', () => {
 
   it('keeps fonts as stacks and embeds nothing', () => {
     const svg = flowSvg(layout);
-    expect(svg).toContain("'IBM Plex Mono'");
+    expect(svg).toContain('ui-monospace');
+    expect(svg).toContain('system-ui');
+    expect(svg).not.toContain('IBM Plex');
+    expect(svg).not.toContain('Archivo');
     expect(svg).not.toContain('@font-face');
     expect(svg).not.toContain('base64');
   });
