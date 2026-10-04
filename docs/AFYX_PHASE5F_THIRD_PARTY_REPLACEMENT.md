@@ -402,3 +402,31 @@ reports incomplete strings/comments/delimiters without throwing or looping.
 checkpoint, not parser-boundary completion: other language families, syntax
 tokens, function references, branch guards, bootstrap/package removal, and
 grammar-WASM removal remain pending.
+
+### Cross-cutting native convergence after `11a2922`
+
+- `e3e200f` migrates syntax-token classification for TypeScript, TSX,
+  JavaScript, JSX, Python, Go, and Java. Embedded SFC JavaScript/TypeScript
+  regions reuse the native classifier under the opt-in gate; the public
+  highlight payload remains compatible.
+- `9dbf892` migrates function-reference candidates for those native routes,
+  including scoped `this` references, Java method references, Python
+  class-as-value references, and import/same-file ownership filtering.
+- The current branch-guard checkpoint adds an Afyx-owned token/source reader
+  for TypeScript, TSX, JavaScript, and JSX. Only guard lookup is native;
+  call-site arguments, triggers, loops, pending languages, and the fallback
+  policy remain on the established route. OLD/NEW differential coverage is
+  4/4 and the focused branch-guard suites pass 59/59.
+
+The native-complete fact and syntax-token set is TypeScript, TSX, JavaScript,
+JSX, Python, Go, and Java. Branch guards are native only for the four JS/TS
+dialects. ArkTS and the remaining systems, JVM, dynamic, enterprise, and
+parser-coupled special-format routes remain pending. Afyx-owned file-level or
+special format routes remain unchanged.
+
+The active `web-tree-sitter`/`SyntaxNode` source coupling count is still 34
+files (baseline 34). This checkpoint introduces no new coupling, but does not
+remove the fallback modules yet. Production dependencies remain
+`web-tree-sitter` and `tree-sitter-wasms`; grammar WASM, bootstrap removal,
+artifact audit, and the parser PR remain deferred until every real route is
+native and validated.

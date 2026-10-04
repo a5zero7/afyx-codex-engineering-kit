@@ -42,6 +42,7 @@ import {
   supportsBranchGuards,
   type BranchGuard,
 } from './branch-guard-policy';
+import { createNativeBranchGuardReader, nativeGuardsInSource, supportsNativeBranchGuards } from './native-branch-guards';
 
 export {
   BRANCH_GUARD_LANGUAGES,
@@ -160,6 +161,21 @@ export async function guardsForFile(
 ): Promise<Map<string, BranchGuard[]>> {
   const out = new Map<string, BranchGuard[]>();
   if (!supportsBranchGuards(language) || sites.length === 0) return out;
+  if (process.env.AFYX_GRAPH_NATIVE_PARSER === '1' && supportsNativeBranchGuards(language)) {
+    let source: string;
+    try {
+      if (fs.statSync(absPath).size > MAX_PARSE_BYTES) return out;
+      source = fs.readFileSync(absPath, 'utf8');
+    } catch {
+      return out;
+    }
+    const readGuards = createNativeBranchGuardReader(source, language);
+    for (const site of sites) {
+      const key = siteKey(site);
+      if (!out.has(key)) out.set(key, readGuards(site.line, site.column ?? null));
+    }
+    return out;
+  }
   const cached = await treeFor(absPath, language);
   if (!cached) return out;
   for (const site of sites) {
@@ -183,6 +199,21 @@ export function guardsForFileSync(
 ): Map<string, BranchGuard[]> {
   const out = new Map<string, BranchGuard[]>();
   if (!supportsBranchGuards(language) || sites.length === 0) return out;
+  if (process.env.AFYX_GRAPH_NATIVE_PARSER === '1' && supportsNativeBranchGuards(language)) {
+    let source: string;
+    try {
+      if (fs.statSync(absPath).size > MAX_PARSE_BYTES) return out;
+      source = fs.readFileSync(absPath, 'utf8');
+    } catch {
+      return out;
+    }
+    const readGuards = createNativeBranchGuardReader(source, language);
+    for (const site of sites) {
+      const key = siteKey(site);
+      if (!out.has(key)) out.set(key, readGuards(site.line, site.column ?? null));
+    }
+    return out;
+  }
   let stat: fs.Stats;
   try {
     stat = fs.statSync(absPath);
@@ -829,6 +860,9 @@ export async function guardsInSource(
   column: number | null = null
 ): Promise<BranchGuard[]> {
   if (!supportsBranchGuards(language)) return [];
+  if (process.env.AFYX_GRAPH_NATIVE_PARSER === '1' && supportsNativeBranchGuards(language)) {
+    return nativeGuardsInSource(source, language, line, column);
+  }
   const tree = await parse(source, language);
   if (!tree) return [];
   try {
