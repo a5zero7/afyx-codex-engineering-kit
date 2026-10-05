@@ -28,7 +28,7 @@ export interface BranchGuard {
 }
 
 export const BRANCH_GUARD_LANGUAGES: readonly Language[] = [
-  'typescript', 'tsx', 'javascript', 'jsx', 'swift', 'python', 'java',
+  'typescript', 'tsx', 'javascript', 'jsx', 'arkts', 'swift', 'python', 'java',
   'kotlin', 'csharp', 'go', 'c', 'cpp', 'objc',
 ];
 
@@ -578,7 +578,7 @@ const cFamily: GuardProfile = {
 };
 
 const PROFILES: ReadonlyMap<Language, GuardProfile> = new Map([
-  ['typescript', javascript], ['tsx', javascript], ['javascript', javascript], ['jsx', javascript],
+  ['typescript', javascript], ['tsx', javascript], ['javascript', javascript], ['jsx', javascript], ['arkts', javascript],
   ['swift', swift], ['python', python], ['java', java], ['kotlin', kotlin], ['csharp', csharp],
   ['go', go], ['c', cFamily], ['cpp', cFamily], ['objc', cFamily],
 ]);

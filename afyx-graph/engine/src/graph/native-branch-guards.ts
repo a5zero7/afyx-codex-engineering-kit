@@ -3,7 +3,7 @@ import type { Language } from '../types';
 import type { BranchGuard, GuardExit, GuardForm } from './branch-guard-policy';
 
 const NATIVE_GUARD_LANGUAGES: ReadonlySet<Language> = new Set([
-  'typescript', 'tsx', 'javascript', 'jsx', 'python', 'java', 'go', 'kotlin',
+  'typescript', 'tsx', 'javascript', 'jsx', 'arkts', 'python', 'java', 'go', 'kotlin',
   'c', 'cpp', 'objc', 'csharp',
   'swift',
 ]);

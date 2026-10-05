@@ -15,6 +15,14 @@ const MODIFIERS = new Set([
   'internal', 'static', 'abstract', 'readonly', 'override', 'final',
 ]);
 
+const TS_FAMILY_LANGUAGES: ReadonlySet<Language> = new Set([
+  'typescript', 'tsx', 'javascript', 'jsx', 'arkts',
+]);
+
+const TYPED_TS_FAMILY_LANGUAGES: ReadonlySet<Language> = new Set([
+  'typescript', 'tsx', 'arkts',
+]);
+
 interface Declaration {
   readonly kind: NodeKind;
   readonly name: string;
@@ -147,6 +155,18 @@ export function extractNativeFacts(filePath: string, source: string, language: L
       .map((token) => token.text);
     return values.length > 0 ? values : undefined;
   };
+  const arktsDecorators = (index: number): string[] | undefined => {
+    if (language !== 'arkts') return undefined;
+    let start = index - 1;
+    while (start >= 0 && ![';', '{', '}'].includes(tokens[start]!.text)) start -= 1;
+    const names: string[] = [];
+    for (let cursor = start + 1; cursor < index - 1; cursor += 1) {
+      if (tokens[cursor]!.text === '@' && tokens[cursor + 1]?.kind === 'identifier') {
+        names.push(tokens[cursor + 1]!.text);
+      }
+    }
+    return names.length > 0 ? names : undefined;
+  };
   const importedNames = new Set<string>();
   for (let i = 0; i < tokens.length; i += 1) {
     if (tokens[i]!.text !== 'import') continue;
@@ -170,7 +190,7 @@ export function extractNativeFacts(filePath: string, source: string, language: L
     }
   }
 
-  if (['typescript', 'tsx', 'javascript', 'jsx'].includes(language)) {
+  if (TS_FAMILY_LANGUAGES.has(language)) {
     for (let i = 0; i < tokens.length - 1; i += 1) {
       const token = tokens[i]!;
       const name = tokens[i + 1]!;
@@ -721,9 +741,11 @@ export function extractNativeFacts(filePath: string, source: string, language: L
 
   const addBlockDeclaration = (kind: NodeKind, keyword: number, nameIndex: number): Declaration | undefined => {
     let searchFrom = nameIndex + 1;
+    let params = -1;
+    let paramsEnd: number | undefined;
     if (kind === 'function') {
-      const params = findNext(tokens, nameIndex + 1, '(');
-      const paramsEnd = params < 0 ? undefined : scan.pairs.get(params);
+      params = findNext(tokens, nameIndex + 1, '(');
+      paramsEnd = params < 0 ? undefined : scan.pairs.get(params);
       if (paramsEnd !== undefined) searchFrom = paramsEnd + 1;
     }
     const open = findNext(tokens, searchFrom, '{');
@@ -741,13 +763,22 @@ export function extractNativeFacts(filePath: string, source: string, language: L
       async: tokens.slice(modifierStart, keyword).some((token) => token.text === 'async'),
       static: tokens.slice(modifierStart, keyword).some((token) => token.text === 'static'),
       visibility: visibility(tokens, modifierStart, keyword),
+      signature: language === 'arkts' && kind === 'function' && params >= 0
+        ? source.slice(tokens[params]!.start.offset, tokens[open]!.start.offset).trim()
+        : undefined,
+      returnType: language === 'arkts' && kind === 'function' && paramsEnd !== undefined
+        ? (() => {
+            const colon = findNext(tokens, paramsEnd + 1, ':', open);
+            return colon < 0 ? undefined : tokens.slice(colon + 1, open).find((item) => item.kind === 'identifier')?.text;
+          })()
+        : undefined,
     };
     declarations.push(declaration);
     return declaration;
   };
 
   for (let i = 0; i < tokens.length; i += 1) {
-    if (!['typescript', 'tsx', 'javascript', 'jsx', 'java'].includes(language)) continue;
+    if (!TS_FAMILY_LANGUAGES.has(language) && language !== 'java') continue;
     const token = tokens[i]!;
     const nameIndex = token.text === 'function' && tokens[i + 1]?.text === '*' ? i + 2 : i + 1;
     const name = tokens[nameIndex];
@@ -755,7 +786,15 @@ export function extractNativeFacts(filePath: string, source: string, language: L
     if (token.text === 'class') addBlockDeclaration('class', i, i + 1);
     else if (token.text === 'interface') addBlockDeclaration('interface', i, i + 1);
     else if (token.text === 'enum') addBlockDeclaration('enum', i, i + 1);
+    else if (language === 'arkts' && token.text === 'struct') addBlockDeclaration('struct', i, i + 1);
     else if (token.text === 'function') addBlockDeclaration('function', i, nameIndex);
+  }
+
+  if (language === 'arkts') {
+    for (let index = 0; index < declarations.length; index += 1) {
+      const declaration = declarations[index]!;
+      declarations[index] = { ...declaration, decorators: arktsDecorators(declaration.start) };
+    }
   }
 
   if (language === 'java') {
@@ -803,13 +842,14 @@ export function extractNativeFacts(filePath: string, source: string, language: L
       const name = tokens[i]!;
       const openParen = tokens[i + 1];
       if (tokens[i - 1]?.text === '@') continue;
-      if (['typescript', 'tsx', 'javascript', 'jsx'].includes(language) &&
-          ['class', 'interface', 'type_alias'].includes(parent.kind) &&
+      if (TS_FAMILY_LANGUAGES.has(language) &&
+          ['class', 'interface', 'struct', 'type_alias'].includes(parent.kind) &&
           name.kind === 'identifier' && tokens[i + 1]?.text === ':') {
         const statementEnd = findNext(tokens, i + 2, ';', end);
         declarations.push({
           kind: 'property', name: name.text, start: i,
           end: statementEnd < 0 ? i + 1 : statementEnd, parent,
+          decorators: arktsDecorators(i),
         });
         i = statementEnd < 0 ? i : statementEnd;
         continue;
@@ -829,7 +869,8 @@ export function extractNativeFacts(filePath: string, source: string, language: L
           continue;
         }
       }
-      if (name.kind !== 'identifier' || openParen?.text !== '(' || CALL_EXCLUSIONS.has(name.text)) continue;
+      if (name.kind !== 'identifier' || openParen?.text !== '(' ||
+          (CALL_EXCLUSIONS.has(name.text) && !(language === 'arkts' && name.text === 'constructor'))) continue;
       const prior = previousWord(tokens, i);
       if (prior === 'function' || prior === 'fn' || prior === 'fun' || prior === 'def' || prior === 'new') continue;
       const closeParen = scan.pairs.get(i + 1);
@@ -869,8 +910,30 @@ export function extractNativeFacts(filePath: string, source: string, language: L
         async: tokens.slice(start, i).some((item) => item.text === 'async'),
         static: tokens.slice(memberStart, i).some((item) => item.text === 'static'),
         visibility: visibility(tokens, memberStart, i),
+        decorators: arktsDecorators(memberStart),
+        signature: language === 'arkts'
+          ? source.slice(openParen.start.offset, tokens[bodyStart]!.start.offset).trim()
+          : undefined,
+        returnType: language === 'arkts' ? (() => {
+          const colon = findNext(tokens, closeParen + 1, ':', bodyStart);
+          if (colon < 0) return undefined;
+          return tokens.slice(colon + 1, bodyStart).find((item) => item.kind === 'identifier')?.text;
+        })() : undefined,
       });
       i = bodyEnd;
+    }
+  }
+
+  if (TS_FAMILY_LANGUAGES.has(language)) {
+    for (const parent of declarations.filter((item) => item.kind === 'enum' && item.bodyStart !== undefined && item.bodyEnd !== undefined)) {
+      let cursor = parent.bodyStart! + 1;
+      while (cursor < parent.bodyEnd!) {
+        const token = tokens[cursor]!;
+        if (token.kind === 'identifier' && (tokens[cursor - 1]?.text === '{' || tokens[cursor - 1]?.text === ',')) {
+          declarations.push({ kind: 'enum_member', name: token.text, start: cursor, end: cursor, parent });
+        }
+        cursor += 1;
+      }
     }
   }
 
@@ -1017,7 +1080,7 @@ export function extractNativeFacts(filePath: string, source: string, language: L
     }
   }
 
-  if (['typescript', 'tsx'].includes(language)) {
+  if (TYPED_TS_FAMILY_LANGUAGES.has(language)) {
     for (const declaration of declarations) {
       if (declaration.kind !== 'type_alias' || declaration.bodyStart === undefined || declaration.bodyEnd === undefined) continue;
       const aliasNode = nodeByDeclaration.get(declaration);
@@ -1061,7 +1124,7 @@ export function extractNativeFacts(filePath: string, source: string, language: L
     return (owners[0] && nodeByDeclaration.get(owners[0])) ?? fileNode;
   };
 
-  if (['typescript', 'tsx', 'javascript', 'jsx', 'python', 'go', 'java', 'rust', 'kotlin', 'scala'].includes(language)) {
+  if ([...TS_FAMILY_LANGUAGES, 'python', 'go', 'java', 'rust', 'kotlin', 'scala'].includes(language)) {
     const definedHere = new Set(declarations
       .filter((declaration) => declaration.kind === 'function' || declaration.kind === 'method' ||
         (language === 'python' && declaration.kind === 'class'))
@@ -1100,7 +1163,7 @@ export function extractNativeFacts(filePath: string, source: string, language: L
       for (let i = 0; i < tokens.length; i += 1) {
         const token = tokens[i]!;
         if (token.kind !== 'identifier') continue;
-        if (['typescript', 'tsx', 'javascript', 'jsx'].includes(language) &&
+        if (TS_FAMILY_LANGUAGES.has(language) &&
             token.text === 'this' && tokens[i + 1]?.text === '.' && tokens[i + 2]?.kind === 'identifier') {
           const member = tokens[i + 2]!;
           if (tokens[i + 3]?.text !== '(') emitFunctionRef(ownerAt(i), `this.${member.text}`, member);
@@ -1135,9 +1198,9 @@ export function extractNativeFacts(filePath: string, source: string, language: L
     }
   }
 
-  if (['typescript', 'tsx', 'javascript', 'jsx'].includes(language)) {
+  if (TS_FAMILY_LANGUAGES.has(language)) {
     for (const declaration of declarations) {
-      if (!['class', 'interface'].includes(declaration.kind) || declaration.bodyStart === undefined) continue;
+      if (!['class', 'interface', 'struct'].includes(declaration.kind) || declaration.bodyStart === undefined) continue;
       const from = nodeByDeclaration.get(declaration);
       if (!from) continue;
       let relation: 'extends' | 'implements' | undefined;
@@ -1172,7 +1235,7 @@ export function extractNativeFacts(filePath: string, source: string, language: L
     }
   }
 
-  if (['typescript', 'tsx', 'javascript', 'jsx'].includes(language)) {
+  if (TS_FAMILY_LANGUAGES.has(language)) {
     for (let i = 0; i < tokens.length - 1; i += 1) {
       if (tokens[i]!.text === 'new') {
         let cursor = i + 1;
@@ -1377,12 +1440,34 @@ export function extractNativeFacts(filePath: string, source: string, language: L
         tokens[i - 3]?.text === '.' ? `self.${receiver.text}.${callee.text}` : undefined;
       const rustDeepChain = language === 'rust' && receiver && tokens[i - 3]?.text === '.' &&
         tokens[i - 4]?.text !== 'self';
+      const arktsMember = language === 'arkts' && tokens[i - 1]?.text === '.'
+        ? receiver?.text === 'this'
+          ? callee.text
+          : receiver
+            ? `${receiver.text}.${callee.text}`
+            : `.${callee.text}`
+        : undefined;
       refs.push({
         fromNodeId: from.id,
-        referenceName: rustSelfField ?? (rustDeepChain ? callee.text : rustPathName ?? (receiver ? `${receiver.text}.${callee.text}` : callee.text)),
+        referenceName: arktsMember ?? rustSelfField ?? (rustDeepChain ? callee.text : rustPathName ?? (receiver ? `${receiver.text}.${callee.text}` : callee.text)),
         referenceKind: 'calls', line: callee.start.line,
         column: rustSelfField ? tokens[i - 4]!.start.column : rustPath?.start.column ?? receiver?.start.column ?? callee.start.column,
       });
+      if (language === 'arkts') {
+        const argsStart = i + 1;
+        const argsEnd = scan.pairs.get(argsStart);
+        if (argsEnd !== undefined) {
+          for (let cursor = argsStart + 1; cursor < argsEnd - 1; cursor += 1) {
+            if (tokens[cursor]!.text !== 'this' || tokens[cursor + 1]?.text !== '.' ||
+                tokens[cursor + 2]?.kind !== 'identifier' || tokens[cursor + 3]?.text === '(') continue;
+            const handler = tokens[cursor + 2]!;
+            refs.push({
+              fromNodeId: from.id, referenceName: handler.text, referenceKind: 'calls',
+              line: handler.start.line, column: handler.start.column,
+            });
+          }
+        }
+      }
     }
     if (language === 'go') {
       for (let i = declaration.start + 1; i < (declaration.bodyStart ?? declaration.end); i += 1) {

@@ -408,13 +408,14 @@ export interface TokenizeResult {
 }
 
 const NATIVE_SYNTAX_LANGUAGES: ReadonlySet<Language> = new Set([
-  'typescript', 'tsx', 'javascript', 'jsx', 'python', 'go', 'java', 'rust', 'kotlin', 'scala',
+  'typescript', 'tsx', 'javascript', 'jsx', 'arkts', 'python', 'go', 'java', 'rust', 'kotlin', 'scala',
   'c', 'cpp', 'objc', 'csharp',
   'swift',
 ]);
 
 const NATIVE_KEYWORDS: Readonly<Record<string, ReadonlySet<string>>> = {
   typescript: new Set('as async await break case catch class const continue debugger default delete do else enum export extends false finally for from function get if implements import in instanceof interface let new null of package private protected public readonly return set static super switch this throw true try type typeof undefined var void while with yield'.split(' ')),
+  arkts: new Set('as async await break case catch class const continue debugger default delete do else enum export extends false finally for from function get if implements import in instanceof interface let new null of package private protected public readonly return set static struct super switch this throw true try type typeof undefined var void while with yield'.split(' ')),
   javascript: new Set('as async await break case catch class const continue debugger default delete do else export extends false finally for from function get if import in instanceof let new null of return set static super switch this throw true try typeof undefined var void while with yield'.split(' ')),
   python: new Set('False None True and as assert async await break class continue def del elif else except finally for from global if import in is lambda nonlocal not or pass raise return try while with yield'.split(' ')),
   go: new Set('break case chan const continue default defer else fallthrough for func go goto if import interface map package range return select struct switch type var'.split(' ')),
@@ -431,6 +432,7 @@ const NATIVE_KEYWORDS: Readonly<Record<string, ReadonlySet<string>>> = {
 
 const NATIVE_BUILTIN_TYPES: Readonly<Record<string, ReadonlySet<string>>> = {
   typescript: new Set('any bigint boolean never number object string symbol unknown void'.split(' ')),
+  arkts: new Set('any bigint boolean never number object string symbol unknown void'.split(' ')),
   javascript: new Set(),
   python: new Set(),
   go: new Set('any bool byte complex64 complex128 error float32 float64 int int8 int16 int32 int64 rune string uint uint8 uint16 uint32 uint64 uintptr'.split(' ')),
