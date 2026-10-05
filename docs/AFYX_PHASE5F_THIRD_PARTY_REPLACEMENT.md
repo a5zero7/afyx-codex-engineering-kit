@@ -625,3 +625,46 @@ internals. `web-tree-sitter`, `tree-sitter-wasms`, grammar WASM and parser
 bootstrap removal remain blocked until those production routes converge. The
 next dependency-safe language boundary is ArkTS, reusing the proven native
 TypeScript-family scanner/fact surface without starting that work here.
+
+### ArkTS native semantic checkpoint
+
+Commit `3a73108` adds ArkTS as the sixteenth feature-gated native semantic
+route. With `AFYX_GRAPH_NATIVE_PARSER=1`, `.ets` files now enter the shared
+Afyx-native TypeScript-family fact recognizer directly; the ArkTS Tree-sitter
+adapter and grammar are not invoked for successful native fact extraction.
+Ungated extraction remains unchanged.
+
+ArkTS reuses the native TypeScript-family scanner, modules/imports, classes,
+interfaces, enums, type aliases, members, inheritance/implementation, type
+references, constructors, calls, instantiations, callable references, and
+ownership. The bounded ArkTS specialization adds decorated `struct`
+components and members, decorator metadata, ArkUI dot-prefixed attribute
+calls, and `.onXxx(this.handler)` bindings. Native syntax classification reuses
+the TypeScript vocabulary with the ArkTS `struct` keyword, and ArkTS now uses
+the existing native TypeScript-family branch-guard implementation.
+
+The focused native ArkTS suite passes 4/4. The established ArkTS extraction
+contract passes 17/17 in native mode, and its normal-mode extraction plus
+syntax counterpart passes 18/18. Seven end-to-end ArkTS resolution cases
+completed their semantic assertions before the established Windows
+temporary-directory cleanup `EPERM`. Shared fact, syntax, function-reference,
+and branch-guard regression coverage passes 107/107. Typecheck, clean
+production/UI build, the six-fixture semantic baseline, all 21 CLI/MCP smoke
+checks, and `git diff --check` pass. The broad native extraction campaign has
+642/655 normal completions, seven post-assertion cleanup `EPERM` results, and
+six pre-existing C/CUDA native semantic gaps outside this boundary.
+
+The native semantic set is now sixteen languages: TypeScript, TSX,
+JavaScript, JSX, Python, Go, Java, Rust, Kotlin, Scala, C, C++, Objective-C,
+C#, Swift, and ArkTS. Active `web-tree-sitter`/`SyntaxNode` source coupling
+remains 34 files (34 → 34). The ArkTS adapter and
+`tree-sitter-arkts.wasm` remain required by ungated/default execution,
+packaging, and the shared fallback bootstrap; no parser package, lockfile,
+grammar asset, legal record, or attribution file is removed.
+
+Remaining parser boundaries include Solidity; PHP, Ruby, Dart, Lua/Luau, R,
+and Nix; Pascal, CFML/CFScript/CFQuery, COBOL, VB.NET, and Erlang;
+Terraform/OpenTofu semantics; and parser-coupled SFC/template/special-format
+internals. `web-tree-sitter`, `tree-sitter-wasms`, grammar WASM, and parser
+bootstrap removal remain blocked. The next dependency-safe language boundary
+is Solidity; it is not started by this checkpoint.
