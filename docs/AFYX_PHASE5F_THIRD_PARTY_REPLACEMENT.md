@@ -1210,3 +1210,100 @@ native semantic and syntax convergence: it is one cohesive named route with
 meaningful scanner/fact reuse, while COBOL requires its fixed-format and
 copybook campaign and the CFML family requires a combined mixed-format design.
 That boundary is not started here.
+
+### Terraform / OpenTofu native semantic and syntax checkpoint
+
+Starting checkpoint `cb368c28268e2d7deb2babe2f51be0dacd186e6d`
+retained Terraform/OpenTofu as one of five named parser-backed routes. Commit
+`f16381d` adds a feature-gated, dependency-free HCL recognizer and native
+syntax route. With `AFYX_GRAPH_NATIVE_PARSER=1`, the existing `.tf`, `.tfvars`,
+and `.tofu` registrations emit Afyx facts directly without requesting
+`getParser()`. OpenTofu has no separate adapter or semantic delta in the
+repository, so it deliberately shares this native core. Ungated/default mode
+continues to use the Terraform grammar and adapter.
+
+The retained structural contract is block/address based. Managed resources
+remain `class` nodes identified as `TYPE.NAME`; data sources remain `class`
+nodes identified as `data.TYPE.NAME`; modules use `module.NAME`; variables use
+`var.NAME`; outputs use `output.NAME`; provider configurations use
+`provider.NAME[.ALIAS]`; and every direct locals attribute is a `constant`
+identified as `local.NAME`. The `terraform` settings block and
+`required_providers` internals intentionally declare no graph symbols, matching
+the previous route. Generic nested provider/resource schemas are not modeled.
+
+Static traversal recognition preserves `var.X`, `local.X`, `module.M`,
+`module.M:output.X`, `module.M:remote-output.X`, `data.TYPE.NAME`, and managed
+resource `TYPE.NAME` references. Index and splat syntax may follow a statically
+known base without changing its identity; built-in roots (`each`, `count`,
+`self`, `path`, `terraform`) remain silent. Runtime values, computed target
+names, and arbitrary provider attributes are never evaluated.
+
+Local module sources beginning `./` or `../` retain the scoped
+`module.M:file` import plus scoped child-input references. Registry, git,
+variable, conditional, and interpolated module sources do not create a guessed
+file edge. Module output and Cloud Posse/Atmos remote-output candidates remain
+resolver-owned and directory/uniqueness scoped. `.tfvars` assignments continue
+to reference root `var.NAME` declarations without becoming symbols.
+
+Provider aliases remain distinct definitions. Static `provider = aws.east`
+and module `providers` map values reference provider configurations, while
+keys and dynamic selections stay silent. `depends_on` remains an ordinary
+explicit traversal dependency. `moved`, `import`, `removed`, and check/assert
+addresses remain file-anchored references. `data
+"terraform_remote_state"` is a normal data source; no backend or state is
+opened. The established framework resolver continues to provide local module,
+provider-ancestor, and remote-output bridges unchanged.
+
+Terraform function names do not produce callable graph facts in the existing
+contract; statically visible traversals inside their arguments still do. The
+native implementation preserves that boundary and does not interpret built-in
+functions. Quoted strings are opaque except for bounded `${...}` / `%{...}`
+template regions. Heredoc and indented-heredoc bodies are likewise opaque
+except for those regions, so Terraform-looking plain text cannot mint facts.
+Incomplete strings, heredocs, and delimiters produce bounded diagnostics while
+retaining prefix declarations and references.
+
+The shared scanner delta is limited to HCL heredocs and hyphenated identifiers;
+existing hash, slash-line, and block comments plus quoted-string handling are
+reused. Native syntax preserves the controlled parser-backed surface for block
+heads, labels, attributes, literals, comments, and expression keywords. The
+semantic extractor owns no `SyntaxNode`, parser adapter, grammar, provider
+runtime, module downloader, evaluator, or state access.
+
+Validation results:
+
+- New native semantic differential, `.tf`/`.tfvars`/`.tofu` seam, syntax
+  differential, heredoc/interpolation, incomplete-buffer, dynamic-boundary,
+  and call-boundary suite: 8/8 PASS. Both semantic and syntax proofs observe
+  no parser request.
+- Established Terraform extraction under native mode: 25/25 PASS; the same
+  default/ungated contract remains 25/25 PASS.
+- Existing Terraform module/provider/remote-state resolution integration: 2/2
+  PASS. Total focused Terraform/OpenTofu evidence is 35/35 PASS.
+- Shared scanner and completed native-route suites: 70/70 PASS; representative
+  Go scanner/extraction coverage: 2/2 PASS.
+- Broad native extraction completed 648 semantic assertions with zero semantic
+  residuals. The same seven Windows temp-directory teardown failures remain
+  classified `CLEANUP_ONLY_EPERM`.
+- Native UI highlighting remains 33/33 PASS. TypeScript typecheck, clean
+  production/UI builds, viewer/29-grammar artifact verification, the standard
+  six-fixture semantic baseline, all 21 CLI/MCP smoke checks, and
+  `git diff --check` pass.
+
+Native semantic languages increase from 27 to 28 and known native semantic
+gaps remain zero. Named parser-backed routes decrease from five to four:
+COBOL, CFML, CFScript, and CFQuery. Active
+`web-tree-sitter`/`SyntaxNode` source coupling remains 34 files (34 → 34), and
+staged grammar WASM remains 29 (29 → 29). The 92,484-byte Terraform grammar
+asset remains an active default-production fallback and packaged release
+dependency; it is not obsolete, build-only, or test-only. Default fallback and
+parser bootstrap remain ACTIVE, so no parser package, WASM, lockfile,
+attribution, or legal record is removed.
+
+Remaining special-format coupling is unchanged: Svelte, Vue, and Astro retain
+script-region delegation; Razor/Blazor retains C# region delegation; and the
+CFML/CFScript/CFQuery family remains a combined mixed-format three-grammar
+boundary. The next dependency-safe Phase 5F boundary is COBOL native semantic
+and syntax convergence: it is one cohesive named route, whereas the remaining
+CFML family must be designed and validated together. That boundary is not
+started here, and Phase 5F is not marked complete.
