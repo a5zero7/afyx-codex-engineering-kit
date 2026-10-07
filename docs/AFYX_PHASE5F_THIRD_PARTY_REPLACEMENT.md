@@ -815,10 +815,11 @@ shadow-safe value-read edges.
 
 Validation passed the focused Dart/Nix suite 6/6, selected native-gated
 extraction/resolution/value-reference contracts 37/37, scanner/fact/syntax/
-differential/function-reference regression 47/47, and the selected normal-mode
+differential/function-reference regression 41/41, and the selected normal-mode
 counterpart 51/51. Default UI highlighting passed 33/33. The full native-gated
-UI matrix retained one pre-existing Ruby definition-token gap (`class Store`
-is still an identifier), while all Dart/Nix syntax assertions passed. Typecheck,
+UI matrix passed 32/33 and retained one pre-existing Ruby definition-token gap
+(`class Store` is still an identifier), while all Dart/Nix syntax assertions
+passed. Typecheck,
 the clean production/UI build, UI artifact verification, the six-fixture
 semantic baseline, all 21 CLI/MCP smoke checks, and `git diff --check` pass. A
 first semantic-baseline process ended with a transient Windows `0xC0000005`
