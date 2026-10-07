@@ -45,6 +45,7 @@ import { getParser, loadGrammarsForLanguages } from './grammars';
 import type { LanguageExtractor } from './tree-sitter-types';
 import { extractNativeFacts } from './native/fact-extractor';
 import { scanSource, type NativeToken } from './native/scanner';
+import { scanCobolSource } from './native/cobol-facts';
 
 /* ------------------------------------------------------------- the classes -- */
 
@@ -417,6 +418,7 @@ const NATIVE_SYNTAX_LANGUAGES: ReadonlySet<Language> = new Set([
   'vbnet',
   'erlang',
   'terraform',
+  'cobol',
 ]);
 
 const NATIVE_KEYWORDS: Readonly<Record<string, ReadonlySet<string>>> = {
@@ -446,6 +448,7 @@ const NATIVE_KEYWORDS: Readonly<Record<string, ReadonlySet<string>>> = {
   vbnet: new Set('addhandler addressof alias and andalso as async boolean byref byte byval call case catch cbool cbyte cchar cdate cdbl cdec char cint class clng const continue csbyte cshort csng cstr ctype cuint culng cushort date decimal declare default delegate dim directcast do double each else elseif end enum erase error event exit false finally for friend function get gettype global gosub goto handles if implements imports in inherits integer interface is isnot iterator let lib like long loop me mod module mustinherit mustoverride mybase myclass namespace narrowing new next not nothing notinheritable notoverridable object of on operator option optional or orelse overloads overridable overrides paramarray partial private property protected public raiseevent readonly redim rem removehandler resume return sbyte select set shadows shared short single static step stop string structure sub synclock then throw to true try trycast typeof uinteger ulong ushort using when while widening with withevents writeonly xor'.split(' ')),
   erlang: new Set('after begin case catch cond end fun if let maybe of receive try when and andalso band bnot bor bsl bsr bxor div not or orelse rem xor module export export_type import include include_lib behaviour behavior compile record type opaque spec callback define'.split(' ')),
   terraform: new Set('for in if else true false null'.split(' ')),
+  cobol: new Set('accept access add address advancing after all alphabet alphabetic alphabetic-lower alphabetic-upper alphanumeric alphanumeric-edited also alter alternate and any apply are area areas ascending assign at author before beginning binary blank block bottom by call cancel cd cf ch character characters class close cobol code code-set collating column comma common communication comp comp-1 comp-2 comp-3 comp-4 comp-5 computational computational-1 computational-2 computational-3 computational-4 computational-5 compute configuration contains content continue control controls converting copy corr corresponding count currency data date date-compiled date-written day day-of-week de debug-content debugging declaratives delete delimited delimiter depending descending destination detail display divide division down duplicate duplicates dynamic egcs eject else emi enable end-add end-call end-compute end-delete end-divide end-evaluate end-if end-multiply end-of-page end-perform end-read end-receive end-return end-rewrite end-search end-start end-string end-subtract end-unstring end-write end-exec enter entry environment evaluate every exception exit extend external false fd file file-control filler final first footing for from generate giving global go greater group heading high-value high-values i-o i-o-control identification if in index indexed indicate initial initialize initiate input input-output inspect installation into invalid is just justified key label last leading left length less limit limits linage linage-counter line line-counter lines linkage local-storage lock low-value low-values memory merge message mode modules more-labels move multiple multiply native negative next no not null nulls number numeric numeric-edited object-computer occurs of off omitted on open optional or order organization other output overflow packed-decimal padding page page-counter perform pf ph pic picture plus pointer position positive procedure procedures proceeding program program-id purge queue quote quotes random read receive record recording records recursive redefines reel reference relative release remainder removal renames replacing rerun reserve reset return returning reversed rewind rewrite rounded run same sd search section security segment segment-limit select send sentence separate sequence sequential set sign size sort sort-merge source source-computer spaces special-names standard standard-1 standard-2 start status stop string sub-queue-1 sub-queue-2 sub-queue-3 subtract sum symbolic sync synchronized table tallying tape terminal terminate test text than then through thru time times to top trailing true unit unstring until up upon usage use using value values varying when when-compiled with words working-storage write zero zeroes zeros'.split(' ')),
 };
 
 const NATIVE_BUILTIN_TYPES: Readonly<Record<string, ReadonlySet<string>>> = {
@@ -480,6 +483,7 @@ const NATIVE_BUILTIN_TYPES: Readonly<Record<string, ReadonlySet<string>>> = {
   vbnet: new Set('boolean byte sbyte char date decimal double integer uinteger long ulong object short ushort single string'.split(' ')),
   erlang: new Set(),
   terraform: new Set(),
+  cobol: new Set(),
 };
 
 function nativeLanguageKey(language: Language): string {
@@ -490,7 +494,10 @@ function nativeLanguageKey(language: Language): string {
 
 function nativeDefinitionOffsets(source: string, language: Language, tokens: readonly NativeToken[]): Set<number> {
   const facts = extractNativeFacts('__syntax__', source, language);
-  const definitionKinds = new Set(['function', 'method', 'class', 'interface', 'struct', 'enum', 'type_alias', 'trait']);
+  const definitionKinds = new Set([
+    'function', 'method', 'class', 'interface', 'struct', 'enum', 'type_alias', 'trait',
+    ...(language === 'cobol' ? ['module', 'variable', 'field', 'constant'] : []),
+  ]);
   const definitions = facts.nodes.filter((node) =>
     definitionKinds.has(node.kind));
   const offsets = new Set<number>();
@@ -504,7 +511,7 @@ function nativeDefinitionOffsets(source: string, language: Language, tokens: rea
 
 function classifyNativeRegion(source: string, language: Language, offset: number): SyntaxSpan[] {
   const key = nativeLanguageKey(language);
-  const scan = scanSource(source, {
+  const scan = key === 'cobol' ? scanCobolSource(source) : scanSource(source, {
     hashComments: key === 'python' || key === 'ruby' || key === 'r' || key === 'nix' || key === 'terraform',
     rustSyntax: key === 'rust',
     tripleQuotedStrings: key === 'kotlin' || key === 'scala',
@@ -568,8 +575,9 @@ function classifyNativeRegion(source: string, language: Language, offset: number
     }
     else if (token.kind === 'number') cls = key === 'terraform' ? 'other' : 'number';
     else if (token.kind === 'identifier') {
-      const comparison = key === 'vbnet' ? token.text.toLowerCase() : token.text;
-      const previous = key === 'vbnet' ? scan.tokens[index - 1]?.text.toLowerCase() : scan.tokens[index - 1]?.text;
+      const caseInsensitive = key === 'vbnet' || key === 'cobol';
+      const comparison = caseInsensitive ? token.text.toLowerCase() : token.text;
+      const previous = caseInsensitive ? scan.tokens[index - 1]?.text.toLowerCase() : scan.tokens[index - 1]?.text;
       if (definitions.has(token.start.offset)) cls = 'def';
       else if (builtins.has(comparison)) cls = 'type';
       else if ((previous === ':' && key !== 'python' && key !== 'nix') || (key === 'vbnet' && previous === 'as') || previous === 'extends' || previous === 'implements' || previous === 'new') cls = 'type';
