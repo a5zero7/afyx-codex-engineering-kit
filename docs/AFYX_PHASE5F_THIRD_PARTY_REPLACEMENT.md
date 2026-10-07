@@ -849,3 +849,77 @@ Parser bootstrap, default fallback, dependency, and grammar-WASM elimination
 remain blocked. Before expanding to another language family, the recommended
 next Phase 5F boundary is an evidence-first closure of the six known C/CUDA
 native semantic gaps; that work is not started here.
+
+### Native residual contract closure: C/CUDA and Ruby
+
+Commit `ccdca86` closes the seven residuals recorded by the Dart/Nix
+checkpoint without adding a language route or changing the normal fallback.
+All seven fixtures describe product facts or token classes, not historical
+Tree-sitter topology.
+
+The six C/CUDA deltas and their corrections are:
+
+1. A C block comment immediately before a function was not copied into the
+   native node's `docstring`. The C-family declaration start also included the
+   comment token, leaving no preceding token to inspect. This was a
+   `C_FAMILY_NATIVE_REGRESSION`; native declarations now start after leading
+   comments and normalize the adjacent documentation token.
+2. `__launch_bounds__(...)` was selected as the function name instead of the
+   following kernel declarator. This was a `CUDA_EXTENSION_OF_C_CONTRACT`;
+   declaration attributes and their balanced argument ranges are excluded from
+   callable candidates.
+3. A macro-defined kernel indexed the macro parameter (`kernelName`) rather
+   than the invocation's concrete first argument (`fwd_kernel`). This was a
+   `CUDA_EXTENSION_OF_C_CONTRACT`; continued preprocessor directives are kept
+   outside declaration discovery and a structurally proven CUDA definition
+   macro names its body from that first invocation argument.
+4. A launch through a local function-pointer alias produced no concrete kernel
+   calls. This was a `CUDA_EXTENSION_OF_C_CONTRACT`; bounded alias assignments
+   now map a launch to every distinct assigned kernel target.
+5. A templated CUDA launch in an extension-less header produced no call fact.
+   This was a `CUDA_EXTENSION_OF_C_CONTRACT`; the native C++ recognizer now
+   captures the bounded `callee<...><<<...>>>(...)` surface directly, so the
+   behavior is content-based rather than filename-specific.
+6. GNU `__attribute__((section(...)))` was indexed first as `__attribute__`
+   and then as `section`, swallowing the actual `RawAttr` function. This was a
+   `C_FAMILY_NATIVE_REGRESSION`; attribute call/range candidates are excluded,
+   leaving the following real declarator authoritative.
+
+The Ruby UI gap came from incomplete editor input. `class Store` without an
+`end` produced no native class fact because container recognition required a
+matched terminator; consequently syntax classification had no definition
+offset and rendered `Store` as an identifier. The bounded native recognizer now
+uses the final available token as the provisional container end. Complete Ruby
+ownership remains unchanged, while the native-gated UI matrix moves from
+32/33 to 33/33.
+
+Focused validation passed all seven former residuals. The selected C/CUDA
+fixture group passed 11/11, native C-family 9/9, dynamic-language coverage
+including Ruby and Lua/Luau 13/13, native syntax 8/8, function references
+20/20, and the C function-pointer synthesizer 18/18. Two optional real-kernel
+sweep tests remained unavailable and skipped. Representative completed-route
+coverage for Rust/Kotlin/Scala and Dart/Nix passed 12/12. The equivalent
+normal-mode C/CUDA selection passed 11/11 and default UI highlighting passed
+33/33.
+
+The repeated broad native extraction campaign recorded 648 normal completions
+and seven post-assertion Windows teardown failures, all classified
+`CLEANUP_ONLY_EPERM`; no semantic assertion residual remains. The full
+native-gated UI matrix passed 33/33. Typecheck, clean production/UI build,
+viewer and 29-grammar artifact validation, the six-fixture semantic baseline,
+all 21 CLI/MCP smoke checks, and `git diff --check` pass.
+
+Active `web-tree-sitter`/`SyntaxNode` source coupling remains 34 files
+(34 → 34). `web-tree-sitter`, `tree-sitter-wasms`, all 29 grammar WASM files,
+parser adapters, bootstrap paths, lockfiles, attribution, and legal records are
+retained because ungated fallback and remaining parser-backed routes still
+require them.
+
+The native semantic language count remains 24. Known legitimate native
+C/CUDA and Ruby token residuals are now zero. Parser-backed production groups
+still include Pascal, CFML/CFScript/CFQuery, COBOL, VB.NET, Erlang, and
+Terraform/OpenTofu, plus parser-coupled SFC/template/special-format internals.
+Default fallback and parser bootstrap elimination remain blocked. The next
+recommended Phase 5F boundary is a separate evidence-first inventory of the
+remaining enterprise routes and dependency-safe slice selection; no such
+migration is started by this checkpoint.
