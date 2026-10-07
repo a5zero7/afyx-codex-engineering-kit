@@ -40,6 +40,8 @@ export interface NativeScanOptions {
   readonly dartSyntax?: boolean;
   /** Consume Nix indented strings (`''...''`) as opaque regions. */
   readonly nixSyntax?: boolean;
+  /** Recognize Pascal brace/paren comments and doubled-quote strings. */
+  readonly pascalSyntax?: boolean;
 }
 
 const OPEN_TO_CLOSE: Readonly<Record<string, string>> = { '(': ')', '[': ']', '{': '}' };
@@ -125,6 +127,27 @@ export function scanSource(source: string, options: NativeScanOptions = {}): Nat
             break;
           }
           continue;
+        }
+        advance();
+      }
+      emit('comment', start);
+      if (!closed) unterminated.push('comment');
+      continue;
+    }
+
+    if (options.pascalSyntax && (char === '{' || (char === '(' && next === '*'))) {
+      const start = position();
+      const parenComment = char === '(';
+      advance();
+      if (parenComment) advance();
+      let closed = false;
+      while (offset < source.length) {
+        if ((!parenComment && source[offset] === '}') ||
+            (parenComment && source[offset] === '*' && source[offset + 1] === ')')) {
+          advance();
+          if (parenComment) advance();
+          closed = true;
+          break;
         }
         advance();
       }
@@ -373,6 +396,27 @@ export function scanSource(source: string, options: NativeScanOptions = {}): Nat
       continue;
     }
 
+    if (options.pascalSyntax && char === "'") {
+      const start = position();
+      advance();
+      let closed = false;
+      while (offset < source.length) {
+        if (source[offset] === "'") {
+          advance();
+          if (source[offset] === "'") {
+            advance();
+            continue;
+          }
+          closed = true;
+          break;
+        }
+        advance();
+      }
+      emit('string', start);
+      if (!closed) unterminated.push('string');
+      continue;
+    }
+
     if (char === '"' || char === "'" || char === '`') {
       const start = position();
       const quote = advance();
@@ -432,7 +476,7 @@ export function scanSource(source: string, options: NativeScanOptions = {}): Nat
     const compound2 = source.slice(offset, offset + 2);
     const operator = ['>>=', '<<=', '===', '!==', '...', '??=', '&&=', '||=', '<<-', '->>', ':::'].includes(compound)
       ? compound
-      : ['=>', '->', '<-', '::', '?.', '??', '&&', '||', '==', '!=', '<=', '>=', '++', '--', '+=', '-=', '*=', '/=', '**', '<<', '>>'].includes(compound2)
+      : ['=>', '->', '<-', '::', '?.', '??', '&&', '||', '==', '!=', '<=', '>=', '++', '--', '+=', '-=', '*=', '/=', '**', '<<', '>>', ':=', '<>'].includes(compound2)
         ? compound2
         : undefined;
     if (operator) {

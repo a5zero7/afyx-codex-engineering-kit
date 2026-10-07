@@ -413,6 +413,7 @@ const NATIVE_SYNTAX_LANGUAGES: ReadonlySet<Language> = new Set([
   'swift', 'solidity',
   'php', 'ruby', 'lua', 'luau', 'r',
   'dart', 'nix',
+  'pascal',
 ]);
 
 const NATIVE_KEYWORDS: Readonly<Record<string, ReadonlySet<string>>> = {
@@ -438,6 +439,7 @@ const NATIVE_KEYWORDS: Readonly<Record<string, ReadonlySet<string>>> = {
   r: new Set('break else false for function if in inf na nan next null repeat return true while'.split(' ')),
   dart: new Set('abstract as assert async await base break case catch class const continue covariant default deferred do dynamic else enum export extends extension external factory false final finally for Function get hide if implements import in interface is late library mixin new null of on operator part required rethrow return sealed set show static super switch sync this throw true try typedef var void when while with yield'.split(' ')),
   nix: new Set('assert else false if in inherit let null or rec then true with'.split(' ')),
+  pascal: new Set('and array as asm begin case class const constructor destructor div do downto else end except exports file finalization finally for function goto if implementation in inherited initialization inline interface is label library mod nil not object of on operator or out packed procedure program property raise record repeat resourcestring set shl shr string then threadvar to true try type unit until uses var while with xor'.split(' ')),
 };
 
 const NATIVE_BUILTIN_TYPES: Readonly<Record<string, ReadonlySet<string>>> = {
@@ -468,6 +470,7 @@ const NATIVE_BUILTIN_TYPES: Readonly<Record<string, ReadonlySet<string>>> = {
   r: new Set(),
   dart: new Set('bool double dynamic Function Future int List Map Never num Object Record Set String Symbol Type Uri void'.split(' ')),
   nix: new Set(),
+  pascal: new Set('Boolean Byte Cardinal Char Currency Double Extended Integer Int64 LongInt LongWord Pointer Real ShortInt Single SmallInt String Variant WideChar WideString Word'.split(' ')),
 };
 
 function nativeLanguageKey(language: Language): string {
@@ -503,6 +506,7 @@ function classifyNativeRegion(source: string, language: Language, offset: number
     luaSyntax: key === 'lua' || key === 'luau',
     dartSyntax: key === 'dart',
     nixSyntax: key === 'nix',
+    pascalSyntax: key === 'pascal',
   });
   const definitions = nativeDefinitionOffsets(source, language, scan.tokens);
   const keywords = NATIVE_KEYWORDS[key] ?? new Set<string>();
