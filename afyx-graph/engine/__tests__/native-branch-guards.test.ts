@@ -187,4 +187,18 @@ describe('native branch guard differential', () => {
       await expect(guardsInSource(...args)).resolves.toEqual(first);
     }
   });
+
+  it('keeps Go guards inside their assigned function-literal execution boundary', async () => {
+    process.env.AFYX_GRAPH_NATIVE_PARSER = '1';
+    const source = `func f() {
+  if outer { return }
+  callback := func() {
+    if inner { run() }
+  }
+  _ = callback
+}`;
+    expect(await guardsInSource(source, 'go', 4, 15)).toEqual([
+      expect.objectContaining({ text: 'inner', negated: false, form: 'if', line: 4 }),
+    ]);
+  });
 });

@@ -231,7 +231,7 @@ function functionBoundary(view: NativeView, siteToken: number, language: Languag
         let assigned = false;
         for (let index = funcIndex - 1; index > floor; index -= 1) {
           const text = view.tokens[index]!.text;
-          if (text === '=' || (text === ':' && view.tokens[index + 1]?.text === '=')) { assigned = true; break; }
+          if (text === '=' || text === ':=' || (text === ':' && view.tokens[index + 1]?.text === '=')) { assigned = true; break; }
           if ([';', '{', '}'].includes(text)) break;
         }
         named = declaration || assigned;
