@@ -1132,3 +1132,81 @@ move from one to zero, active `web-tree-sitter`/`SyntaxNode` coupling remains
 34 files, staged grammar WASM remains 29, and default fallback plus parser
 bootstrap remain active. The next boundary remains Erlang native semantic and
 syntax convergence; it is not started here.
+
+### Erlang native semantic and syntax checkpoint
+
+Starting checkpoint `2fba81c9f35bb18ee925e43d18cbbba2af06d46d`
+retained Erlang as one of six named parser-backed routes. Commit `934e47c`
+adds a feature-gated, dependency-free Erlang recognizer and native syntax
+route. With `AFYX_GRAPH_NATIVE_PARSER=1`, `.erl`, `.hrl`, `.escript`, `.app`,
+and `.app.src` semantic extraction uses scanner tokens and emits Afyx facts
+directly; a structural seam test proves that the route does not request
+`getParser()`. Ungated/default mode continues to use the Erlang grammar and
+adapter.
+
+The retained contract is form- and arity-based rather than a compiler model.
+`-module` owns declarations, while functions retain a bare display name and
+use `module::name/arity` identity. Clauses in one period-terminated form merge
+into one logical function; same-name functions with different arities remain
+distinct. Export state is arity-specific and `export_all` remains supported.
+The bounded attribute surface covers imports/includes, behaviours, records and
+fields, type/opaque aliases, preceding matching specs, callbacks as
+non-symbol type declarations, and macros as constant/link boundaries. Macro
+replacement bodies own their calls, use sites link to the macro, predefined
+macros remain silent, and no preprocessor expansion is attempted.
+
+Local calls use `name/arity`, static remote calls use
+`module::name/arity`, and variable module/function dispatch stays silent.
+`fun name/arity`, `fun module:name/arity`, record uses, statically evident
+spawn/apply-family MFA arguments, and established `gen_server` registered-name
+handler conventions are preserved. Anonymous and named-fun bodies remain
+owned by the enclosing public function; no anonymous public node is invented.
+Application resource terms retain callback-module and dependency references.
+No public Erlang branch-guard contract exists, so case/receive/if/try clauses
+receive no invented control-flow facts.
+
+The scanner delta is limited to percent comments, quoted atoms, ordinary
+strings, character literals, Erlang number/form termination, and binary-aware
+arity counting. Existing delimiter handling covers tuples, lists, records and
+maps. Incomplete strings or delimiters remain bounded and preserve prefix
+facts. Native syntax adds Erlang attribute/control/operator vocabulary and
+uses the semantic facts to identify function definitions. This intentionally
+improves the function name from the grammar route's plain `ident` class to
+`def`; other controlled syntax classes remain equal.
+
+Validation results:
+
+- New native contract/differential/seam/syntax/incomplete/boundary suite: 7/7
+  PASS. The direct semantic and syntax proofs observe no parser request.
+- Established Erlang extraction under native mode: 34/34 PASS; the same
+  default/ungated contract remains 34/34 PASS.
+- Erlang arity resolution and behaviour synthesis: 8/8 PASS, including binary
+  literal arity handling. Total focused Erlang evidence is 49/49 PASS.
+- Shared completed-route fact/syntax/differential suites: 66/66 PASS; scanner
+  and branch-boundary regressions: 18/18 PASS.
+- Broad native extraction completed 648 semantic assertions with zero semantic
+  residuals. The same seven Windows temp-directory cleanup failures remain
+  classified `CLEANUP_ONLY_EPERM`.
+- Native UI highlighting remains 33/33 PASS. TypeScript typecheck, clean
+  production/UI builds, viewer/29-grammar artifact verification, the standard
+  six-fixture semantic baseline, all 21 CLI/MCP smoke checks, and
+  `git diff --check` pass.
+
+Native semantic languages increase from 26 to 27 and known native semantic
+gaps remain zero. Named parser-backed routes decrease from six to five: COBOL,
+Terraform/OpenTofu, CFML, CFScript, and CFQuery. Active
+`web-tree-sitter`/`SyntaxNode` source coupling remains 34 files (34 → 34), and
+staged grammar WASM remains 29 (29 → 29). The Erlang adapter and grammar asset
+remain active default-production fallback and packaged release dependencies;
+they are not obsolete, build-only, or test-only. Default fallback and parser
+bootstrap remain ACTIVE, so no parser package, WASM, lockfile, attribution, or
+legal record is removed.
+
+Remaining special-format coupling is unchanged: Svelte, Vue, and Astro retain
+script-region delegation; Razor/Blazor retains C# region delegation; and the
+CFML/CFScript/CFQuery family remains a single mixed-format three-grammar
+boundary. The next dependency-safe Phase 5F boundary is Terraform/OpenTofu
+native semantic and syntax convergence: it is one cohesive named route with
+meaningful scanner/fact reuse, while COBOL requires its fixed-format and
+copybook campaign and the CFML family requires a combined mixed-format design.
+That boundary is not started here.
