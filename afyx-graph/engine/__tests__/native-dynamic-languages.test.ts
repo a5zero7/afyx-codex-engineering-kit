@@ -93,6 +93,10 @@ end`);
     const syntax = await tokenizeSource(source, 'ruby');
     const spans = syntax?.spans.map((span) => [span.cls, source.slice(span.start, span.end)]);
     expect(spans).toEqual(expect.arrayContaining([['keyword', 'class'], ['def', 'Worker'], ['keyword', 'def'], ['def', 'run']]));
+    const incomplete = 'class Store';
+    const incompleteSyntax = await tokenizeSource(incomplete, 'ruby');
+    expect(incompleteSyntax?.spans.map((span) => [span.cls, incomplete.slice(span.start, span.end)]))
+      .toContainEqual(['def', 'Store']);
   });
 });
 

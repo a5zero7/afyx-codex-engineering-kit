@@ -51,8 +51,8 @@ export function extractNativeRubyFacts(filePath: string, source: string) {
     if (keyword !== 'class' && keyword !== 'module') continue;
     const nameIndex = index + 1;
     if (tokens[nameIndex]?.kind !== 'identifier') continue;
-    const end = matchEnd(tokens, index);
-    if (end === undefined) continue;
+    const matchedEnd = matchEnd(tokens, index);
+    const end = matchedEnd ?? tokens.length - 1;
     declarations.push({
       kind: keyword === 'class' ? 'class' : 'module', name: rubyName(tokens, nameIndex),
       start: index, end, bodyStart: index, bodyEnd: end,

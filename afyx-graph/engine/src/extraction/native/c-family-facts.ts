@@ -20,6 +20,7 @@ interface Declaration {
   abstract?: boolean;
   returnType?: string;
   signature?: string;
+  docstring?: string;
 }
 
 const CONTROL = new Set(['if', 'for', 'foreach', 'while', 'switch', 'catch', 'lock', 'using', 'sizeof', 'typeof', 'nameof']);
@@ -29,7 +30,30 @@ const TYPE_WORDS = new Set([
   'volatile', 'static', 'extern', 'inline', 'virtual', 'override', 'final', 'public', 'private', 'protected',
   'internal', 'readonly', 'async', 'unsafe', 'partial', 'abstract', 'sealed', 'struct', 'class', 'enum',
   'union', 'interface', 'record', 'typename', 'template', 'id', 'instancetype', 'nullable', 'nonnull',
+  '__global__', '__device__', '__host__', '__constant__', '__shared__', '__managed__', '__grid_constant__',
+  '__forceinline__', '__noinline__', '__launch_bounds__',
 ]);
+
+const DECLARATION_ATTRIBUTES = new Set(['__attribute__', '__declspec', '__launch_bounds__']);
+
+function cleanDocComment(text: string): string {
+  return text.trim()
+    .replace(/^\/\*+!?/, '').replace(/\*+\/$/, '')
+    .replace(/^\/\/[/!]?[ ]?/gm, '')
+    .replace(/^\s*\*[ ]?/gm, '')
+    .trim();
+}
+
+function precedingDoc(tokens: readonly NativeToken[], declaration: Declaration): string | undefined {
+  const start = tokens[declaration.start];
+  if (!start) return undefined;
+  for (let index = declaration.start - 1; index >= 0; index -= 1) {
+    const token = tokens[index]!;
+    if (token.kind === 'comment') return start.start.line - token.end.line <= 3 ? cleanDocComment(token.text) : undefined;
+    if (token.text === '}' || token.text === ';' || start.start.line - token.end.line > 2) return undefined;
+  }
+  return undefined;
+}
 
 function visibility(tokens: readonly NativeToken[], start: number, end: number): Node['visibility'] {
   for (let i = start; i < end; i += 1) {
@@ -68,6 +92,24 @@ export function extractNativeCFamilyFacts(filePath: string, source: string, lang
   const tokens = scan.tokens;
   const declarations: Declaration[] = [];
   const refs: UnresolvedReference[] = [];
+  const sourceLines = source.split(/\r?\n/);
+  const directiveLines = new Set<number>();
+  const cudaFunctionMacros = new Set<string>();
+  let continuation = false;
+  for (let lineIndex = 0; lineIndex < sourceLines.length; lineIndex += 1) {
+    const line = sourceLines[lineIndex]!;
+    const directive: boolean = continuation || /^\s*#/.test(line);
+    if (directive) directiveLines.add(lineIndex + 1);
+    continuation = directive && /\\\s*$/.test(line);
+    if (!/^\s*#\s*define\b/.test(line)) continue;
+    let logical = line;
+    let end = lineIndex;
+    while (/\\\s*$/.test(sourceLines[end] ?? '') && end + 1 < sourceLines.length) logical += `\n${sourceLines[++end]}`;
+    const macro = /^\s*#\s*define\s+([A-Za-z_]\w*)\s*\(\s*([A-Za-z_]\w*)/.exec(logical);
+    if (macro?.[1] && macro[2] && new RegExp(`\\b__global__\\s+void\\s+${macro[2]}\\s*\\(`).test(logical)) {
+      cudaFunctionMacros.add(macro[1]);
+    }
+  }
   const nextText = (from: number, text: string, limit = tokens.length): number => {
     for (let i = from; i < limit; i += 1) if (tokens[i]?.text === text) return i;
     return -1;
@@ -85,6 +127,12 @@ export function extractNativeCFamilyFacts(filePath: string, source: string, lang
     return index;
   };
   const containingKinds = new Set<NodeKind>(['namespace', 'class', 'struct', 'union', 'interface', 'protocol', 'enum']);
+  const declarationAttributeRanges: Array<{ start: number; end: number }> = [];
+  for (let index = 0; index < tokens.length - 1; index += 1) {
+    if (!DECLARATION_ATTRIBUTES.has(tokens[index]!.text) || tokens[index + 1]?.text !== '(') continue;
+    const end = scan.pairs.get(index + 1);
+    if (end !== undefined) declarationAttributeRanges.push({ start: index, end });
+  }
 
   // Namespaces are explicit owners in C++ and C#.
   if (language === 'cpp' || language === 'csharp') {
@@ -279,9 +327,8 @@ export function extractNativeCFamilyFacts(filePath: string, source: string, lang
   for (let i = 0; i < tokens.length - 1; i += 1) {
     const name = tokens[i]!;
     if (name.kind !== 'identifier' || tokens[i + 1]?.text !== '(' || CONTROL.has(name.text)) continue;
-    // Multi-character all-caps invocations before a declaration are normally
-    // annotation/export macros. Single-letter function names are valid C++.
-    if (language === 'cpp' && name.text.length > 1 && /^[A-Z][A-Z0-9_]*$/.test(name.text)) continue;
+    if (directiveLines.has(name.start.line) || DECLARATION_ATTRIBUTES.has(name.text) ||
+        declarationAttributeRanges.some((range) => range.start < i && i < range.end)) continue;
     if (['class', 'struct', 'interface', 'record', 'enum', 'namespace', 'new', 'return'].includes(tokens[i - 1]?.text ?? '')) continue;
     const paramsEnd = scan.pairs.get(i + 1);
     if (paramsEnd === undefined) continue;
@@ -291,12 +338,22 @@ export function extractNativeCFamilyFacts(filePath: string, source: string, lang
     const bodyStart = tokens[terminator]?.text === '{' ? terminator : expressionBody ? terminator : -1;
     const bodyEnd = tokens[terminator]?.text === '{' ? scan.pairs.get(terminator) : expressionBody ? statementEnd(terminator) : undefined;
     if (bodyStart < 0 || bodyEnd === undefined) continue;
-    const start = statementStart(i);
+    const macroName = cudaFunctionMacros.has(name.text) && tokens[i + 2]?.kind === 'identifier'
+      ? tokens[i + 2]!.text
+      : undefined;
+    // Multi-character all-caps invocations before a declaration are normally
+    // annotation/export macros. A macro whose own argument list is followed
+    // immediately by a body is a callable wrapper (for example TEST_F); a
+    // proven CUDA definition macro is named by its first invocation argument.
+    if (language === 'cpp' && name.text.length > 1 && /^[A-Z][A-Z0-9_]*$/.test(name.text) &&
+        !macroName && terminator !== paramsEnd + 1) continue;
+    let start = statementStart(i);
+    while (start < i && tokens[start]?.kind === 'comment') start += 1;
     // Calls followed by a block inside an existing callable are not declarations.
     const enclosingCallable = ownerFor(declarations, i, bodyEnd, new Set<NodeKind>(['function', 'method']));
     if (enclosingCallable) continue;
     let owner = ownerFor(declarations, i, bodyEnd, containingKinds);
-    let methodName = name.text;
+    let methodName = macroName ?? name.text;
     const cppReceiver = language === 'cpp' ? cppReceiverAt(i) : undefined;
     if (cppReceiver) {
       owner = declarations.find((item) => item.name === cppReceiver.name && ['class', 'struct', 'union'].includes(item.kind)) ?? owner;
@@ -433,7 +490,8 @@ export function extractNativeCFamilyFacts(filePath: string, source: string, lang
       isExported: language === 'csharp' ? declaration.visibility === 'public' : undefined,
       isStatic: declaration.static || undefined, isAsync: declaration.async || undefined,
       isAbstract: declaration.abstract || undefined,
-      returnType: declaration.returnType, signature: declaration.signature, updatedAt: Date.now(),
+      returnType: declaration.returnType, signature: declaration.signature,
+      docstring: declaration.docstring ?? precedingDoc(tokens, declaration), updatedAt: Date.now(),
     };
     nodes.push(node);
     nodeByDeclaration.set(declaration, node);
@@ -457,6 +515,35 @@ export function extractNativeCFamilyFacts(filePath: string, source: string, lang
       (kind === 'function_ref' || (ref.line === token.start.line && ref.column === columnToken.start.column)))) return;
     refs.push({ fromNodeId: from.id, referenceName: name, referenceKind: kind, line: token.start.line, column: columnToken.start.column });
   };
+
+  // CUDA kernel launches are not ordinary C++ calls: the launch configuration
+  // sits between the callee and argument list. Capture the bounded product
+  // contract directly, including templated kernels and local function-pointer
+  // aliases whose assignments may select more than one concrete kernel.
+  if (language === 'cpp' && source.includes('<<<')) {
+    const aliases = new Map<string, Set<string>>();
+    for (let index = 0; index < tokens.length - 3; index += 1) {
+      const alias = tokens[index];
+      if (alias?.kind !== 'identifier' || tokens[index + 1]?.text !== '=') continue;
+      let cursor = index + 2;
+      if (tokens[cursor]?.text !== '&') continue;
+      cursor += 1;
+      const target = tokens[cursor];
+      if (target?.kind !== 'identifier') continue;
+      const targets = aliases.get(alias.text) ?? new Set<string>();
+      targets.add(target.text);
+      aliases.set(alias.text, targets);
+    }
+    const tokenByOffset = new Map(tokens.map((token, index) => [token.start.offset, index]));
+    const launch = /\b([A-Za-z_]\w*)\s*(?:<[^;{}()\n]{0,200}>)?\s*<<<[^;]{0,400}?>>>\s*\(/g;
+    for (const match of source.matchAll(launch)) {
+      if (match.index === undefined || !match[1]) continue;
+      const index = tokenByOffset.get(match.index);
+      if (index === undefined) continue;
+      const targets = aliases.get(match[1]) ?? new Set([match[1]]);
+      for (const target of targets) pushRef(index, target, 'calls');
+    }
+  }
 
   // Includes/imports/usings.
   const importPattern = language === 'csharp'
