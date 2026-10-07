@@ -410,7 +410,7 @@ export interface TokenizeResult {
 const NATIVE_SYNTAX_LANGUAGES: ReadonlySet<Language> = new Set([
   'typescript', 'tsx', 'javascript', 'jsx', 'arkts', 'python', 'go', 'java', 'rust', 'kotlin', 'scala',
   'c', 'cpp', 'objc', 'csharp',
-  'swift',
+  'swift', 'solidity',
 ]);
 
 const NATIVE_KEYWORDS: Readonly<Record<string, ReadonlySet<string>>> = {
@@ -428,6 +428,7 @@ const NATIVE_KEYWORDS: Readonly<Record<string, ReadonlySet<string>>> = {
   objc: new Set('auto break case char const continue default do double else enum extern float for goto if inline int long register restrict return short signed sizeof static struct switch typedef union unsigned void volatile while interface implementation protocol property end selector'.split(' ')),
   csharp: new Set('abstract as async await base bool break byte case catch char checked class const continue decimal default delegate do double else enum event explicit extern false finally fixed float for foreach goto if implicit in int interface internal is lock long namespace new null object operator out override params partial private protected public readonly record ref return sbyte sealed short sizeof stackalloc static string struct switch this throw true try typeof uint ulong unchecked unsafe ushort using virtual void volatile while yield'.split(' ')),
   swift: new Set('actor any as associatedtype async await break case catch class continue convenience default defer deinit do dynamic else enum extension fallthrough false fileprivate final for func guard if import indirect init in inout internal is isolated let nil nonisolated open operator optional override precedencegroup private protocol public repeat required rethrows return self Self some static struct subscript super switch throw throws true try typealias unowned var weak where while'.split(' ')),
+  solidity: new Set('abstract after alias apply auto case catch constant contract default define final immutable implements in inline let macro match mutable null of override partial promise reference relocatable sealed sizeof static supports switch typedef typeof unchecked var address bool break bytes constructor continue delete do else enum error event external fallback false fixed for function if import indexed interface internal is library mapping memory modifier new payable pragma private public pure receive return returns revert storage string struct throw true try using view virtual while'.split(' ')),
 };
 
 const NATIVE_BUILTIN_TYPES: Readonly<Record<string, ReadonlySet<string>>> = {
@@ -445,6 +446,12 @@ const NATIVE_BUILTIN_TYPES: Readonly<Record<string, ReadonlySet<string>>> = {
   objc: new Set('void BOOL char short int long float double id instancetype NSInteger NSUInteger'.split(' ')),
   csharp: new Set('void bool byte sbyte char short ushort int uint long ulong float double decimal string object dynamic'.split(' ')),
   swift: new Set('Any AnyObject Bool Character Double Float Int Int8 Int16 Int32 Int64 Never String Substring UInt UInt8 UInt16 UInt32 UInt64 Void'.split(' ')),
+  solidity: new Set([
+    ...'address bool byte bytes fixed string ufixed int uint'.split(' '),
+    ...Array.from({ length: 32 }, (_, index) => `uint${(index + 1) * 8}`),
+    ...Array.from({ length: 32 }, (_, index) => `int${(index + 1) * 8}`),
+    ...Array.from({ length: 32 }, (_, index) => `bytes${index + 1}`),
+  ]),
 };
 
 function nativeLanguageKey(language: Language): string {

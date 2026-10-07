@@ -4,6 +4,7 @@ import { generateNodeId } from '../node-id';
 import { extractNativeCFamilyFacts, isNativeCFamilyLanguage } from './c-family-facts';
 import { scanSource, type NativeToken } from './scanner';
 import { extractNativeSwiftFacts } from './swift-facts';
+import { extractNativeSolidityFacts } from './solidity-facts';
 
 const CALL_EXCLUSIONS = new Set([
   'if', 'for', 'while', 'switch', 'catch', 'with', 'function', 'typeof', 'delete',
@@ -104,6 +105,7 @@ function visibility(tokens: readonly NativeToken[], start: number, keyword: numb
 export function extractNativeFacts(filePath: string, source: string, language: Language): ExtractionResult {
   if (isNativeCFamilyLanguage(language)) return extractNativeCFamilyFacts(filePath, source, language);
   if (language === 'swift') return extractNativeSwiftFacts(filePath, source);
+  if (language === 'solidity') return extractNativeSolidityFacts(filePath, source);
   const started = Date.now();
   const scan = scanSource(source, {
     hashComments: ['python', 'ruby', 'r'].includes(language),
