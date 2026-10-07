@@ -923,3 +923,91 @@ Default fallback and parser bootstrap elimination remain blocked. The next
 recommended Phase 5F boundary is a separate evidence-first inventory of the
 remaining enterprise routes and dependency-safe slice selection; no such
 migration is started by this checkpoint.
+
+### Remaining-route inventory and Pascal native checkpoint
+
+Starting checkpoint `4798089` retained eight named parser-backed production
+routes plus parser-coupled special formats. The inventory below records the
+actual product contract rather than language-spec completeness. Complexity,
+reuse, and coupling describe the pre-change route.
+
+| Route | Runtime/parser path and Afyx contract | Convergence evidence | Classification |
+| --- | --- | --- | --- |
+| Pascal/Delphi source | Extension registration selected the Pascal WASM and generic `TreeSitterExtractor`, augmented by Pascal-only type/uses/constant/procedure/body walkers and function/value-reference capture. Required facts are unit/program identity, uses dependencies, classes/records/interfaces/enums/aliases, members and visibility, inheritance, calls (including paren-less and typed factory chains), callable values, shared constants, and DFM code-behind resolution. | Complexity MEDIUM; native reuse HIGH; coupling LOCAL; scanner delta SMALL; resolution impact MEDIUM; special-format risk LOW for source and explicitly separated for DFM/FMX; independence MODERATE. Existing coverage: 29 extraction assertions plus function/value-reference, resolution, and DFM pairing gates. | `READY_FOR_NATIVE_REPLACEMENT`; selected and completed here. |
+| CFML tags | `CfmlExtractor` loads the CFML grammar, walks tag nodes, and delegates nested script/query bodies to two more parsers. Required facts include components, tag functions/arguments/properties, includes, inheritance/implements, nested calls and typed receiver inference. | Complexity HIGH; reuse MEDIUM; coupling DEEP across three grammars; scanner delta MATERIAL; resolution HIGH; special-format risk HIGH; independence HARD. Twenty-two extraction tests plus dedicated inheritance and receiver suites cover the retained behavior. | `SPECIAL_FORMAT_BOUNDARY`; defer to one dedicated CFML-family design. |
+| CFScript | Standalone `.cfs` and bare-script `.cfc/.cfm` files use `TreeSitterExtractor('cfscript')`; tag-based files also delegate `<cfscript>` regions to it. Required facts include anonymous components, functions/methods, properties/variables, imports/includes, construction, calls, inheritance, and typed arguments. | Complexity HIGH in the combined route; reuse MEDIUM; coupling SHARED with `CfmlExtractor`; scanner delta MATERIAL; resolution HIGH; special-format risk HIGH; independence HARD when separated from tag CFML. | `READY_WITH_SHARED_FAMILY`, specifically the CFML/CFScript/CFQuery family; not safe as an isolated checkpoint. |
+| CFQuery | The grammar is not a file-extension route; `CfmlExtractor` delegates `<cfquery>` SQL bodies and retains CFML expressions/calls embedded there. | Complexity LOW alone but boundary coupling DEEP; reuse LOW; scanner delta MATERIAL for mixed SQL/CFML; resolution MEDIUM; special-format risk HIGH; independence HARD. | `SPECIAL_FORMAT_BOUNDARY`; close only with CFML family. |
+| COBOL | Patched fixed-format COBOL WASM plus a large custom `visitNode` reconstructs flat PROGRAM-ID, section/paragraph extents, PERFORM/THRU, GO TO, literal CALL, CICS LINK/XCTL, SQL INCLUDE, COPY, and hierarchical data/condition entries. Copybook resolution and CICS synthesis consume the facts. | Complexity HIGH; reuse LOW; coupling DEEP; scanner delta MATERIAL (fixed/free format and copybooks); resolution HIGH; special-format risk MEDIUM; independence HARD. Twelve focused extraction assertions exist, but the custom semantic surface and resolver bridges require a standalone campaign. | `REQUIRES_SPECIALIZED_NATIVE_DELTA`. |
+| VB.NET | VB.NET WASM and the generic extractor plus language hook cover namespaces, classes/modules/interfaces/structures/enums/delegates, members/events, Imports, Inherits/Implements, calls/index-shaped invocations, construction, and types. XML literals, multi-line LINQ, abstract members, nullable declarators, and case-insensitive syntax are required editor-safe behavior. | Complexity MEDIUM-HIGH; reuse MEDIUM; coupling SHARED; scanner delta MATERIAL; resolution MEDIUM; special-format risk MEDIUM (XML literals); independence MODERATE/HARD. Thirteen focused extraction assertions establish the current contract. | `REQUIRES_SPECIALIZED_NATIVE_DELTA`; it does not share a safe lexical/semantic boundary with Pascal. |
+| Erlang | Erlang WASM and custom hooks merge multi-clause functions by name/arity, own modules/records/types/callbacks/specs/macros/includes, and classify local/remote calls, `fun` refs, dynamic MFA, and record uses. Arity matching and behaviour dispatch add dedicated resolver/synthesizer paths. | Complexity HIGH; reuse LOW; coupling DEEP; scanner delta MATERIAL; resolution HIGH; special-format risk MEDIUM for `.app`/`.app.src`; independence HARD. Thirty-four extraction assertions plus arity and behaviour suites cover the current contract. | `REQUIRES_SPECIALIZED_NATIVE_DELTA`; requires a form/arity-specific recognizer, not a generic parser layer. |
+| Terraform/OpenTofu | Terraform/HCL WASM and a large custom hook interpret labelled blocks and traversals into resources, data sources, modules, variables, outputs, locals, providers and moved/import relationships. The Terraform framework resolver supplies module-boundary, remote-state and provider-alias behavior. | Complexity HIGH; reuse MEDIUM; coupling DEEP; scanner delta MATERIAL (heredocs/templates/traversals); resolution HIGH; special-format risk HIGH; independence HARD. Twenty-six extraction assertions plus framework integration cover the retained contract. | `REQUIRES_SPECIALIZED_NATIVE_DELTA`; standalone domain checkpoint required. |
+
+The selected slice was Pascal source semantics and syntax classification. It
+removed a complete named route, reused the existing scanner, delimiter map,
+dynamic fact builder, resolver contracts, and syntax classifier, and needed no
+new parser abstraction. Its six-file implementation commit is `8717546`.
+VB.NET was not bundled merely because both languages are case-insensitive and
+use end-delimited blocks: VB XML literals, LINQ clauses, invocation/index
+ambiguity, and statement grammar form a materially different risk boundary.
+CFML, COBOL, Erlang, and Terraform each retain dedicated domain semantics that
+would make a combined slice neither cohesive nor independently reversible.
+
+The Afyx-native Pascal recognizer consumes scanner tokens directly and emits
+the public fact schema. It covers unit/program/library fallback identity;
+dotted uses imports; class, record, interface, enum, alias, member and constant
+facts; visibility, static methods, signatures and return types; extends and
+implements; implementation-only functions; ordinary, paren-less and typed
+factory-chain calls; callable values; and shadow-safe same-file constant reads.
+The scanner delta is limited to brace and paren-star comments, doubled-quote
+strings, and `:=`/`<>`. Incomplete comments produce a bounded warning while
+preserving prefix facts. Native syntax classification uses the same facts for
+definition offsets plus Pascal keyword/builtin vocabularies.
+
+`AFYX_GRAPH_NATIVE_PARSER=1` routes `.pas`, `.dpr`, `.dpk`, and `.lpr` source
+to this recognizer without requesting `getParser()`. `.dfm` and `.fmx` remain
+on their existing parser-free `DfmExtractor`; the explicit route exclusion is
+covered by the broad native campaign. Ungated/default Pascal remains on the
+Tree-sitter fallback.
+
+#### Special-format inventory
+
+| Format/route | Current dependency and semantic purpose | Future closure |
+| --- | --- | --- |
+| Svelte | Regex locates `<script>` regions; semantic extraction delegates JS/TS to `TreeSitterExtractor`. Native-gated viewer syntax already tokenizes those regions natively. | Route semantic delegation through the established native JS/TS fact entry point while preserving source offsets and Svelte template facts. |
+| Vue | Same direct JS/TS parser delegation pattern for script blocks, plus Vue template/store facts and router synthesis. Native-gated syntax regions are already native. | Dedicated offset/ownership adapter around native JS/TS facts; retain Vue template semantics. |
+| Astro | Frontmatter and script regions delegate directly to the TypeScript parser while markup facts remain custom. Native-gated syntax regions are already native. | Dedicated region-offset adapter using native TypeScript facts. |
+| Razor/Blazor | Custom markup extraction delegates `@code`/C# regions directly to `TreeSitterExtractor('csharp')` for component logic and types. | Dedicated C# region adapter preserving markup-to-code ownership and `_Imports.razor` behavior. |
+| CFML/CFScript/CFQuery | Three parser grammars cooperate inside one mixed tag/script/query semantic route. | A dedicated family-native design; do not emulate the three ASTs. |
+| DFM/FMX | `DfmExtractor` is already parser-free and emits component hierarchy/event refs; sibling Pascal code-behind is now native-gated. | No parser replacement needed; keep the format boundary and pairing regression. |
+| Liquid | Custom lexical/template extractor; no `web-tree-sitter`/`SyntaxNode` dependency. | No parser replacement needed. |
+| MyBatis XML | Custom XML mapper extractor; no Tree-sitter dependency. | No parser replacement needed. |
+| YAML, Twig, properties | File-level-only routes at this stage; no symbol parser is invoked. Framework resolvers may add bounded file facts. | No grammar migration until a new product contract requires symbol semantics. |
+
+#### Validation and independence state
+
+- Focused Pascal native contract and differential: 51/51 PASS (including the
+  new 4/4 direct seam suite); normal-mode Pascal counterpart: 47/47 PASS.
+- Shared scanner/fact/syntax/differential/function-reference/branch-guard/UI
+  campaign: 137/137 PASS; native UI remains 33/33 PASS.
+- The broad native extraction campaign completed 648 semantic assertions and
+  recorded the same seven post-assertion Windows temp-directory cleanup
+  failures, classified `CLEANUP_ONLY_EPERM`; semantic residuals are zero.
+- TypeScript typecheck, clean production/UI build, viewer and 29-grammar
+  artifact validation, six-fixture semantic baseline, all 21 CLI/MCP smoke
+  checks, and `git diff --check` pass.
+
+Native semantic languages increase from 24 to 25. Named parser-backed routes
+decrease from eight to seven: CFML, CFScript, CFQuery, COBOL, VB.NET, Erlang,
+and Terraform/OpenTofu remain. Active `web-tree-sitter`/`SyntaxNode` source
+coupling remains 34 files (34 → 34), and staged grammar WASM remains 29
+(29 → 29). The Pascal adapter and `tree-sitter-pascal.wasm` remain active
+default production fallback and release assets; they are neither obsolete nor
+test-only. Default fallback and parser bootstrap remain ACTIVE, so parser
+packages, lockfiles, grammar assets, legal records, and attribution stay in
+place.
+
+The next dependency-safe Phase 5F boundary is VB.NET native semantic and syntax
+convergence. It has a bounded single-language route and meaningful native
+scanner/fact reuse, while avoiding the deeper multi-grammar/domain resolver
+boundaries of CFML, COBOL, Erlang, and Terraform. That boundary is not started
+by this checkpoint.
