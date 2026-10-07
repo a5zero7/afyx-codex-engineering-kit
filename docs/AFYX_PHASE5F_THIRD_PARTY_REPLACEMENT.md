@@ -1307,3 +1307,96 @@ boundary. The next dependency-safe Phase 5F boundary is COBOL native semantic
 and syntax convergence: it is one cohesive named route, whereas the remaining
 CFML family must be designed and validated together. That boundary is not
 started here, and Phase 5F is not marked complete.
+
+### COBOL native semantic and syntax checkpoint
+
+Starting checkpoint `6c94cfe0019116abff7a8ee9c2c2fc6b6040e57d`
+retained COBOL as one of four named parser-backed routes. The COBOL closure
+adds a feature-gated, dependency-free recognizer and native syntax route. With
+`AFYX_GRAPH_NATIVE_PARSER=1`, the existing `.cbl`, `.cob`, `.cobol`, and `.cpy`
+registrations emit Afyx facts directly without requesting `getParser()`.
+Ungated/default execution continues to use the patched COBOL grammar and its
+adapter.
+
+The native source view is line-oriented and offset-safe. Fixed-format input
+keeps columns 1-6 as the sequence area, recognizes the column-7 comment and
+continuation indicators, limits source text to the established code area, and
+supports `*>` inline comments. Free-format input is recognized from the same
+decisive division, `PROGRAM-ID`, and level-number markers as the established
+route. It is scanned at its original columns instead of being shifted through
+the old seven-space parser shim. Strings, doubled quotes, periods, numbers,
+hyphenated identifiers, fixed continuations, comments, and incomplete buffers
+are handled locally while preserving original UTF-16 offsets and source
+spelling.
+
+Only repository-evidenced structure is modeled. `PROGRAM-ID` remains a
+`module`; divisions are structural boundaries rather than graph noise;
+PROCEDURE DIVISION sections and paragraphs remain `function` nodes, with
+paragraphs owned by their current section. Static `PERFORM` and
+`PERFORM ... THRU/THROUGH` targets, static `GO TO`, and quoted-literal `CALL`
+targets remain `calls` references. A data-name `CALL` stays conservative and
+does not guess a runtime target. Inline `PERFORM` control forms are not
+simulated.
+
+DATA DIVISION and data-copybook level entries retain the established
+hierarchy: top-level `01`, `66`, and `77` entries are variables, nested entries
+are fields, and level `88` condition names are constants owned by the open
+data item. `PIC`, `USAGE`, `OCCURS`, and `REDEFINES` remain in the bounded
+signature where present; the previous adapter emitted no alias or memory
+overlap relationship, so the native route invents none. MOVE, ADD, SUBTRACT,
+and COMPUTE write targets retain the established `references` facts, excluding
+runtime special registers. No byte layout or general COBOL dataflow is
+calculated.
+
+`COPY` remains an import node plus static copybook-name dependency; resolution
+continues through the existing case-insensitive basename resolver. There is no
+COPY expansion, `REPLACING` evaluation, external library lookup, or missing
+file guess. `EXEC SQL` is opaque except for the established static `INCLUDE`
+copybook dependency. `EXEC CICS LINK/XCTL PROGRAM` retains literal targets and
+same-file literal VALUE dereferencing; `RETURN/START TRANSID` retains literal
+or same-file VALUE-backed `cics-transid:` calls. Unknown dynamic values stay
+silent. SQL parsing, CICS runtime semantics, JCL, compiler evaluation, and
+external dataset/storage behavior remain outside this checkpoint.
+
+Keyword recognition is COBOL-local and case-insensitive; emitted names keep
+their source spelling and exact offsets. Native syntax consumes the same
+COBOL lexical view and classifies program, section, paragraph, and data-item
+definitions plus verbs, strings, numbers, comments, COPY, and EXEC vocabulary.
+The previous grammar syntax walk exposed only a sparse token subset; native
+mode retains its identifier/string classes while intentionally adding bounded
+keyword and definition coverage. Both semantic and syntax seam tests prove
+that successful native-gated COBOL execution requests no parser.
+
+Validation results:
+
+- New native semantic differential, semantic/syntax seam, fixed/free source,
+  continuation, dynamic-call boundary, syntax, REDEFINES-signature, and
+  incomplete-buffer suite: 7/7 PASS.
+- Established COBOL extraction remains 12/12 PASS in default/parser-backed
+  mode and 12/12 PASS in native-gated mode. Focused COBOL evidence is 31/31.
+- Shared native syntax and differential regressions are 12/12 PASS. The
+  combined focused semantic/syntax/UI campaign is 52/52 PASS.
+- Broad native extraction completed 648 semantic assertions with zero
+  semantic residuals. The same seven Windows temp-directory teardown failures
+  remain classified `CLEANUP_ONLY_EPERM`, not semantic failures.
+- Native UI highlighting remains 33/33 PASS. TypeScript typecheck, clean
+  production and UI builds, viewer/29-grammar artifact verification, the
+  standard six-fixture semantic baseline, all 21 CLI/MCP smoke checks, and
+  `git diff --check` pass.
+
+Native semantic languages increase from 28 to 29 and known native semantic
+gaps remain zero. Named parser-backed routes decrease from four to three:
+CFML, CFScript, and CFQuery. Active `web-tree-sitter`/`SyntaxNode` source
+coupling remains 34 files (34 → 34), and staged grammar WASM remains 29
+(29 → 29). The COBOL grammar remains an active default-production fallback,
+is loaded by the parser bootstrap when the default route is selected, and is
+copied into production/release artifacts. It is not build-only, test-only,
+obsolete, or historical/legal-only. No parser package, grammar, lockfile,
+adapter, attribution, or legal record is removed while fallback is active.
+
+Remaining special-format coupling is unchanged: Svelte, Vue, and Astro retain
+script-region delegation, and Razor/Blazor retains C# region delegation. The
+next dependency-safe Phase 5F boundary is the combined CFML / CFScript /
+CFQuery mixed-format native convergence campaign. It must be designed and
+validated as one family. That boundary is not started here, and Phase 5F is
+not marked complete.
