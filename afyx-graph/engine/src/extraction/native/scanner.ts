@@ -34,6 +34,8 @@ export interface NativeScanOptions {
   readonly csharpStrings?: boolean;
   /** Recognize Swift raw/multiline strings and nested block comments. */
   readonly swiftSyntax?: boolean;
+  /** Recognize Lua/Luau line comments plus long-bracket comments and strings. */
+  readonly luaSyntax?: boolean;
 }
 
 const OPEN_TO_CLOSE: Readonly<Record<string, string>> = { '(': ')', '[': ']', '{': '}' };
@@ -124,6 +126,31 @@ export function scanSource(source: string, options: NativeScanOptions = {}): Nat
       }
       emit('comment', start);
       if (!closed) unterminated.push('comment');
+      continue;
+    }
+
+    if (options.luaSyntax && char === '-' && next === '-') {
+      const start = position();
+      advance();
+      advance();
+      if (source[offset] === '[') {
+        const long = /^\[(=*)\[/.exec(source.slice(offset));
+        if (long) {
+          for (let index = 0; index < long[0].length; index += 1) advance();
+          const close = `]${long[1]}]`;
+          const end = source.indexOf(close, offset);
+          if (end < 0) {
+            while (offset < source.length) advance();
+            unterminated.push('comment');
+          } else {
+            while (offset < end + close.length) advance();
+          }
+          emit('comment', start);
+          continue;
+        }
+      }
+      while (offset < source.length && source[offset] !== '\n') advance();
+      emit('comment', start);
       continue;
     }
 
@@ -312,6 +339,24 @@ export function scanSource(source: string, options: NativeScanOptions = {}): Nat
       continue;
     }
 
+    if (options.luaSyntax && char === '[') {
+      const long = /^\[(=*)\[/.exec(source.slice(offset));
+      if (long) {
+        const start = position();
+        for (let index = 0; index < long[0].length; index += 1) advance();
+        const close = `]${long[1]}]`;
+        const end = source.indexOf(close, offset);
+        if (end < 0) {
+          while (offset < source.length) advance();
+          unterminated.push('string');
+        } else {
+          while (offset < end + close.length) advance();
+        }
+        emit('string', start);
+        continue;
+      }
+    }
+
     if (isIdentifierStart(char)) {
       const start = position();
       advance();
@@ -331,9 +376,9 @@ export function scanSource(source: string, options: NativeScanOptions = {}): Nat
     const start = position();
     const compound = source.slice(offset, offset + 3);
     const compound2 = source.slice(offset, offset + 2);
-    const operator = ['>>=', '<<=', '===', '!==', '...', '??=', '&&=', '||='].includes(compound)
+    const operator = ['>>=', '<<=', '===', '!==', '...', '??=', '&&=', '||=', '<<-', '->>', ':::'].includes(compound)
       ? compound
-      : ['=>', '->', '::', '?.', '??', '&&', '||', '==', '!=', '<=', '>=', '++', '--', '+=', '-=', '*=', '/=', '**', '<<', '>>'].includes(compound2)
+      : ['=>', '->', '<-', '::', '?.', '??', '&&', '||', '==', '!=', '<=', '>=', '++', '--', '+=', '-=', '*=', '/=', '**', '<<', '>>'].includes(compound2)
         ? compound2
         : undefined;
     if (operator) {

@@ -5,6 +5,10 @@ import { extractNativeCFamilyFacts, isNativeCFamilyLanguage } from './c-family-f
 import { scanSource, type NativeToken } from './scanner';
 import { extractNativeSwiftFacts } from './swift-facts';
 import { extractNativeSolidityFacts } from './solidity-facts';
+import { extractNativePhpFacts } from './php-facts';
+import { extractNativeRubyFacts } from './ruby-facts';
+import { extractNativeLuaFacts } from './lua-facts';
+import { extractNativeRFacts } from './r-facts';
 
 const CALL_EXCLUSIONS = new Set([
   'if', 'for', 'while', 'switch', 'catch', 'with', 'function', 'typeof', 'delete',
@@ -106,6 +110,10 @@ export function extractNativeFacts(filePath: string, source: string, language: L
   if (isNativeCFamilyLanguage(language)) return extractNativeCFamilyFacts(filePath, source, language);
   if (language === 'swift') return extractNativeSwiftFacts(filePath, source);
   if (language === 'solidity') return extractNativeSolidityFacts(filePath, source);
+  if (language === 'php') return extractNativePhpFacts(filePath, source);
+  if (language === 'ruby') return extractNativeRubyFacts(filePath, source);
+  if (language === 'lua' || language === 'luau') return extractNativeLuaFacts(filePath, source, language);
+  if (language === 'r') return extractNativeRFacts(filePath, source);
   const started = Date.now();
   const scan = scanSource(source, {
     hashComments: ['python', 'ruby', 'r'].includes(language),

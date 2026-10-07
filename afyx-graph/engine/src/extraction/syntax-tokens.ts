@@ -411,6 +411,7 @@ const NATIVE_SYNTAX_LANGUAGES: ReadonlySet<Language> = new Set([
   'typescript', 'tsx', 'javascript', 'jsx', 'arkts', 'python', 'go', 'java', 'rust', 'kotlin', 'scala',
   'c', 'cpp', 'objc', 'csharp',
   'swift', 'solidity',
+  'php', 'ruby', 'lua', 'luau', 'r',
 ]);
 
 const NATIVE_KEYWORDS: Readonly<Record<string, ReadonlySet<string>>> = {
@@ -429,6 +430,11 @@ const NATIVE_KEYWORDS: Readonly<Record<string, ReadonlySet<string>>> = {
   csharp: new Set('abstract as async await base bool break byte case catch char checked class const continue decimal default delegate do double else enum event explicit extern false finally fixed float for foreach goto if implicit in int interface internal is lock long namespace new null object operator out override params partial private protected public readonly record ref return sbyte sealed short sizeof stackalloc static string struct switch this throw true try typeof uint ulong unchecked unsafe ushort using virtual void volatile while yield'.split(' ')),
   swift: new Set('actor any as associatedtype async await break case catch class continue convenience default defer deinit do dynamic else enum extension fallthrough false fileprivate final for func guard if import indirect init in inout internal is isolated let nil nonisolated open operator optional override precedencegroup private protocol public repeat required rethrows return self Self some static struct subscript super switch throw throws true try typealias unowned var weak where while'.split(' ')),
   solidity: new Set('abstract after alias apply auto case catch constant contract default define final immutable implements in inline let macro match mutable null of override partial promise reference relocatable sealed sizeof static supports switch typedef typeof unchecked var address bool break bytes constructor continue delete do else enum error event external fallback false fixed for function if import indexed interface internal is library mapping memory modifier new payable pragma private public pure receive return returns revert storage string struct throw true try using view virtual while'.split(' ')),
+  php: new Set('abstract and array as break callable case catch class clone const continue declare default do echo else elseif empty enddeclare endfor endforeach endif endswitch endwhile enum eval exit extends final finally fn for foreach function global goto if implements include include_once instanceof insteadof interface isset list match namespace new or print private protected public readonly require require_once return static switch throw trait try unset use var while xor yield false true null'.split(' ')),
+  ruby: new Set('alias and begin break case class def defined do else elsif end ensure false for if in module next nil not or redo rescue retry return self super then true undef unless until when while yield'.split(' ')),
+  lua: new Set('and break do else elseif end false for function goto if in local nil not or repeat return then true until while'.split(' ')),
+  luau: new Set('and break continue do else elseif end export false for function goto if in local nil not or repeat return then true type typeof until while'.split(' ')),
+  r: new Set('break else false for function if in inf na nan next null repeat return true while'.split(' ')),
 };
 
 const NATIVE_BUILTIN_TYPES: Readonly<Record<string, ReadonlySet<string>>> = {
@@ -452,6 +458,11 @@ const NATIVE_BUILTIN_TYPES: Readonly<Record<string, ReadonlySet<string>>> = {
     ...Array.from({ length: 32 }, (_, index) => `int${(index + 1) * 8}`),
     ...Array.from({ length: 32 }, (_, index) => `bytes${index + 1}`),
   ]),
+  php: new Set('array bool callable false float int iterable mixed never null object string true void'.split(' ')),
+  ruby: new Set(),
+  lua: new Set(),
+  luau: new Set('any boolean buffer nil never number string thread unknown vector'.split(' ')),
+  r: new Set(),
 };
 
 function nativeLanguageKey(language: Language): string {
@@ -477,13 +488,14 @@ function nativeDefinitionOffsets(source: string, language: Language, tokens: rea
 function classifyNativeRegion(source: string, language: Language, offset: number): SyntaxSpan[] {
   const key = nativeLanguageKey(language);
   const scan = scanSource(source, {
-    hashComments: key === 'python',
+    hashComments: key === 'python' || key === 'ruby' || key === 'r',
     rustSyntax: key === 'rust',
     tripleQuotedStrings: key === 'kotlin' || key === 'scala',
     backtickIdentifiers: key === 'kotlin',
     cppRawStrings: key === 'cpp',
     csharpStrings: key === 'csharp',
     swiftSyntax: key === 'swift',
+    luaSyntax: key === 'lua' || key === 'luau',
   });
   const definitions = nativeDefinitionOffsets(source, language, scan.tokens);
   const keywords = NATIVE_KEYWORDS[key] ?? new Set<string>();
