@@ -1011,3 +1011,86 @@ convergence. It has a bounded single-language route and meaningful native
 scanner/fact reuse, while avoiding the deeper multi-grammar/domain resolver
 boundaries of CFML, COBOL, Erlang, and Terraform. That boundary is not started
 by this checkpoint.
+
+### VB.NET native semantic and syntax checkpoint
+
+Starting checkpoint `7e02e85c096b0b19d696b5304d9d024c0ef255d2` retained
+VB.NET as one of seven named parser-backed routes. Commit `a95b50a` adds a
+feature-gated, dependency-free VB.NET recognizer and native syntax route. With
+`AFYX_GRAPH_NATIVE_PARSER=1`, `.vb` semantic extraction and highlighting use
+scanner tokens and emit Afyx facts directly; a structural seam test proves
+that supported extraction does not request `getParser()`. Ungated/default mode
+still uses the established VB.NET Tree-sitter adapter.
+
+The required product contract is deliberately smaller than the language
+specification. It includes namespaces; classes, modules, structures,
+interfaces, enums and delegates; methods, constructors, properties, fields,
+constants-as-established-members and events; Imports; Inherits/Implements;
+user return/header types; calls, index-shaped invocation candidates and
+construction; ownership; mixed-case keywords; and bounded incomplete editor
+input. Operators, Roslyn binding, full default-property inference, LINQ query
+evaluation, XML DOM semantics, and a complete Visual Basic grammar are outside
+the observed contract. The existing resolver performs exact symbol-name
+lookup, so this slice does not globally case-fold identifiers. It preserves
+original identifier spelling while all VB keyword/modifier/type comparisons
+inside the native boundary are case-insensitive; the controlled OLD/NEW
+differential includes a differently-cased call reference and remains
+identical.
+
+XML literals are opaque scanner tokens because Afyx requires the surrounding
+VB routine and sibling facts, not XML internals. A complete root or self-closing
+literal is consumed as one bounded region; malformed editor input is limited
+to the current line and produces the standard native incomplete-source
+warning. LINQ remains ordinary routine-owned token flow, preserving calls such
+as `big.Sum()` without representing query-clause topology. Parenthesized
+`foo(...)` remains a call candidate, matching the previous adapter's deliberate
+invocation/index ambiguity policy; unresolved index-shaped candidates simply
+do not become graph edges. Multiline lambdas are range-balanced so calls stay
+owned by the enclosing named routine, but lambdas do not become new public
+nodes. No public parser-backed VB.NET branch-guard contract exists, so no guard
+or control-flow subsystem was added.
+
+The scanner delta is limited to apostrophe and statement-position `REM`
+comments, doubled-quote/interpolated strings, bracketed identifiers, and the
+bounded XML policy. Syntax classification uses the native definition facts,
+case-folded VB keyword/builtin vocabularies, and `As` type context. Tests cover
+the prior 13 extraction assertions, direct OLD/NEW semantic parity, native
+seam isolation, XML/comment/string boundaries, mixed-case syntax, multiline
+lambda ownership, and incomplete input.
+
+Validation results:
+
+- Focused scanner/syntax/VB suite: 21/21 PASS, including the new 6/6 native
+  contract/seam tests.
+- Existing VB.NET extraction contract under native mode: 13/13 PASS; the same
+  default/ungated counterpart remains 13/13 PASS.
+- Shared fact/differential/function-reference/native UI campaign: 59/59 PASS;
+  the native UI matrix remains 33/33 PASS.
+- Remaining completed-route native suites: 66/67 PASS. The sole failure is the
+  pre-existing Go branch-boundary fixture (`outer` guard leakage); the four
+  guard source/test files are byte-identical to the starting checkpoint and
+  the scanner delta executes only when `vbnetSyntax` is enabled. It is not a
+  VB.NET or scanner regression and is not widened into this boundary.
+- Broad native extraction: 648 semantic assertions PASS, zero semantic
+  residuals, plus seven post-assertion Windows temp-directory failures
+  classified `CLEANUP_ONLY_EPERM`.
+- Typecheck, clean production build, UI build, viewer/29-grammar artifact
+  verification, six-fixture semantic baseline, all 21 CLI/MCP smoke checks,
+  and `git diff --check` PASS.
+
+Native semantic languages increase from 25 to 26 and known native semantic
+gaps remain zero. Named parser-backed routes decrease from seven to six:
+CFML, CFScript, CFQuery, COBOL, Erlang, and Terraform/OpenTofu. Active
+`web-tree-sitter`/`SyntaxNode` source coupling remains 34 files (34 → 34), and
+staged grammar WASM remains 29 (29 → 29). The 6,477,499-byte
+`tree-sitter-vbnet.wasm`, VB adapter, parser bootstrap, `web-tree-sitter`, and
+`tree-sitter-wasms` remain active default-production/release dependencies, not
+obsolete assets; no package, lockfile, attribution, or legal record is removed.
+
+Remaining special-format coupling is unchanged: Svelte, Vue, and Astro retain
+script-region delegation; Razor/Blazor retains C# region delegation; and the
+CFML/CFScript/CFQuery family retains its mixed three-grammar orchestration.
+The next dependency-safe Phase 5F boundary is Erlang native semantic and syntax
+convergence: it is a single named route with a contained form/arity contract,
+whereas COBOL, Terraform/OpenTofu, and the CFML family have deeper domain or
+mixed-format resolver boundaries. That boundary is not started here.
