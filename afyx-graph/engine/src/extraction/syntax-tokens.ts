@@ -415,6 +415,7 @@ const NATIVE_SYNTAX_LANGUAGES: ReadonlySet<Language> = new Set([
   'dart', 'nix',
   'pascal',
   'vbnet',
+  'erlang',
 ]);
 
 const NATIVE_KEYWORDS: Readonly<Record<string, ReadonlySet<string>>> = {
@@ -442,6 +443,7 @@ const NATIVE_KEYWORDS: Readonly<Record<string, ReadonlySet<string>>> = {
   nix: new Set('assert else false if in inherit let null or rec then true with'.split(' ')),
   pascal: new Set('and array as asm begin case class const constructor destructor div do downto else end except exports file finalization finally for function goto if implementation in inherited initialization inline interface is label library mod nil not object of on operator or out packed procedure program property raise record repeat resourcestring set shl shr string then threadvar to true try type unit until uses var while with xor'.split(' ')),
   vbnet: new Set('addhandler addressof alias and andalso as async boolean byref byte byval call case catch cbool cbyte cchar cdate cdbl cdec char cint class clng const continue csbyte cshort csng cstr ctype cuint culng cushort date decimal declare default delegate dim directcast do double each else elseif end enum erase error event exit false finally for friend function get gettype global gosub goto handles if implements imports in inherits integer interface is isnot iterator let lib like long loop me mod module mustinherit mustoverride mybase myclass namespace narrowing new next not nothing notinheritable notoverridable object of on operator option optional or orelse overloads overridable overrides paramarray partial private property protected public raiseevent readonly redim rem removehandler resume return sbyte select set shadows shared short single static step stop string structure sub synclock then throw to true try trycast typeof uinteger ulong ushort using when while widening with withevents writeonly xor'.split(' ')),
+  erlang: new Set('after begin case catch cond end fun if let maybe of receive try when and andalso band bnot bor bsl bsr bxor div not or orelse rem xor module export export_type import include include_lib behaviour behavior compile record type opaque spec callback define'.split(' ')),
 };
 
 const NATIVE_BUILTIN_TYPES: Readonly<Record<string, ReadonlySet<string>>> = {
@@ -474,6 +476,7 @@ const NATIVE_BUILTIN_TYPES: Readonly<Record<string, ReadonlySet<string>>> = {
   nix: new Set(),
   pascal: new Set('Boolean Byte Cardinal Char Currency Double Extended Integer Int64 LongInt LongWord Pointer Real ShortInt Single SmallInt String Variant WideChar WideString Word'.split(' ')),
   vbnet: new Set('boolean byte sbyte char date decimal double integer uinteger long ulong object short ushort single string'.split(' ')),
+  erlang: new Set(),
 };
 
 function nativeLanguageKey(language: Language): string {
@@ -511,6 +514,7 @@ function classifyNativeRegion(source: string, language: Language, offset: number
     nixSyntax: key === 'nix',
     pascalSyntax: key === 'pascal',
     vbnetSyntax: key === 'vbnet',
+    erlangSyntax: key === 'erlang',
   });
   const definitions = nativeDefinitionOffsets(source, language, scan.tokens);
   const keywords = NATIVE_KEYWORDS[key] ?? new Set<string>();

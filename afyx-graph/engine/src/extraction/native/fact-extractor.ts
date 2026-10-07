@@ -13,6 +13,7 @@ import { extractNativeDartFacts } from './dart-facts';
 import { extractNativeNixFacts } from './nix-facts';
 import { extractNativePascalFacts } from './pascal-facts';
 import { extractNativeVbnetFacts } from './vbnet-facts';
+import { extractNativeErlangFacts } from './erlang-facts';
 
 const CALL_EXCLUSIONS = new Set([
   'if', 'for', 'while', 'switch', 'catch', 'with', 'function', 'typeof', 'delete',
@@ -122,6 +123,7 @@ export function extractNativeFacts(filePath: string, source: string, language: L
   if (language === 'nix') return extractNativeNixFacts(filePath, source);
   if (language === 'pascal') return extractNativePascalFacts(filePath, source);
   if (language === 'vbnet') return extractNativeVbnetFacts(filePath, source);
+  if (language === 'erlang') return extractNativeErlangFacts(filePath, source);
   const started = Date.now();
   const scan = scanSource(source, {
     hashComments: ['python', 'ruby', 'r'].includes(language),

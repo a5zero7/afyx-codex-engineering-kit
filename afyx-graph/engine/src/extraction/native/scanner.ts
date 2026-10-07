@@ -44,6 +44,8 @@ export interface NativeScanOptions {
   readonly pascalSyntax?: boolean;
   /** Recognize VB.NET comments, doubled-quote strings, bracketed names, and XML literals. */
   readonly vbnetSyntax?: boolean;
+  /** Recognize Erlang percent comments, quoted atoms, and character literals. */
+  readonly erlangSyntax?: boolean;
 }
 
 const OPEN_TO_CLOSE: Readonly<Record<string, string>> = { '(': ')', '[': ']', '{': '}' };
@@ -95,6 +97,26 @@ export function scanSource(source: string, options: NativeScanOptions = {}): Nat
 
     if (/\s/u.test(char)) {
       advance();
+      continue;
+    }
+
+    if (options.erlangSyntax && char === '%') {
+      const start = position();
+      while (offset < source.length && source[offset] !== '\n') advance();
+      emit('comment', start);
+      continue;
+    }
+
+    // Erlang character literals are values, not identifier/punctuation input.
+    // Consume the optional escape and its payload without trying to interpret it.
+    if (options.erlangSyntax && char === '$') {
+      const start = position();
+      advance();
+      if (offset < source.length) {
+        if (source[offset] === '\\') advance();
+        if (offset < source.length) advance();
+      }
+      emit('string', start);
       continue;
     }
 
@@ -501,6 +523,10 @@ export function scanSource(source: string, options: NativeScanOptions = {}): Nat
       let closed = false;
       while (offset < source.length) {
         const current = advance();
+        if (options.erlangSyntax && quote === "'" && current === "'" && source[offset] === "'") {
+          advance();
+          continue;
+        }
         if (current === '\\' && offset < source.length) {
           advance();
           continue;
@@ -544,7 +570,12 @@ export function scanSource(source: string, options: NativeScanOptions = {}): Nat
     if (/\d/u.test(char)) {
       const start = position();
       advance();
-      while (offset < source.length && /[\p{ID_Continue}.]/u.test(source[offset]!)) advance();
+      while (offset < source.length) {
+        const current = source[offset]!;
+        if (options.erlangSyntax && current === '.' && !/\d/u.test(source[offset + 1] ?? '')) break;
+        if (!/[\p{ID_Continue}.]/u.test(current)) break;
+        advance();
+      }
       emit('number', start);
       continue;
     }

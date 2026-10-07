@@ -12,6 +12,8 @@ export interface NativeDeclaration {
   bodyEnd?: number;
   parent?: NativeDeclaration;
   qualifiedPrefix?: string;
+  /** Language-specific identity suffix kept out of the display name (for example Erlang `/arity`). */
+  qualifiedSuffix?: string;
   signature?: string;
   docstring?: string;
   returnType?: string;
@@ -91,11 +93,12 @@ export function finishDynamicFacts(
     if (!start) continue;
     const end = scan.tokens[declaration.end] ?? start;
     const parentNode = declaration.parent ? nodeByDeclaration.get(declaration.parent) : undefined;
-    const qualifiedName = parentNode
+    const qualifiedBase = parentNode
       ? `${parentNode.qualifiedName}::${declaration.name}`
       : declaration.qualifiedPrefix
         ? `${declaration.qualifiedPrefix}::${declaration.name}`
         : declaration.name;
+    const qualifiedName = `${qualifiedBase}${declaration.qualifiedSuffix ?? ''}`;
     const node: Node = {
       id: generateNodeId(filePath, declaration.kind, qualifiedName, start.start.line),
       kind: declaration.kind,
