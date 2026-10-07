@@ -46,6 +46,8 @@ export interface NativeScanOptions {
   readonly vbnetSyntax?: boolean;
   /** Recognize Erlang percent comments, quoted atoms, and character literals. */
   readonly erlangSyntax?: boolean;
+  /** Recognize HCL heredocs and hyphenated identifiers. */
+  readonly hclSyntax?: boolean;
 }
 
 const OPEN_TO_CLOSE: Readonly<Record<string, string>> = { '(': ')', '[': ']', '{': '}' };
@@ -118,6 +120,28 @@ export function scanSource(source: string, options: NativeScanOptions = {}): Nat
       }
       emit('string', start);
       continue;
+    }
+
+    if (options.hclSyntax && char === '<' && next === '<') {
+      const opening = /^<<-?([A-Za-z_][\w-]*)[ \t]*\r?\n/u.exec(source.slice(offset));
+      if (opening) {
+        const start = position();
+        const delimiter = opening[1]!;
+        for (let index = 0; index < opening[0].length; index += 1) advance();
+        const closing = new RegExp(`^[ \\t]*${delimiter}[ \\t]*(?:\\r?$)`, 'mu').exec(source.slice(offset));
+        if (!closing) {
+          while (offset < source.length) advance();
+          emit('string', start);
+          unterminated.push('string');
+          continue;
+        }
+        const end = offset + closing.index + closing[0].length;
+        while (offset < end) advance();
+        if (source[offset] === '\r') advance();
+        if (source[offset] === '\n') advance();
+        emit('string', start);
+        continue;
+      }
     }
 
     if (char === '/' && next === '/') {
@@ -562,7 +586,17 @@ export function scanSource(source: string, options: NativeScanOptions = {}): Nat
     if (isIdentifierStart(char)) {
       const start = position();
       advance();
-      while (offset < source.length && isIdentifierContinue(source[offset]!)) advance();
+      while (offset < source.length) {
+        if (isIdentifierContinue(source[offset]!)) {
+          advance();
+          continue;
+        }
+        if (options.hclSyntax && source[offset] === '-' && isIdentifierContinue(source[offset + 1] ?? '')) {
+          advance();
+          continue;
+        }
+        break;
+      }
       emit('identifier', start);
       continue;
     }
