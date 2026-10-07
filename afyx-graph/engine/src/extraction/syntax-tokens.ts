@@ -414,6 +414,7 @@ const NATIVE_SYNTAX_LANGUAGES: ReadonlySet<Language> = new Set([
   'php', 'ruby', 'lua', 'luau', 'r',
   'dart', 'nix',
   'pascal',
+  'vbnet',
 ]);
 
 const NATIVE_KEYWORDS: Readonly<Record<string, ReadonlySet<string>>> = {
@@ -440,6 +441,7 @@ const NATIVE_KEYWORDS: Readonly<Record<string, ReadonlySet<string>>> = {
   dart: new Set('abstract as assert async await base break case catch class const continue covariant default deferred do dynamic else enum export extends extension external factory false final finally for Function get hide if implements import in interface is late library mixin new null of on operator part required rethrow return sealed set show static super switch sync this throw true try typedef var void when while with yield'.split(' ')),
   nix: new Set('assert else false if in inherit let null or rec then true with'.split(' ')),
   pascal: new Set('and array as asm begin case class const constructor destructor div do downto else end except exports file finalization finally for function goto if implementation in inherited initialization inline interface is label library mod nil not object of on operator or out packed procedure program property raise record repeat resourcestring set shl shr string then threadvar to true try type unit until uses var while with xor'.split(' ')),
+  vbnet: new Set('addhandler addressof alias and andalso as async boolean byref byte byval call case catch cbool cbyte cchar cdate cdbl cdec char cint class clng const continue csbyte cshort csng cstr ctype cuint culng cushort date decimal declare default delegate dim directcast do double each else elseif end enum erase error event exit false finally for friend function get gettype global gosub goto handles if implements imports in inherits integer interface is isnot iterator let lib like long loop me mod module mustinherit mustoverride mybase myclass namespace narrowing new next not nothing notinheritable notoverridable object of on operator option optional or orelse overloads overridable overrides paramarray partial private property protected public raiseevent readonly redim rem removehandler resume return sbyte select set shadows shared short single static step stop string structure sub synclock then throw to true try trycast typeof uinteger ulong ushort using when while widening with withevents writeonly xor'.split(' ')),
 };
 
 const NATIVE_BUILTIN_TYPES: Readonly<Record<string, ReadonlySet<string>>> = {
@@ -471,6 +473,7 @@ const NATIVE_BUILTIN_TYPES: Readonly<Record<string, ReadonlySet<string>>> = {
   dart: new Set('bool double dynamic Function Future int List Map Never num Object Record Set String Symbol Type Uri void'.split(' ')),
   nix: new Set(),
   pascal: new Set('Boolean Byte Cardinal Char Currency Double Extended Integer Int64 LongInt LongWord Pointer Real ShortInt Single SmallInt String Variant WideChar WideString Word'.split(' ')),
+  vbnet: new Set('boolean byte sbyte char date decimal double integer uinteger long ulong object short ushort single string'.split(' ')),
 };
 
 function nativeLanguageKey(language: Language): string {
@@ -507,6 +510,7 @@ function classifyNativeRegion(source: string, language: Language, offset: number
     dartSyntax: key === 'dart',
     nixSyntax: key === 'nix',
     pascalSyntax: key === 'pascal',
+    vbnetSyntax: key === 'vbnet',
   });
   const definitions = nativeDefinitionOffsets(source, language, scan.tokens);
   const keywords = NATIVE_KEYWORDS[key] ?? new Set<string>();
@@ -556,11 +560,12 @@ function classifyNativeRegion(source: string, language: Language, offset: number
     }
     else if (token.kind === 'number') cls = 'number';
     else if (token.kind === 'identifier') {
-      const previous = scan.tokens[index - 1]?.text;
+      const comparison = key === 'vbnet' ? token.text.toLowerCase() : token.text;
+      const previous = key === 'vbnet' ? scan.tokens[index - 1]?.text.toLowerCase() : scan.tokens[index - 1]?.text;
       if (definitions.has(token.start.offset)) cls = 'def';
-      else if (builtins.has(token.text)) cls = 'type';
-      else if ((previous === ':' && key !== 'python' && key !== 'nix') || previous === 'extends' || previous === 'implements' || previous === 'new') cls = 'type';
-      else if (keywords.has(token.text)) cls = ['true', 'false', 'null', 'undefined', 'None', 'True', 'False', 'nil'].includes(token.text) ? 'number' : 'keyword';
+      else if (builtins.has(comparison)) cls = 'type';
+      else if ((previous === ':' && key !== 'python' && key !== 'nix') || (key === 'vbnet' && previous === 'as') || previous === 'extends' || previous === 'implements' || previous === 'new') cls = 'type';
+      else if (keywords.has(comparison)) cls = ['true', 'false', 'null', 'undefined', 'none', 'nil', 'nothing'].includes(comparison.toLowerCase()) ? 'number' : 'keyword';
       else cls = 'ident';
     }
     append(token.start.offset, token.end.offset, cls);

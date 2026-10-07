@@ -42,6 +42,8 @@ export interface NativeScanOptions {
   readonly nixSyntax?: boolean;
   /** Recognize Pascal brace/paren comments and doubled-quote strings. */
   readonly pascalSyntax?: boolean;
+  /** Recognize VB.NET comments, doubled-quote strings, bracketed names, and XML literals. */
+  readonly vbnetSyntax?: boolean;
 }
 
 const OPEN_TO_CLOSE: Readonly<Record<string, string>> = { '(': ')', '[': ']', '{': '}' };
@@ -154,6 +156,45 @@ export function scanSource(source: string, options: NativeScanOptions = {}): Nat
       emit('comment', start);
       if (!closed) unterminated.push('comment');
       continue;
+    }
+
+    if (options.vbnetSyntax && char === "'") {
+      const start = position();
+      while (offset < source.length && source[offset] !== '\n') advance();
+      emit('comment', start);
+      continue;
+    }
+
+    if (options.vbnetSyntax && /^rem(?:\s|$)/i.test(source.slice(offset))) {
+      const previous = tokens.at(-1);
+      if (!previous || previous.end.line < line || previous.text === ':') {
+        const start = position();
+        while (offset < source.length && source[offset] !== '\n') advance();
+        emit('comment', start);
+        continue;
+      }
+    }
+
+    // Afyx does not consume XML-literal internals. Keep a well-formed root
+    // literal opaque, while bounding incomplete editor input to one line.
+    if (options.vbnetSyntax && char === '<') {
+      const opening = /^<([A-Za-z_][\w.-]*)(?:\s[^<>]*?)?>/.exec(source.slice(offset));
+      if (opening) {
+        const start = position();
+        const closePattern = new RegExp(`<\\/${opening[1]}\\s*>`, 'i');
+        const tail = source.slice(offset + opening[0].length);
+        const close = closePattern.exec(tail);
+        const selfClosing = /\/\s*>$/.test(opening[0]);
+        const end = selfClosing
+          ? offset + opening[0].length
+          : close
+          ? offset + opening[0].length + close.index + close[0].length
+          : source.indexOf('\n', offset) >= 0 ? source.indexOf('\n', offset) : source.length;
+        while (offset < end) advance();
+        emit('string', start);
+        if (!close && !selfClosing) unterminated.push('string');
+        continue;
+      }
     }
 
     if (options.luaSyntax && char === '-' && next === '-') {
@@ -414,6 +455,43 @@ export function scanSource(source: string, options: NativeScanOptions = {}): Nat
       }
       emit('string', start);
       if (!closed) unterminated.push('string');
+      continue;
+    }
+
+    if (options.vbnetSyntax && (char === '"' || (char === '$' && next === '"'))) {
+      const start = position();
+      if (char === '$') advance();
+      advance();
+      let closed = false;
+      while (offset < source.length) {
+        if (source[offset] === '"') {
+          advance();
+          if (source[offset] === '"') {
+            advance();
+            continue;
+          }
+          closed = true;
+          break;
+        }
+        advance();
+      }
+      emit('string', start);
+      if (!closed) unterminated.push('string');
+      continue;
+    }
+
+    if (options.vbnetSyntax && char === '[') {
+      const start = position();
+      advance();
+      let closed = false;
+      while (offset < source.length && source[offset] !== '\n') {
+        if (advance() === ']') {
+          closed = true;
+          break;
+        }
+      }
+      emit('identifier', start);
+      if (!closed) unterminated.push('delimiter');
       continue;
     }
 
