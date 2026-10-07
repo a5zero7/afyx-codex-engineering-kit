@@ -412,6 +412,7 @@ const NATIVE_SYNTAX_LANGUAGES: ReadonlySet<Language> = new Set([
   'c', 'cpp', 'objc', 'csharp',
   'swift', 'solidity',
   'php', 'ruby', 'lua', 'luau', 'r',
+  'dart', 'nix',
 ]);
 
 const NATIVE_KEYWORDS: Readonly<Record<string, ReadonlySet<string>>> = {
@@ -435,6 +436,8 @@ const NATIVE_KEYWORDS: Readonly<Record<string, ReadonlySet<string>>> = {
   lua: new Set('and break do else elseif end false for function goto if in local nil not or repeat return then true until while'.split(' ')),
   luau: new Set('and break continue do else elseif end export false for function goto if in local nil not or repeat return then true type typeof until while'.split(' ')),
   r: new Set('break else false for function if in inf na nan next null repeat return true while'.split(' ')),
+  dart: new Set('abstract as assert async await base break case catch class const continue covariant default deferred do dynamic else enum export extends extension external factory false final finally for Function get hide if implements import in interface is late library mixin new null of on operator part required rethrow return sealed set show static super switch sync this throw true try typedef var void when while with yield'.split(' ')),
+  nix: new Set('assert else false if in inherit let null or rec then true with'.split(' ')),
 };
 
 const NATIVE_BUILTIN_TYPES: Readonly<Record<string, ReadonlySet<string>>> = {
@@ -463,6 +466,8 @@ const NATIVE_BUILTIN_TYPES: Readonly<Record<string, ReadonlySet<string>>> = {
   lua: new Set(),
   luau: new Set('any boolean buffer nil never number string thread unknown vector'.split(' ')),
   r: new Set(),
+  dart: new Set('bool double dynamic Function Future int List Map Never num Object Record Set String Symbol Type Uri void'.split(' ')),
+  nix: new Set(),
 };
 
 function nativeLanguageKey(language: Language): string {
@@ -488,7 +493,7 @@ function nativeDefinitionOffsets(source: string, language: Language, tokens: rea
 function classifyNativeRegion(source: string, language: Language, offset: number): SyntaxSpan[] {
   const key = nativeLanguageKey(language);
   const scan = scanSource(source, {
-    hashComments: key === 'python' || key === 'ruby' || key === 'r',
+    hashComments: key === 'python' || key === 'ruby' || key === 'r' || key === 'nix',
     rustSyntax: key === 'rust',
     tripleQuotedStrings: key === 'kotlin' || key === 'scala',
     backtickIdentifiers: key === 'kotlin',
@@ -496,6 +501,8 @@ function classifyNativeRegion(source: string, language: Language, offset: number
     csharpStrings: key === 'csharp',
     swiftSyntax: key === 'swift',
     luaSyntax: key === 'lua' || key === 'luau',
+    dartSyntax: key === 'dart',
+    nixSyntax: key === 'nix',
   });
   const definitions = nativeDefinitionOffsets(source, language, scan.tokens);
   const keywords = NATIVE_KEYWORDS[key] ?? new Set<string>();
@@ -548,7 +555,7 @@ function classifyNativeRegion(source: string, language: Language, offset: number
       const previous = scan.tokens[index - 1]?.text;
       if (definitions.has(token.start.offset)) cls = 'def';
       else if (builtins.has(token.text)) cls = 'type';
-      else if ((previous === ':' && key !== 'python') || previous === 'extends' || previous === 'implements' || previous === 'new') cls = 'type';
+      else if ((previous === ':' && key !== 'python' && key !== 'nix') || previous === 'extends' || previous === 'implements' || previous === 'new') cls = 'type';
       else if (keywords.has(token.text)) cls = ['true', 'false', 'null', 'undefined', 'None', 'True', 'False', 'nil'].includes(token.text) ? 'number' : 'keyword';
       else cls = 'ident';
     }

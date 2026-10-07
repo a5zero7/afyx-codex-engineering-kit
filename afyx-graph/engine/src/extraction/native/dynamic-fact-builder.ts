@@ -18,10 +18,13 @@ export interface NativeDeclaration {
   visibility?: Node['visibility'];
   exported?: boolean;
   static?: boolean;
+  async?: boolean;
+  abstract?: boolean;
 }
 
 export interface NativeReference {
   owner?: NativeDeclaration;
+  directTarget?: NativeDeclaration;
   token: NativeToken;
   name: string;
   kind: UnresolvedReference['referenceKind'];
@@ -110,13 +113,23 @@ export function finishDynamicFacts(
       visibility: declaration.visibility,
       isExported: declaration.exported,
       isStatic: declaration.static,
+      isAsync: declaration.async,
+      isAbstract: declaration.abstract,
       updatedAt: Date.now(),
     };
     nodes.push(node);
     nodeByDeclaration.set(declaration, node);
     edges.push({ source: parentNode?.id ?? fileNode.id, target: node.id, kind: 'contains' });
   }
-  const unresolvedReferences: UnresolvedReference[] = references.map((reference) => ({
+  for (const reference of references) {
+    if (!reference.directTarget) continue;
+    const sourceNode = reference.owner ? nodeByDeclaration.get(reference.owner) : fileNode;
+    const targetNode = nodeByDeclaration.get(reference.directTarget);
+    if (sourceNode && targetNode && sourceNode.id !== targetNode.id) {
+      edges.push({ source: sourceNode.id, target: targetNode.id, kind: 'references', metadata: { valueRef: true } });
+    }
+  }
+  const unresolvedReferences: UnresolvedReference[] = references.filter((reference) => !reference.directTarget).map((reference) => ({
     fromNodeId: reference.owner ? nodeByDeclaration.get(reference.owner)?.id ?? fileNode.id : fileNode.id,
     referenceName: reference.name,
     referenceKind: reference.kind,

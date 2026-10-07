@@ -36,6 +36,10 @@ export interface NativeScanOptions {
   readonly swiftSyntax?: boolean;
   /** Recognize Lua/Luau line comments plus long-bracket comments and strings. */
   readonly luaSyntax?: boolean;
+  /** Consume Dart raw and triple-quoted strings as opaque regions. */
+  readonly dartSyntax?: boolean;
+  /** Consume Nix indented strings (`''...''`) as opaque regions. */
+  readonly nixSyntax?: boolean;
 }
 
 const OPEN_TO_CLOSE: Readonly<Record<string, string>> = { '(': ')', '[': ']', '{': '}' };
@@ -236,6 +240,56 @@ export function scanSource(source: string, options: NativeScanOptions = {}): Nat
         if (!closed) unterminated.push('string');
         continue;
       }
+    }
+
+    if (options.dartSyntax) {
+      const raw = (char === 'r' || char === 'R') && (next === '"' || next === "'");
+      const quoteOffset = raw ? offset + 1 : offset;
+      const quote = source[quoteOffset];
+      const triple = quote && source.startsWith(quote.repeat(3), quoteOffset);
+      if (quote === '"' || quote === "'") {
+        const start = position();
+        if (raw) advance();
+        const opening = triple ? 3 : 1;
+        for (let index = 0; index < opening; index += 1) advance();
+        const suffix = quote.repeat(opening);
+        let closed = false;
+        while (offset < source.length) {
+          if (source.startsWith(suffix, offset)) {
+            for (let index = 0; index < suffix.length; index += 1) advance();
+            closed = true;
+            break;
+          }
+          if (!raw && !triple && source[offset] === '\\' && offset + 1 < source.length) {
+            advance();
+            advance();
+          } else {
+            advance();
+          }
+        }
+        emit('string', start);
+        if (!closed) unterminated.push('string');
+        continue;
+      }
+    }
+
+    if (options.nixSyntax && char === "'" && next === "'") {
+      const start = position();
+      advance();
+      advance();
+      let closed = false;
+      while (offset < source.length) {
+        if (source[offset] === "'" && source[offset + 1] === "'") {
+          advance();
+          advance();
+          closed = true;
+          break;
+        }
+        advance();
+      }
+      emit('string', start);
+      if (!closed) unterminated.push('string');
+      continue;
     }
 
     if (options.cppRawStrings) {
