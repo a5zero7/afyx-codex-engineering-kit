@@ -1094,3 +1094,41 @@ The next dependency-safe Phase 5F boundary is Erlang native semantic and syntax
 convergence: it is a single named route with a contained form/arity contract,
 whereas COBOL, Terraform/OpenTofu, and the CFML family have deeper domain or
 mixed-format resolver boundaries. That boundary is not started here.
+
+### Go native branch-boundary residual closure
+
+The VB.NET checkpoint exposed one older completed-route residual in the shared
+native guard campaign: a Go call inside `callback := func(){ ... }` incorrectly
+inherited the enclosing function's preceding `if outer { return }` guard. The
+failure reproduced independently and deterministically 3/3. Its primary
+classification is `FUNCTION_BOUNDARY_OWNERSHIP_BUG`.
+
+The native scanner has always emitted Go's short assignment as the compound
+token `:=`. `functionBoundary()` recognized an assigned Go function literal
+only when scanning backward found `=` or the legacy split pair `:` plus `=`.
+It therefore failed to mark the literal body as a new execution boundary and
+allowed the outer early-return guard to reach the inner call. Commit `92acfa9`
+adds the missing compound-token recognition. It does not change scanners,
+fact extraction, resolver behavior, or any non-Go branch rule.
+
+The original isolation fixture now passes, and a durable regression proves
+both halves of the contract: `outer` is absent while a legitimate `if inner`
+inside the literal remains attached to `run()`. Focused regression is 2/2;
+the complete native/legacy branch-guard selection is 70/70; and the campaign
+that previously recorded 66/67 now passes all 67 original assertions plus the
+new regression (68/68). Go extraction passed 8/8 and shared native
+differential/fact/syntax/function-reference/resolution coverage passed 47/47.
+
+The broad native extraction campaign again completed 648 semantic assertions
+with zero residuals and seven post-assertion Windows temp-directory failures
+classified `CLEANUP_ONLY_EPERM`. Native UI remains 33/33. Typecheck, clean
+production/UI build, viewer and 29-grammar artifact verification, the
+six-fixture semantic baseline, all 21 CLI/MCP smoke checks, and
+`git diff --check` pass.
+
+This correction changes no third-party boundary: native semantic languages
+remain 26, named parser-backed routes remain six, known native semantic gaps
+move from one to zero, active `web-tree-sitter`/`SyntaxNode` coupling remains
+34 files, staged grammar WASM remains 29, and default fallback plus parser
+bootstrap remain active. The next boundary remains Erlang native semantic and
+syntax convergence; it is not started here.
