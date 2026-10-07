@@ -776,3 +776,75 @@ and parser-coupled SFC/template/special-format internals. Parser bootstrap,
 dependency, grammar-WASM, and fallback removal remain blocked. The recommended
 next Phase 5F boundary is a separate evidence-first Dart/Nix contract audit;
 that work is not started by this checkpoint.
+
+### Dart and Nix native semantic checkpoint
+
+Commit `26d4e71` adds Dart and Nix as the twenty-third and twenty-fourth
+feature-gated native semantic routes. The languages remain one valid delivery
+checkpoint because both reuse the bounded scanner, delimiter map, dynamic fact
+schema, and syntax classifier, while their high-level fact recognizers remain
+separate. No Dart analyzer, Nix evaluator, generic AST, or new parser
+architecture was introduced. With `AFYX_GRAPH_NATIVE_PARSER=1`, successful
+Dart and Nix semantic extraction and syntax classification no longer invoke
+their Tree-sitter language adapters or grammar WASM. Ungated/default behavior
+continues to use the established fallback.
+
+The Dart recognizer preserves imports, exports, and parts; class-shaped class,
+mixin, and extension definitions; enums, aliases, functions, methods, named
+constructors, fields, and shared constants; containment and visibility;
+extends/implements/mixin and declared-type references; construction, calls,
+factory/constructor chains, callable values, and same-file constant reads.
+Constant reads remain direct graph edges and fail closed for a locally shadowed
+name. Function and arrow bodies provide bounded call ownership; there was no
+separate established Dart branch-guard contract to migrate.
+
+The Nix recognizer is deliberately lexical. It preserves attribute and
+`let` bindings, curried functions and attribute-set arguments, exported result
+sets, `inherit`, static relative `import`/`builtins.import`, module/import lists,
+`callPackage` dependencies, function application, attribute selections, and
+same-file callable values. Dynamic imports and interpolation text do not become
+static file dependencies. It performs no evaluation, derivation execution,
+nixpkgs resolution, or module-system interpretation.
+
+Scanner changes are limited to Dart raw/triple-quoted strings and Nix indented
+strings. Native syntax vocabularies and routing now cover both languages; Nix
+hash comments and lambda colons are classified without borrowing type syntax.
+The dynamic fact builder gained only the metadata fields already present in the
+public node contract and a direct-target reference path needed to retain
+shadow-safe value-read edges.
+
+Validation passed the focused Dart/Nix suite 6/6, selected native-gated
+extraction/resolution/value-reference contracts 37/37, scanner/fact/syntax/
+differential/function-reference regression 47/47, and the selected normal-mode
+counterpart 51/51. Default UI highlighting passed 33/33. The full native-gated
+UI matrix retained one pre-existing Ruby definition-token gap (`class Store`
+is still an identifier), while all Dart/Nix syntax assertions passed. Typecheck,
+the clean production/UI build, UI artifact verification, the six-fixture
+semantic baseline, all 21 CLI/MCP smoke checks, and `git diff --check` pass. A
+first semantic-baseline process ended with a transient Windows `0xC0000005`
+before assertions; the isolated rerun passed all six fixtures.
+
+The one broad 655-test native extraction campaign recorded 642 assertion
+passes, the same six pre-existing C/CUDA semantic gaps, and seven post-assertion
+Windows cleanup failures classified `CLEANUP_ONLY_EPERM`. No Dart or Nix
+regression was present. These C/CUDA gaps remain explicit closure work rather
+than accepted behavior.
+
+Active `web-tree-sitter`/`SyntaxNode` source coupling remains 34 files
+(34 → 34). The existing Dart and Nix adapters remain required by normal-mode
+fallback, and `tree-sitter-dart.wasm` (984,666 bytes) plus
+`tree-sitter-nix.wasm` (80,876 bytes) remain production/release assets. The
+clean build still stages all 29 grammar WASM files. No parser package,
+lockfile, bootstrap path, grammar asset, attribution, or legal record is
+removed, so `web-tree-sitter` and `tree-sitter-wasms` remain production
+dependencies.
+
+The native semantic set is now TypeScript, TSX, JavaScript, JSX, Python, Go,
+Java, Rust, Kotlin, Scala, C, C++, Objective-C, C#, Swift, ArkTS, Solidity,
+PHP, Ruby, Lua, Luau, R, Dart, and Nix. Remaining parser-backed groups are
+Pascal, CFML/CFScript/CFQuery, COBOL, VB.NET, and Erlang;
+Terraform/OpenTofu; and parser-coupled SFC/template/special-format internals.
+Parser bootstrap, default fallback, dependency, and grammar-WASM elimination
+remain blocked. Before expanding to another language family, the recommended
+next Phase 5F boundary is an evidence-first closure of the six known C/CUDA
+native semantic gaps; that work is not started here.
