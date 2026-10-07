@@ -668,3 +668,52 @@ Terraform/OpenTofu semantics; and parser-coupled SFC/template/special-format
 internals. `web-tree-sitter`, `tree-sitter-wasms`, grammar WASM, and parser
 bootstrap removal remain blocked. The next dependency-safe language boundary
 is Solidity; it is not started by this checkpoint.
+
+### Solidity native semantic checkpoint
+
+Commit `c029b49` adds Solidity as the seventeenth feature-gated native semantic
+route. With `AFYX_GRAPH_NATIVE_PARSER=1`, `.sol` files now enter the bounded
+Afyx-owned `solidity-facts.ts` recognizer directly. Successful native semantic
+extraction does not load the Solidity Tree-sitter adapter, grammar, or WASM;
+ungated/default extraction remains unchanged.
+
+The native contract covers imports and aliases; contracts, interfaces,
+libraries, structs, enums, value-type aliases, functions, constructors,
+modifiers, fallback/receive functions, state variables, constants, events and
+custom errors; containment; Solidity `is` inheritance; user-defined, mapping,
+array, parameter and return-type references; `using` library references;
+internal/member calls; base-constructor and modifier invocations; event emits,
+custom-error reverts; and `new` instantiations. Events and custom errors retain
+the established field-shaped definitions, while their uses remain call facts.
+Inline assembly is delimiter-bounded but intentionally not parsed as Yul.
+
+The existing native scanner required no change. Native syntax classification
+adds Solidity keywords and elementary-width types. No Solidity-specific branch
+machinery was added: the required semantic ownership is bounded by declaration
+and brace scopes, and the established Solidity contract has no parser-backed
+branch-guard surface.
+
+The focused native Solidity suite passes 4/4. The established Solidity
+extraction contract passes 12/12 under the native gate and 12/12 in normal
+mode. Shared scanner/fact/syntax and already-native language coverage passes
+50/50. Typecheck, clean production/UI build, the six-fixture semantic baseline,
+all 21 CLI/MCP smoke checks, and `git diff --check` pass. No semantic failure
+or Windows cleanup `EPERM` occurred in this boundary. There is no separately
+maintained Solidity resolution fixture; the focused suite validates the exact
+unresolved inheritance, type, modifier, event/error, call, and instantiation
+facts consumed by the shared resolver.
+
+The native semantic set is now seventeen languages: TypeScript, TSX,
+JavaScript, JSX, Python, Go, Java, Rust, Kotlin, Scala, C, C++, Objective-C,
+C#, Swift, ArkTS, and Solidity. Active `web-tree-sitter`/`SyntaxNode` source
+coupling remains 34 files (34 → 34). The existing Solidity adapter and
+`tree-sitter-solidity.wasm` remain required production fallback assets for
+ungated/default execution, packaging, and shared parser bootstrap. No parser
+package, lockfile, grammar asset, legal record, or attribution file is removed.
+
+Remaining parser boundaries include PHP, Ruby, Dart, Lua/Luau, R, and Nix;
+Pascal, CFML/CFScript/CFQuery, COBOL, VB.NET, and Erlang; Terraform/OpenTofu
+semantics; and parser-coupled SFC/template/special-format internals.
+`web-tree-sitter`, `tree-sitter-wasms`, grammar WASM, and parser bootstrap
+removal remain blocked. The next dependency-safe task is a separate audit of
+the remaining dynamic-language group; no such language is started here.
