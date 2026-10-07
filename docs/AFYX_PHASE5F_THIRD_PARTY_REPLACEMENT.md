@@ -717,3 +717,62 @@ semantics; and parser-coupled SFC/template/special-format internals.
 `web-tree-sitter`, `tree-sitter-wasms`, grammar WASM, and parser bootstrap
 removal remain blocked. The next dependency-safe task is a separate audit of
 the remaining dynamic-language group; no such language is started here.
+
+### PHP, Ruby, Lua/Luau, and R native semantic checkpoint
+
+Commit `3662726` adds five feature-gated native semantic routes, increasing
+the native set from seventeen to twenty-two languages. With
+`AFYX_GRAPH_NATIVE_PARSER=1`, PHP, Ruby, Lua, Luau, and R now enter bounded
+Afyx-owned fact recognizers directly; successful semantic extraction and
+syntax classification do not invoke their Tree-sitter adapters or grammar
+WASM. Ungated/default extraction remains on the established fallback.
+
+The implementation keeps language-specific contracts separate behind a small
+shared fact/result builder. PHP covers namespaces and `use` imports, class-like
+containers, members, inheritance/composition, typed references, calls,
+construction, includes, closures/arrow functions, and established HOF callable
+forms. Ruby covers nested modules/classes, methods and singleton methods,
+inheritance/mixins, require paths, receiver/bare calls, Rails callback symbols,
+and assignment-bound lambda scope. Lua and Luau share one scanner/fact core for
+functions, table/module methods, `require`, calls, callable values, and
+function-valued assignment ownership; Luau adds exported type aliases, typed
+signatures, return types, and type references. R covers assignment-bound and
+nested functions, file variables/constants, package/source dependencies,
+namespaced/member calls, callable values, and the established S4/R5/R6/ggproto
+class and method idioms.
+
+Scanner changes are deliberately narrow: Lua line/long-bracket comments and
+long strings, plus the R assignment/namespace operators. Native syntax
+vocabularies now cover all five routes. No separate branch-guard subsystem was
+added because these languages do not have an established parser-backed guard
+API in the current product contract; callable and closure ownership is instead
+bounded directly by function, brace, `end`, and assignment scopes.
+
+Validation passed the new focused family suite 13/13, the selected established
+extraction/resolution contracts 45/45 in native mode and 45/45 in normal mode,
+the complete function-reference campaign 20/20, and the selected shared-native
+campaign 61/61. Typecheck, clean production and UI builds, the six-fixture
+semantic baseline, all 21 CLI/MCP smoke checks, and `git diff --check` pass.
+The optional native-kernel parity suites were unavailable and skipped 23/23.
+The one broad 655-test native extraction campaign recorded 642 normal passes,
+six previously documented C/CUDA native semantic gaps outside this boundary,
+and seven post-assertion Windows cleanup `EPERM` results. Its initial Lua
+doc-comment mismatch was corrected; the focused rerun passed the Lua assertions
+and then stopped at the existing C doc-comment gap.
+
+Active `web-tree-sitter`/`SyntaxNode` source coupling remains 34 files
+(34 → 34). The PHP, Ruby, Lua, Luau, and R adapters and grammar assets remain
+required production fallback and release assets while ungated mode is
+supported; the clean build still stages all 29 grammar WASM files. No parser
+package, lockfile, grammar asset, bootstrap code, legal record, or attribution
+file is removed. `web-tree-sitter` and `tree-sitter-wasms` therefore remain
+production dependencies.
+
+The native semantic set is now TypeScript, TSX, JavaScript, JSX, Python, Go,
+Java, Rust, Kotlin, Scala, C, C++, Objective-C, C#, Swift, ArkTS, Solidity,
+PHP, Ruby, Lua, Luau, and R. Remaining parser boundaries include Dart and Nix;
+Pascal, CFML/CFScript/CFQuery, COBOL, VB.NET, and Erlang; Terraform/OpenTofu;
+and parser-coupled SFC/template/special-format internals. Parser bootstrap,
+dependency, grammar-WASM, and fallback removal remain blocked. The recommended
+next Phase 5F boundary is a separate evidence-first Dart/Nix contract audit;
+that work is not started by this checkpoint.
