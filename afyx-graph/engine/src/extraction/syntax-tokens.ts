@@ -386,12 +386,15 @@ export function syntaxRegionsFor(source: string, language: Language): SyntaxRegi
     }
   }
 
-  SCRIPT_BLOCK.lastIndex = 0;
+  const scriptPattern = process.env.AFYX_GRAPH_NATIVE_PARSER === '1'
+    ? /<script(\s[^>]*)?>([\s\S]*?)(?:<\/script>|$)/gi
+    : SCRIPT_BLOCK;
+  scriptPattern.lastIndex = 0;
   let match: RegExpExecArray | null;
-  while ((match = SCRIPT_BLOCK.exec(source)) !== null) {
+  while ((match = scriptPattern.exec(source)) !== null) {
     const body = match[2] ?? '';
     if (body.trim() === '') continue;
-    const start = match.index + match[0].length - body.length - '</script>'.length;
+    const start = match.index + match[0].indexOf('>') + 1;
     regions.push({
       start,
       end: start + body.length,

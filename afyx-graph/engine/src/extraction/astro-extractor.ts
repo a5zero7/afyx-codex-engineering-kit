@@ -1,7 +1,7 @@
 import { Node, Edge, ExtractionResult, ExtractionError, UnresolvedReference } from '../types';
 import { generateNodeId } from './node-id';
-import { TreeSitterExtractor } from './tree-sitter';
 import { isLanguageSupported } from './grammars';
+import { extractEmbeddedScriptFacts, remapEmbeddedScriptResult } from './embedded-script';
 
 /**
  * Astro built-in components — compiler-provided (`<Fragment>`) or shipped by
@@ -15,7 +15,7 @@ const ASTRO_BUILTIN_COMPONENTS = new Set(['Fragment', 'Code', 'Debug']);
  * Astro files are multi-language: a TypeScript frontmatter block fenced by
  * `---` lines, a JSX-like HTML template, and optional <script>/<style> blocks.
  * Rather than parsing a full Astro grammar, we extract the frontmatter and
- * <script> contents and delegate them to the TypeScript TreeSitterExtractor
+ * <script> contents and delegate them through the shared native/default seam
  * (Astro processes both as TypeScript by default — no `lang` attr needed).
  *
  * Also extracts function calls from template expressions (`{fn(...)}`) and
@@ -153,10 +153,12 @@ export class AstroExtractor {
   /**
    * Extract <script> blocks from the template portion
    */
-  private extractScriptBlocks(): Array<{ content: string; startLine: number }> {
-    const blocks: Array<{ content: string; startLine: number }> = [];
+  private extractScriptBlocks(): Array<{ content: string; startLine: number; startColumn: number }> {
+    const blocks: Array<{ content: string; startLine: number; startColumn: number }> = [];
 
-    const scriptRegex = /<script(\s[^>]*)?>(?<content>[\s\S]*?)<\/script>/g;
+    const scriptRegex = process.env.AFYX_GRAPH_NATIVE_PARSER === '1'
+      ? /<script(\s[^>]*)?>(?<content>[\s\S]*?)(?:<\/script>|$)/g
+      : /<script(\s[^>]*)?>(?<content>[\s\S]*?)<\/script>/g;
     let match;
 
     while ((match = scriptRegex.exec(this.source)) !== null) {
@@ -171,23 +173,26 @@ export class AstroExtractor {
       const openingTag = match[0].substring(0, match[0].indexOf('>') + 1);
       const openingTagLines = (openingTag.match(/\n/g) || []).length;
       const contentStartLine = scriptTagLine + openingTagLines; // 0-indexed
+      const contentStart = match.index + openingTag.length;
+      const previousNewline = this.source.lastIndexOf('\n', contentStart - 1);
+      const contentStartColumn = contentStart - previousNewline - 1;
 
-      blocks.push({ content, startLine: contentStartLine });
+      blocks.push({ content, startLine: contentStartLine, startColumn: contentStartColumn });
     }
 
     return blocks;
   }
 
   /**
-   * Process frontmatter / script content by delegating to TreeSitterExtractor.
+   * Process frontmatter / script content through the embedded-script seam.
    * Astro treats both as TypeScript by default.
    */
   private processScriptContent(
-    block: { content: string; startLine: number },
+    block: { content: string; startLine: number; startColumn?: number },
     componentNodeId: string,
     label: 'frontmatter' | 'script'
   ): void {
-    if (!isLanguageSupported('typescript')) {
+    if (process.env.AFYX_GRAPH_NATIVE_PARSER !== '1' && !isLanguageSupported('typescript')) {
       this.errors.push({
         message: `Parser for typescript not available, cannot parse Astro ${label} block`,
         severity: 'warning',
@@ -195,16 +200,11 @@ export class AstroExtractor {
       return;
     }
 
-    // Delegate to TreeSitterExtractor
-    const extractor = new TreeSitterExtractor(this.filePath, block.content, 'typescript');
-    const result = extractor.extract();
+    const result = extractEmbeddedScriptFacts(this.filePath, block.content, 'typescript');
+    remapEmbeddedScriptResult(result, { startLine: block.startLine, startColumn: block.startColumn ?? 0 }, this.filePath, 'astro');
 
-    // Offset line numbers from the block back to .astro file positions
+    // The shared seam has mapped region-local coordinates to the .astro file.
     for (const node of result.nodes) {
-      node.startLine += block.startLine;
-      node.endLine += block.startLine;
-      node.language = 'astro'; // Mark as astro, not TS
-
       this.nodes.push(node);
 
       // Add containment edge from component to this node
@@ -217,25 +217,16 @@ export class AstroExtractor {
 
     // Offset edges (they reference line numbers)
     for (const edge of result.edges) {
-      if (edge.line) {
-        edge.line += block.startLine;
-      }
       this.edges.push(edge);
     }
 
     // Offset unresolved references
     for (const ref of result.unresolvedReferences) {
-      ref.line += block.startLine;
-      ref.filePath = this.filePath;
-      ref.language = 'astro';
       this.unresolvedReferences.push(ref);
     }
 
     // Carry over errors
     for (const error of result.errors) {
-      if (error.line) {
-        error.line += block.startLine;
-      }
       this.errors.push(error);
     }
   }
@@ -254,7 +245,9 @@ export class AstroExtractor {
       coveredRanges.push([frontmatter.startLine - 1, frontmatter.endLine]);
     }
 
-    const tagRegex = /<(script|style)(\s[^>]*)?>[\s\S]*?<\/\1>/g;
+    const tagRegex = process.env.AFYX_GRAPH_NATIVE_PARSER === '1'
+      ? /<(script|style)(\s[^>]*)?>[\s\S]*?(?:<\/\1>|$)/g
+      : /<(script|style)(\s[^>]*)?>[\s\S]*?<\/\1>/g;
     let tagMatch;
     while ((tagMatch = tagRegex.exec(this.source)) !== null) {
       const startLine = (this.source.substring(0, tagMatch.index).match(/\n/g) || []).length;

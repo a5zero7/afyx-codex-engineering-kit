@@ -1,7 +1,7 @@
 import { Node, Edge, ExtractionResult, ExtractionError, UnresolvedReference, Language } from '../types';
 import { generateNodeId } from './node-id';
-import { TreeSitterExtractor } from './tree-sitter';
 import { isLanguageSupported } from './grammars';
+import { extractEmbeddedScriptFacts, remapEmbeddedScriptResult } from './embedded-script';
 
 /**
  * Vue built-in components — skipped so a `<Transition>` / `<KeepAlive>` in the
@@ -31,7 +31,7 @@ function kebabToPascal(name: string): string {
  *
  * Vue SFCs are multi-language (script + template + style). Rather than
  * parsing the full Vue grammar, we extract the <script> block content
- * and delegate it to the TypeScript/JavaScript TreeSitterExtractor.
+ * and delegate it through the shared native/default embedded-script seam.
  *
  * Every .vue file produces a component node (Vue components are always importable).
  */
@@ -120,17 +120,21 @@ export class VueExtractor {
   private extractScriptBlocks(): Array<{
     content: string;
     startLine: number;
+    startColumn: number;
     isSetup: boolean;
     isTypeScript: boolean;
   }> {
     const blocks: Array<{
       content: string;
       startLine: number;
+      startColumn: number;
       isSetup: boolean;
       isTypeScript: boolean;
     }> = [];
 
-    const scriptRegex = /<script(\s[^>]*)?>(?<content>[\s\S]*?)<\/script>/g;
+    const scriptRegex = process.env.AFYX_GRAPH_NATIVE_PARSER === '1'
+      ? /<script(\s[^>]*)?>(?<content>[\s\S]*?)(?:<\/script>|$)/g
+      : /<script(\s[^>]*)?>(?<content>[\s\S]*?)<\/script>/g;
     let match;
 
     while ((match = scriptRegex.exec(this.source)) !== null) {
@@ -153,10 +157,14 @@ export class VueExtractor {
       const openingTag = match[0].substring(0, match[0].indexOf('>') + 1);
       const openingTagLines = (openingTag.match(/\n/g) || []).length;
       const contentStartLine = scriptTagLine + openingTagLines; // 0-indexed line
+      const contentStart = match.index + openingTag.length;
+      const previousNewline = this.source.lastIndexOf('\n', contentStart - 1);
+      const contentStartColumn = contentStart - previousNewline - 1;
 
       blocks.push({
         content,
         startLine: contentStartLine,
+        startColumn: contentStartColumn,
         isSetup,
         isTypeScript,
       });
@@ -166,16 +174,16 @@ export class VueExtractor {
   }
 
   /**
-   * Process a script block by delegating to TreeSitterExtractor
+   * Process a script block through the native/default embedded-script seam.
    */
   private processScriptBlock(
-    block: { content: string; startLine: number; isSetup: boolean; isTypeScript: boolean },
+    block: { content: string; startLine: number; startColumn: number; isSetup: boolean; isTypeScript: boolean },
     componentNodeId: string
   ): void {
     const scriptLanguage: Language = block.isTypeScript ? 'typescript' : 'javascript';
 
     // Check if the script language parser is available
-    if (!isLanguageSupported(scriptLanguage)) {
+    if (process.env.AFYX_GRAPH_NATIVE_PARSER !== '1' && !isLanguageSupported(scriptLanguage)) {
       this.errors.push({
         message: `Parser for ${scriptLanguage} not available, cannot parse Vue script block`,
         severity: 'warning',
@@ -183,16 +191,11 @@ export class VueExtractor {
       return;
     }
 
-    // Delegate to TreeSitterExtractor
-    const extractor = new TreeSitterExtractor(this.filePath, block.content, scriptLanguage);
-    const result = extractor.extract();
+    const result = extractEmbeddedScriptFacts(this.filePath, block.content, scriptLanguage);
+    remapEmbeddedScriptResult(result, block, this.filePath, 'vue');
 
-    // Offset line numbers from script block back to .vue file positions
+    // The shared seam has mapped region-local coordinates to the .vue file.
     for (const node of result.nodes) {
-      node.startLine += block.startLine;
-      node.endLine += block.startLine;
-      node.language = 'vue'; // Mark as vue, not TS/JS
-
       this.nodes.push(node);
 
       // Add containment edge from component to this node
@@ -205,25 +208,16 @@ export class VueExtractor {
 
     // Offset edges (they reference line numbers)
     for (const edge of result.edges) {
-      if (edge.line) {
-        edge.line += block.startLine;
-      }
       this.edges.push(edge);
     }
 
     // Offset unresolved references
     for (const ref of result.unresolvedReferences) {
-      ref.line += block.startLine;
-      ref.filePath = this.filePath;
-      ref.language = 'vue';
       this.unresolvedReferences.push(ref);
     }
 
     // Carry over errors
     for (const error of result.errors) {
-      if (error.line) {
-        error.line += block.startLine;
-      }
       this.errors.push(error);
     }
   }
@@ -248,7 +242,9 @@ export class VueExtractor {
     // also correctly handles nested <template> tags (v-if / slots), which a
     // single non-greedy <template>…</template> match would mis-bound.
     const coveredRanges: Array<[number, number]> = [];
-    const blockRegex = /<(script|style)(\s[^>]*)?>[\s\S]*?<\/\1>/g;
+    const blockRegex = process.env.AFYX_GRAPH_NATIVE_PARSER === '1'
+      ? /<(script|style)(\s[^>]*)?>[\s\S]*?(?:<\/\1>|$)/g
+      : /<(script|style)(\s[^>]*)?>[\s\S]*?<\/\1>/g;
     let blockMatch;
     while ((blockMatch = blockRegex.exec(this.source)) !== null) {
       const startLine = (this.source.substring(0, blockMatch.index).match(/\n/g) || []).length;

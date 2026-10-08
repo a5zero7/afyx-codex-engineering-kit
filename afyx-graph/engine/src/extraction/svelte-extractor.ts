@@ -1,7 +1,7 @@
 import { Node, Edge, ExtractionResult, ExtractionError, UnresolvedReference, Language } from '../types';
 import { generateNodeId } from './node-id';
-import { TreeSitterExtractor } from './tree-sitter';
 import { isLanguageSupported } from './grammars';
+import { extractEmbeddedScriptFacts, remapEmbeddedScriptResult } from './embedded-script';
 
 /** Svelte 5 rune names — compiler builtins, not real functions */
 const SVELTE_RUNES = new Set([
@@ -14,7 +14,7 @@ const SVELTE_RUNES = new Set([
  *
  * Svelte files are multi-language (script + template + style). Rather than
  * parsing the full Svelte grammar, we extract the <script> block content
- * and delegate it to the TypeScript/JavaScript TreeSitterExtractor.
+ * and delegate it through the shared native/default embedded-script seam.
  *
  * Also extracts function calls from template expressions (`{fn(...)}`) so
  * cross-file call edges are captured even when calls live in markup.
@@ -112,17 +112,21 @@ export class SvelteExtractor {
   private extractScriptBlocks(): Array<{
     content: string;
     startLine: number;
+    startColumn: number;
     isModule: boolean;
     isTypeScript: boolean;
   }> {
     const blocks: Array<{
       content: string;
       startLine: number;
+      startColumn: number;
       isModule: boolean;
       isTypeScript: boolean;
     }> = [];
 
-    const scriptRegex = /<script(\s[^>]*)?>(?<content>[\s\S]*?)<\/script>/g;
+    const scriptRegex = process.env.AFYX_GRAPH_NATIVE_PARSER === '1'
+      ? /<script(\s[^>]*)?>(?<content>[\s\S]*?)(?:<\/script>|$)/g
+      : /<script(\s[^>]*)?>(?<content>[\s\S]*?)<\/script>/g;
     let match;
 
     while ((match = scriptRegex.exec(this.source)) !== null) {
@@ -145,10 +149,14 @@ export class SvelteExtractor {
       const openingTag = match[0].substring(0, match[0].indexOf('>') + 1);
       const openingTagLines = (openingTag.match(/\n/g) || []).length;
       const contentStartLine = scriptTagLine + openingTagLines; // 0-indexed line
+      const contentStart = match.index + openingTag.length;
+      const previousNewline = this.source.lastIndexOf('\n', contentStart - 1);
+      const contentStartColumn = contentStart - previousNewline - 1;
 
       blocks.push({
         content,
         startLine: contentStartLine,
+        startColumn: contentStartColumn,
         isModule,
         isTypeScript,
       });
@@ -158,16 +166,16 @@ export class SvelteExtractor {
   }
 
   /**
-   * Process a script block by delegating to TreeSitterExtractor
+   * Process a script block through the native/default embedded-script seam.
    */
   private processScriptBlock(
-    block: { content: string; startLine: number; isModule: boolean; isTypeScript: boolean },
+    block: { content: string; startLine: number; startColumn: number; isModule: boolean; isTypeScript: boolean },
     componentNodeId: string
   ): void {
     const scriptLanguage: Language = block.isTypeScript ? 'typescript' : 'javascript';
 
     // Check if the script language parser is available
-    if (!isLanguageSupported(scriptLanguage)) {
+    if (process.env.AFYX_GRAPH_NATIVE_PARSER !== '1' && !isLanguageSupported(scriptLanguage)) {
       this.errors.push({
         message: `Parser for ${scriptLanguage} not available, cannot parse Svelte script block`,
         severity: 'warning',
@@ -175,16 +183,11 @@ export class SvelteExtractor {
       return;
     }
 
-    // Delegate to TreeSitterExtractor
-    const extractor = new TreeSitterExtractor(this.filePath, block.content, scriptLanguage);
-    const result = extractor.extract();
+    const result = extractEmbeddedScriptFacts(this.filePath, block.content, scriptLanguage);
+    remapEmbeddedScriptResult(result, block, this.filePath, 'svelte');
 
-    // Offset line numbers from script block back to .svelte file positions
+    // The shared seam has mapped region-local coordinates to the .svelte file.
     for (const node of result.nodes) {
-      node.startLine += block.startLine;
-      node.endLine += block.startLine;
-      node.language = 'svelte'; // Mark as svelte, not TS/JS
-
       this.nodes.push(node);
 
       // Add containment edge from component to this node
@@ -197,25 +200,16 @@ export class SvelteExtractor {
 
     // Offset edges (they reference line numbers)
     for (const edge of result.edges) {
-      if (edge.line) {
-        edge.line += block.startLine;
-      }
       this.edges.push(edge);
     }
 
     // Offset unresolved references
     for (const ref of result.unresolvedReferences) {
-      ref.line += block.startLine;
-      ref.filePath = this.filePath;
-      ref.language = 'svelte';
       this.unresolvedReferences.push(ref);
     }
 
     // Carry over errors
     for (const error of result.errors) {
-      if (error.line) {
-        error.line += block.startLine;
-      }
       this.errors.push(error);
     }
   }
@@ -235,7 +229,9 @@ export class SvelteExtractor {
     const coveredRanges: Array<[number, number]> = [];
 
     // Find all <script>...</script> and <style>...</style> ranges
-    const tagRegex = /<(script|style)(\s[^>]*)?>[\s\S]*?<\/\1>/g;
+    const tagRegex = process.env.AFYX_GRAPH_NATIVE_PARSER === '1'
+      ? /<(script|style)(\s[^>]*)?>[\s\S]*?(?:<\/\1>|$)/g
+      : /<(script|style)(\s[^>]*)?>[\s\S]*?<\/\1>/g;
     let tagMatch;
     while ((tagMatch = tagRegex.exec(this.source)) !== null) {
       const startLine = (this.source.substring(0, tagMatch.index).match(/\n/g) || []).length;
@@ -291,7 +287,9 @@ export class SvelteExtractor {
   private extractTemplateComponents(componentNodeId: string): void {
     // Build ranges covered by <script> and <style> blocks to skip them
     const coveredRanges: Array<[number, number]> = [];
-    const tagRegex = /<(script|style)(\s[^>]*)?>[\s\S]*?<\/\1>/g;
+    const tagRegex = process.env.AFYX_GRAPH_NATIVE_PARSER === '1'
+      ? /<(script|style)(\s[^>]*)?>[\s\S]*?(?:<\/\1>|$)/g
+      : /<(script|style)(\s[^>]*)?>[\s\S]*?<\/\1>/g;
     let tagMatch;
     while ((tagMatch = tagRegex.exec(this.source)) !== null) {
       const startLine = (this.source.substring(0, tagMatch.index).match(/\n/g) || []).length;
