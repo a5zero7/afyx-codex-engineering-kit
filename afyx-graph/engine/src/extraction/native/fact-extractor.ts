@@ -108,17 +108,91 @@ function visibility(tokens: readonly NativeToken[], start: number, keyword: numb
   return undefined;
 }
 
+const NATIVE_VALUE_REF_LANGUAGES = new Set<Language>([
+  'typescript', 'javascript', 'tsx', 'arkts', 'go', 'python', 'rust', 'ruby',
+  'c', 'java', 'csharp', 'php', 'scala', 'kotlin', 'swift',
+]);
+
+function addNativeValueReferences(
+  source: string,
+  language: Language,
+  result: ExtractionResult
+): ExtractionResult {
+  if (process.env.AFYX_GRAPH_VALUE_REFS === '0' || !NATIVE_VALUE_REF_LANGUAGES.has(language)) return result;
+  const sourceLines = source.split('\n');
+  const fileNode = result.nodes.find((node) => node.kind === 'file');
+  const ensureValue = (name: string, line: number, column: number, parent?: Node, isStatic?: boolean): void => {
+    if (result.nodes.some((node) => node.name === name && node.startLine === line)) return;
+    const node: Node = {
+      id: generateNodeId(fileNode?.filePath ?? '', 'constant', name, line),
+      kind: 'constant', name, qualifiedName: parent ? `${parent.qualifiedName}::${name}` : name,
+      filePath: fileNode?.filePath ?? '', language, startLine: line, endLine: line,
+      startColumn: column, endColumn: column + name.length,
+      isStatic: isStatic || undefined, updatedAt: Date.now(),
+    };
+    result.nodes.push(node);
+    if (fileNode) result.edges.push({ source: parent?.id ?? fileNode.id, target: node.id, kind: 'contains' });
+  };
+  for (let index = 0; index < sourceLines.length; index += 1) {
+    const text = sourceLines[index]!;
+    let match: RegExpExecArray | null = null;
+    if (language === 'go') match = /^\s*(?:const|var)\s+([A-Za-z_]\w*)[^=\n]*=/u.exec(text);
+    else if (language === 'c') match = /^\s*(?:static\s+)?const\b[^;=]*?\b([A-Za-z_]\w*)\s*(?:\[[^\]]*\])?\s*=/u.exec(text);
+    else if (language === 'php') match = /^\s*const\s+([A-Za-z_]\w*)\s*=/u.exec(text);
+    else if (language === 'csharp') match = /^\s*(?:(?:public|private|protected|internal)\s+)?static\s+readonly\b[^;=]*?\b([A-Za-z_]\w*)\s*(?:\[[^\]]*\])?\s*=/u.exec(text);
+    if (!match?.[1]) continue;
+    const parent = result.nodes
+      .filter((node) => ['class', 'struct', 'module', 'enum'].includes(node.kind) && node.startLine <= index + 1 && node.endLine >= index + 1)
+      .sort((left, right) => (left.endLine - left.startLine) - (right.endLine - right.startLine))[0];
+    ensureValue(match[1], index + 1, text.indexOf(match[1]), parent, language === 'csharp');
+  }
+  const targets = result.nodes.filter((node) =>
+    (node.kind === 'constant' || (node.kind === 'variable' && node.qualifiedName === node.name &&
+      (!TS_FAMILY_LANGUAGES.has(language) || node.startColumn === 0)) ||
+      (node.kind === 'field' && node.isStatic === true && /\b(?:final|readonly)\b/u.test(sourceLines[node.startLine - 1] ?? ''))) &&
+    node.name.length >= 3 && /[A-Z_]/u.test(node.name));
+  if (targets.length === 0) return result;
+  const lines = sourceLines;
+  const countByName = new Map<string, number>();
+  for (const target of targets) countByName.set(target.name, (countByName.get(target.name) ?? 0) + 1);
+  const active = new Map<string, Node>();
+  for (const target of targets) {
+    const escaped = target.name.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+    const binding = new RegExp(
+      `\\b${escaped}\\s*(?::[^=\\n]+)?(?::=|=|<-)`,
+      'gu'
+    );
+    const bindings = [...source.matchAll(binding)].length;
+    if (bindings <= (countByName.get(target.name) ?? 1)) active.set(target.name, target);
+  }
+  if (active.size === 0) return result;
+  const readers = result.nodes.filter((node) =>
+    ['function', 'method', 'component', 'constant', 'variable'].includes(node.kind));
+  const seen = new Set(result.edges.map((edge) => `${edge.source}\0${edge.target}\0${edge.kind}`));
+  for (const reader of readers) {
+    const text = lines.slice(Math.max(0, reader.startLine - 1), reader.endLine).join('\n');
+    for (const [name, target] of active) {
+      if (reader.id === target.id || reader.name === name || !new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}\\b`, 'u').test(text)) continue;
+      const key = `${reader.id}\0${target.id}\0references`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.edges.push({ source: reader.id, target: target.id, kind: 'references', metadata: { valueRef: true } });
+    }
+  }
+  return result;
+}
+
 /**
  * First native fact recognizer: the shared JS/TS declaration and call surface.
  * It deliberately consumes scanner tokens/ranges directly and does not expose
  * or emulate a Tree-sitter node API.
  */
 export function extractNativeFacts(filePath: string, source: string, language: Language): ExtractionResult {
-  if (isNativeCFamilyLanguage(language)) return extractNativeCFamilyFacts(filePath, source, language);
-  if (language === 'swift') return extractNativeSwiftFacts(filePath, source);
+  if (isNativeCFamilyLanguage(language)) return addNativeValueReferences(source, language, extractNativeCFamilyFacts(filePath, source, language));
+  if (language === 'swift') return addNativeValueReferences(source, language, extractNativeSwiftFacts(filePath, source));
   if (language === 'solidity') return extractNativeSolidityFacts(filePath, source);
-  if (language === 'php') return extractNativePhpFacts(filePath, source);
-  if (language === 'ruby') return extractNativeRubyFacts(filePath, source);
+  if (language === 'php') return addNativeValueReferences(source, language, extractNativePhpFacts(filePath, source));
+  if (language === 'ruby') return addNativeValueReferences(source, language, extractNativeRubyFacts(filePath, source));
   if (language === 'lua' || language === 'luau') return extractNativeLuaFacts(filePath, source, language);
   if (language === 'r') return extractNativeRFacts(filePath, source);
   if (language === 'dart') return extractNativeDartFacts(filePath, source);
@@ -137,6 +211,8 @@ export function extractNativeFacts(filePath: string, source: string, language: L
   });
   const tokens = scan.tokens;
   const declarations: Declaration[] = [];
+  const pairStart = new Map<number, number>();
+  for (const [open, close] of scan.pairs) pairStart.set(close, open);
   const tokenLineEnd = (from: number): number => {
     const line = tokens[from]?.start.line;
     let end = from;
@@ -151,6 +227,15 @@ export function extractNativeFacts(filePath: string, source: string, language: L
       end = i;
     }
     return end;
+  };
+  const topLevelSemicolon = (from: number): number => {
+    for (let candidate = from; candidate < tokens.length; candidate += 1) {
+      if (tokens[candidate]!.text !== ';') continue;
+      const nested = [...scan.pairs.entries()].some(([open, close]) =>
+        open >= from && open < candidate && close > candidate);
+      if (!nested) return candidate;
+    }
+    return -1;
   };
   const pairedBody = (from: number): { start: number; end: number } | undefined => {
     const open = findNext(tokens, from, '{');
@@ -190,6 +275,30 @@ export function extractNativeFacts(filePath: string, source: string, language: L
       }
     }
     return names.length > 0 ? names : undefined;
+  };
+  const callableValue = (from: number, limit: number): { bodyStart: number; bodyEnd: number; async: boolean } | undefined => {
+    let marker = from;
+    const async = tokens[marker]?.text === 'async';
+    if (async) marker += 1;
+    if (tokens[marker]?.text === 'function') {
+      const bodyStart = findNext(tokens, marker + 1, '{', limit);
+      const bodyEnd = bodyStart < 0 ? undefined : scan.pairs.get(bodyStart);
+      return bodyStart < 0 || bodyEnd === undefined ? undefined : { bodyStart, bodyEnd, async };
+    }
+    const arrow = findNext(tokens, marker, '=>', limit);
+    if (arrow < 0) return undefined;
+    const bodyStart = tokens[arrow + 1]?.text === '{' ? arrow + 1 : arrow;
+    const bodyEnd = tokens[bodyStart]?.text === '{'
+      ? scan.pairs.get(bodyStart)
+      : Math.max(bodyStart, limit - 1);
+    return bodyEnd === undefined ? undefined : { bodyStart, bodyEnd, async };
+  };
+  const directlyInside = (index: number, open: number, close: number): boolean => {
+    if (index <= open || index >= close) return false;
+    for (const [nestedOpen, nestedClose] of scan.pairs) {
+      if (nestedOpen > open && nestedClose < close && nestedOpen < index && index < nestedClose) return false;
+    }
+    return true;
   };
   const importedNames = new Set<string>();
   for (let i = 0; i < tokens.length; i += 1) {
@@ -234,7 +343,7 @@ export function extractNativeFacts(filePath: string, source: string, language: L
         });
       }
       if (!['const', 'let', 'var'].includes(token.text) || name.kind !== 'identifier') continue;
-      const statementEnd = findNext(tokens, i + 2, ';');
+      const statementEnd = topLevelSemicolon(i + 2);
       const limit = statementEnd < 0 ? tokens.length : statementEnd + 1;
       const equals = findNext(tokens, i + 2, '=', limit);
       const arrow = findNext(tokens, i + 2, '=>', limit);
@@ -245,19 +354,63 @@ export function extractNativeFacts(filePath: string, source: string, language: L
         valueToken?.text === 'async' || (valueToken?.kind === 'identifier' && tokens[valueStart + 1]?.text === '=>') ||
         (valueToken?.text === '(' && scan.pairs.has(valueStart))
       );
-      const callable = directArrow || functionKeyword === valueStart || (valueToken?.text === 'async' && functionKeyword === valueStart + 1);
+      let callable = directArrow || functionKeyword === valueStart || (valueToken?.text === 'async' && functionKeyword === valueStart + 1);
+      const callOpen = findNext(tokens, valueStart, '(', limit);
+      const genericOpen = callOpen < 0 ? -1 : findNext(tokens, valueStart, '<', callOpen);
+      const calleeEnd = genericOpen >= 0 ? genericOpen : callOpen;
+      const calleeName = callOpen < 0 ? '' : tokens.slice(valueStart, calleeEnd)
+        .filter((item) => item.kind === 'identifier' || item.text === '.')
+        .map((item) => item.text).join('');
+      const hookWrapper = /^(?:React\.)?(?:useCallback|useEffectEvent|useEvent)$/u.test(calleeName);
+      const styledWrapper = valueToken?.text === 'styled' &&
+        (tokens[valueStart + 1]?.text === '.' || tokens[valueStart + 1]?.text === '(');
+      const componentWrapper = /^[A-Z]/u.test(name.text) &&
+        (/^(?:React\.)?(?:forwardRef|memo)$/u.test(calleeName) || calleeName === 'styled' || calleeName.startsWith('styled.') || styledWrapper);
+      const callClose = callOpen < 0 ? undefined : scan.pairs.get(callOpen);
+      const wrappedCallable = (hookWrapper || componentWrapper) && callOpen >= 0 && callClose !== undefined
+        ? callableValue(callOpen + 1, callClose)
+        : undefined;
+      callable ||= hookWrapper && wrappedCallable !== undefined;
       const marker = arrow >= 0 ? arrow : functionKeyword;
-      const callableBody = !callable || marker < 0 ? undefined : findNext(tokens, marker + 1, '{', limit);
+      const callableBody = wrappedCallable?.bodyStart ??
+        (!callable || marker < 0 ? undefined : findNext(tokens, marker + 1, '{', limit));
       const objectBody = !callable && valueToken?.text === '{' ? valueStart : undefined;
       const bodyStart = objectBody ?? callableBody;
-      const bodyEnd = bodyStart === undefined || bodyStart < 0 ? undefined : scan.pairs.get(bodyStart);
+      const bodyEnd = wrappedCallable?.bodyEnd ??
+        (bodyStart === undefined || bodyStart < 0 ? undefined : scan.pairs.get(bodyStart));
       declarations.push({
-        kind: callable ? 'function' : token.text === 'const' ? 'constant' : 'variable',
+        kind: componentWrapper ? 'component' : callable ? 'function' : token.text === 'const' ? 'constant' : 'variable',
         name: name.text, start: i + 1, end: bodyEnd ?? (statementEnd < 0 ? name === tokens.at(-1) ? i + 1 : limit - 1 : statementEnd),
         bodyStart: bodyStart === undefined || bodyStart < 0 ? undefined : bodyStart,
         bodyEnd,
+        signature: equals < 0 ? undefined : `= ${source.slice(tokens[equals + 1]!.start.offset, tokens[Math.min(limit - 1, tokens.length - 1)]!.end.offset).slice(0, 100)}`,
         exported: tokens[i - 1]?.text === 'export',
         async: tokens.slice(i + 2, marker < 0 ? limit : marker).some((item) => item.text === 'async'),
+      });
+    }
+
+    // CommonJS property exports bind their anonymous callable value to the
+    // exported property name. Other member assignments deliberately remain
+    // ordinary expressions rather than declarations.
+    for (let equals = 0; equals < tokens.length - 1; equals += 1) {
+      if (tokens[equals]!.text !== '=') continue;
+      let nameIndex = -1;
+      if (tokens[equals - 3]?.text === 'exports' && tokens[equals - 2]?.text === '.' &&
+          tokens[equals - 1]?.kind === 'identifier') {
+        nameIndex = equals - 1;
+      } else if (tokens[equals - 5]?.text === 'module' && tokens[equals - 4]?.text === '.' &&
+          tokens[equals - 3]?.text === 'exports' && tokens[equals - 2]?.text === '.' &&
+          tokens[equals - 1]?.kind === 'identifier') {
+        nameIndex = equals - 1;
+      }
+      if (nameIndex < 0) continue;
+      const end = statementEnd(equals);
+      const callable = callableValue(equals + 1, end + 1);
+      if (!callable) continue;
+      declarations.push({
+        kind: 'function', name: tokens[nameIndex]!.text, start: nameIndex,
+        end: callable.bodyEnd, bodyStart: callable.bodyStart, bodyEnd: callable.bodyEnd,
+        exported: true, async: callable.async,
       });
     }
   }
@@ -295,7 +448,10 @@ export function extractNativeFacts(filePath: string, source: string, language: L
     }
     for (let i = 0; i < tokens.length - 2; i += 1) {
       const name = tokens[i]!;
-      if (name.kind !== 'identifier' || name.start.column !== 0 || tokens[i + 1]?.text !== '=') continue;
+      if (name.kind !== 'identifier' || tokens[i + 1]?.text !== '=') continue;
+      const insideCallable = declarations.some((item) => item.kind === 'function' &&
+        item.bodyStart !== undefined && item.bodyStart < i && item.end >= i);
+      if (insideCallable) continue;
       let end = i + 2;
       while (end + 1 < tokens.length && tokens[end + 1]!.start.line === name.start.line) end += 1;
       declarations.push({ kind: 'variable', name: name.text, start: i, end, bodyStart: i + 1, bodyEnd: end + 1 });
@@ -855,8 +1011,152 @@ export function extractNativeFacts(filePath: string, source: string, language: L
     }
   }
 
+  if (TS_FAMILY_LANGUAGES.has(language)) {
+    for (let index = 0; index < declarations.length; index += 1) {
+      const declaration = declarations[index]!;
+      if (declaration.exported || (declaration.kind !== 'constant' && declaration.kind !== 'variable')) continue;
+      const exportedLater = tokens.some((token, cursor) => token.text === 'export' && cursor > declaration.start && (
+        (tokens[cursor + 1]?.text === 'default' && tokens[cursor + 2]?.text === declaration.name) ||
+        (tokens[cursor + 1]?.text === '{' && tokens.slice(cursor + 2, scan.pairs.get(cursor + 1) ?? cursor + 2)
+          .some((candidate) => candidate.text === declaration.name))
+      ));
+      if (exportedLater) declarations[index] = { ...declaration, exported: true };
+    }
+  }
+
+  const syntheticObjectParents = new Set<Declaration>();
+  if (TS_FAMILY_LANGUAGES.has(language)) {
+    for (let index = 0; index < tokens.length - 2; index += 1) {
+      if (tokens[index]?.text !== 'export' || tokens[index + 1]?.text !== 'default' || tokens[index + 2]?.text !== '{') continue;
+      const close = scan.pairs.get(index + 2);
+      if (close === undefined) continue;
+      const synthetic: Declaration = {
+        kind: 'constant', name: '<default-export>', start: index + 2, end: close,
+        bodyStart: index + 2, bodyEnd: close, exported: true,
+      };
+      declarations.push(synthetic);
+      syntheticObjectParents.add(synthetic);
+    }
+  }
+
   const containers = declarations.filter((declaration) =>
     declaration.bodyStart !== undefined && ['class', 'interface', 'struct', 'trait', 'type_alias', 'constant', 'variable'].includes(declaration.kind));
+
+  if (TS_FAMILY_LANGUAGES.has(language)) {
+    // Class fields are declarations in their own right. A callable initializer
+    // is method-shaped; every other initializer/type-only member is a property.
+    for (const parent of containers.filter((item) => item.kind === 'class' || item.kind === 'struct')) {
+      const begin = parent.bodyStart!;
+      const end = parent.bodyEnd ?? tokens.length;
+      for (let member = begin + 1; member < end - 1; member += 1) {
+        if (!directlyInside(member, begin, end) || tokens[member]?.kind !== 'identifier' ||
+            tokens[member + 1]?.text !== '(' || tokens[member]?.text === 'constructor') continue;
+        const paramsEnd = scan.pairs.get(member + 1);
+        const bodyStart = paramsEnd === undefined ? -1 : findNext(tokens, paramsEnd + 1, '{', end);
+        const bodyEnd = bodyStart < 0 ? undefined : scan.pairs.get(bodyStart);
+        if (bodyStart < 0 || bodyEnd === undefined || bodyEnd > end ||
+            declarations.some((item) => item.parent === parent && item.name === tokens[member]!.text)) continue;
+        let start = member;
+        while (start > begin + 1 && tokens[start - 1]!.start.line === tokens[member]!.start.line &&
+               ![';', '{', '}'].includes(tokens[start - 1]!.text)) start -= 1;
+        declarations.push({
+          kind: 'method', name: tokens[member]!.text, start, end: bodyEnd,
+          bodyStart, bodyEnd, parent,
+          async: tokens.slice(start, member).some((item) => item.text === 'async'),
+          static: tokens.slice(start, member).some((item) => item.text === 'static'),
+          visibility: visibility(tokens, start, member),
+        });
+      }
+      let cursor = begin + 1;
+      while (cursor < end) {
+        if (!directlyInside(cursor, begin, end)) { cursor += 1; continue; }
+        let statementEnd = cursor;
+        while (statementEnd < end && tokens[statementEnd]!.text !== ';') statementEnd += 1;
+        if (statementEnd >= end) break;
+        const segment = tokens.slice(cursor, statementEnd);
+        const equalsOffset = segment.findIndex((token, offset) =>
+          token.text === '=' && directlyInside(cursor + offset, begin, end));
+        const colonOffset = segment.findIndex((token, offset) =>
+          token.text === ':' && directlyInside(cursor + offset, begin, end));
+        const boundaryOffset = colonOffset >= 0 ? colonOffset : equalsOffset;
+        const parenOffset = segment.findIndex((token) => token.text === '(');
+        if (boundaryOffset >= 0 && (parenOffset < 0 || boundaryOffset < parenOffset)) {
+          const boundary = cursor + boundaryOffset;
+          let nameIndex = boundary - 1;
+          while (nameIndex >= cursor && tokens[nameIndex]!.kind !== 'identifier') nameIndex -= 1;
+          if (nameIndex >= cursor && !declarations.some((item) => item.parent === parent && item.name === tokens[nameIndex]!.text)) {
+            const equals = equalsOffset < 0 ? -1 : cursor + equalsOffset;
+            const callable = equals < 0 ? undefined : callableValue(equals + 1, statementEnd);
+            const typeTokens = colonOffset >= 0
+              ? segment.slice(colonOffset + 1, equalsOffset >= 0 ? equalsOffset : segment.length)
+              : [];
+            const typeName = typeTokens.filter((token) => token.kind === 'identifier').map((token) => token.text).join(' | ');
+            declarations.push({
+              kind: callable ? 'method' : 'property', name: tokens[nameIndex]!.text,
+              start: cursor, end: callable?.bodyEnd ?? statementEnd,
+              bodyStart: callable?.bodyStart ?? (equalsOffset >= 0 ? equals : undefined),
+              bodyEnd: callable?.bodyEnd ?? (equalsOffset >= 0 ? statementEnd : undefined),
+              parent, async: callable?.async,
+              static: segment.slice(0, nameIndex - cursor).some((token) => token.text === 'static'),
+              visibility: visibility(tokens, cursor, nameIndex),
+              signature: typeName ? `${typeName} ${tokens[nameIndex]!.text}` : undefined,
+            });
+          }
+        }
+        cursor = statementEnd + 1;
+      }
+    }
+
+    // Callable properties from object literals owned by an exported binding
+    // become function nodes. This covers direct literals and literals returned
+    // through statically visible initializer wrappers without evaluating code.
+    for (const parent of declarations.filter((item) => item.kind === 'constant' && item.exported)) {
+      const begin = parent.bodyStart ?? parent.start;
+      const end = parent.bodyEnd ?? parent.end;
+      for (let open = begin; open < end; open += 1) {
+        if (tokens[open]?.text !== '{') continue;
+        const close = scan.pairs.get(open);
+        if (close === undefined || close > end) continue;
+        for (let key = open + 1; key < close - 1; key += 1) {
+          if (!directlyInside(key, open, close) ||
+              (tokens[key]?.kind !== 'identifier' && tokens[key]?.text !== 'async')) continue;
+          if (tokens[key - 1]?.text !== '{' && tokens[key - 1]?.text !== ',') continue;
+          const memberKey = tokens[key]?.text === 'async' && tokens[key + 1]?.kind === 'identifier'
+            ? key + 1
+            : key;
+          let valueStart = -1;
+          if (tokens[memberKey + 1]?.text === ':') valueStart = memberKey + 2;
+          else if (tokens[memberKey + 1]?.text === '(') valueStart = memberKey;
+          if (valueStart < 0) continue;
+          let memberLimit = close;
+          for (let candidate = valueStart; candidate < close; candidate += 1) {
+            if (tokens[candidate]?.text === ',' && directlyInside(candidate, open, close)) {
+              memberLimit = candidate;
+              break;
+            }
+          }
+          let callable = callableValue(valueStart, memberLimit);
+          if (tokens[memberKey + 1]?.text === '(') {
+            const paramsEnd = scan.pairs.get(memberKey + 1);
+            const bodyStart = paramsEnd === undefined ? -1 : findNext(tokens, paramsEnd + 1, '{', memberLimit);
+            const bodyEnd = bodyStart < 0 ? undefined : scan.pairs.get(bodyStart);
+            callable = bodyStart < 0 || bodyEnd === undefined ? undefined : { bodyStart, bodyEnd, async: memberKey !== key };
+          }
+          if (!callable || declarations.some((item) => item.parent === parent && item.name === tokens[memberKey]!.text)) continue;
+          declarations.push({
+            kind: 'function', name: tokens[memberKey]!.text, start: memberKey, end: callable.bodyEnd,
+            bodyStart: callable.bodyStart, bodyEnd: callable.bodyEnd, parent, async: callable.async,
+          });
+        }
+      }
+    }
+  }
+
+  if (syntheticObjectParents.size > 0) {
+    for (let index = declarations.length - 1; index >= 0; index -= 1) {
+      if (syntheticObjectParents.has(declarations[index]!)) declarations.splice(index, 1);
+    }
+  }
 
   for (const parent of containers) {
     if (['rust', 'kotlin', 'scala'].includes(language)) continue;
@@ -869,6 +1169,7 @@ export function extractNativeFacts(filePath: string, source: string, language: L
       if (TS_FAMILY_LANGUAGES.has(language) &&
           ['class', 'interface', 'struct', 'type_alias'].includes(parent.kind) &&
           name.kind === 'identifier' && tokens[i + 1]?.text === ':') {
+        if (declarations.some((item) => item.parent === parent && item.name === name.text)) continue;
         const statementEnd = findNext(tokens, i + 2, ';', end);
         declarations.push({
           kind: 'property', name: name.text, start: i,
@@ -1024,11 +1325,25 @@ export function extractNativeFacts(filePath: string, source: string, language: L
     }
   }
 
+  // Bind locally declared callables to the narrowest enclosing callable. The
+  // scanner discovers variable-bound arrows before named function blocks, so
+  // this ownership pass must run after all declarations have been collected.
+  for (let i = 0; i < declarations.length; i += 1) {
+    const declaration = declarations[i]!;
+    if (declaration.parent || !['function', 'method', 'component'].includes(declaration.kind)) continue;
+    const owner = declarations
+      .filter((candidate) => candidate !== declaration &&
+        (candidate.kind === 'function' || candidate.kind === 'method' || candidate.kind === 'component') &&
+        candidate.bodyStart !== undefined && candidate.bodyStart < declaration.start && candidate.end >= declaration.end)
+      .sort((left, right) => (left.end - left.start) - (right.end - right.start))[0];
+    if (owner) declarations[i] = { ...declaration, parent: owner };
+  }
+
   for (let i = declarations.length - 1; i >= 0; i -= 1) {
     const declaration = declarations[i]!;
     if (declaration.kind !== 'constant' && declaration.kind !== 'variable') continue;
     const enclosingCallable = declarations.some((candidate) =>
-      candidate !== declaration && (candidate.kind === 'function' || candidate.kind === 'method') &&
+      candidate !== declaration && (candidate.kind === 'function' || candidate.kind === 'method' || candidate.kind === 'component') &&
       candidate.bodyStart !== undefined && candidate.bodyStart < declaration.start && candidate.end >= declaration.end);
     if (enclosingCallable) declarations.splice(i, 1);
   }
@@ -1057,6 +1372,13 @@ export function extractNativeFacts(filePath: string, source: string, language: L
     }
   }
 
+  const declarationKeys = new Set<string>();
+  for (let index = declarations.length - 1; index >= 0; index -= 1) {
+    const declaration = declarations[index]!;
+    const key = `${declaration.kind}\0${declaration.name}\0${tokens[declaration.start]?.start.line ?? 0}`;
+    if (declarationKeys.has(key)) declarations.splice(index, 1);
+    else declarationKeys.add(key);
+  }
   declarations.sort((left, right) => left.start - right.start || right.end - left.end);
   const nodes: Node[] = [];
   const edges: Edge[] = [];
@@ -1351,6 +1673,29 @@ export function extractNativeFacts(filePath: string, source: string, language: L
     }
   }
 
+  if (TS_FAMILY_LANGUAGES.has(language)) {
+    const seenCalls = new Set(refs.filter((ref) => ref.referenceKind === 'calls')
+      .map((ref) => `${ref.fromNodeId}\0${ref.referenceName}\0${ref.line}\0${ref.column}`));
+    for (let close = 0; close < tokens.length - 1; close += 1) {
+      if ((tokens[close]?.text !== ')' && tokens[close]?.text !== ']') || tokens[close + 1]?.text !== '(') continue;
+      const open = pairStart.get(close);
+      if (open === undefined) continue;
+      const isSequenceCall = tokens[open]?.text === '(' && tokens.slice(open + 1, close).some((token) => token.text === ',');
+      const isIndexedCall = tokens[open]?.text === '[' && tokens[open - 1]?.kind === 'identifier';
+      if (!isSequenceCall && !isIndexedCall) continue;
+      const start = isIndexedCall ? open - 1 : open;
+      const referenceName = source.slice(tokens[start]!.start.offset, tokens[close]!.end.offset);
+      const from = ownerAt(close);
+      const key = `${from.id}\0${referenceName}\0${tokens[start]!.start.line}\0${tokens[start]!.start.column}`;
+      if (seenCalls.has(key)) continue;
+      seenCalls.add(key);
+      refs.push({
+        fromNodeId: from.id, referenceName, referenceKind: 'calls',
+        line: tokens[start]!.start.line, column: tokens[start]!.start.column,
+      });
+    }
+  }
+
   if (language === 'rust') {
     const typeDeclarations = declarations.filter((item) => ['struct', 'union', 'enum', 'trait'].includes(item.kind));
     for (const declaration of typeDeclarations) {
@@ -1434,7 +1779,7 @@ export function extractNativeFacts(filePath: string, source: string, language: L
   }
 
   for (const declaration of declarations) {
-    const callable = declaration.kind === 'function' || declaration.kind === 'method';
+    const callable = declaration.kind === 'function' || declaration.kind === 'method' || declaration.kind === 'component';
     const value = declaration.kind === 'constant' || declaration.kind === 'variable' || declaration.kind === 'field';
     if (!callable && !value) continue;
     const scanStart = declaration.bodyStart ?? (value ? declaration.start : undefined);
@@ -1450,7 +1795,24 @@ export function extractNativeFacts(filePath: string, source: string, language: L
       if (declarations.some((item) => item.parent === declaration && item.start <= i && item.end >= i)) continue;
       if (declarations.some((item) => item !== declaration && item.start > declaration.start &&
           item.end <= declaration.end && item.start <= i && item.end >= i)) continue;
+      const receiverExpression = (dot: number): { name: string; start: NativeToken } | undefined => {
+        const tail = dot - 1;
+        if (tokens[tail]?.text === ')') {
+          const open = pairStart.get(tail);
+          const called = open === undefined ? undefined : tokens[open - 1];
+          if (open === undefined || !called || called.kind !== 'identifier') return undefined;
+          const base = tokens[open - 2]?.text === '.' ? receiverExpression(open - 2) : undefined;
+          return { name: `${base ? `${base.name}.` : ''}${called.text}()`, start: base?.start ?? called };
+        }
+        const member = tokens[tail];
+        if (!member || member.kind !== 'identifier') return undefined;
+        const base = tokens[tail - 1]?.text === '.' ? receiverExpression(tail - 1) : undefined;
+        return { name: `${base ? `${base.name}.` : ''}${member.text}`, start: base?.start ?? member };
+      };
+      const receiverChain = tokens[i - 1]?.text === '.' ? receiverExpression(i - 1) : undefined;
       const receiver = tokens[i - 2]?.kind === 'identifier' && tokens[i - 1]?.text === '.' ? tokens[i - 2] : undefined;
+      if (tokens[i - 1]?.text === '.' && !receiverChain &&
+          (TS_FAMILY_LANGUAGES.has(language) || language === 'python')) continue;
       const rustPath = language === 'rust' && tokens[i - 2]?.kind === 'identifier' && tokens[i - 1]?.text === '::'
         ? tokens[i - 2]
         : undefined;
@@ -1473,9 +1835,10 @@ export function extractNativeFacts(filePath: string, source: string, language: L
         : undefined;
       refs.push({
         fromNodeId: from.id,
-        referenceName: arktsMember ?? rustSelfField ?? (rustDeepChain ? callee.text : rustPathName ?? (receiver ? `${receiver.text}.${callee.text}` : callee.text)),
+        referenceName: arktsMember ?? rustSelfField ?? (rustDeepChain ? callee.text : rustPathName ??
+          (receiverChain?.name.startsWith('window.') ? callee.text : receiverChain ? `${receiverChain.name}.${callee.text}` : callee.text)),
         referenceKind: 'calls', line: callee.start.line,
-        column: rustSelfField ? tokens[i - 4]!.start.column : rustPath?.start.column ?? receiver?.start.column ?? callee.start.column,
+        column: rustSelfField ? tokens[i - 4]!.start.column : rustPath?.start.column ?? receiverChain?.start.start.column ?? callee.start.column,
       });
       if (language === 'arkts') {
         const argsStart = i + 1;
@@ -1563,6 +1926,7 @@ export function extractNativeFacts(filePath: string, source: string, language: L
       .map((ref) => `${ref.referenceName}\0${ref.line}\0${ref.column}`));
     for (let i = 0; i < tokens.length - 1; i += 1) {
       const callee = tokens[i]!;
+      if (tokens[i - 1]?.text === '.' && tokens[i - 2]?.text === ')') continue;
       if (callee.kind !== 'identifier' || tokens[i + 1]?.text !== '(' || CALL_EXCLUSIONS.has(callee.text)) continue;
       if (tokens[i - 1]?.text === 'def' || tokens[i - 1]?.text === 'class') continue;
       const receiver = tokens[i - 2]?.kind === 'identifier' && tokens[i - 1]?.text === '.' ? tokens[i - 2] : undefined;
@@ -1790,12 +2154,12 @@ export function extractNativeFacts(filePath: string, source: string, language: L
   });
   refs.sort((left, right) => left.line - right.line || left.column - right.column);
 
-  return {
+  return addNativeValueReferences(source, language, {
     nodes, edges, unresolvedReferences: refs,
     errors: scan.unterminated.map((kind) => ({
       message: `Incomplete ${kind} while scanning ${filePath}`,
       filePath, severity: 'warning' as const, code: 'native_incomplete_source',
     })),
     durationMs: Date.now() - started,
-  };
+  });
 }

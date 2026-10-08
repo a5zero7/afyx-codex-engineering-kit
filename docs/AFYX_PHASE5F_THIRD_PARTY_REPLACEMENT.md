@@ -1963,3 +1963,66 @@ unconditional; they remain explicit later boundaries.
 
 The single recommended next implementation boundary is **Global Default
 Fallback Closure**. It is not started by this audit.
+
+## Native Semantic Contract Closure — partial implementation record
+
+Baseline `66d4bf829f92e9ec39efe5efa721612df82ef940` disproved the readiness
+statement above when production routing was exercised rather than only the
+route-level corpus. The reversible native-default probe produced 55 failed,
+265 passed, and 20 skipped files (214 failed, 5,462 passed, and 213 skipped
+tests). A focused default/native matrix then isolated seven semantic failures
+in eleven assertions. The fallback removal was rolled back; default routing,
+parser bootstrap, grammar assets, dependencies, and legal records remain
+unchanged.
+
+This boundary added native structural facts for CommonJS callable exports;
+exported, export-later, and default-export object callables; JavaScript and
+TypeScript class fields; call-result receiver chains; React hook/HOC callable
+wrappers; and same-file value references with local-shadow suppression.
+Existing Redux, Zustand, Vuex, Pinia, UI Steps, and cross-tier synthesizers
+consume those facts; their policy was not duplicated in extraction.
+
+Focused native evidence is 92/92 across CommonJS, object members, class
+fields, alias binding, receiver precision, React, the four store families, UI
+Steps, cross-tier flow, and the complete 29-case value-reference precision
+matrix. The same 92/92 matrix passes under the unchanged default route. No
+filename, fixture-symbol, or native-to-parser fallback was introduced.
+
+The full native campaign remains open. Its current result is 5,525 passed,
+150 failed, and 213 skipped tests out of 5,888. At least 46 failed assertions
+in 14 files remain semantic candidates after separating obvious Windows
+EPERM and timeout noise. Focused reruns confirm gaps in type-alias object
+members, local receiver typing, supertype/embedded-type conformance, and
+Rust/Go chained factory resolution. Direct Go factory chains already pass, so
+broad resolver relaxation would reduce precision and is not acceptable. The
+semantic baseline is structurally identical but retains a native/default
+search-score delta caused by runtime scoring.
+
+| Contract | Default | Native |
+| --- | --- | --- |
+| ES modules / selected CommonJS contracts | PASS | PASS |
+| Functions, object members, and class fields | PASS | PASS |
+| Aliases and selected value references | PASS | PASS |
+| Qualified receiver precision matrix | PASS | PASS |
+| React / Redux / Zustand / Vuex / Pinia focused matrix | PASS | PASS |
+| UI Steps / selected cross-tier matrix | PASS | PASS |
+| Full production resolution and conformance | PASS | NOT READY |
+
+```text
+Route-level native semantic gaps: 7/11 failures -> 0/92 focused failures
+Full production semantic gaps:    214 failed-test starting signal -> 46 confirmed semantic candidates remain
+LEGITIMATE SEMANTIC REGRESSIONS:   > 0
+```
+
+Physical metrics intentionally remain unchanged: native semantic Tree-sitter
+reachability is zero, while default fallback, parser bootstrap, 29 grammar
+WASM assets, and 34-file `SyntaxNode`/parser type coupling remain present.
+This record supersedes the earlier readiness conclusion:
+
+```text
+DEFAULT_FALLBACK_CLOSURE = NOT_READY
+```
+
+The single next boundary is **Native Resolution and Conformance Closure**.
+It must close the confirmed cross-language receiver, return-type, and
+conformance matrix before Global Default Fallback Closure is retried.
