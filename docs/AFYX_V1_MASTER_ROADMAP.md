@@ -10,8 +10,9 @@ Current work: **Phase 5F — Third-Party Source / Runtime Replacement**
 Task: `AFYX-91852`  
 Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`  
 Active implementation branch: `afyx/native-phase5f-parser-grammar`  
-Latest verified Phase 5F implementation checkpoint: `3e6b624505680e264af3b5f681be0f806a84648d`  
-Latest verified Phase 5F contract-decision checkpoint: `3425348dcf4079bb35385a31a98ce54286ec9f0b`  
+Latest verified Phase 5F implementation checkpoint: `62621a0639f42db0eaac69ef087436d851cdba88`  
+Latest verified Phase 5F semantic-freeze checkpoint: `6fd0296b22844eef62b86a395b861ebb51193dc5`  
+Current Phase 5F boundary: **Native Performance & Token Efficiency Baseline**  
 Last merged Phase 5F major checkpoint: **PR #57 — Utility Runtime + UI Runtime**  
 Phase 5E merge baseline: `48b6078ed37349e405213258819fa5225bcdb3fb`
 
