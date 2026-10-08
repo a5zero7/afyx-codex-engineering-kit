@@ -2026,3 +2026,91 @@ DEFAULT_FALLBACK_CLOSURE = NOT_READY
 The single next boundary is **Native Resolution and Conformance Closure**.
 It must close the confirmed cross-language receiver, return-type, and
 conformance matrix before Global Default Fallback Closure is retried.
+
+## Native Resolution and Conformance Closure
+
+This boundary starts from `affaa0a042c0647150b8009c4ab39a5dee9f6598` and
+keeps native routing opt-in. The conservative 47-candidate inventory did not
+collapse into one resolver defect: the selected resolution/conformance cluster
+is closed, while unrelated native capability families remain.
+
+The first incorrect layers were small structural-fact gaps rather than a need
+for a general type checker. Type-alias properties with callable signatures are
+normalized to methods. Scala block-bodied local receivers retain their complete
+body. Java methods and fields retain declared types, and `this.field.method()`
+uses that declared type plus import FQN. Go methods retain cross-file receiver
+ownership, factory return types, and explicit embedded-type conformance. Rust
+split `impl` methods retain qualified ownership and associated factory chains
+retain `Type::factory()` identity. PHP static factories and Ruby constructors
+retain their receiver/instantiation identity. The existing bounded resolver and
+conformance traversal then connect those facts; no public graph schema or
+runtime inference was added.
+
+Precision remains protected. The focused native matrix covers unrelated
+same-named members, missing factory members, built-in/dynamic receivers,
+ambiguous module names, local shadowing, and unsupported Rust `impl` targets.
+An intermediate full run exposed two regressions: a Go generic receiver was
+reduced to its type parameter and `impl Trait for dyn Trait` acquired a false
+owner. Both were corrected at extraction and their existing negative contracts
+pass. The final focused resolution/conformance selection is 49/49, the native
+framework/UI selection is 86/86, the unchanged default selection is 61/61,
+and the alias/value-reference precision suites are 35/35.
+
+The original candidate recount is:
+
+```text
+semantic candidates in the original 15-file inventory: 47 -> 21
+```
+
+Twenty-six candidates in that inventory were closed by the shared fact,
+ownership, receiver, return-type, and conformance changes. The full campaign
+also proves that the old 47 was not exhaustive: 63 legitimate semantic/behavior
+candidates remain in distinct families. They include lexical receiver/binding
+precision (PHP properties, Python collections, store/local shadowing, and the
+TypeScript `typeof` field case), extraction/framework synthesis, and
+ranking/explore behavior. They are not safely fixable by further loosening the
+name matcher or expanding this boundary.
+
+The final opt-in native production campaign reports:
+
+```text
+passed:   5,558
+failed:     117
+skipped:    213
+total:    5,888
+
+classified failures:
+  legitimate semantic/behavior candidates: 63
+  Windows cleanup EPERM:                    38
+  timeout:                                   9
+  mode/score/tooling/performance noise:       7
+```
+
+This improves the preceding checkpoint from 5,527 passed / 148 failed by 31
+tests, with no new final-run failure. The six remaining `resolution.test.ts`
+failures are cleanup-only EPERM after their semantic assertions. Native
+Tree-sitter semantic reachability remains zero.
+
+The semantic baseline remains structurally identical. The two observed search
+scores differ slightly (`parseToken` 105.5825881522508 versus
+105.58770806565178; `./parser` import 2.7109981735576496 versus
+2.6581462898477937). Because nodes, references, and edges are unchanged, this
+is classified as runtime/index-derived floating score variation, not a graph
+semantic correction; scores were not tuned.
+
+The reversible production-routing probe was not run. Its acceptance
+precondition requires zero legitimate semantic regressions, and the full native
+campaign still contains valid capability gaps. Default fallback, parser
+bootstrap, all 29 grammar WASM assets, dependencies, and the 34-file
+`SyntaxNode`/parser coupling therefore remain unchanged.
+
+```text
+Route-level native semantic gaps: 0 -> 0
+Full production semantic gaps:    >0 -> >0
+LEGITIMATE SEMANTIC REGRESSIONS:   63
+DEFAULT_FALLBACK_CLOSURE = NOT_READY
+```
+
+The single recommended next semantic boundary is **Native Lexical Receiver
+Precision Closure**. It should establish one bounded binding/scope primitive
+before any framework-synthesis or default-routing work begins.
