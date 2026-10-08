@@ -1988,9 +1988,9 @@ Steps, cross-tier flow, and the complete 29-case value-reference precision
 matrix. The same 92/92 matrix passes under the unchanged default route. No
 filename, fixture-symbol, or native-to-parser fallback was introduced.
 
-The full native campaign remains open. Its current result is 5,525 passed,
-150 failed, and 213 skipped tests out of 5,888. At least 46 failed assertions
-in 14 files remain semantic candidates after separating obvious Windows
+The full native campaign remains open. Its final-head result is 5,527 passed,
+148 failed, and 213 skipped tests out of 5,888. At least 47 failed assertions
+in 15 files remain semantic candidates after separating obvious Windows
 EPERM and timeout noise. Focused reruns confirm gaps in type-alias object
 members, local receiver typing, supertype/embedded-type conformance, and
 Rust/Go chained factory resolution. Direct Go factory chains already pass, so
@@ -2010,7 +2010,7 @@ search-score delta caused by runtime scoring.
 
 ```text
 Route-level native semantic gaps: 7/11 failures -> 0/92 focused failures
-Full production semantic gaps:    214 failed-test starting signal -> 46 confirmed semantic candidates remain
+Full production semantic gaps:    214 failed-test starting signal -> 47 semantic candidates remain
 LEGITIMATE SEMANTIC REGRESSIONS:   > 0
 ```
 
