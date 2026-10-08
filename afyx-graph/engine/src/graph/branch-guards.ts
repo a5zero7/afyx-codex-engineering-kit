@@ -160,28 +160,18 @@ export async function guardsForFile(
   sites: readonly CallSite[]
 ): Promise<Map<string, BranchGuard[]>> {
   const out = new Map<string, BranchGuard[]>();
-  if (!supportsBranchGuards(language) || sites.length === 0) return out;
-  if (process.env.AFYX_GRAPH_NATIVE_PARSER === '1' && supportsNativeBranchGuards(language)) {
-    let source: string;
-    try {
-      if (fs.statSync(absPath).size > MAX_PARSE_BYTES) return out;
-      source = fs.readFileSync(absPath, 'utf8');
-    } catch {
-      return out;
-    }
-    const readGuards = createNativeBranchGuardReader(source, language);
-    for (const site of sites) {
-      const key = siteKey(site);
-      if (!out.has(key)) out.set(key, readGuards(site.line, site.column ?? null));
-    }
+  if (!supportsNativeBranchGuards(language) || sites.length === 0) return out;
+  let source: string;
+  try {
+    if (fs.statSync(absPath).size > MAX_PARSE_BYTES) return out;
+    source = fs.readFileSync(absPath, 'utf8');
+  } catch {
     return out;
   }
-  const cached = await treeFor(absPath, language);
-  if (!cached) return out;
+  const readGuards = createNativeBranchGuardReader(source, language);
   for (const site of sites) {
     const key = siteKey(site);
-    if (out.has(key)) continue;
-    out.set(key, guardsInTree(cached.tree.rootNode, cached.source, language, site.line, site.column ?? null));
+    if (!out.has(key)) out.set(key, readGuards(site.line, site.column ?? null));
   }
   return out;
 }
@@ -198,48 +188,18 @@ export function guardsForFileSync(
   sites: readonly CallSite[]
 ): Map<string, BranchGuard[]> {
   const out = new Map<string, BranchGuard[]>();
-  if (!supportsBranchGuards(language) || sites.length === 0) return out;
-  if (process.env.AFYX_GRAPH_NATIVE_PARSER === '1' && supportsNativeBranchGuards(language)) {
-    let source: string;
-    try {
-      if (fs.statSync(absPath).size > MAX_PARSE_BYTES) return out;
-      source = fs.readFileSync(absPath, 'utf8');
-    } catch {
-      return out;
-    }
-    const readGuards = createNativeBranchGuardReader(source, language);
-    for (const site of sites) {
-      const key = siteKey(site);
-      if (!out.has(key)) out.set(key, readGuards(site.line, site.column ?? null));
-    }
-    return out;
-  }
-  let stat: fs.Stats;
+  if (!supportsNativeBranchGuards(language) || sites.length === 0) return out;
+  let source: string;
   try {
-    stat = fs.statSync(absPath);
+    if (fs.statSync(absPath).size > MAX_PARSE_BYTES) return out;
+    source = fs.readFileSync(absPath, 'utf8');
   } catch {
     return out;
   }
-  const key = `${language}:${stat.mtimeMs}:${stat.size}`;
-  let cached = treeCache.get(absPath);
-  if (!cached || cached.key !== key) {
-    if (stat.size > MAX_PARSE_BYTES) return out;
-    const parser = getParser(language);
-    if (!parser) return out;
-    let source: string;
-    try {
-      source = fs.readFileSync(absPath, 'utf8');
-    } catch {
-      return out;
-    }
-    const tree = parser.parse(source);
-    if (!tree) return out;
-    cached = { key, tree, source };
-    remember(absPath, cached);
-  }
+  const readGuards = createNativeBranchGuardReader(source, language);
   for (const site of sites) {
-    const k = siteKey(site);
-    if (!out.has(k)) out.set(k, guardsInTree(cached.tree.rootNode, cached.source, language, site.line, site.column ?? null));
+    const key = siteKey(site);
+    if (!out.has(key)) out.set(key, readGuards(site.line, site.column ?? null));
   }
   return out;
 }
@@ -841,7 +801,7 @@ function firstNonBlankColumn(source: string, row: number): number {
   return m ? (m.index ?? 0) : 0;
 }
 
-/** Load the grammars {@link guardsForFileSync} needs; a no-op once loaded, never throws. */
+/** Explicit test/dev oracle warm-up; production file guards are Afyx-native. */
 export async function warmBranchGuardGrammars(only?: readonly Language[]): Promise<void> {
   const wanted = BRANCH_GUARD_LANGUAGES.filter((l) => !only || only.includes(l));
   if (wanted.length === 0) return;
@@ -852,17 +812,25 @@ export async function warmBranchGuardGrammars(only?: readonly Language[]): Promi
   }
 }
 
-/** Guards for one site in source text — the test seam; production reads files. */
+/** Guards for one site in source text through the production-native seam. */
 export async function guardsInSource(
   source: string,
   language: Language,
   line: number,
   column: number | null = null
 ): Promise<BranchGuard[]> {
+  if (!supportsNativeBranchGuards(language)) return [];
+  return nativeGuardsInSource(source, language, line, column);
+}
+
+/** Explicit historical parser oracle; production never calls this function. */
+export async function guardsInSourceWithParserOracle(
+  source: string,
+  language: Language,
+  line: number,
+  column: number | null = null
+): Promise<BranchGuard[]> {
   if (!supportsBranchGuards(language)) return [];
-  if (process.env.AFYX_GRAPH_NATIVE_PARSER === '1' && supportsNativeBranchGuards(language)) {
-    return nativeGuardsInSource(source, language, line, column);
-  }
   const tree = await parse(source, language);
   if (!tree) return [];
   try {

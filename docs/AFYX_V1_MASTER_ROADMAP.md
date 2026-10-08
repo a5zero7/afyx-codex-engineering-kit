@@ -13,7 +13,7 @@ Active implementation branch: `afyx/native-phase5f-parser-grammar`
 Latest verified Phase 5F implementation checkpoint: `62621a0639f42db0eaac69ef087436d851cdba88`  
 Latest verified Phase 5F semantic-freeze checkpoint: `6fd0296b22844eef62b86a395b861ebb51193dc5`  
 Latest verified Phase 5F performance-baseline checkpoint: `1f671dabc8af5bf8f8088dc6e947e48834cafdc3`
-Current Phase 5F boundary: **Global Default Fallback Closure**
+Current Phase 5F boundary: **Parser Bootstrap & Worker-Protocol Closure**
 Last merged Phase 5F major checkpoint: **PR #57 — Utility Runtime + UI Runtime**  
 Phase 5E merge baseline: `48b6078ed37349e405213258819fa5225bcdb3fb`
 
@@ -575,12 +575,12 @@ A. Native Performance & Token-Efficiency Baseline [COMPLETE]
    Establish representative OLD/native measurements and large-repo context
    efficiency evidence without requiring an arbitrary percentage claim.
 
-B. Global Default Fallback Closure [NEXT]
+B. Global Default Fallback Closure [COMPLETE]
    Make Afyx-native semantic/syntax/guard routing unconditional in production.
    The historical parser may remain only as an explicitly isolated oracle if
    still justified for a short transition.
 
-C. Parser Bootstrap & Worker-Protocol Closure
+C. Parser Bootstrap & Worker-Protocol Closure [NEXT]
    Remove parser initialization, grammar reads/transfers/load messages, and
    parser caches while preserving the native worker pool.
 
@@ -595,6 +595,12 @@ E. Grammar & Packaging Closure
 F. Runtime & Dev/Test Isolation
    Remove production web-tree-sitter/tree-sitter-wasms requirements and delete
    or strictly isolate any remaining parser-only tooling/oracles.
+```
+
+Canonical routing state:
+
+```text
+GLOBAL_DEFAULT_FALLBACK = CLOSED
 ```
 
 Performance/token principle:

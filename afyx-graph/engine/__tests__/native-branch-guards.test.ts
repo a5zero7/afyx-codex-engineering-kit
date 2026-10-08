@@ -1,6 +1,6 @@
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { initGrammars } from '../src/extraction/grammars';
-import { guardsInSource } from '../src/graph/branch-guards';
+import { guardsInSource, guardsInSourceWithParserOracle } from '../src/graph/branch-guards';
 import type { Language } from '../src/types';
 
 const originalGate = process.env.AFYX_GRAPH_NATIVE_PARSER;
@@ -133,13 +133,13 @@ class OwnerController {
   },
 ];
 
-async function results(fixture: Fixture, native: boolean) {
-  if (native) process.env.AFYX_GRAPH_NATIVE_PARSER = '1';
-  else delete process.env.AFYX_GRAPH_NATIVE_PARSER;
+async function results(fixture: Fixture, oracle = false) {
   const lines = fixture.source.split('\n');
   return Promise.all(fixture.sites.map(async (site) => {
     const row = lines.findIndex((line) => line.includes(site));
-    const guards = await guardsInSource(fixture.source, fixture.language, row + 1, lines[row]!.indexOf(site));
+    const guards = await (oracle ? guardsInSourceWithParserOracle : guardsInSource)(
+      fixture.source, fixture.language, row + 1, lines[row]!.indexOf(site)
+    );
     return guards.map(({ text, negated, form, line, branch, armExit, exit }) => ({
       text, negated, form, line, branch, armExit: armExit ?? null, exit: exit ?? null,
     }));
@@ -149,8 +149,8 @@ async function results(fixture: Fixture, native: boolean) {
 describe('native branch guard differential', () => {
   for (const fixture of fixtures) {
     it(`${fixture.language}: preserves guard structure and metadata`, async () => {
-      const native = await results(fixture, true);
-      const baseline = await results(fixture, false);
+      const native = await results(fixture);
+      const baseline = await results(fixture, true);
       for (let index = 0; index < fixture.sites.length; index += 1) {
         expect(native[index], fixture.sites[index]).toEqual(baseline[index]);
       }

@@ -1,7 +1,5 @@
 import { Node, Edge, ExtractionResult, ExtractionError, UnresolvedReference } from '../types';
 import { generateNodeId } from './node-id';
-import { TreeSitterExtractor } from './tree-sitter';
-import { isLanguageSupported } from './grammars';
 import { extractNativeFacts } from './native/fact-extractor';
 import { findRazorCodeRegions } from './razor-regions';
 
@@ -187,112 +185,26 @@ export class RazorExtractor {
   }
 
   /**
-   * Find the matching `}` for the `{` at `openIdx`, skipping string literals and
-   * comments so a brace inside `"{"` / `// }` doesn't throw off the count.
-   * Returns the index of the closing brace, or -1 if unbalanced.
-   */
-  private matchBrace(src: string, openIdx: number): number {
-    let depth = 0;
-    for (let i = openIdx; i < src.length; i++) {
-      const ch = src[i];
-      if (ch === '"' || ch === "'") {
-        const quote = ch;
-        i++;
-        while (i < src.length && src[i] !== quote) {
-          if (src[i] === '\\') i++;
-          i++;
-        }
-        continue;
-      }
-      if (ch === '/' && src[i + 1] === '/') {
-        while (i < src.length && src[i] !== '\n') i++;
-        continue;
-      }
-      if (ch === '/' && src[i + 1] === '*') {
-        i += 2;
-        while (i < src.length && !(src[i] === '*' && src[i + 1] === '/')) i++;
-        i++;
-        continue;
-      }
-      if (ch === '{') depth++;
-      else if (ch === '}') {
-        depth--;
-        if (depth === 0) return i;
-      }
-    }
-    return -1;
-  }
-
-  /** `@code { … }` / `@functions { … }` (Blazor) and `@{ … }` (Razor) C# blocks. */
-  private extractCodeBlocks(): Array<{ content: string; lineOffset: number }> {
-    const blocks: Array<{ content: string; lineOffset: number }> = [];
-    const re = /@(?:code|functions)\b\s*\{|@\{/g;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(this.source)) !== null) {
-      const openIdx = this.source.indexOf('{', m.index);
-      if (openIdx < 0) continue;
-      const close = this.matchBrace(this.source, openIdx);
-      if (close < 0) continue;
-      const content = this.source.slice(openIdx + 1, close);
-      // newlines before the content's first char → 0-indexed line of content start
-      const lineOffset = (this.source.slice(0, openIdx + 1).match(/\n/g) || []).length;
-      blocks.push({ content, lineOffset });
-      re.lastIndex = close;
-    }
-    return blocks;
-  }
-
-  /**
    * Attribute each supported C# block's external references to the component.
-   * Native mode extracts the local region directly; default mode retains the
-   * historical synthetic-class Tree-sitter path. Both keep dependency references
-   * only — per-member nodes are outside the established Razor graph contract.
+   * Production extracts each local region through the Afyx-native fact seam.
+   * Dependency references only are kept; per-member nodes remain outside the
+   * established Razor graph contract.
    */
   private processCodeBlocks(componentId: string): void {
-    const native = process.env.AFYX_GRAPH_NATIVE_PARSER === '1';
-    if (!native && !isLanguageSupported('csharp')) return;
-    if (native) {
-      for (const block of findRazorCodeRegions(this.source, true)) {
-        if (!block.content.trim()) continue;
-        const result = extractNativeFacts(this.filePath, block.content, 'csharp');
-        const localLines = block.content.split(/\r?\n/);
-        for (const ref of result.unresolvedReferences) {
-          const localLine = localLines[ref.line - 1] ?? '';
-          const isConstruction = ref.referenceKind === 'calls' &&
-            /\bnew\s*$/.test(localLine.slice(0, ref.column));
-          this.unresolvedReferences.push({
-            ...ref,
-            fromNodeId: componentId,
-            referenceKind: isConstruction ? 'references' : ref.referenceKind,
-            line: ref.line + block.startLine - 1,
-            column: ref.column + (ref.line === 1 ? block.startColumn : 0),
-            filePath: this.filePath,
-            language: 'razor',
-          });
-        }
-      }
-      return;
-    }
-    for (const block of this.extractCodeBlocks()) {
+    for (const block of findRazorCodeRegions(this.source, true)) {
       if (!block.content.trim()) continue;
-      let result: ExtractionResult;
-      try {
-        result = new TreeSitterExtractor(
-          this.filePath,
-          `class __RazorCode__ {\n${block.content}\n}`,
-          'csharp'
-        ).extract();
-      } catch {
-        continue; // grammar not loaded / parse failure — skip this block
-      }
-      // The synthetic wrapper adds one line before the block content; map ref
-      // lines back to the .razor file (display only — coverage is line-agnostic).
+      const result = extractNativeFacts(this.filePath, block.content, 'csharp');
+      const localLines = block.content.split(/\r?\n/);
       for (const ref of result.unresolvedReferences) {
+        const localLine = localLines[ref.line - 1] ?? '';
+        const isConstruction = ref.referenceKind === 'calls' &&
+          /\bnew\s*$/.test(localLine.slice(0, ref.column));
         this.unresolvedReferences.push({
           ...ref,
           fromNodeId: componentId,
-          line: ref.line + block.lineOffset - 1,
-          column: ref.column,
+          referenceKind: isConstruction ? 'references' : ref.referenceKind,
+          line: ref.line + block.startLine - 1,
+          column: ref.column + (ref.line === 1 ? block.startColumn : 0),
           filePath: this.filePath,
           language: 'razor',
         });

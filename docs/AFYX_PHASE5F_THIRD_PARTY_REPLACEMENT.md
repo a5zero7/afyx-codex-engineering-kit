@@ -2680,3 +2680,98 @@ NATIVE_PERFORMANCE_BASELINE = FROZEN
 ```
 
 The exact next boundary is **Global Default Fallback Closure**.
+
+## Global Default Fallback Closure
+
+This routing-only closure starts from
+`4599115b94d4f66e0efe46e0ae586ffc1fe3327b`. It makes the already-frozen
+Afyx-native extraction, syntax, and branch-guard paths unconditional in
+production. It does not remove the historical parser source, bootstrap,
+worker protocol, grammar assets, dependencies, native kernel, or attribution.
+
+### Routing inventory and final ownership
+
+| Route / switch | Previous behavior | Final classification | Final behavior |
+| --- | --- | --- | --- |
+| `extractFromSource` | `AFYX_GRAPH_NATIVE_PARSER=1` selected native facts; otherwise parser/kernel fallback | `PRODUCTION_ROUTING` | named and CFML families always use Afyx-native facts; special/file-only extractors remain explicit; unsupported input returns the established bounded error |
+| Svelte/Vue/Astro embedded scripts | env-selected native facts or `TreeSitterExtractor` | `PRODUCTION_ROUTING` | native embedded fact seam only, including incomplete blocks and absolute coordinate remapping |
+| Razor code regions | env-selected native facts or synthetic parser wrapper | `PRODUCTION_ROUTING` | native C# region facts only |
+| syntax highlighting | env-selected scanner or grammar parse | `PRODUCTION_ROUTING` | native classifier only; unsupported languages return the existing unclassified result |
+| file/source branch guards | env-selected native reader or grammar tree | `PRODUCTION_ROUTING` | native reader only; Explore no longer warms parser grammars |
+| `AFYX_GRAPH_NATIVE_PARSER` | restored parser-backed production behavior when unset/`0` | `TEST_ONLY` spelling retained temporarily | ignored by all production source; unset, `0`, and `1` have identical routing |
+| `TreeSitterExtractor` and parser syntax/guard entry points | implicit production fallback plus differential oracle | `DEV_ORACLE` | reachable only through explicit oracle APIs/direct construction for later removal verification |
+| `CfmlExtractor` parser delegation | historical fallback implementation | `DEV_ORACLE` | retained source, no production dispatch caller |
+| parser bootstrap/worker/WASM/dependencies | active infrastructure | transitional physical state | intentionally unchanged for the next boundary |
+
+The production source tree contains zero reads of
+`AFYX_GRAPH_NATIVE_PARSER`. Native failure cannot silently fall back to a
+parser. The old differential tests now name and call the historical oracle
+explicitly instead of defining “default” as parser-backed behavior.
+
+### Newly exposed differences
+
+- The default UI syntax route initially exposed an O(definitions × tokens)
+  lookup and exceeded the 400 ms large-file contract. The first broken layer
+  was native syntax definition classification, not extraction semantics. A
+  token-offset index plus bounded JS/TS lexical declaration pass restored the
+  focused test to 240 ms while preserving syntax differentials.
+- Structural semantic fixtures remain identical. The semantic-baseline script
+  reports only the already-frozen runtime/index-derived search-score values
+  (`105.5825881522508` vs `105.58770806565178`, and
+  `2.7109981735576496` vs `2.6581462898477937`). Classification:
+  `LEGACY_SCORE_COMPATIBILITY`; no ranking change was made here.
+- The full campaign continues to expose the previously classified native
+  corrections, post-v1 framework gaps, ranking/explore expectations,
+  parser-warning oracle expectations, Windows cleanup `EPERM`, and host timing
+  cases. None is a new V1-required or unknown routing defect.
+
+### Final evidence
+
+```text
+focused routing/extraction/syntax/guards       42/42 PASS
+large-file syntax + syntax/routing follow-up  48/48 PASS
+focused regression cone                      801 PASS
+cleanup-only failures                           6 EPERM
+full production/default campaign            5,623 PASS
+classified failures                             56
+classified skips                               213
+full total                                   5,892
+TypeScript typecheck                           PASS
+clean production/UI build                      PASS
+UI artifact check (29 grammars)                 PASS
+CLI/MCP smoke, production default             21/21 PASS
+CLI/MCP smoke, env=1                          21/21 PASS
+semantic structural contract                    PASS
+semantic exact-score snapshot      FROZEN SCORE-ONLY DIFF
+git diff --check                                PASS
+```
+
+The 56 full-campaign failures contain no `V1_REQUIRED` or `UNKNOWN` product
+failure. They are the frozen semantic families above plus cleanup/timing/tooling
+cases; no skip was added by this closure. The previous native semantic and
+performance baselines were reused and the performance campaign was not
+repeated. Only the default-switch-specific large-file syntax sanity was run.
+
+### Independence state and decision
+
+```text
+production default parser fallback     0
+production native routing              unconditional
+native semantic parser reachability    0
+native syntax parser reachability      0
+named parser-backed native routes      0
+special-format parser routes           0
+
+parser bootstrap                       PRESENT
+parser adapter/source                  PRESENT (DEV_ORACLE/TEST_ONLY)
+grammar WASM                           29
+web-tree-sitter                        PRESENT
+tree-sitter-wasms                      PRESENT
+SyntaxNode coupling                    transitional (32 source files)
+
+V1_REQUIRED failure                    0
+UNKNOWN product failure                0
+GLOBAL_DEFAULT_FALLBACK                CLOSED
+```
+
+The exact next boundary is **Parser Bootstrap & Worker-Protocol Closure**.

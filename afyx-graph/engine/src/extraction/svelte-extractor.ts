@@ -1,6 +1,5 @@
 import { Node, Edge, ExtractionResult, ExtractionError, UnresolvedReference, Language } from '../types';
 import { generateNodeId } from './node-id';
-import { isLanguageSupported } from './grammars';
 import { extractEmbeddedScriptFacts, remapEmbeddedScriptResult } from './embedded-script';
 
 /** Svelte 5 rune names — compiler builtins, not real functions */
@@ -124,9 +123,7 @@ export class SvelteExtractor {
       isTypeScript: boolean;
     }> = [];
 
-    const scriptRegex = process.env.AFYX_GRAPH_NATIVE_PARSER === '1'
-      ? /<script(\s[^>]*)?>(?<content>[\s\S]*?)(?:<\/script>|$)/g
-      : /<script(\s[^>]*)?>(?<content>[\s\S]*?)<\/script>/g;
+    const scriptRegex = /<script(\s[^>]*)?>(?<content>[\s\S]*?)(?:<\/script>|$)/g;
     let match;
 
     while ((match = scriptRegex.exec(this.source)) !== null) {
@@ -174,15 +171,6 @@ export class SvelteExtractor {
   ): void {
     const scriptLanguage: Language = block.isTypeScript ? 'typescript' : 'javascript';
 
-    // Check if the script language parser is available
-    if (process.env.AFYX_GRAPH_NATIVE_PARSER !== '1' && !isLanguageSupported(scriptLanguage)) {
-      this.errors.push({
-        message: `Parser for ${scriptLanguage} not available, cannot parse Svelte script block`,
-        severity: 'warning',
-      });
-      return;
-    }
-
     const result = extractEmbeddedScriptFacts(this.filePath, block.content, scriptLanguage);
     remapEmbeddedScriptResult(result, block, this.filePath, 'svelte');
 
@@ -229,9 +217,7 @@ export class SvelteExtractor {
     const coveredRanges: Array<[number, number]> = [];
 
     // Find all <script>...</script> and <style>...</style> ranges
-    const tagRegex = process.env.AFYX_GRAPH_NATIVE_PARSER === '1'
-      ? /<(script|style)(\s[^>]*)?>[\s\S]*?(?:<\/\1>|$)/g
-      : /<(script|style)(\s[^>]*)?>[\s\S]*?<\/\1>/g;
+    const tagRegex = /<(script|style)(\s[^>]*)?>[\s\S]*?(?:<\/\1>|$)/g;
     let tagMatch;
     while ((tagMatch = tagRegex.exec(this.source)) !== null) {
       const startLine = (this.source.substring(0, tagMatch.index).match(/\n/g) || []).length;
@@ -287,9 +273,7 @@ export class SvelteExtractor {
   private extractTemplateComponents(componentNodeId: string): void {
     // Build ranges covered by <script> and <style> blocks to skip them
     const coveredRanges: Array<[number, number]> = [];
-    const tagRegex = process.env.AFYX_GRAPH_NATIVE_PARSER === '1'
-      ? /<(script|style)(\s[^>]*)?>[\s\S]*?(?:<\/\1>|$)/g
-      : /<(script|style)(\s[^>]*)?>[\s\S]*?<\/\1>/g;
+    const tagRegex = /<(script|style)(\s[^>]*)?>[\s\S]*?(?:<\/\1>|$)/g;
     let tagMatch;
     while ((tagMatch = tagRegex.exec(this.source)) !== null) {
       const startLine = (this.source.substring(0, tagMatch.index).match(/\n/g) || []).length;

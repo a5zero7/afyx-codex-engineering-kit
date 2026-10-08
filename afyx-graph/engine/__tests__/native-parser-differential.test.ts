@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { extractFromSource } from '../src/extraction/tree-sitter';
+import { extractFromSource, TreeSitterExtractor } from '../src/extraction/tree-sitter';
 import { initGrammars, loadGrammarsForLanguages } from '../src/extraction/grammars';
 import type { Language } from '../src/types';
 
@@ -8,10 +8,10 @@ beforeAll(async () => {
   await loadGrammarsForLanguages(['typescript', 'python', 'go', 'java']);
 });
 
-function canonical(filePath: string, source: string, language: Language, native: boolean) {
-  if (native) process.env.AFYX_GRAPH_NATIVE_PARSER = '1';
-  else delete process.env.AFYX_GRAPH_NATIVE_PARSER;
-  const result = extractFromSource(filePath, source, language);
+function canonical(filePath: string, source: string, language: Language, oracle = false) {
+  const result = oracle
+    ? new TreeSitterExtractor(filePath, source, language).extract()
+    : extractFromSource(filePath, source, language);
   return {
     nodes: Object.fromEntries(result.nodes.map((node) => [`${node.kind}:${node.name}`, {
       id: node.id, kind: node.kind, name: node.name, qualifiedName: node.qualifiedName,
@@ -40,7 +40,7 @@ describe('native parser semantic differential', () => {
       '  }',
       '}',
     ].join('\n');
-    expect(canonical('ledger.ts', source, 'typescript', true)).toEqual(canonical('ledger.ts', source, 'typescript', false));
+    expect(canonical('ledger.ts', source, 'typescript')).toEqual(canonical('ledger.ts', source, 'typescript', true));
   });
 
   it.each([
@@ -57,6 +57,6 @@ describe('native parser semantic differential', () => {
       '  public int total() {', '    return 1;', '  }', '}',
     ].join('\n')],
   ] as const)('preserves %s ground-truth facts', (filePath, language, source) => {
-    expect(canonical(filePath, source, language, true)).toEqual(canonical(filePath, source, language, false));
+    expect(canonical(filePath, source, language)).toEqual(canonical(filePath, source, language, true));
   });
 });

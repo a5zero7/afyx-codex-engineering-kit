@@ -1,7 +1,6 @@
 import type { ExtractionResult, Language, Node } from '../types';
 import { extractNativeFacts } from './native/fact-extractor';
 import { scanSource } from './native/scanner';
-import { TreeSitterExtractor } from './tree-sitter';
 
 const CALL_EXCLUSIONS = new Set([
   'catch', 'class', 'for', 'function', 'if', 'import', 'new', 'return', 'switch', 'throw', 'while', 'with',
@@ -58,21 +57,17 @@ export interface EmbeddedScriptOrigin {
 }
 
 /**
- * Shared SFC delegation seam. Native mode reuses the established JS/TS fact
- * extractor directly; the ungated path deliberately retains its parser-backed
- * behavior until global fallback removal.
+ * Shared SFC delegation seam. Production embedded scripts always use the
+ * Afyx-native JS/TS fact extractor.
  */
 export function extractEmbeddedScriptFacts(
   filePath: string,
   content: string,
   language: Extract<Language, 'javascript' | 'typescript'>,
 ): ExtractionResult {
-  if (process.env.AFYX_GRAPH_NATIVE_PARSER === '1') {
-    const result = extractNativeFacts(filePath, content, language);
-    preserveEmbeddedObjectCalls(result, content);
-    return result;
-  }
-  return new TreeSitterExtractor(filePath, content, language).extract();
+  const result = extractNativeFacts(filePath, content, language);
+  preserveEmbeddedObjectCalls(result, content);
+  return result;
 }
 
 /** Map region-local fact coordinates back to the original container source. */
@@ -82,7 +77,7 @@ export function remapEmbeddedScriptResult(
   filePath: string,
   outerLanguage: Extract<Language, 'svelte' | 'vue' | 'astro'>,
 ): void {
-  const columnOffset = process.env.AFYX_GRAPH_NATIVE_PARSER === '1' ? origin.startColumn : 0;
+  const columnOffset = origin.startColumn;
   for (const node of result.nodes) {
     const localStartLine = node.startLine;
     const localEndLine = node.endLine;

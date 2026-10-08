@@ -30,8 +30,6 @@ import { AstroExtractor } from './astro-extractor';
 import { DfmExtractor } from './dfm-extractor';
 import { VueExtractor } from './vue-extractor';
 import { MyBatisExtractor } from './mybatis-extractor';
-import { CfmlExtractor } from './cfml-extractor';
-import { tryKernelExtract, takeDeferredPreParse } from './kernel';
 import { extractNativeFacts } from './native/fact-extractor';
 import { extractNativeCfmlFacts } from './native/cfml-facts';
 import {
@@ -7153,13 +7151,12 @@ export function extractFromSource(
 
   let result: ExtractionResult;
 
-  const useNativeParser = process.env.AFYX_GRAPH_NATIVE_PARSER === '1';
-
-  // During semantic convergence the native route is opt-in. The flag is
-  // removed when every language family has passed OLD/NEW parity.
-  if (useNativeParser && (detectedLanguage === 'cfml' || detectedLanguage === 'cfscript')) {
+  // Production extraction is unconditionally Afyx-native. The historical
+  // TreeSitterExtractor remains available only as an explicit test/dev oracle;
+  // no environment switch can restore it as a production fallback.
+  if (detectedLanguage === 'cfml' || detectedLanguage === 'cfscript' || detectedLanguage === 'cfquery') {
     result = extractNativeCfmlFacts(filePath, source, detectedLanguage);
-  } else if (useNativeParser && ['typescript', 'tsx', 'javascript', 'jsx', 'arkts', 'python', 'go', 'java', 'rust', 'kotlin', 'scala', 'c', 'cpp', 'objc', 'csharp', 'swift', 'solidity', 'php', 'ruby', 'lua', 'luau', 'r', 'dart', 'nix', 'pascal', 'vbnet', 'erlang', 'terraform', 'cobol'].includes(detectedLanguage) &&
+  } else if (['typescript', 'tsx', 'javascript', 'jsx', 'arkts', 'python', 'go', 'java', 'rust', 'kotlin', 'scala', 'c', 'cpp', 'objc', 'csharp', 'swift', 'solidity', 'php', 'ruby', 'lua', 'luau', 'r', 'dart', 'nix', 'pascal', 'vbnet', 'erlang', 'terraform', 'cobol'].includes(detectedLanguage) &&
       !(detectedLanguage === 'pascal' && (fileExtension === '.dfm' || fileExtension === '.fmx'))) {
     result = extractNativeFacts(filePath, source, detectedLanguage);
   // Use custom extractor for Svelte
@@ -7187,16 +7184,6 @@ export function extractFromSource(
     // file node so the watcher tracks it without emitting symbols.
     const extractor = new MyBatisExtractor(filePath, source);
     result = extractor.extract();
-  } else if (detectedLanguage === 'cfml' || detectedLanguage === 'cfscript') {
-    // Custom extractor for CFML (.cfc/.cfm) — dialect-switches between the
-    // tag-based cfml grammar and the bare-script cfscript grammar. Standalone
-    // `.cfs` files (language 'cfscript') are always pure script (never `<`-led),
-    // so routing them through here too gets them the same anonymous-component
-    // filename fallback as a bare-script `.cfc` — without it a `.cfs` whose
-    // `component { ... }` declares no name (the grammar has no `name` field;
-    // CFML never spells one in source) stays `<anonymous>`.
-    const extractor = new CfmlExtractor(filePath, source, detectedLanguage);
-    result = extractor.extract();
   } else if (isFileLevelOnlyLanguage(detectedLanguage)) {
     // No symbol extraction at this stage — files are tracked at the file-record
     // level only. Framework extractors (Drupal routing yml, Spring `@Value`
@@ -7211,24 +7198,16 @@ export function extractFromSource(
     const extractor = new DfmExtractor(filePath, source);
     result = extractor.extract();
   } else {
-    // Native-kernel route (docs/design/rust-kernel-migration-plan.md): gated
-    // per language, null when not routed/available or on a kernel error —
-    // the wasm TreeSitterExtractor below stays the fallback either way.
-    const kernelResult = tryKernelExtract(filePath, source, detectedLanguage);
-    if (kernelResult) {
-      result = kernelResult;
-    } else {
-      // A kernel-deferred file already paid the (offset-preserving) preParse
-      // at the route point — reuse those bytes instead of blanking again.
-      const deferredPre = takeDeferredPreParse(filePath, source, detectedLanguage);
-      const extractor = new TreeSitterExtractor(
+    result = {
+      nodes: [], edges: [], unresolvedReferences: [],
+      errors: [{
+        message: `Unsupported language: ${detectedLanguage}`,
         filePath,
-        deferredPre ?? source,
-        detectedLanguage,
-        { sourceIsPreParsed: deferredPre != null }
-      );
-      result = extractor.extract();
-    }
+        severity: 'error',
+        code: 'unsupported_language',
+      }],
+      durationMs: 0,
+    };
   }
 
   // Framework-specific extraction (routes, middleware, etc.)

@@ -5,7 +5,7 @@ import { isTestFile, normalizeNameToken } from '../search/query-utils';
 import { extractQueryPaths, queryMightContainPaths } from '../search/query-paths';
 import { existsSync, readFileSync, statSync } from 'fs';
 import { clamp, validatePathWithinRoot, isConfigLeafNode } from '../utils';
-import { guardLabel, guardsForFileSync, siteKey, supportsBranchGuards, warmBranchGuardGrammars } from '../graph/branch-guards';
+import { guardLabel, guardsForFileSync, siteKey, supportsBranchGuards } from '../graph/branch-guards';
 import { findDynamicBoundaries, type BoundarySite } from '../graph/dynamic-boundary-report';
 import { countImplementers } from '../graph/type-hierarchy';
 import { findAllSymbols, resolveNamedSymbolFlow } from '../graph/named-symbol-flow';
@@ -2418,7 +2418,6 @@ class ExploreTool {
     // off-spine peers skeletonize.
     // The Flow section labels each hop with its branch conditions; that read
     // is synchronous, so the grammars it needs are loaded here, once.
-    await warmBranchGuardGrammars();
     const flow = this.buildFlowFromNamedSymbols(cg, matchQuery);
 
     // Snapshot every ranked candidate's scoring inputs, in final sort order, so

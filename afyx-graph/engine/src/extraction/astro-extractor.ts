@@ -1,6 +1,5 @@
 import { Node, Edge, ExtractionResult, ExtractionError, UnresolvedReference } from '../types';
 import { generateNodeId } from './node-id';
-import { isLanguageSupported } from './grammars';
 import { extractEmbeddedScriptFacts, remapEmbeddedScriptResult } from './embedded-script';
 
 /**
@@ -51,12 +50,12 @@ export class AstroExtractor {
       // Extract and process the frontmatter block (--- fenced, TypeScript)
       const frontmatter = this.extractFrontmatter();
       if (frontmatter) {
-        this.processScriptContent(frontmatter, componentNode.id, 'frontmatter');
+        this.processScriptContent(frontmatter, componentNode.id);
       }
 
       // Extract and process <script> blocks (client-side, TypeScript-capable)
       for (const block of this.extractScriptBlocks()) {
-        this.processScriptContent(block, componentNode.id, 'script');
+        this.processScriptContent(block, componentNode.id);
       }
 
       // Ranges the template scans must skip: frontmatter + <script>/<style>
@@ -156,9 +155,7 @@ export class AstroExtractor {
   private extractScriptBlocks(): Array<{ content: string; startLine: number; startColumn: number }> {
     const blocks: Array<{ content: string; startLine: number; startColumn: number }> = [];
 
-    const scriptRegex = process.env.AFYX_GRAPH_NATIVE_PARSER === '1'
-      ? /<script(\s[^>]*)?>(?<content>[\s\S]*?)(?:<\/script>|$)/g
-      : /<script(\s[^>]*)?>(?<content>[\s\S]*?)<\/script>/g;
+    const scriptRegex = /<script(\s[^>]*)?>(?<content>[\s\S]*?)(?:<\/script>|$)/g;
     let match;
 
     while ((match = scriptRegex.exec(this.source)) !== null) {
@@ -189,17 +186,8 @@ export class AstroExtractor {
    */
   private processScriptContent(
     block: { content: string; startLine: number; startColumn?: number },
-    componentNodeId: string,
-    label: 'frontmatter' | 'script'
+    componentNodeId: string
   ): void {
-    if (process.env.AFYX_GRAPH_NATIVE_PARSER !== '1' && !isLanguageSupported('typescript')) {
-      this.errors.push({
-        message: `Parser for typescript not available, cannot parse Astro ${label} block`,
-        severity: 'warning',
-      });
-      return;
-    }
-
     const result = extractEmbeddedScriptFacts(this.filePath, block.content, 'typescript');
     remapEmbeddedScriptResult(result, { startLine: block.startLine, startColumn: block.startColumn ?? 0 }, this.filePath, 'astro');
 
@@ -245,9 +233,7 @@ export class AstroExtractor {
       coveredRanges.push([frontmatter.startLine - 1, frontmatter.endLine]);
     }
 
-    const tagRegex = process.env.AFYX_GRAPH_NATIVE_PARSER === '1'
-      ? /<(script|style)(\s[^>]*)?>[\s\S]*?(?:<\/\1>|$)/g
-      : /<(script|style)(\s[^>]*)?>[\s\S]*?<\/\1>/g;
+    const tagRegex = /<(script|style)(\s[^>]*)?>[\s\S]*?(?:<\/\1>|$)/g;
     let tagMatch;
     while ((tagMatch = tagRegex.exec(this.source)) !== null) {
       const startLine = (this.source.substring(0, tagMatch.index).match(/\n/g) || []).length;

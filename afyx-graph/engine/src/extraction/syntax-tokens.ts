@@ -364,7 +364,6 @@ export interface SyntaxRegion {
   language: Language;
 }
 
-const SCRIPT_BLOCK = /<script(\s[^>]*)?>([\s\S]*?)<\/script>/gi;
 const TS_LANG_ATTR = /lang\s*=\s*["'](ts|typescript)["']/i;
 /** Astro's frontmatter: a `---` fence at the very top of the file. */
 const ASTRO_FRONTMATTER = /^(---\r?\n)([\s\S]*?)\r?\n---/;
@@ -377,7 +376,6 @@ const ASTRO_FRONTMATTER = /^(---\r?\n)([\s\S]*?)\r?\n---/;
  */
 export function syntaxRegionsFor(source: string, language: Language): SyntaxRegion[] | null {
   if (language === 'razor') {
-    if (process.env.AFYX_GRAPH_NATIVE_PARSER !== '1') return null;
     return findRazorCodeRegions(source, true).map((region) => ({
       start: region.start,
       end: region.end,
@@ -395,9 +393,7 @@ export function syntaxRegionsFor(source: string, language: Language): SyntaxRegi
     }
   }
 
-  const scriptPattern = process.env.AFYX_GRAPH_NATIVE_PARSER === '1'
-    ? /<script(\s[^>]*)?>([\s\S]*?)(?:<\/script>|$)/gi
-    : SCRIPT_BLOCK;
+  const scriptPattern = /<script(\s[^>]*)?>([\s\S]*?)(?:<\/script>|$)/gi;
   scriptPattern.lastIndex = 0;
   let match: RegExpExecArray | null;
   while ((match = scriptPattern.exec(source)) !== null) {
@@ -433,6 +429,9 @@ const NATIVE_SYNTAX_LANGUAGES: ReadonlySet<Language> = new Set([
   'terraform',
   'cobol',
   'cfml', 'cfscript', 'cfquery',
+]);
+const NATIVE_TS_FAMILY_LANGUAGES: ReadonlySet<Language> = new Set([
+  'typescript', 'tsx', 'javascript', 'jsx', 'arkts',
 ]);
 
 const NATIVE_KEYWORDS: Readonly<Record<string, ReadonlySet<string>>> = {
@@ -506,7 +505,33 @@ function nativeLanguageKey(language: Language): string {
   return language;
 }
 
+function nativeTsDefinitionOffsets(source: string, tokens: readonly NativeToken[]): Set<number> {
+  const tokenOffsets = new Set(tokens
+    .filter((token) => token.kind === 'identifier')
+    .map((token) => token.start.offset));
+  const offsets = new Set<number>();
+  const collect = (pattern: RegExp): void => {
+    for (const match of source.matchAll(pattern)) {
+      const name = match[1];
+      if (!name || match.index === undefined) continue;
+      if (['if', 'for', 'while', 'switch', 'catch', 'with'].includes(name)) continue;
+      const relative = match[0].indexOf(name);
+      const offset = match.index + relative;
+      if (relative >= 0 && tokenOffsets.has(offset)) offsets.add(offset);
+    }
+  };
+  collect(/\b(?:class|interface|struct|enum|type|function)\s+([A-Za-z_$][\w$]*)/gu);
+  collect(/(?:^|[{};])[ \t]*(?:(?:export|default|public|private|protected|static|async|abstract|readonly|declare|override|get|set)\s+)*(?:\*\s*)?([A-Za-z_$][\w$]*)\s*(?:<[^>{}\n]*>)?\s*\([^\n)]*\)\s*(?::[^=>{\n]+)?\s*(?:\{|=>|;)/gmu);
+  collect(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)[^;\n]*?=\s*(?:async\s*)?(?:\([^\n)]*\)|[A-Za-z_$][\w$]*)\s*=>/gu);
+  return offsets;
+}
+
 function nativeDefinitionOffsets(source: string, language: Language, tokens: readonly NativeToken[]): Set<number> {
+  // Syntax highlighting needs declaration names, not the complete graph fact
+  // model. Avoid the substantially heavier fact pass for JS/TS source while
+  // retaining its declaration forms (named, member, and arrow functions).
+  if (NATIVE_TS_FAMILY_LANGUAGES.has(language)) return nativeTsDefinitionOffsets(source, tokens);
+
   const facts = extractNativeFacts('__syntax__', source, language);
   const definitionKinds = new Set([
     'function', 'method', 'class', 'interface', 'struct', 'enum', 'type_alias', 'trait',
@@ -514,10 +539,18 @@ function nativeDefinitionOffsets(source: string, language: Language, tokens: rea
   ]);
   const definitions = facts.nodes.filter((node) =>
     definitionKinds.has(node.kind));
+  const identifiers = new Map<string, NativeToken[]>();
+  for (const token of tokens) {
+    if (token.kind !== 'identifier') continue;
+    const key = `${token.start.line}\0${token.text}`;
+    const candidates = identifiers.get(key);
+    if (candidates) candidates.push(token);
+    else identifiers.set(key, [token]);
+  }
   const offsets = new Set<number>();
   for (const node of definitions) {
-    const match = tokens.find((token) => token.kind === 'identifier' && token.text === node.name &&
-      token.start.line === node.startLine && token.start.column >= node.startColumn);
+    const match = identifiers.get(`${node.startLine}\0${node.name}`)
+      ?.find((token) => token.start.column >= node.startColumn);
     if (match) offsets.add(match.start.offset);
   }
   return offsets;
@@ -617,7 +650,7 @@ export async function tokenizeSource(
 ): Promise<TokenizeResult | null> {
   const regions = syntaxRegionsFor(source, language);
   if (regions === null) {
-    const spans = await tokenizeRegion(source, language, 0);
+    const spans = tokenizeNativeRegion(source, language, 0);
     return spans ? { spans, grammars: [language] } : null;
   }
   if (regions.length === 0) return null;
@@ -625,7 +658,7 @@ export async function tokenizeSource(
   const spans: SyntaxSpan[] = [];
   const grammars = new Set<string>();
   for (const region of regions) {
-    const part = await tokenizeRegion(
+    const part = tokenizeNativeRegion(
       source.slice(region.start, region.end),
       region.language,
       region.start
@@ -639,17 +672,46 @@ export async function tokenizeSource(
   return { spans, grammars: [...grammars] };
 }
 
-async function tokenizeRegion(
+function tokenizeNativeRegion(
+  source: string,
+  language: Language,
+  offset: number
+): SyntaxSpan[] | null {
+  if (!NATIVE_SYNTAX_LANGUAGES.has(language)) return null;
+  if (language === 'cfml' || language === 'cfscript' || language === 'cfquery') {
+    return classifyNativeCfmlSyntax(source, language, offset);
+  }
+  return classifyNativeRegion(source, language, offset);
+}
+
+/** Explicit test/dev oracle; production {@link tokenizeSource} never calls it. */
+export async function tokenizeSourceWithParserOracle(
+  source: string,
+  language: Language
+): Promise<TokenizeResult | null> {
+  const regions = syntaxRegionsFor(source, language);
+  const selected = regions ?? [{ start: 0, end: source.length, language }];
+  if (selected.length === 0) return null;
+  const spans: SyntaxSpan[] = [];
+  const grammars = new Set<string>();
+  for (const region of selected) {
+    const part = await tokenizeParserOracleRegion(
+      source.slice(region.start, region.end), region.language, region.start
+    );
+    if (!part) continue;
+    grammars.add(region.language);
+    spans.push(...part);
+  }
+  if (spans.length === 0) return null;
+  spans.sort((left, right) => left.start - right.start);
+  return { spans, grammars: [...grammars] };
+}
+
+async function tokenizeParserOracleRegion(
   source: string,
   language: Language,
   offset: number
 ): Promise<SyntaxSpan[] | null> {
-  if (process.env.AFYX_GRAPH_NATIVE_PARSER === '1' && NATIVE_SYNTAX_LANGUAGES.has(language)) {
-    if (language === 'cfml' || language === 'cfscript' || language === 'cfquery') {
-      return classifyNativeCfmlSyntax(source, language, offset);
-    }
-    return classifyNativeRegion(source, language, offset);
-  }
   try {
     await loadGrammarsForLanguages([language]);
     const parser = getParser(language);

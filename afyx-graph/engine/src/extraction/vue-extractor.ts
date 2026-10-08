@@ -1,6 +1,5 @@
 import { Node, Edge, ExtractionResult, ExtractionError, UnresolvedReference, Language } from '../types';
 import { generateNodeId } from './node-id';
-import { isLanguageSupported } from './grammars';
 import { extractEmbeddedScriptFacts, remapEmbeddedScriptResult } from './embedded-script';
 
 /**
@@ -132,9 +131,7 @@ export class VueExtractor {
       isTypeScript: boolean;
     }> = [];
 
-    const scriptRegex = process.env.AFYX_GRAPH_NATIVE_PARSER === '1'
-      ? /<script(\s[^>]*)?>(?<content>[\s\S]*?)(?:<\/script>|$)/g
-      : /<script(\s[^>]*)?>(?<content>[\s\S]*?)<\/script>/g;
+    const scriptRegex = /<script(\s[^>]*)?>(?<content>[\s\S]*?)(?:<\/script>|$)/g;
     let match;
 
     while ((match = scriptRegex.exec(this.source)) !== null) {
@@ -181,15 +178,6 @@ export class VueExtractor {
     componentNodeId: string
   ): void {
     const scriptLanguage: Language = block.isTypeScript ? 'typescript' : 'javascript';
-
-    // Check if the script language parser is available
-    if (process.env.AFYX_GRAPH_NATIVE_PARSER !== '1' && !isLanguageSupported(scriptLanguage)) {
-      this.errors.push({
-        message: `Parser for ${scriptLanguage} not available, cannot parse Vue script block`,
-        severity: 'warning',
-      });
-      return;
-    }
 
     const result = extractEmbeddedScriptFacts(this.filePath, block.content, scriptLanguage);
     remapEmbeddedScriptResult(result, block, this.filePath, 'vue');
@@ -242,9 +230,7 @@ export class VueExtractor {
     // also correctly handles nested <template> tags (v-if / slots), which a
     // single non-greedy <template>…</template> match would mis-bound.
     const coveredRanges: Array<[number, number]> = [];
-    const blockRegex = process.env.AFYX_GRAPH_NATIVE_PARSER === '1'
-      ? /<(script|style)(\s[^>]*)?>[\s\S]*?(?:<\/\1>|$)/g
-      : /<(script|style)(\s[^>]*)?>[\s\S]*?<\/\1>/g;
+    const blockRegex = /<(script|style)(\s[^>]*)?>[\s\S]*?(?:<\/\1>|$)/g;
     let blockMatch;
     while ((blockMatch = blockRegex.exec(this.source)) !== null) {
       const startLine = (this.source.substring(0, blockMatch.index).match(/\n/g) || []).length;
