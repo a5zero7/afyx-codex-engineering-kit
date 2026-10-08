@@ -1546,3 +1546,90 @@ The remaining Phase 5F surfaces are Razor/Blazor C# region delegation and the
 global default fallback/bootstrap/runtime/grammar reachability. The single
 next dependency-safe boundary is Razor / Blazor C# region delegation. It is
 not started here, and Phase 5F is not marked complete.
+
+### Razor / Blazor C# region native convergence checkpoint
+
+Starting checkpoint `ec461f75878f7af002db55437073c5ca3af7d85e`
+retained the final parser-coupled special-format semantic path. Both `.razor`
+and `.cshtml` were routed to `RazorExtractor`. The container already discovered
+`@code`, `@functions`, and `@{ ... }` blocks with bounded brace matching, then
+wrapped every body in a synthetic C# class and delegated it to
+`TreeSitterExtractor('csharp')`. Only external dependency references were kept
+and reassigned to the single Razor component node; C# member nodes were never
+part of the established Razor graph contract. Razor syntax had no region route
+and therefore produced no classified C# spans.
+
+The native-gated route now uses a small Razor-owned region recognizer shared by
+semantic and syntax entry points. It recognizes only the three established C#
+block forms, skips Razor comments, HTML comments, quoted tag attributes, and
+escaped `@@` transitions, and handles C# strings/comments while balancing
+braces. Closed blocks remain independent; an unclosed final block is bounded
+at end of source so valid prefix references and syntax remain available. No
+inline `@Foo`, `@Foo.Bar()`, `@(expression)`, Razor control-flow compiler
+semantics, generated classes, dependency-injection runtime, or rendering
+behavior is introduced.
+
+Under `AFYX_GRAPH_NATIVE_PARSER=1`, each discovered body is passed directly to
+the established native C# fact extractor. The Razor facade retains only its
+dependency references, maps them to the component owner, restores absolute
+one-based lines, and adds the region's UTF-16 column only on the first local
+line. Multiple blocks share the established component owner without leaking
+local C# nodes. Constructor type dependencies remain `references`, matching
+the old Razor contract. Calls in an implicit `@{ ... }` block are now retained;
+the synthetic class previously made those statements invalid, so this bounded
+difference is classified `NATIVE_CORRECTION`.
+
+Container-owned behavior is unchanged. `@model` and `@inherits` produce type
+references, including bounded generic type names; `@inject` produces a service
+type reference; `@typeof` produces a type reference; and PascalCase Blazor
+component tags plus generic component type arguments remain references.
+`@using`, `@implements`, `@namespace`, `@typeparam`, and `@page` remain outside
+the direct extractor's fact output; existing resolver handling such as folder
+`_Imports.razor` remains unchanged. `.cshtml` continues to exclude component
+tag inference.
+
+Native Razor syntax now exposes only the discovered C# bodies to the existing
+native C# classifier and translates its byte offsets back to the container.
+Direct spies over representative `.razor` and `.cshtml` semantic and syntax
+calls observe zero `getParser()` requests. Default/ungated semantics retain the
+synthetic-class Tree-sitter route, and default Razor syntax remains unchanged.
+
+Validation results:
+
+- New native Razor/Blazor differential, seam, offset, ownership, multiple-
+  region, directive, escape/comment, incomplete-input, and syntax suite: 6/6
+  PASS.
+- Established Razor/Blazor integration: 4/4 PASS in default mode and 4/4 PASS
+  in native mode.
+- Direct C# fact, syntax, branch-guard, differential, and reference regressions:
+  44/44 PASS. Svelte/Vue/Astro and CFML special-format regressions: 15/15 PASS.
+- Broad native extraction completed 648 semantic assertions with zero semantic
+  residuals. Seven Windows temporary-directory teardown failures remain
+  `CLEANUP_ONLY_EPERM`.
+- Native UI highlighting remains 33/33 PASS. TypeScript typecheck, clean
+  production/UI builds, viewer and 29-grammar artifact verification, the
+  six-fixture semantic baseline, all 21 CLI/MCP smoke checks, and
+  `git diff --check` pass.
+
+Known native semantic gaps remain zero and named parser-backed language routes
+remain zero. Parser-coupled special-format semantic routes decrease from one
+to zero. Static and direct-seam audit finds no native-mode semantic path that
+can instantiate `TreeSitterExtractor` or request a grammar. All grammar-backed
+native syntax routes, including embedded Svelte/Vue/Astro and Razor C# regions,
+also classify without a parser. The generic syntax fallback entry point remains
+reachable for grammarless file-level/custom formats; it can call grammar
+loading/`getParser()` but returns unclassified because those formats have no
+grammar, so no Tree-sitter parse occurs.
+
+Active `web-tree-sitter`/`SyntaxNode` source coupling remains 34 files
+(34 → 34), and staged grammar WASM remains 29 (29 → 29). The C# grammar is not
+reachable from native Razor semantic or syntax execution, but remains an active
+default-production fallback, bootstrap input, packaged release asset, and test
+dependency. Default fallback and parser bootstrap remain ACTIVE. Parser
+adapters, packages, WASM, lockfiles, attribution, and legal assets are retained.
+
+CFML/CFScript/CFQuery, Svelte/Vue/Astro, and Razor/Blazor native semantic
+convergence are now closed. The only remaining Phase 5F surface is the global
+default fallback/bootstrap/runtime/grammar reachability boundary. The next
+boundary is **Global Default Fallback & Parser Reachability Closure Audit**;
+it is not started here, and Phase 5F is not marked complete.
