@@ -47,6 +47,7 @@ import { extractNativeFacts } from './native/fact-extractor';
 import { scanSource, type NativeToken } from './native/scanner';
 import { scanCobolSource } from './native/cobol-facts';
 import { classifyNativeCfmlSyntax } from './native/cfml-facts';
+import { findRazorCodeRegions } from './razor-regions';
 
 /* ------------------------------------------------------------- the classes -- */
 
@@ -375,6 +376,14 @@ const ASTRO_FRONTMATTER = /^(---\r?\n)([\s\S]*?)\r?\n---/;
  * as `language`", empty is "this file has a grammar for none of it".
  */
 export function syntaxRegionsFor(source: string, language: Language): SyntaxRegion[] | null {
+  if (language === 'razor') {
+    if (process.env.AFYX_GRAPH_NATIVE_PARSER !== '1') return null;
+    return findRazorCodeRegions(source, true).map((region) => ({
+      start: region.start,
+      end: region.end,
+      language: 'csharp',
+    }));
+  }
   if (language !== 'svelte' && language !== 'vue' && language !== 'astro') return null;
 
   const regions: SyntaxRegion[] = [];

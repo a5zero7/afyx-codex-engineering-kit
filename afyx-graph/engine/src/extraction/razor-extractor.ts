@@ -2,6 +2,8 @@ import { Node, Edge, ExtractionResult, ExtractionError, UnresolvedReference } fr
 import { generateNodeId } from './node-id';
 import { TreeSitterExtractor } from './tree-sitter';
 import { isLanguageSupported } from './grammars';
+import { extractNativeFacts } from './native/fact-extractor';
+import { findRazorCodeRegions } from './razor-regions';
 
 /**
  * RazorExtractor — extracts code relationships from ASP.NET Razor (`.cshtml`)
@@ -241,16 +243,36 @@ export class RazorExtractor {
   }
 
   /**
-   * Delegate each `@code`/`@functions`/`@{` block's C# to the tree-sitter C#
-   * extractor and attribute the block's external references (service/DTO calls,
-   * `new X()`, type uses) to the component. The block is wrapped in a synthetic
-   * class so tree-sitter parses the component's fields/methods in a class context
-   * (a Blazor `@code` body compiles into the component's partial class). We keep
-   * only the dependency references — coverage just needs the edges to external
-   * types, not per-member nodes. Degrades gracefully if the C# grammar isn't loaded.
+   * Attribute each supported C# block's external references to the component.
+   * Native mode extracts the local region directly; default mode retains the
+   * historical synthetic-class Tree-sitter path. Both keep dependency references
+   * only — per-member nodes are outside the established Razor graph contract.
    */
   private processCodeBlocks(componentId: string): void {
-    if (!isLanguageSupported('csharp')) return;
+    const native = process.env.AFYX_GRAPH_NATIVE_PARSER === '1';
+    if (!native && !isLanguageSupported('csharp')) return;
+    if (native) {
+      for (const block of findRazorCodeRegions(this.source, true)) {
+        if (!block.content.trim()) continue;
+        const result = extractNativeFacts(this.filePath, block.content, 'csharp');
+        const localLines = block.content.split(/\r?\n/);
+        for (const ref of result.unresolvedReferences) {
+          const localLine = localLines[ref.line - 1] ?? '';
+          const isConstruction = ref.referenceKind === 'calls' &&
+            /\bnew\s*$/.test(localLine.slice(0, ref.column));
+          this.unresolvedReferences.push({
+            ...ref,
+            fromNodeId: componentId,
+            referenceKind: isConstruction ? 'references' : ref.referenceKind,
+            line: ref.line + block.startLine - 1,
+            column: ref.column + (ref.line === 1 ? block.startColumn : 0),
+            filePath: this.filePath,
+            language: 'razor',
+          });
+        }
+      }
+      return;
+    }
     for (const block of this.extractCodeBlocks()) {
       if (!block.content.trim()) continue;
       let result: ExtractionResult;
