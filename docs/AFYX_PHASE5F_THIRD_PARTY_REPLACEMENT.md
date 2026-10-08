@@ -1468,3 +1468,81 @@ delegation, Razor/Blazor C# region delegation, and the global default
 fallback/bootstrap/runtime/grammar reachability. The next dependency-safe
 Phase 5F boundary is Svelte/Vue/Astro script-region delegation convergence.
 It is not started here, and Phase 5F is not marked complete.
+
+### Svelte / Vue / Astro script-region native convergence checkpoint
+
+Starting checkpoint `52e6151b1439c6ed9305a2a4db354f04f89a59da`
+retained three parser-coupled special-format semantic paths. Svelte and Vue
+located script blocks with their existing bounded tag scans, selected
+JavaScript by default and TypeScript for the established `lang="ts"` /
+`lang="typescript"` forms, then instantiated `TreeSitterExtractor`. Astro
+used its existing frontmatter and script discovery and delegated both regions
+as TypeScript. All three already owned template calls/components themselves;
+native-gated script syntax already used JS/TS native tokenization.
+
+The new private `embedded-script` seam preserves that container architecture.
+Each extractor discovers its own regions and language, the seam selects the
+established native JS/TS fact extractor only when
+`AFYX_GRAPH_NATIVE_PARSER=1`, and one coordinate mapper restores absolute
+container locations and outer-file language ownership. Ungated execution
+still selects `TreeSitterExtractor`, preserving the default fallback. The
+bounded compatibility completion retains otherwise-unseen calls inside Vue
+Options API object methods without changing the global JS fact contract.
+
+Line offsets are restored for nodes, references, edges, and diagnostics.
+Native facts beginning on the first region-local line additionally receive
+the opening tag's UTF-16 column offset; later lines retain their original
+columns. This fixes the old same-line column loss and is classified
+`NATIVE_CORRECTION`; default-mode coordinates remain unchanged. Every region
+is extracted independently, so facts remain owned by their region-local
+declarations or file node and do not leak between normal/module/setup blocks.
+Container nodes and their existing containment edges remain authoritative.
+
+Svelte preserves instance/module discovery, rune filtering, template calls,
+and component usages without attempting compiler semantics. Vue preserves
+normal and setup blocks, combined-block behavior, template component facts,
+and Options API call coverage without compiler transformation. Astro preserves
+closed frontmatter and script blocks as TypeScript plus its template facts;
+an unclosed frontmatter fence remains non-semantic as before. In native mode,
+an unclosed `<script>` keeps bounded prefix facts and is excluded from template
+double extraction. Multiple closed or incomplete regions remain independently
+bounded. Outer Svelte/Vue/Astro markup discovery stays parser-free.
+
+The syntax-region scan uses the same established native JS/TS token route and
+now recognizes a bounded unclosed script region under the native gate. A
+direct seam test exercises semantic extraction and syntax for all three
+formats while spying on `getParser()`; no parser request occurs. Therefore
+native semantic and syntax parser reachability for Svelte, Vue, and Astro is
+`TreeSitterExtractor/getParser → none`. Their JavaScript and TypeScript
+grammars remain reachable only through ungated/default semantic and syntax
+fallback, shared parser bootstrap, packaging, and tests.
+
+Validation results:
+
+- New native special-format differential, absolute-offset, multi-region,
+  incomplete-input, language-selection, and no-parser seam suite: 10/10 PASS.
+- Existing Vue/Astro extraction: 22/22 PASS in default mode and 22/22 PASS in
+  native mode. SvelteKit/Vue router and targeted Svelte/Astro/Vue resolution:
+  36/36 PASS.
+- Direct JS/TS native fact, syntax, differential, branch-guard, and reference
+  regressions: 37/37 PASS.
+- Broad native extraction completed 648 semantic assertions with zero
+  semantic residuals. Seven Windows temporary-directory teardown failures are
+  classified `CLEANUP_ONLY_EPERM`.
+- Native UI highlighting remains 33/33 PASS. TypeScript typecheck, clean
+  production/UI builds, viewer and 29-grammar artifact verification, the
+  six-fixture semantic baseline, all 21 CLI/MCP smoke checks, and
+  `git diff --check` pass.
+
+Native semantic languages remain 31, known native semantic gaps remain zero,
+and named parser-backed language routes remain zero. Special-format semantic
+parser routes decrease from three to zero. Active
+`web-tree-sitter`/`SyntaxNode` source coupling remains 34 files (34 → 34), and
+staged grammar WASM remains 29 (29 → 29). Default fallback and parser bootstrap
+remain ACTIVE; no parser package, grammar, lockfile, attribution, or legal
+asset is removed.
+
+The remaining Phase 5F surfaces are Razor/Blazor C# region delegation and the
+global default fallback/bootstrap/runtime/grammar reachability. The single
+next dependency-safe boundary is Razor / Blazor C# region delegation. It is
+not started here, and Phase 5F is not marked complete.
