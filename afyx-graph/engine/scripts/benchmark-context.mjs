@@ -37,6 +37,7 @@ const median = (values) => {
   const middle = sorted.length >> 1;
   return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 };
+const p95 = (values) => [...values].sort((a, b) => a - b)[Math.max(0, Math.ceil(values.length * 0.95) - 1)];
 const digest = (value) => crypto.createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex').slice(0, 12);
 
 function seeded(seed) {
@@ -113,14 +114,22 @@ function summarize(result) {
     return { digest: digest([result.roots, [...result.nodes.keys()], result.edges.map((edge) => `${edge.source}>${edge.target}:${edge.kind}`)]), roots: result.roots.length, nodes: result.nodes.size, edges: result.edges.length };
   }
   const ranges = result.codeBlocks.map((block) => `${block.filePath}\0${block.startLine}\0${block.endLine}`);
+  const seenRanges = new Set();
+  let duplicateSourceBytes = 0;
+  result.codeBlocks.forEach((block, index) => {
+    if (seenRanges.has(ranges[index])) duplicateSourceBytes += Buffer.byteLength(block.content, 'utf8');
+    seenRanges.add(ranges[index]);
+  });
   return {
     digest: digest([result.entryPoints.map((node) => node.id), [...result.subgraph.nodes.keys()], result.codeBlocks.map((block) => block.content)]),
     nodes: result.subgraph.nodes.size,
     codeBlocks: result.codeBlocks.length,
     source_bytes: result.codeBlocks.reduce((total, block) => total + Buffer.byteLength(block.content, 'utf8'), 0),
     files: new Set(result.codeBlocks.map((block) => block.filePath)).size,
+    file_paths: [...new Set(result.codeBlocks.map((block) => block.filePath))],
     ranges: ranges.length,
     duplicate_ranges: ranges.length - new Set(ranges).size,
+    duplicate_source_bytes: duplicateSourceBytes,
   };
 }
 
@@ -150,7 +159,11 @@ try {
       for (let i = 0; i < inner; i++) await call(graph);
       samples.push(((performance.now() - start) / inner) * 1000);
     }
-    results[name] = { median_us: Math.round(median(samples) * 10) / 10, ...first };
+    results[name] = {
+      median_us: Math.round(median(samples) * 10) / 10,
+      p95_us: Math.round(p95(samples) * 10) / 10,
+      ...first,
+    };
   }
   graph.close();
 
