@@ -43,6 +43,8 @@ export function extractNativePhpFacts(filePath: string, source: string) {
   const started = Date.now();
   const scan = scanSource(source, { hashComments: false });
   const tokens = scan.tokens;
+  const pairStart = new Map<number, number>();
+  for (const [open, close] of scan.pairs) pairStart.set(close, open);
   const declarations: NativeDeclaration[] = [];
   const references: NativeReference[] = [];
   let namespace = '';
@@ -267,7 +269,15 @@ export function extractNativePhpFacts(filePath: string, source: string) {
     if (declarations.some((item) => item.name === bare(token.text) && item.start <= index && (item.bodyStart ?? item.end) >= index)) continue;
     let name = bare(token.text);
     let marker = index;
-    if (tokens[index - 1]?.text === '->' || tokens[index - 1]?.text === '?->' || tokens[index - 1]?.text === '::') {
+    if ((tokens[index - 1]?.text === '->' || tokens[index - 1]?.text === '?->') && tokens[index - 2]?.text === ')') {
+      const open = pairStart.get(index - 2);
+      const inner = open === undefined ? undefined : tokens[open - 1];
+      const owner = open === undefined ? undefined : tokens[open - 3];
+      if (open !== undefined && inner?.kind === 'identifier' && tokens[open - 2]?.text === '::' && owner?.kind === 'identifier') {
+        name = `${bare(owner.text)}::${bare(inner.text)}().${name}`;
+        marker = open - 3;
+      }
+    } else if (tokens[index - 1]?.text === '->' || tokens[index - 1]?.text === '?->' || tokens[index - 1]?.text === '::') {
       const receiver = tokens[index - 2];
       if (receiver?.kind === 'identifier') { name = `${bare(receiver.text)}.${name}`; marker = index - 2; }
     }

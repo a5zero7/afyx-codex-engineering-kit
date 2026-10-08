@@ -43,12 +43,14 @@ interface Declaration {
   readonly bodyStart?: number;
   readonly bodyEnd?: number;
   readonly parent?: Declaration;
+  readonly qualifiedOwner?: string;
   readonly exported?: boolean;
   readonly async?: boolean;
   readonly static?: boolean;
   readonly visibility?: Node['visibility'];
   readonly signature?: string;
   readonly extendsName?: string;
+  readonly embeddedTypes?: readonly string[];
   readonly returnType?: string;
   readonly decorators?: string[];
 }
@@ -208,6 +210,7 @@ export function extractNativeFacts(filePath: string, source: string, language: L
     rustSyntax: language === 'rust',
     tripleQuotedStrings: language === 'kotlin' || language === 'scala',
     backtickIdentifiers: language === 'kotlin',
+    javascriptRegex: TS_FAMILY_LANGUAGES.has(language),
   });
   const tokens = scan.tokens;
   const declarations: Declaration[] = [];
@@ -472,20 +475,39 @@ export function extractNativeFacts(filePath: string, source: string, language: L
         if (shape !== 'struct' && shape !== 'interface') continue;
         const open = findNext(tokens, shapeIndex + 1, '{');
         const close = open < 0 ? undefined : scan.pairs.get(open);
+        const embeddedTypes: string[] = [];
+        if (shape === 'struct' && open >= 0 && close !== undefined) {
+          for (let cursor = open + 1; cursor < close; cursor += 1) {
+            const candidate = tokens[cursor]!;
+            if (candidate.kind !== 'identifier' || !/^[A-Z]/.test(candidate.text)) continue;
+            const previous = tokens[cursor - 1];
+            const next = tokens[cursor + 1];
+            const startsField = previous?.text === '{' || previous?.text === ';' ||
+              previous?.end.line !== candidate.start.line ||
+              (previous?.text === '*' && (tokens[cursor - 2]?.text === '{' || tokens[cursor - 2]?.text === ';' ||
+                tokens[cursor - 2]?.end.line !== candidate.start.line));
+            const endsField = next?.text === '}' || next?.text === ';' || next?.start.line !== candidate.end.line;
+            if (startsField && endsField) embeddedTypes.push(candidate.text);
+          }
+        }
         declarations.push({
           kind: shape, name: tokens[i + 1]!.text, start: i + 1, end: close ?? i + 2,
           bodyStart: open < 0 ? undefined : open, bodyEnd: close,
+          embeddedTypes,
           exported: /^[A-Z]/.test(tokens[i + 1]!.text),
         });
       }
       if (tokens[i]!.text !== 'func') continue;
       let nameIndex = i + 1;
       let receiverOwner: Declaration | undefined;
+      let qualifiedOwner: string | undefined;
       if (tokens[nameIndex]?.text === '(') {
         const receiverEnd = scan.pairs.get(nameIndex);
         if (receiverEnd === undefined) continue;
         const receiverType = tokens.slice(nameIndex + 1, receiverEnd)
-          .find((token) => token.kind === 'identifier' && /^[A-Z]/.test(token.text));
+          .filter((token) => token.kind === 'identifier')
+          .at(-1);
+        qualifiedOwner = receiverType?.text;
         receiverOwner = receiverType && declarations.find((item) => item.name === receiverType.text);
         nameIndex = receiverEnd + 1;
       }
@@ -494,11 +516,16 @@ export function extractNativeFacts(filePath: string, source: string, language: L
       const paramsEnd = params < 0 ? undefined : scan.pairs.get(params);
       const open = paramsEnd === undefined ? -1 : findNext(tokens, paramsEnd + 1, '{');
       const close = open < 0 ? undefined : scan.pairs.get(open);
+      const returnType = paramsEnd === undefined || open < 0 ? undefined : tokens
+        .slice(paramsEnd + 1, open)
+        .find((token) => token.kind === 'identifier' && token.text !== 'error')?.text;
       declarations.push({
         kind: tokens[i + 1]?.text === '(' ? 'method' : 'function', name: tokens[nameIndex]!.text, start: i, end: close ?? (paramsEnd ?? nameIndex),
         bodyStart: open < 0 ? undefined : open, bodyEnd: close,
         exported: /^[A-Z]/.test(tokens[nameIndex]!.text),
         parent: receiverOwner,
+        qualifiedOwner,
+        returnType,
       });
     }
   }
@@ -511,16 +538,13 @@ export function extractNativeFacts(filePath: string, source: string, language: L
       const open = declaration.start + 1;
       const close = scan.pairs.get(open);
       if (close === undefined) continue;
-      let receiverType: NativeToken | undefined;
-      for (let j = open + 1; j < close; j += 1) {
-        const token = tokens[j]!;
-        if (token.kind === 'identifier' && /^[A-Z]/.test(token.text)) {
-          receiverType = token;
-          break;
-        }
-      }
+      const receiverTokens = tokens.slice(open + 1, close);
+      const genericOpen = receiverTokens.findIndex((token) => token.text === '[');
+      const receiverType = genericOpen > 0
+        ? [...receiverTokens.slice(0, genericOpen)].reverse().find((token) => token.kind === 'identifier')
+        : [...receiverTokens].reverse().find((token) => token.kind === 'identifier');
       const owner = receiverType && owners.find((item) => item.name === receiverType.text);
-      if (owner) declarations[i] = { ...declaration, parent: owner };
+      if (receiverType) declarations[i] = { ...declaration, parent: owner, qualifiedOwner: receiverType.text };
     }
   }
 
@@ -592,7 +616,9 @@ export function extractNativeFacts(filePath: string, source: string, language: L
         if (token.text === '>') { genericDepth = Math.max(0, genericDepth - 1); continue; }
         if (genericDepth === 0 && token.kind === 'identifier' && !['mut', 'dyn', 'where'].includes(token.text)) candidates.push(token);
       }
-      const typeToken = [...candidates].reverse().find((token) => /^[A-Z]/.test(token.text));
+      const typeToken = tokens[typeStart]?.text === 'dyn'
+        ? undefined
+        : [...candidates].reverse().find((token) => /^[A-Z]/.test(token.text));
       let traitName: string | undefined;
       if (forIndex >= 0) {
         let traitStart = i + 1;
@@ -668,10 +694,11 @@ export function extractNativeFacts(filePath: string, source: string, language: L
         : trait;
       const signatureEnd = tokens[bodyStart]?.text === '{' || tokens[bodyStart]?.text === ';' ? bodyStart : paramsEnd + 1;
       declarations.push({
-        kind: owner || trait ? 'method' : 'function', name: tokens[nameIndex]!.text,
+        kind: impl?.typeName || trait ? 'method' : 'function', name: tokens[nameIndex]!.text,
         start: tokens[i - 1]?.text === 'pub' || tokens[i - 1]?.text === 'async' ? i - 1 : i,
         end, bodyStart: bodyEnd === undefined ? undefined : bodyStart, bodyEnd,
         parent: owner ?? trait,
+        qualifiedOwner: owner?.name ?? trait?.name ?? impl?.typeName,
         exported: rustVisibility(i) === 'public', visibility: rustVisibility(i),
         async: tokens[i - 1]?.text === 'async',
         signature: source.slice(tokens[params]!.start.offset, tokens[signatureEnd - 1]?.end.offset ?? tokens[paramsEnd]!.end.offset).trim(),
@@ -870,9 +897,12 @@ export function extractNativeFacts(filePath: string, source: string, language: L
       if (tokens[marker]?.text === '{') {
         bodyStart = marker; bodyEnd = scan.pairs.get(marker); end = bodyEnd ?? marker;
       } else if (tokens[marker]?.text === '=') {
-        bodyStart = marker;
-        const indentation = indentationBody(i, marker);
-        bodyEnd = indentation?.end ?? statementEnd(marker);
+        const blockStart = tokens[marker + 1]?.text === '{' ? marker + 1 : undefined;
+        bodyStart = blockStart ?? marker;
+        const indentation = blockStart === undefined ? indentationBody(i, marker) : undefined;
+        bodyEnd = blockStart === undefined
+          ? indentation?.end ?? statementEnd(marker)
+          : scan.pairs.get(blockStart) ?? statementEnd(marker);
         end = bodyEnd;
       }
       const parent = typeDeclarations.filter((item) => item.bodyStart !== undefined && item.bodyStart < i && item.end >= end)
@@ -1041,6 +1071,28 @@ export function extractNativeFacts(filePath: string, source: string, language: L
 
   const containers = declarations.filter((declaration) =>
     declaration.bodyStart !== undefined && ['class', 'interface', 'struct', 'trait', 'type_alias', 'constant', 'variable'].includes(declaration.kind));
+
+  if (language === 'java') {
+    for (const parent of containers.filter((item) => item.kind === 'class' || item.kind === 'interface')) {
+      const begin = parent.bodyStart!;
+      const end = parent.bodyEnd ?? tokens.length;
+      for (let index = begin + 2; index < end; index += 1) {
+        const name = tokens[index]!;
+        const type = tokens[index - 1];
+        if (!directlyInside(index, begin, end) || name.kind !== 'identifier' || type?.kind !== 'identifier') continue;
+        if (![';', '=', '['].includes(tokens[index + 1]?.text ?? '')) continue;
+        if (['return', 'new', 'class', 'interface'].includes(type.text) || MODIFIERS.has(type.text)) continue;
+        const memberEnd = findNext(tokens, index + 1, ';', end);
+        if (memberEnd < 0 || declarations.some((item) => item.parent === parent && item.name === name.text)) continue;
+        declarations.push({
+          kind: 'field', name: name.text, start: index, end: memberEnd, parent,
+          signature: `${type.text} ${name.text}`,
+          visibility: visibility(tokens, declarationStart(tokens, index), index),
+        });
+        index = memberEnd;
+      }
+    }
+  }
 
   if (TS_FAMILY_LANGUAGES.has(language)) {
     // Class fields are declarations in their own right. A callable initializer
@@ -1243,6 +1295,13 @@ export function extractNativeFacts(filePath: string, source: string, language: L
           const colon = findNext(tokens, closeParen + 1, ':', bodyStart);
           if (colon < 0) return undefined;
           return tokens.slice(colon + 1, bodyStart).find((item) => item.kind === 'identifier')?.text;
+        })() : language === 'java' ? (() => {
+          const candidate = tokens.slice(memberStart, i)
+            .filter((item) => item.kind === 'identifier' && !MODIFIERS.has(item.text))
+            .at(-1)?.text;
+          return candidate && !['void', 'boolean', 'byte', 'short', 'int', 'long', 'float', 'double', 'char'].includes(candidate)
+            ? candidate
+            : undefined;
         })() : undefined,
       });
       i = bodyEnd;
@@ -1379,6 +1438,15 @@ export function extractNativeFacts(filePath: string, source: string, language: L
     if (declarationKeys.has(key)) declarations.splice(index, 1);
     else declarationKeys.add(key);
   }
+  if (TYPED_TS_FAMILY_LANGUAGES.has(language)) {
+    for (let index = 0; index < declarations.length; index += 1) {
+      const declaration = declarations[index]!;
+      if (declaration.kind !== 'property' || declaration.parent?.kind !== 'type_alias') continue;
+      if (tokens.slice(declaration.start, declaration.end + 1).some((token) => token.text === '=>')) {
+        declarations[index] = { ...declaration, kind: 'method' };
+      }
+    }
+  }
   declarations.sort((left, right) => left.start - right.start || right.end - left.end);
   const nodes: Node[] = [];
   const edges: Edge[] = [];
@@ -1397,6 +1465,8 @@ export function extractNativeFacts(filePath: string, source: string, language: L
     const parentNode = declaration.parent ? nodeByDeclaration.get(declaration.parent) : undefined;
     const qualifiedName = parentNode
       ? `${parentNode.qualifiedName}::${declaration.name}`
+      : declaration.qualifiedOwner
+        ? `${declaration.qualifiedOwner}::${declaration.name}`
       : declaration.name;
     const node: Node = {
       id: generateNodeId(filePath, declaration.kind, declaration.name, start.start.line),
@@ -1421,6 +1491,12 @@ export function extractNativeFacts(filePath: string, source: string, language: L
     if (declaration.extendsName) {
       refs.push({
         fromNodeId: node.id, referenceName: declaration.extendsName, referenceKind: 'extends',
+        line: start.start.line, column: start.start.column,
+      });
+    }
+    for (const embeddedType of declaration.embeddedTypes ?? []) {
+      refs.push({
+        fromNodeId: node.id, referenceName: embeddedType, referenceKind: 'implements',
         line: start.start.line, column: start.start.column,
       });
     }
@@ -1696,6 +1772,42 @@ export function extractNativeFacts(filePath: string, source: string, language: L
     }
   }
 
+  if (TS_FAMILY_LANGUAGES.has(language)) {
+    const seenTopLevelCalls = new Set(refs.filter((ref) => ref.referenceKind === 'calls')
+      .map((ref) => `${ref.fromNodeId}\0${ref.referenceName}\0${ref.line}\0${ref.column}`));
+    const receiverExpression = (dot: number): { name: string; start: NativeToken } | undefined => {
+      const tail = dot - 1;
+      if (tokens[tail]?.text === ')') {
+        const open = pairStart.get(tail);
+        const called = open === undefined ? undefined : tokens[open - 1];
+        if (open === undefined || !called || called.kind !== 'identifier') return undefined;
+        const base = tokens[open - 2]?.text === '.' ? receiverExpression(open - 2) : undefined;
+        return { name: `${base ? `${base.name}.` : ''}${called.text}()`, start: base?.start ?? called };
+      }
+      const member = tokens[tail];
+      if (!member || member.kind !== 'identifier') return undefined;
+      const base = tokens[tail - 1]?.text === '.' ? receiverExpression(tail - 1) : undefined;
+      return { name: `${base ? `${base.name}.` : ''}${member.text}`, start: base?.start ?? member };
+    };
+    for (let index = 0; index < tokens.length - 1; index += 1) {
+      const callee = tokens[index]!;
+      if (callee.kind !== 'identifier' || tokens[index + 1]?.text !== '(' || CALL_EXCLUSIONS.has(callee.text)) continue;
+      const from = ownerAt(index);
+      if (from.id !== fileNode.id) continue;
+      const receiver = tokens[index - 1]?.text === '.' ? receiverExpression(index - 1) : undefined;
+      if (tokens[index - 1]?.text === '.' && !receiver) continue;
+      const referenceName = receiver ? `${receiver.name}.${callee.text}` : callee.text;
+      const start = receiver?.start ?? callee;
+      const key = `${from.id}\0${referenceName}\0${callee.start.line}\0${start.start.column}`;
+      if (seenTopLevelCalls.has(key)) continue;
+      seenTopLevelCalls.add(key);
+      refs.push({
+        fromNodeId: from.id, referenceName, referenceKind: 'calls',
+        line: callee.start.line, column: start.start.column,
+      });
+    }
+  }
+
   if (language === 'rust') {
     const typeDeclarations = declarations.filter((item) => ['struct', 'union', 'enum', 'trait'].includes(item.kind));
     for (const declaration of typeDeclarations) {
@@ -1801,8 +1913,13 @@ export function extractNativeFacts(filePath: string, source: string, language: L
           const open = pairStart.get(tail);
           const called = open === undefined ? undefined : tokens[open - 1];
           if (open === undefined || !called || called.kind !== 'identifier') return undefined;
-          const base = tokens[open - 2]?.text === '.' ? receiverExpression(open - 2) : undefined;
-          return { name: `${base ? `${base.name}.` : ''}${called.text}()`, start: base?.start ?? called };
+          const dottedBase = tokens[open - 2]?.text === '.' ? receiverExpression(open - 2) : undefined;
+          const scopedBase = language === 'rust' && tokens[open - 2]?.text === '::' && tokens[open - 3]?.kind === 'identifier'
+            ? { name: tokens[open - 3]!.text, start: tokens[open - 3]! }
+            : undefined;
+          const base = dottedBase ?? scopedBase;
+          const separator = scopedBase ? '::' : '.';
+          return { name: `${base ? `${base.name}${separator}` : ''}${called.text}()`, start: base?.start ?? called };
         }
         const member = tokens[tail];
         if (!member || member.kind !== 'identifier') return undefined;
@@ -1902,6 +2019,7 @@ export function extractNativeFacts(filePath: string, source: string, language: L
     for (let i = 0; i < tokens.length - 1; i += 1) {
       const callee = tokens[i]!;
       if (callee.kind !== 'identifier' || tokens[i + 1]?.text !== '(' || CALL_EXCLUSIONS.has(callee.text)) continue;
+      if (tokens[i - 1]?.text === '.' && tokens[i - 2]?.text === ')') continue;
       if (['fun', 'class', 'interface'].includes(tokens[i - 1]?.text ?? '')) continue;
       const receiver = tokens[i - 2]?.kind === 'identifier' && tokens[i - 1]?.text === '.' ? tokens[i - 2] : undefined;
       const referenceName = receiver ? `${receiver.text}.${callee.text}` : callee.text;

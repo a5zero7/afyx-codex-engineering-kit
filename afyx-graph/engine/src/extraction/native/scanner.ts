@@ -48,6 +48,8 @@ export interface NativeScanOptions {
   readonly erlangSyntax?: boolean;
   /** Recognize HCL heredocs and hyphenated identifiers. */
   readonly hclSyntax?: boolean;
+  /** Consume JavaScript-family regular-expression literals as opaque regions. */
+  readonly javascriptRegex?: boolean;
 }
 
 const OPEN_TO_CLOSE: Readonly<Record<string, string>> = { '(': ')', '[': ']', '{': '}' };
@@ -539,6 +541,37 @@ export function scanSource(source: string, options: NativeScanOptions = {}): Nat
       emit('identifier', start);
       if (!closed) unterminated.push('delimiter');
       continue;
+    }
+
+    if (options.javascriptRegex && char === '/') {
+      const previous = tokens.at(-1);
+      const previousText = previous?.text;
+      let startsRegex = previous === undefined ||
+        ['=', '(', '[', '{', ',', ':', ';', '!', '?', '&&', '||', '=>', 'return', 'case', 'throw', 'else'].includes(previousText ?? '');
+      if (!startsRegex && previousText === ')') {
+        const pair = [...pairs.entries()].find(([, close]) => close === tokens.length - 1);
+        const beforeOpen = pair === undefined ? undefined : tokens[pair[0] - 1]?.text;
+        startsRegex = beforeOpen === 'if' || beforeOpen === 'while';
+      }
+      if (startsRegex) {
+        const start = position();
+        advance();
+        let escaped = false;
+        let inClass = false;
+        let closed = false;
+        while (offset < source.length && source[offset] !== '\n') {
+          const current = advance();
+          if (escaped) { escaped = false; continue; }
+          if (current === '\\') { escaped = true; continue; }
+          if (current === '[') { inClass = true; continue; }
+          if (current === ']' && inClass) { inClass = false; continue; }
+          if (current === '/' && !inClass) { closed = true; break; }
+        }
+        if (closed) while (offset < source.length && /[A-Za-z]/.test(source[offset]!)) advance();
+        emit('string', start);
+        if (!closed) unterminated.push('string');
+        continue;
+      }
     }
 
     if (char === '"' || char === "'" || char === '`') {

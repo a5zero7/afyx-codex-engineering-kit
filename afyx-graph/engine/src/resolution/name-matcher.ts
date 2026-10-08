@@ -2463,6 +2463,16 @@ export function matchMethodCall(
     return matchTsThisFieldCall(objectOrClass!.slice('this.'.length), methodName!, ref, context);
   }
 
+  if (ref.language === 'java' && dotMatch && objectOrClass!.startsWith('this.')) {
+    const fieldName = objectOrClass!.slice('this.'.length);
+    if (fieldName.includes('.')) return null;
+    const inferredType = inferJavaFieldReceiverType(fieldName, ref, context);
+    if (!inferredType) return null;
+    const importedFqn = context.getImportMappings(ref.filePath, ref.language)
+      .find((item) => item.localName === inferredType)?.source;
+    return resolveMethodOnType(inferredType, methodName!, ref, context, 0.9, 'instance-method', importedFqn);
+  }
+
   // Java/Kotlin: receiver may be a field whose name doesn't match the type by
   // Java naming convention (`userbo` → class `UserBO`, abbreviated). Look up
   // the field in the enclosing class to get its declared type, then resolve

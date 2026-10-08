@@ -155,7 +155,14 @@ export function extractNativeRubyFacts(filePath: string, source: string) {
     let marker = index;
     if (tokens[index - 1]?.text === '.' || tokens[index - 1]?.text === '::') {
       const receiver = tokens[index - 2];
-      if (receiver?.kind === 'identifier') { call = true; name = `${receiver.text}.${name}`; marker = index - 2; }
+      if (receiver?.kind === 'identifier') {
+        call = true;
+        name = `${receiver.text}.${name}`;
+        marker = index - 2;
+        if (token.text === 'new' && /^[A-Z]/.test(receiver.text)) {
+          pushRef(index - 2, receiver.text, 'instantiates');
+        }
+      }
     }
     const atStatementStart = index === 0 || token.start.line > tokens[index - 1]!.end.line || [';', 'do'].includes(tokens[index - 1]!.text);
     const hasArgument = tokens[index + 1] && tokens[index + 1]!.start.line === token.start.line &&
