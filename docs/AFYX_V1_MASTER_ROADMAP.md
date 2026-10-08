@@ -12,7 +12,8 @@ Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`
 Active implementation branch: `afyx/native-phase5f-parser-grammar`  
 Latest verified Phase 5F implementation checkpoint: `62621a0639f42db0eaac69ef087436d851cdba88`  
 Latest verified Phase 5F semantic-freeze checkpoint: `6fd0296b22844eef62b86a395b861ebb51193dc5`  
-Current Phase 5F boundary: **Native Performance & Token Efficiency Baseline**  
+Latest verified Phase 5F performance-baseline checkpoint: `1f671dabc8af5bf8f8088dc6e947e48834cafdc3`
+Current Phase 5F boundary: **Global Default Fallback Closure**
 Last merged Phase 5F major checkpoint: **PR #57 — Utility Runtime + UI Runtime**  
 Phase 5E merge baseline: `48b6078ed37349e405213258819fa5225bcdb3fb`
 
@@ -546,18 +547,35 @@ five V1-required behavior families
   -> semantic contract freeze
 ```
 
-The exact next boundary is:
+Completed measurement boundary:
 
 > **Native Performance & Token Efficiency Baseline**
+
+Authoritative state:
+
+```text
+NATIVE_PERFORMANCE_BASELINE = FROZEN
+```
+
+The same-fixture default/native campaign froze cold indexing, sync, graph/query,
+context/explore information density, MCP/daemon lifecycle, persistence, RSS,
+and artifact-footprint evidence beside correctness digests. Native peak RSS
+(+49.63 MB on the controlled 301-file fixture) is the primary measured
+optimization candidate; it does not block the trustworthy baseline. Provider
+tokens and a large real-repository agent campaign remain explicitly unmeasured.
+
+The exact next boundary is:
+
+> **Global Default Fallback Closure**
 
 The remaining parser/runtime closure sequence is:
 
 ```text
-A. Native Performance & Token-Efficiency Baseline
+A. Native Performance & Token-Efficiency Baseline [COMPLETE]
    Establish representative OLD/native measurements and large-repo context
    efficiency evidence without requiring an arbitrary percentage claim.
 
-B. Global Default Fallback Closure
+B. Global Default Fallback Closure [NEXT]
    Make Afyx-native semantic/syntax/guard routing unconditional in production.
    The historical parser may remain only as an explicitly isolated oracle if
    still justified for a short transition.

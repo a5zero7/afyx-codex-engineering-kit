@@ -2499,3 +2499,184 @@ V1_SEMANTIC_CONTRACT        FROZEN
 Native parser reachability, default fallback, parser bootstrap, 29 grammar
 WASM assets, parser dependencies, and legal/attribution state are unchanged.
 The exact next boundary is **Native Performance & Token Efficiency Baseline**.
+
+## Native Performance & Token Efficiency Baseline
+
+The authoritative campaign starts at
+`59f0a2a66bacff1688534247e20f979183a234fb`. Benchmark observability is frozen
+at `1f671dabc8af5bf8f8088dc6e947e48834cafdc3`: the context harness now records
+p95, selected file paths, and duplicate source bytes, and the new explore
+harness measures first/repeat delivery through the existing CG-4 diagnostic.
+Neither harness changes production behavior.
+
+### Environment and method
+
+```text
+OS                         Microsoft Windows 10.0.26300, x64
+CPU                        AMD64 Family 25 Model 117, 12 logical CPUs
+Node                       v26.7.0 (AFYX_GRAPH_ALLOW_UNSAFE_NODE=1)
+npm                        11.19.0
+TypeScript                 5.9.3
+Git                        2.55.0.windows.3
+campaign scratch           %TEMP%/afyx-phase5f-performance-20261008
+execution                  sequential; no benchmark contention
+default/native switch      AFYX_GRAPH_NATIVE_PARSER unset / 1
+watch and daemon           disabled where the harness owns indexing
+provider/model tokens      NOT_MEASURED
+CPU profile / process I/O  NOT_MEASURED
+```
+
+Broad measurements use five fresh-process cold indexes and five warm-sync
+samples over the same seeded 301-file TypeScript project (2,373 nodes / 5,435
+edges). Context uses nine calibrated rounds over 292 files / 2,136 nodes /
+4,617 edges. Explore uses nine fresh sessions over the same 19-file Go payroll
+fixture. MCP uses five lifecycle rounds over independently indexed copies of
+that same fixture. Graph, DB, search, impact, watcher, WAL, extraction, and
+daemon harnesses preserve their result digests beside timings. Historical Phase
+5E values below are reference-only even though the runtime, CPU count, and
+fixture definitions remain compatible.
+
+### Broad default/native comparison
+
+| Metric | Phase 5E historical | Default measured | Native measured | Native delta | Default/native p95 | Result evidence | Classification |
+| --- | ---: | ---: | ---: | ---: | ---: | --- | --- |
+| Cold index | 2,422.55 ms | 2,467.02 ms | 2,453.36 ms | -13.66 ms / -0.55% | 2,506.41 / 2,506.92 ms | 301 / 2,373 / 5,435 both | within noise |
+| Peak RSS | 351.52 MB | 375.71 MB | 425.34 MB | +49.63 MB / +13.21% | 378.84 / 425.95 MB | same project counts | measured native overhead |
+| Warm sync, five files | 994.37 ms | 1,034.62 ms | 1,028.88 ms | -5.74 ms / -0.55% | 1,092.22 / 1,033.75 ms | same indexed fixture | within noise |
+| Search | 6.00 ms | 6.21 ms | 6.19 ms | -0.02 ms / -0.32% | not emitted | 20 results both | no change |
+| Callers / callees | — | 0.05 / 0.03 ms | 0.05 / 0.03 ms | 0 | not emitted | 2 / 2 results both | no change |
+| Impact / dependents | — | 0.04 / 0.02 ms | 0.04 / 0.02 ms | 0 | not emitted | 5 / 2 results both | no change |
+| Context | 41.53 ms | 39.93 ms | 44.78 ms | +4.85 ms / +12.15% | focused harness below | stable counts | mixed/noise-sensitive |
+| MCP initialize | 494.17 ms | 507.62 ms | 500.80 ms | -6.82 ms / -1.34% | 524.40 / 522.92 ms | protocol success | within noise |
+| MCP first result | 1,473.84 ms | 1,503.70 ms | 1,477.53 ms | -26.17 ms / -1.74% | 1,510.09 / 1,528.62 ms | tool success | within noise |
+| DB size | 3.49 MB | 3.49 MB | 3.53 MB | +0.04 MB / +1.15% | n/a | mode-specific native facts | small increase |
+
+The cold-index latency and query results do not support a speed claim. The
+49.63 MB median peak-RSS increase is larger than each mode's spread and is the
+principal measured optimization candidate; it is not a correctness or baseline
+reliability blocker.
+
+### Context and explore efficiency
+
+All eight graph-selection context cases retain identical default/native digests.
+The structured result is identical (`e78654b9990b`): nine nodes, five code
+blocks, 564 source bytes, two files, five ranges, zero duplicate ranges, and
+zero duplicate source bytes.
+
+| Context case | Default median / p95 | Native median / p95 | Native delta | Digest / output |
+| --- | ---: | ---: | ---: | --- |
+| Structured | 26.243 / 31.328 ms | 23.793 / 25.529 ms | -2.451 ms / -9.34% | same; 564 source bytes |
+| Dedup-heavy selection | 46.414 / 54.564 ms | 44.897 / 52.710 ms | -1.517 ms / -3.27% | `b3f166986ffb` both |
+| Prose architecture | 50.238 / 61.234 ms | 55.375 / 59.278 ms | +5.137 ms / +10.23% | `b07bb4a9524d` both |
+| Markdown with code | 18.921 / 24.802 ms | 18.663 / 28.825 ms | -0.258 ms / -1.36% | 1,487 / 1,560 bytes |
+
+Native formatted context adds 73 bytes to each markdown form and 454 bytes to
+JSON. Structured content remains identical, so this is mode-specific rendered
+metadata rather than missing or duplicated source. It is not converted into a
+provider-token claim.
+
+Explore remains deterministic within each mode and preserves the payroll
+domain/cycle/store core. The fourth relevant first-call file differs by mode:
+default selects the payslip builder and native selects the HTTP payroll handler.
+Both are relevant to the query; the already-frozen product contracts remain the
+correctness gate.
+
+| Explore metric | Default | Native | Native delta |
+| --- | ---: | ---: | ---: |
+| First call median / p95 | 61.28 / 300.49 ms | 64.79 / 299.27 ms | +3.51 ms / +5.73% median |
+| Repeat call median / p95 | 61.38 / 66.85 ms | 63.96 / 71.45 ms | +2.58 ms / +4.20% median |
+| First response / source | 18,425 B / 14,559 chars | 17,994 B / 14,161 chars | -431 B / -398 chars |
+| Repeat response / source | 10,827 B / 5,781 chars | 9,515 B / 4,424 chars | -1,312 B / -1,357 chars |
+| First distinct files / ranges | 4 / 7 | 4 / 11 | same files count |
+| Repeat distinct files / ranges | 3 / 8 | 3 / 11 | same files count |
+| Repeat duplicate source bytes | 0 | 0 | identical |
+| Withheld source / pointer bytes | 12,855 / 1,777 | 12,415 / 1,857 | mode-specific ranges |
+| First unused allocation | 0 | 0 | identical full use |
+| Repeat unused allocation | 6,419 chars | 7,776 chars | +1,357 chars |
+| First/repeat hard-cap utilization | 0.94 / 0.55 | 0.92 / 0.49 | bounded below cap |
+
+The repeat call does not re-deliver a single previously served source line. It
+uses pointers for held source and still delivers three files of new relevant
+source. The unused repeat allowance reflects exhausted useful novel source on
+this fixed query, not an invitation to pad the response or trigger compensating
+manual Reads. Actual downstream provider reads were not instrumented.
+
+### MCP, daemon, and shared-core baseline
+
+The focused MCP lifecycle has byte-identical default/native payloads:
+initialize 6,664 B, controlled three-tool `tools/list` 3,075 B, valid/repeat
+search 117 B, invalid tool 93 B, and invalid arguments 127 B.
+
+| MCP metric | Default median | Native median | Native delta | Observed range, default/native |
+| --- | ---: | ---: | ---: | --- |
+| Initialize | 475.091 ms | 483.519 ms | +8.428 ms / +1.77% | 467.050–493.588 / 478.181–505.871 |
+| Tools list | 340.585 ms | 337.240 ms | -3.345 ms / -0.98% | 332.395–351.874 / 327.537–354.891 |
+| First valid search | 225.761 ms | 231.768 ms | +6.007 ms / +2.66% | 220.432–228.499 / 218.104–233.814 |
+| Repeated search | 0.931 ms | 0.818 ms | -0.113 ms | 0.799–1.136 / 0.788–0.820 |
+| Full lifecycle | 1,054.582 ms | 1,076.894 ms | +22.312 ms / +2.12% | 1,047.587–1,097.464 / 1,059.939–1,083.657 |
+
+Current-only shared-core measurements, labelled `MEASURED`, are:
+
+- extraction reconciliation over 2,000 files: 2.264–3.548 ms median across
+  no-op, add/change/delete, rename, and batch cases; every digest stable;
+- search primitives: 3.42–74.94 microseconds for ordinary parsing/segmentation,
+  1,766.32 microseconds for ranking 2,000 candidates, and 3.885–11.817 ms for
+  20,000-path extraction workloads;
+- impact/affected tests: 0.42–249.21 microseconds per operation, including the
+  2,000-result high-fanout case; every digest stable;
+- graph: 34 workloads, identical default/native cardinalities, 28 identical
+  digests, and six mode-specific ID/edge-order digests with identical returned
+  node/edge counts; no empty or new unknown product result;
+- DB: 4,960 nodes / 14,376 edges / 160 files in 4,583,424 bytes; point read
+  8.07 microseconds and FTS search 8.016 ms per operation;
+- watcher policy: 0.205 ms single event and 55.296 ms for 1,000-event
+  coalescing; common stable digest;
+- WAL: policy decisions 0.02–0.84 microseconds per operation; real durable
+  backpressure cycle 81.868 ms per operation;
+- daemon: cold start 397.172 ms, first attach 15.833 ms, second attach 1.084 ms,
+  ping round trip 0.477 ms, shutdown 7.102 ms, and stale-lock restart 514.590
+  ms; stable lifecycle digests.
+
+### Resource footprint, confidence, and candidates
+
+```text
+dist/                         75.13 MB       MEASURED
+grammar WASM                  65.03 MB / 29  MEASURED
+web-tree-sitter installed      5.51 MB       MEASURED
+tree-sitter-wasms installed   49.37 MB       MEASURED
+win32-x64 release archive     46.67 MB       MEASURED
+controlled DB              3.49/3.53 MB      MEASURED default/native
+provider tokens                    —         NOT_MEASURED
+CPU profile / process I/O           —         NOT_MEASURED
+large real-repository campaign      —         NOT_MEASURED (Phase 8 / Track D)
+```
+
+Five-sample p95 values are effectively the observed maximum and are directional,
+not distribution guarantees. Nine-round context/explore medians and p95s are
+more stable, but host scheduling still explains mixed single-digit deltas.
+Absolute sub-millisecond MCP deltas are noise. No percentage is presented as a
+provider-token saving.
+
+Ranked measured optimization candidates, with no implementation in this
+boundary:
+
+1. profile the +49.63 MB native cold-index peak RSS before parser/runtime
+   removal, separating retained historical runtime from native structures;
+2. profile MCP readiness/catch-up, where startup/list/first call dominate while
+   the repeated call remains below 1 ms;
+3. explain the explore first-call cold tail (~300 ms p95 vs ~65 ms median)
+   before changing allocation or output quality;
+4. review whether the extra native formatted-context metadata is useful before
+   attempting to remove 73–454 serialized bytes;
+5. retain WAL durability semantics unless an I/O profile shows avoidable work.
+
+No measurement defect, correctness regression, or unknown product failure
+blocks the baseline. Semantic campaigns were not repeated: the frozen V1
+correctness evidence remains authoritative and every benchmark carries counts,
+digests, or deterministic payload checks.
+
+```text
+NATIVE_PERFORMANCE_BASELINE = FROZEN
+```
+
+The exact next boundary is **Global Default Fallback Closure**.
