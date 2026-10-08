@@ -12,7 +12,8 @@ Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`
 Active implementation branch: `afyx/native-phase5f-parser-grammar`  
 Latest verified Phase 5F implementation checkpoint: `62621a0639f42db0eaac69ef087436d851cdba88`  
 Latest verified Phase 5F semantic-freeze checkpoint: `6fd0296b22844eef62b86a395b861ebb51193dc5`  
-Latest verified Phase 5F performance-baseline checkpoint: `1f671dabc8af5bf8f8088dc6e947e48834cafdc3`
+Latest verified Phase 5F performance-baseline checkpoint: `1f671dabc8af5bf8f8088dc6e947e48834cafdc3`  
+Latest verified Phase 5F fallback-closure checkpoint: `16c8e84ce7dc036141a680dbabbdd73e31f70f6c`  
 Current Phase 5F boundary: **Parser Bootstrap & Worker-Protocol Closure**
 Last merged Phase 5F major checkpoint: **PR #57 — Utility Runtime + UI Runtime**  
 Phase 5E merge baseline: `48b6078ed37349e405213258819fa5225bcdb3fb`
