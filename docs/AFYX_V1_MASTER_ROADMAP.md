@@ -10,7 +10,8 @@ Current work: **Phase 5F — Third-Party Source / Runtime Replacement**
 Task: `AFYX-91852`  
 Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`  
 Active implementation branch: `afyx/native-phase5f-parser-grammar`  
-Latest verified Phase 5F implementation checkpoint at this revision: `3e6b624505680e264af3b5f681be0f806a84648d`  
+Latest verified Phase 5F implementation checkpoint: `3e6b624505680e264af3b5f681be0f806a84648d`  
+Latest verified Phase 5F contract-decision checkpoint: `3425348dcf4079bb35385a31a98ce54286ec9f0b`  
 Last merged Phase 5F major checkpoint: **PR #57 — Utility Runtime + UI Runtime**  
 Phase 5E merge baseline: `48b6078ed37349e405213258819fa5225bcdb3fb`
 
@@ -462,11 +463,15 @@ web-tree-sitter:                   PRESENT
 tree-sitter-wasms:                 PRESENT
 ```
 
-Current decision boundary:
+V1 contract decision gate:
 
-> **Afyx V1 Contract Closure Decision Gate**
+**COMPLETE**
 
-Every remaining difference must be classified as exactly one of:
+Decision checkpoint:
+
+`3425348dcf4079bb35385a31a98ce54286ec9f0b`
+
+The audit classified remaining behavioral differences into:
 
 - `V1_REQUIRED`.
 - `NATIVE_CORRECTION`.
@@ -474,15 +479,55 @@ Every remaining difference must be classified as exactly one of:
 - `POST_V1`.
 - `ENVIRONMENT_OR_TOOLING_NOISE`.
 
-Only `V1_REQUIRED` differences block semantic freeze. A failing historical test
-does not automatically define the Afyx v1 product contract, but no remaining
-failure or skip may stay unexplained.
+Authoritative behavior-family accounting:
+
+```text
+TOTAL ASSESSED DIFFERENCE FAMILIES = 14
+SEMANTIC / PRODUCT DIFFERENCES     = 11
+
+V1_REQUIRED                       = 5
+NATIVE_CORRECTION                 = 1
+LEGACY_COMPATIBILITY_ONLY         = 1
+POST_V1                           = 4
+ENVIRONMENT_OR_TOOLING_NOISE      = 3
+```
+
+The five v1 blockers are:
+
+1. correct real-index context selection / expansion / budgeting;
+2. spend explore reservation on relevant source without exceeding the hard cap;
+3. prevent source-line re-delivery across explore calls;
+4. reject ordinary non-store `actions` members;
+5. preserve Java abstract definitions and anonymous override relationships.
+
+Non-blocking decisions:
+
+- retain the native deprioritization correction;
+- do not tune floating scores without measured product impact;
+- defer Expo Router attribution, RTK Query completeness, Spring Event
+  enrichment, and Vuex mutation recall to post-v1;
+- keep environment/tooling noise separate from semantic implementation.
+
+Decision:
+
+```text
+V1_SEMANTIC_CONTRACT = IMPLEMENT_REQUIRED_GAPS
+```
+
+Current implementation boundary:
+
+> **Afyx V1 Required Behavior Closure**
+
+This must be one consolidated closure of the five required behavior families,
+not five independent micro-phases.
 
 Semantic closure rule:
 
 ```text
-V1 contract decision
-  -> one consolidated V1-required behavior closure, only if needed
+five V1-required behavior families
+  -> one consolidated implementation closure
+  -> focused + risk-proportional validation
+  -> V1_REQUIRED = 0
   -> semantic contract freeze
 ```
 
