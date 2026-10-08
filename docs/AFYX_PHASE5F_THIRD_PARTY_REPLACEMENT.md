@@ -2307,3 +2307,95 @@ DEFAULT_FALLBACK_CLOSURE = NOT_READY
 
 The single recommended next boundary is **Native Ranking & Explore Contract
 Closure**.
+
+## Afyx V1 Contract Closure Decision Gate
+
+This audit starts from `3e6b624505680e264af3b5f681be0f806a84648d`
+and replaces the provisional `22 -> 6` statement with a product-contract
+inventory. That old number measured only the frozen lexical/framework campaign:
+15 selected framework assertions closed while six previously classified
+ranking/explore assertions remained. It was never a global production-parity
+count.
+
+The ranking accounting contained a bookkeeping error. The six assertions were
+two legacy-control assertions for deprioritization, three assertions for one
+explore-allocation invariant, and one cross-call dedup assertion. The separate
+real-index context-contract assertion was then reclassified as ranking/explore
+without increasing six to seven. The authoritative assertion count for that
+old set is therefore seven, representing four behavior families.
+
+The current authoritative audit uses behavior families rather than counting
+multiple assertions for one defect. It assesses eleven semantic/product
+differences and three non-product noise families:
+
+| Capability | Native difference and observable impact | Disposition | Evidence |
+|---|---|---|---|
+| Deprioritize legacy control | Native ranks product code ahead of peripheral `usage()` helpers even without configuration; configured deprioritization, recall, direct targeting, path isolation, and explore matcher assertions pass. | `NATIVE_CORRECTION` | The only two failures are legacy controls requiring the inferior unconfigured ordering, at lines 168 and 226 of `deprioritize-config.test.ts`. |
+| Explore allocation | A qualifying target receives only a cluster stub, leaves reserved bytes unused, and reduces useful source delivered under an unchanged hard cap. | `V1_REQUIRED` | Three CG-21 assertions independently verify render mode, delivered bytes, and the general reservation-spend invariant. |
+| Cross-call deduplication | A second explore call re-sends source lines already delivered instead of replacing all withheld spans with pointers. | `V1_REQUIRED` | Real payroll index reports repeated lines 68-72 in `payslip_builder.go`. |
+| Real-index context selection | Native changes selected/expanded context, code blocks, or budgeting—not merely a score field. | `V1_REQUIRED` | `context-contract` real-index record differs; its contract contains roots, nodes, entry points, related files, stats, and code-block ranges, but no floating scores. |
+| Floating search scores | Small runtime/index-derived score differences remain while the structural six-fixture baseline and CLI/MCP product paths remain green. | `LEGACY_COMPATIBILITY_ONLY` | Same relevant structural result; score-for-score tuning has no demonstrated product outcome. |
+| Expo Router attribution | Navigation resolves, but native reports same-file component intermediates in `via` where the established bridge boundary expects none. | `POST_V1` | Targeted native run: all other Expo Router tests pass; one attribution assertion differs. No v1 product documentation advertises this specialized attribution shape. |
+| RTK Query synthesis | Native extracts two of four endpoint forms, so some generated hook-to-endpoint relationships are absent. | `POST_V1` | Targeted native run: positive matrix reports 2/4; negative hand-written-hook precision test passes. Useful framework enrichment, but not part of the minimum documented v1 contract. |
+| Spring Event synthesis | Native emits no publish-to-listener edges for the tested listener forms. | `POST_V1` | Targeted native run expects three `OrderShippedEvent` listeners and receives none; clean non-event control passes. Specialized framework enrichment. |
+| Vue-store member recall | Native omits the Vuex `SET_TOKEN` mutation while other tested Vuex/Pinia members are present. | `POST_V1` | Targeted native run fails only at the missing mutation in the positive store matrix. Specialized framework enrichment. |
+| Vue-store precision | Native emits `doThing` from an ordinary, non-exported `actions` object outside a store. This is false graph data that can contaminate search/context. | `V1_REQUIRED` | Targeted negative control expects zero and receives one node. |
+| Java anonymous classes | Native omits the abstract base method before it can connect the anonymous override, losing a core definition/type relationship. | `V1_REQUIRED` | Targeted end-to-end run cannot find the base abstract method. This is core Java graph correctness, not merely framework compatibility. |
+| Windows cleanup | Temporary directories can fail deletion after semantic assertions complete. | `ENVIRONMENT_OR_TOOLING_NOISE` | Repeated `EPERM` in teardown; no product output failure. |
+| Timeout-only cases | Git/sync/subprocess cases sometimes exceed their test deadline without a stable product differential. | `ENVIRONMENT_OR_TOOLING_NOISE` | Prior campaign classification and no reproducible semantic delta. |
+| Mode/tooling/performance noise | Parser-warning harness, old-Git probes, and timing ceilings can differ by mode or host without a semantic product delta. | `ENVIRONMENT_OR_TOOLING_NOISE` | Prior campaign classification; excluded from semantic implementation. |
+
+Authoritative counts, at behavior-family granularity:
+
+```text
+TOTAL ASSESSED DIFFERENCE FAMILIES = 14
+SEMANTIC / PRODUCT DIFFERENCES     = 11
+
+V1_REQUIRED                       = 5
+NATIVE_CORRECTION                 = 1
+LEGACY_COMPATIBILITY_ONLY         = 1
+POST_V1                           = 4
+ENVIRONMENT_OR_TOOLING_NOISE      = 3
+```
+
+Only these five behaviors block semantic freeze:
+
+| V1-required behavior | Product value | Correctness | Token efficiency | Implementation scope | Regression risk |
+|---|---|---|---|---|---|
+| Correct real-index context selection/expansion/budgeting | HIGH | HIGH | HIGH | MEDIUM | HIGH |
+| Spend explore reservations on relevant source within the existing hard cap | HIGH | MEDIUM | HIGH | MEDIUM | MEDIUM |
+| Never resend already-delivered lines across explore calls | HIGH | MEDIUM | HIGH | SMALL | MEDIUM |
+| Reject ordinary non-store `actions` members | MEDIUM | HIGH | MEDIUM | SMALL | LOW/MEDIUM |
+| Preserve Java abstract definitions and anonymous overrides | MEDIUM | HIGH | MEDIUM | MEDIUM | MEDIUM |
+
+The four `POST_V1` framework capabilities remain useful backlog items, but
+existing tests alone do not make them part of the minimum v1 product contract.
+They do not block Phase 5F. The native deprioritization ordering must be retained
+rather than regressed to satisfy legacy control assertions, and floating numeric
+scores must not be tuned unless a future result-set, ordering, or context-output
+measurement proves material harm.
+
+Performance measurement is ready once these five semantics are closed. Existing
+deterministic hooks cover cold indexing, warm incremental sync, query/search and
+context latency, database size, peak RSS, MCP first response, and bundle size
+(`benchmark.mjs`); context selection/traversal cases with correctness digests and
+counts (`benchmark-context.mjs`); search-layer ranking cost
+(`benchmark-search.mjs`); reconciliation (`benchmark-extraction.mjs`); and daemon
+startup/attach/round-trip lifecycle (`benchmark-daemon.mjs`). Explore allocation
+diagnostics already expose per-file rank, allowance, render mode, emitted chars,
+source totals, and the hard output cap. The later performance boundary should
+compare output digests/counts and delivered relevant/duplicate bytes alongside
+latency and RSS so a faster but lower-quality implementation cannot win.
+
+The audit reused the 5,888-test campaign, the 713-assertion extraction
+guardrail, semantic baseline, CLI/MCP smoke, and build evidence. It reran only
+the four ranking/context test files and five historical framework test files
+needed to resolve classification. No full campaign, build, UI, smoke, or parser
+audit was repeated. No production source, fallback, bootstrap, grammar,
+dependency, ranking, or legal file changed.
+
+```text
+V1_SEMANTIC_CONTRACT = IMPLEMENT_REQUIRED_GAPS
+```
+
+The single recommended next boundary is **Afyx V1 Required Behavior Closure**.
