@@ -14,7 +14,8 @@ Latest verified Phase 5F implementation checkpoint: `62621a0639f42db0eaac69ef087
 Latest verified Phase 5F semantic-freeze checkpoint: `6fd0296b22844eef62b86a395b861ebb51193dc5`  
 Latest verified Phase 5F performance-baseline checkpoint: `1f671dabc8af5bf8f8088dc6e947e48834cafdc3`  
 Latest verified Phase 5F fallback-closure checkpoint: `16c8e84ce7dc036141a680dbabbdd73e31f70f6c`  
-Current Phase 5F boundary: **Parser Bootstrap & Worker-Protocol Closure**
+Latest verified Phase 5F bootstrap/protocol checkpoint: `81695bb7659bd05a06f00e9fe0e36d5e6e933191`
+Current Phase 5F boundary: **Parser Adapter & Tree-Walk Source Closure**
 Last merged Phase 5F major checkpoint: **PR #57 — Utility Runtime + UI Runtime**  
 Phase 5E merge baseline: `48b6078ed37349e405213258819fa5225bcdb3fb`
 
@@ -581,11 +582,11 @@ B. Global Default Fallback Closure [COMPLETE]
    The historical parser may remain only as an explicitly isolated oracle if
    still justified for a short transition.
 
-C. Parser Bootstrap & Worker-Protocol Closure [NEXT]
+C. Parser Bootstrap & Worker-Protocol Closure [COMPLETE]
    Remove parser initialization, grammar reads/transfers/load messages, and
    parser caches while preserving the native worker pool.
 
-D. Parser Adapter & Tree-Walk Source Closure
+D. Parser Adapter & Tree-Walk Source Closure [NEXT]
    Remove TreeSitterExtractor, parser adapters, AST/tree-walk helpers/types, and
    obsolete parser-backed syntax/guard paths.
 
@@ -602,6 +603,8 @@ Canonical routing state:
 
 ```text
 GLOBAL_DEFAULT_FALLBACK = CLOSED
+PARSER_BOOTSTRAP = CLOSED
+PARSER_WORKER_PROTOCOL = CLOSED
 ```
 
 Performance/token principle:

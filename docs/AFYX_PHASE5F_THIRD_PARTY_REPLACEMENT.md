@@ -2775,3 +2775,88 @@ GLOBAL_DEFAULT_FALLBACK                CLOSED
 ```
 
 The exact next boundary is **Parser Bootstrap & Worker-Protocol Closure**.
+
+## Parser Bootstrap & Worker-Protocol Closure
+
+This runtime-architecture closure starts from
+`ce194f1c48d557a1abaabd582d15d5e7d91231e9`; the verified implementation
+checkpoint is `81695bb7659bd05a06f00e9fe0e36d5e6e933191`. Production extraction was
+already unconditionally Afyx-native, but process startup and the extraction
+worker pool still initialized Tree-sitter, read grammar WASM, transferred those
+bytes to every worker, and waited for a parser-specific readiness reply. Those
+operations were dead production prerequisites, not semantic dependencies.
+
+### Bootstrap inventory and ownership
+
+| Component | Previous role | Classification | Final state |
+| --- | --- | --- | --- |
+| `AfyxGraph.init/open/recreate` | initialized the Tree-sitter runtime before DB/lifecycle work | `PARSER_BOOTSTRAP` | parser initialization removed |
+| `ExtractionOrchestrator.indexAll/sync` | initialized parsers, selected preload languages, read grammar bytes, and loaded grammars for in-process extraction | `PARSER_BOOTSTRAP` | all production grammar initialization/read/preload work removed |
+| `ParseWorkerPool` | sent `load-grammars` plus language/byte payloads and waited for `grammars-loaded` | `PARSER_PROTOCOL` | accepts generic `ready`; queue, growth, timeout, recycle, crash recovery, and concurrency retained |
+| extraction worker | loaded grammars, maintained parser reset counters, and filtered parser-WASM abort output | `PARSER_BOOTSTRAP` / `PARSER_PROTOCOL` | starts native extraction directly and reports generic `ready` |
+| query, resolver, and store workers | independent query/resolution/storage concurrency | `GENERIC_WORKER_INFRA` | unchanged |
+| `grammars.ts`, explicit branch-guard and syntax-token oracle entry points | historical parser differential/oracle | `DEV_ORACLE` / `TEST_ONLY` | retained; invoked only through explicit test/dev APIs |
+| grammar byte reader and preload-language helper | supported production grammar transfer | `DEAD` after routing closure | removed with obsolete focused tests |
+
+The extraction worker now has the bounded protocol `ready`, `parse`,
+`parse-result`, `shutdown`, and `shutdown-ack`. Spawn and respawn perform module
+load plus handler registration only. No grammar fields, buffers, parser caches,
+load messages, or parser readiness state cross the worker boundary. The
+existing pool still isolates CPU work, scales on demand, prewarms for bulk
+indexes, accepts late results safely, recycles isolates, and replaces crashed
+or timed-out workers.
+
+### Validation and classification
+
+```text
+focused worker lifecycle/protocol            17/17 PASS
+native extraction core                         5/5 PASS
+extraction/reconciliation ground truth          5/5 PASS
+daemon attach contract                          2/2 PASS
+shared daemon lifecycle                        12/12 PASS
+MCP initialize behavioral assertions             PASS
+MCP initialize cleanup-only failures          3 EPERM
+CLI/MCP built-artifact smoke                  21/21 PASS
+TypeScript typecheck                             PASS
+clean production/UI build                       PASS
+UI/artifact check (29 grammars retained)         PASS
+git diff --check                                 PASS
+semantic structural contract                     PASS
+semantic exact-score snapshot       FROZEN SCORE-ONLY DIFF
+```
+
+The semantic run reproduced only the already-frozen runtime/index-derived
+ranking values documented in the preceding closure; graph structure, nodes,
+edges, lookup, context, impact, and affected-test results were unchanged. The
+three MCP initialize failures occurred in Windows temporary-directory cleanup
+after their assertions (`fs.rmSync`, `CLEANUP_ONLY_EPERM`). Therefore:
+
+```text
+V1_REQUIRED failure       0
+UNKNOWN product failure   0
+```
+
+The prior native semantic and performance baselines were reused. No full
+semantic campaign, Benchmark A, Benchmark B, or new performance claim was run.
+
+### Independence state and decision
+
+```text
+production parser bootstrap          0
+production grammar initialization    0
+production grammar transfer          0
+production parser worker protocol    0
+
+generic worker pool                  PRESERVED / PASS
+native worker functionality          PASS
+parser adapter/source                PRESENT (DEV_ORACLE/TEST_ONLY)
+SyntaxNode coupling                  32 source files (transitional)
+grammar WASM                         29 (retained)
+web-tree-sitter                      PRESENT (retained)
+tree-sitter-wasms                    PRESENT (retained)
+
+PARSER_BOOTSTRAP                     CLOSED
+PARSER_WORKER_PROTOCOL               CLOSED
+```
+
+The exact next boundary is **Parser Adapter & Tree-Walk Source Closure**.
