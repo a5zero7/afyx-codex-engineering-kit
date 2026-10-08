@@ -129,8 +129,8 @@ describe('MCP initialize handshake (issue #172)', () => {
 
   it('sends initialize response BEFORE tryInitializeDefault finishes', async () => {
     // Seed a real .afyx-graph so the server's tryInitializeDefault path runs
-    // its full body: AfyxGraph.open() (which awaits initGrammars()) and then
-    // startWatching() (which logs "File watcher active" to stderr). On any
+    // its full body: AfyxGraph.open() and then startWatching() (which logs
+    // "File watcher active" to stderr). On any
     // platform, that stderr log is observable evidence that tryInitializeDefault
     // has completed. The contract we're protecting: the JSON-RPC response on
     // stdout must arrive BEFORE that stderr log. If a future change re-awaits

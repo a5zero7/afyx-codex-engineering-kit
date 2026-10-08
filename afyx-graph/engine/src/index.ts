@@ -40,7 +40,6 @@ import {
   IndexResult,
   SyncResult,
   extractFromSource,
-  initGrammars,
 } from './extraction';
 import {
   ReferenceResolver,
@@ -281,7 +280,6 @@ export class AfyxGraph {
    * @returns A new Afyx Graph instance
    */
   static async init(projectRoot: string, options: InitOptions = {}): Promise<AfyxGraph> {
-    await initGrammars();
     const resolvedRoot = path.resolve(projectRoot);
 
     // Check if already initialized
@@ -337,7 +335,6 @@ export class AfyxGraph {
    * @returns An Afyx Graph instance
    */
   static async open(projectRoot: string, options: OpenOptions = {}): Promise<AfyxGraph> {
-    await initGrammars();
     const resolvedRoot = path.resolve(projectRoot);
 
     // Check if initialized
@@ -383,7 +380,6 @@ export class AfyxGraph {
    * (and running migrations against) the poisoned database entirely.
    */
   static async recreate(projectRoot: string): Promise<AfyxGraph> {
-    await initGrammars();
     const resolvedRoot = path.resolve(projectRoot);
 
     // Check if initialized — recreate REBUILDS an existing project; it is not a

@@ -7,7 +7,6 @@
  */
 
 import * as path from 'path';
-import * as fsp from 'fs/promises';
 import { Parser, Language as WasmLanguage } from 'web-tree-sitter';
 import { Language } from '../types';
 
@@ -368,40 +367,13 @@ function expandGrammarLanguages(languages: Language[]): Language[] {
 }
 
 /**
- * Pre-read the grammar WASM bytes for an index set, keyed by language. The
- * orchestrator reads each grammar ONCE and hands the bytes to every parse
- * worker via its `load-grammars` message, so worker spawns/respawns load
- * grammars from memory instead of re-reading them from disk — on slow storage
- * (HDD, issue #1231) each respawn's grammar re-read otherwise amplifies the
- * I/O contention that caused the respawn. Best-effort: a language whose WASM
- * can't be read here is simply omitted, and the worker falls back to its own
- * disk load (which surfaces the real error/warning path).
- */
-export async function readGrammarWasmBytes(languages: Language[]): Promise<Record<string, Uint8Array>> {
-  const out: Record<string, Uint8Array> = {};
-  const toRead = [...new Set(expandGrammarLanguages(languages))].filter(
-    (lang): lang is GrammarLanguage => lang in WASM_GRAMMAR_FILES
-  );
-  for (const lang of toRead) {
-    try {
-      out[lang] = await fsp.readFile(resolveWasmPath(lang));
-    } catch {
-      // fall through — the worker's own load reports the failure
-    }
-  }
-  return out;
-}
-
-/**
  * Load grammar WASM files for specific languages only.
  * Skips languages that are already loaded or have no WASM grammar.
  * Must be called after initGrammars().
- *
- * `wasmBytes` (optional) holds pre-read grammar bytes keyed by language (from
- * {@link readGrammarWasmBytes}, forwarded through the parse pool); when a
- * language's bytes are present they're loaded from memory instead of disk.
+ * This is retained for explicit test/dev parser-oracle use only; production
+ * startup and extraction workers never call it.
  */
-export async function loadGrammarsForLanguages(languages: Language[], wasmBytes?: Record<string, Uint8Array>): Promise<void> {
+export async function loadGrammarsForLanguages(languages: Language[]): Promise<void> {
   if (!parserInitialized) {
     await initGrammars();
   }
@@ -420,8 +392,7 @@ export async function loadGrammarsForLanguages(languages: Language[], wasmBytes?
   // See: https://github.com/tree-sitter/tree-sitter/issues/2338
   for (const lang of toLoad) {
     try {
-      const bytes = wasmBytes?.[lang];
-      const language = await WasmLanguage.load(bytes ?? resolveWasmPath(lang));
+      const language = await WasmLanguage.load(resolveWasmPath(lang));
       languageCache.set(lang, language);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -432,8 +403,7 @@ export async function loadGrammarsForLanguages(languages: Language[], wasmBytes?
 }
 
 /**
- * Load ALL grammar WASM files. Convenience function for tests and
- * backward compatibility. Prefer loadGrammarsForLanguages() in production.
+ * Load ALL grammar WASM files for explicit test/dev parser-oracle use.
  */
 export async function loadAllGrammars(): Promise<void> {
   const allLanguages = Object.keys(WASM_GRAMMAR_FILES) as GrammarLanguage[];

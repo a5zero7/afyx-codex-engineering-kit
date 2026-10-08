@@ -1,12 +1,12 @@
 /**
- * ParseWorkerPool — the worker pool that parses files across cores during a full
+ * ParseWorkerPool — the worker pool that extracts files across cores during a full
  * `afyx-graph index` (issue #1015). These tests drive the pool's queue / growth /
  * recycle / crash-recovery / timeout / teardown logic with INJECTED fake
  * workers, so they exercise the real scheduling code without spawning threads or
  * needing a built dist.
  *
- * End-to-end behavior with real worker threads (each worker owns a tree-sitter
- * WASM heap and runs extractFromSource) is covered by the extraction suite
+ * End-to-end behavior with real worker threads (each worker runs the native
+ * extractFromSource route) is covered by the extraction suite
  * against a real temp project; here we pin the orchestration that makes the
  * parallelism safe.
  */
@@ -20,12 +20,11 @@ interface ParseMsg { type: 'parse'; id: number; filePath: string; content: strin
 type Action = { result: ExtractionResult } | { crash: true } | { hang: true } | { wait: Promise<ExtractionResult> };
 
 /**
- * Fake worker speaking the same {load-grammars → grammars-loaded} /
- * {parse → parse-result} protocol as the real parse-worker. `behavior` decides
+ * Fake worker speaking the same {ready} / {parse → parse-result} protocol as
+ * the real extraction worker. `behavior` decides
  * per parse whether to return a result, crash (exit≠0), hang (never reply —
  * exercises the timeout), or wait on a promise (hold a parse in-flight to
- * observe concurrency). Emits 'grammars-loaded' on a macrotask so the pool has
- * wired its listeners first.
+ * observe concurrency). Emits `ready` after the pool wires its message listener.
  */
 class FakeWorker implements ParsePoolWorker {
   private msgCb?: (m: unknown) => void;
@@ -33,7 +32,10 @@ class FakeWorker implements ParsePoolWorker {
   alive = true;
   constructor(private behavior: (m: ParseMsg) => Action, private onTerminate?: () => void) {}
   on(event: string, cb: (...args: any[]) => void): void {
-    if (event === 'message') this.msgCb = cb;
+    if (event === 'message') {
+      this.msgCb = cb;
+      setTimeout(() => { if (this.alive) this.msgCb?.({ type: 'ready' }); }, 0);
+    }
     else if (event === 'exit') this.exitCb = cb;
     // 'error' unused by the fakes
   }
@@ -42,10 +44,6 @@ class FakeWorker implements ParsePoolWorker {
   }
   postMessage(msg: unknown): void {
     const m = msg as { type: string } & Partial<ParseMsg>;
-    if (m.type === 'load-grammars') {
-      setTimeout(() => { if (this.alive) this.msgCb?.({ type: 'grammars-loaded' }); }, 0);
-      return;
-    }
     if (m.type !== 'parse') return;
     const action = this.behavior(m as ParseMsg);
     if ('crash' in action) {
@@ -71,7 +69,6 @@ function makePool(
 ) {
   let spawned = 0, terminated = 0;
   const pool = new ParseWorkerPool({
-    languages: ['typescript'] as Language[],
     size,
     recycleInterval: opts.recycleInterval,
     parseTimeoutMs: opts.parseTimeoutMs,
@@ -205,28 +202,28 @@ describe('ParseWorkerPool', () => {
     await pool.destroy();
   });
 
-  it('forwards pre-read grammar WASM bytes to every spawned worker (#1231 respawn I/O fix)', async () => {
-    const grammarBuffers = { typescript: new Uint8Array([1, 2, 3]) };
-    const loadMsgs: Array<{ grammarBuffers?: Record<string, Uint8Array> }> = [];
+  it('starts and respawns workers without parser bootstrap messages or grammar bytes', async () => {
+    const sent: unknown[] = [];
     let worker!: FakeWorker;
     const pool = new ParseWorkerPool({
-      languages: ['typescript'] as Language[],
       size: 1,
-      grammarBuffers,
+      recycleInterval: 1,
       createWorker: () => {
         worker = new FakeWorker(() => ({ result: result() }));
         const orig = worker.postMessage.bind(worker);
         worker.postMessage = (msg: unknown) => {
-          const m = msg as { type: string; grammarBuffers?: Record<string, Uint8Array> };
-          if (m.type === 'load-grammars') loadMsgs.push(m);
+          sent.push(msg);
           orig(msg);
         };
         return worker;
       },
     });
     await pool.requestParse(task('a.ts'));
-    expect(loadMsgs).toHaveLength(1);
-    expect(loadMsgs[0].grammarBuffers).toBe(grammarBuffers);
+    await pool.requestParse(task('b.ts'));
+    expect(sent).toHaveLength(2);
+    expect(sent[0]).toMatchObject({ type: 'parse', filePath: 'a.ts' });
+    expect(sent[1]).toMatchObject({ type: 'parse', filePath: 'b.ts' });
+    expect(JSON.stringify(sent)).not.toMatch(/grammar|wasm|load-grammars/i);
     await pool.destroy();
   });
 

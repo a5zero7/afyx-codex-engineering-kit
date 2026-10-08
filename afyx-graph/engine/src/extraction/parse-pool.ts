@@ -1,25 +1,23 @@
 /**
- * Parse worker pool — runs tree-sitter parsing across N worker threads so a full
+ * Extraction worker pool — runs Afyx-native extraction across N worker threads so a full
  * `afyx-graph index` uses every core instead of pinning one.
  *
  * Why this exists: `ExtractionOrchestrator.indexAll()` already reads files in
- * parallel, but it parsed them through a SINGLE worker thread, so on an
+ * parallel, but it extracted them through a SINGLE worker thread, so on an
  * N-core machine indexing a large repo used one core and left the rest idle
- * (issue #1015, the parse-time half of #320). Spreading the parse calls across a
- * pool of workers — each its own tree-sitter WASM heap — restores multi-core
+ * (issue #1015, the extraction-time half of #320). Spreading extraction across a
+ * pool of workers restores multi-core
  * throughput. SQLite storage stays on the main thread (it isn't thread-safe), so
- * only the CPU-bound parse step is parallelised; results are stored as they
+ * only the CPU-bound extraction step is parallelised; results are stored as they
  * arrive, in whatever order they finish.
  *
  * Design mirrors {@link ../mcp/query-pool} (idle-list dispatch, lazy growth,
- * throttled cold-starts, crash recovery), with parse-specific behaviour:
- *   - per-worker recycle: WASM linear memory grows but never shrinks, so each
- *     worker is torn down and replaced after `recycleInterval` parses to reclaim
- *     its heap — the same reason the old single worker recycled.
+ * throttled cold-starts, crash recovery), with extraction-specific behaviour:
+ *   - per-worker recycle bounds isolate-local caches during long indexing runs.
  *   - reject, don't retry: a parse that crashes or times out its worker REJECTS
  *     (with a message the orchestrator's retry pass recognises) rather than being
  *     silently requeued — the orchestrator owns the smarter two-stage retry
- *     (fresh worker, then comment-stripped) on a clean WASM heap.
+ *     (fresh worker, then comment-stripped) in a fresh isolate.
  *   - a size-1 pool reproduces the old single-worker path exactly, which is the
  *     conservative rollback: set `AFYX_GRAPH_PARSE_WORKERS=1`.
  *
@@ -57,7 +55,7 @@ export interface ParseTask {
 const DEFAULT_PARSE_POOL_CAP = 8;
 /** Hard ceiling on pool size regardless of an explicit env override. */
 const MAX_PARSE_POOL_SIZE = 16;
-/** Parses a worker performs before it's recycled to reclaim WASM heap. */
+/** Extractions a worker performs before it is recycled. */
 const DEFAULT_RECYCLE_INTERVAL = 250;
 /** Base per-parse timeout; scaled up for large files by the caller's formula. */
 const DEFAULT_PARSE_TIMEOUT_MS = 10_000;
@@ -76,8 +74,8 @@ const MAX_SCALED_PARSE_TIMEOUT_MS = 20_000;
  */
 const HARD_KILL_MULTIPLIER = 3;
 /**
- * Max workers cold-starting at once. A worker's cold start is heavy (module load
- * + grammar WASM compile); starting the whole pool simultaneously thrashes CPU.
+ * Max workers cold-starting at once. A worker's cold start loads the extraction
+ * module graph; starting the whole pool simultaneously thrashes CPU.
  * Warming a couple at a time keeps each start fast while the pool still reaches
  * full size within a few parses of a large run.
  */
@@ -85,8 +83,7 @@ const MAX_CONCURRENT_SPAWN = 2;
 /**
  * Total worker deaths before the pool stops respawning and fails outstanding
  * work, so a systematically-broken worker platform degrades instead of
- * respawning forever. Set high: normal per-file WASM crashes are cleared by the
- * orchestrator's retry pass and shouldn't trip this on a merely-crashy repo.
+ * respawning forever. Set high so isolated worker failures do not disable a run.
  */
 const CRASH_BUDGET = 100;
 
@@ -147,7 +144,7 @@ interface ParseJob {
   hardKillTimer?: ReturnType<typeof setTimeout>;
 }
 
-/** Shape of a message a worker posts back (grammar-load ack or a parse result). */
+/** Shape of a message a worker posts back (readiness or an extraction result). */
 interface ParseWorkerMessage {
   type?: string;
   id?: number;
@@ -157,13 +154,11 @@ interface ParseWorkerMessage {
 }
 
 export interface ParseWorkerPoolOptions {
-  /** Languages to load grammars for in every worker at spawn. */
-  languages: Language[];
   /** Number of worker threads (≥1). Clamp the resolved value before passing. */
   size: number;
   /** Compiled `parse-worker.js` path. Required unless `createWorker` is given. */
   workerScriptPath?: string;
-  /** Parses per worker before recycle. Default 250. */
+  /** Extractions per worker before recycle. Default 250. */
   recycleInterval?: number;
   /** Base per-parse timeout (ms); scaled by file size per parse. Default 10s. */
   parseTimeoutMs?: number;
@@ -171,15 +166,6 @@ export interface ParseWorkerPoolOptions {
   createWorker?: () => ParsePoolWorker;
   /** Optional verbose logger (the orchestrator's `[worker] …` logger). */
   log?: (msg: string) => void;
-  /**
-   * Pre-read grammar WASM bytes keyed by language, forwarded to every worker's
-   * `load-grammars` message so a spawn/respawn loads grammars from memory
-   * instead of re-reading them from disk — on slow storage each respawn's
-   * grammar re-read otherwise amplifies the very I/O contention that caused
-   * the respawn (issue #1231). Best-effort: a missing language falls back to
-   * the worker's own disk read.
-   */
-  grammarBuffers?: Record<string, Uint8Array>;
 }
 
 export class ParseWorkerPool {
@@ -187,7 +173,7 @@ export class ParseWorkerPool {
   private queue: ParseJob[] = [];
   private inflight = new Map<ParsePoolWorker, ParseJob>();
   private workers = new Set<ParsePoolWorker>();
-  // Spawned but not yet 'grammars-loaded'. Growth counts these so a single first
+  // Spawned but not yet ready. Growth counts these so a single first
   // parse doesn't spawn the whole pool before the eager worker reports ready.
   private pending = new Set<ParsePoolWorker>();
   private parseCounts = new Map<ParsePoolWorker, number>();
@@ -195,17 +181,13 @@ export class ParseWorkerPool {
   private totalCrashes = 0;
   private destroyed = false;
 
-  private readonly languages: Language[];
   private readonly maxSize: number;
   private readonly recycleInterval: number;
   private readonly parseTimeoutMs: number;
   private readonly createWorker: () => ParsePoolWorker;
   private readonly log: (msg: string) => void;
-  private readonly grammarBuffers?: Record<string, Uint8Array>;
 
   constructor(opts: ParseWorkerPoolOptions) {
-    this.languages = opts.languages;
-    this.grammarBuffers = opts.grammarBuffers;
     this.maxSize = Math.max(1, Math.min(opts.size, MAX_PARSE_POOL_SIZE));
     this.recycleInterval = opts.recycleInterval ?? DEFAULT_RECYCLE_INTERVAL;
     this.parseTimeoutMs = opts.parseTimeoutMs ?? DEFAULT_PARSE_TIMEOUT_MS;
@@ -231,8 +213,8 @@ export class ParseWorkerPool {
    * Spawn the whole pool up front. The default demand-driven growth avoids
    * paying worker boot for small jobs, but a bulk index KNOWS every core will
    * be needed — on a fast repo the one-by-one ramp-up otherwise consumes most
-   * of the parse phase (each worker boot is a fresh Node isolate + grammar
-   * load, ~hundreds of ms, and growth only triggers as queue pressure builds).
+   * of the extraction phase (each worker boot is a fresh Node isolate, and
+   * growth only triggers as queue pressure builds).
    */
   prewarm(): void {
     while (this.workers.size < this.maxSize) {
@@ -281,14 +263,10 @@ export class ParseWorkerPool {
     w.on('message', (m) => this.onMessage(w, (m ?? {}) as ParseWorkerMessage));
     w.on('error', (e) => this.onWorkerGone(w, `Worker error: ${e?.message ?? 'unknown'}`));
     w.on('exit', (code) => { if (code !== 0) this.onWorkerGone(w, `Worker exited with code ${code}`); });
-    // Load grammars; the worker replies 'grammars-loaded' and only then is idle.
-    // Pre-read WASM bytes (when the orchestrator provided them) make this a
-    // memory load instead of a per-spawn disk read.
-    w.postMessage({ type: 'load-grammars', languages: this.languages, grammarBuffers: this.grammarBuffers });
   }
 
   private onMessage(w: ParsePoolWorker, m: ParseWorkerMessage): void {
-    if (m.type === 'grammars-loaded') {
+    if (m.type === 'ready') {
       if (!this.workers.has(w)) return; // recycled/destroyed before ready
       this.pending.delete(w);
       this.idle.push(w);
@@ -315,8 +293,8 @@ export class ParseWorkerPool {
             : ` (parse genuinely took ${parseMs}ms)`;
         this.log(`Late parse-result accepted: ${job.task.filePath}${detail}`);
       }
-      // Recycle the worker once it's done enough parses to have grown its WASM
-      // heap; otherwise return it to the idle set for the next job.
+      // Recycle the worker after a bounded amount of work; otherwise return it
+      // to the idle set for the next job.
       if ((this.parseCounts.get(w) ?? 0) >= this.recycleInterval) {
         this.recycle(w);
       } else {
@@ -450,8 +428,8 @@ export class ParseWorkerPool {
   }
 
   /**
-   * Recycle every idle worker now (fresh WASM heaps). The orchestrator calls
-   * this before its retry pass so crash-on-memory files get the cleanest heap.
+   * Recycle every idle worker now. The orchestrator calls this before its retry
+   * pass so retried files run in fresh isolates.
    */
   recycleAll(): void {
     for (const w of [...this.idle]) this.recycle(w);

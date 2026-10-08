@@ -19,7 +19,7 @@ import { QueryBuilder } from '../db/queries';
 import { ParseWorkerPool, resolveParsePoolSize, resolveParseTimeoutMs } from './parse-pool';
 import { StoreWriter } from './store-writer';
 import { materializeKernelResult } from './kernel';
-import { detectLanguage, isSourceFile, isLanguageSupported, isFileLevelOnlyLanguage, initGrammars, loadGrammarsForLanguages, readGrammarWasmBytes } from './grammars';
+import { isSourceFile, isLanguageSupported, isFileLevelOnlyLanguage } from './grammars';
 import { loadExtensionOverrides, loadIncludeIgnoredPatterns, loadExcludePatterns, loadIncludePatterns, PROJECT_CONFIG_FILENAME } from '../project-config';
 import { isAfyxGraphDataDir } from '../directory';
 import { logDebug, logWarn } from '../errors';
@@ -56,22 +56,17 @@ const FILE_IO_BATCH_SIZE = 10;
  */
 const SYNC_RECONCILE_YIELD_INTERVAL = 1000;
 
-// PARSER_RESET_INTERVAL moved to parse-worker.ts (runs in worker thread)
-
 /**
- * Maximum time (ms) to wait for a single file to parse in the worker thread.
- * If tree-sitter hangs or WASM runs out of memory, this prevents the entire
- * indexing run from freezing. The worker is restarted after a (hard) timeout.
+ * Maximum time (ms) to wait for a single file extraction in the worker thread.
+ * If native extraction hangs, this prevents the entire indexing run from
+ * freezing. The worker is restarted after a (hard) timeout.
  * Env-overridable via AFYX_GRAPH_PARSE_TIMEOUT_MS for slow storage (#1231).
  */
 const PARSE_TIMEOUT_MS = resolveParseTimeoutMs(process.env.AFYX_GRAPH_PARSE_TIMEOUT_MS);
 
 /**
- * Number of files to parse before recycling the worker thread.
- * WASM linear memory can grow but NEVER shrink (WebAssembly spec limitation).
- * The only way to reclaim tree-sitter's WASM heap is to destroy the entire
- * V8 isolate by terminating the worker thread and spawning a fresh one.
- * This interval balances memory usage against the cost of reloading grammars.
+ * Number of files to extract before recycling the worker thread. Recycling
+ * bounds isolate-local caches and provides a fresh worker for long index runs.
  */
 const WORKER_RECYCLE_INTERVAL = 250;
 
@@ -749,29 +744,6 @@ function findNestedGitRepos(absDir: string, relPrefix: string): string[] {
  * scope cannot diverge from each other or from `git ls-files --exclude-standard`
  * (#1728).
  */
-
-/**
- * The grammars to preload for a file set.
- *
- * Path-only detection calls every `.h` file C, but parse-time detection reads
- * the source and can reclassify it as C++ or Objective-C (`detectLanguage`
- * with a `source` argument). Workers only ever get the grammars named here, so
- * a header that turns out to be Objective-C in a project with no `.m` file
- * found no parser and failed with `Failed to get parser for language: objc`
- * (#1628). C++ was already covered; Objective-C was not.
- */
-export function preloadLanguagesForFiles(
-  files: string[],
-  overrides?: Record<string, Language>
-): Language[] {
-  const languages = [...new Set(files.map((f) => detectLanguage(f, undefined, overrides)))];
-  if (languages.includes('c')) {
-    for (const ambiguous of ['cpp', 'objc'] as const) {
-      if (!languages.includes(ambiguous)) languages.push(ambiguous);
-    }
-  }
-  return languages;
-}
 
 export class ScopeIgnore {
   private embedded: Array<{ root: string; matcher: AfyxIgnoreMatcher }>;
@@ -1877,9 +1849,6 @@ export class ExtractionOrchestrator {
     // in file order preserves the #1015 determinism exactly.
     storeWriterOpts?: { dbPath: string; fastInit: boolean } | null
   ): Promise<IndexResult> {
-    const tGrammar = Date.now();
-    await initGrammars();
-    if (process.env.AFYX_GRAPH_SYNTH_TIMINGS) console.error(`[phase-timing] grammar-init: ${Date.now() - tGrammar}ms`);
     const startTime = Date.now();
     const errors: ExtractionError[] = [];
     let filesIndexed = 0;
@@ -1966,7 +1935,7 @@ export class ExtractionOrchestrator {
 
     // Emit parsing phase immediately so the progress bar appears during worker setup.
     // The yield lets the shimmer worker flush the phase transition to stdout before
-    // the main thread starts synchronous grammar detection work.
+    // the main thread starts worker setup.
     onProgress?.({
       phase: 'parsing',
       current: 0,
@@ -1974,10 +1943,7 @@ export class ExtractionOrchestrator {
     });
     await new Promise(resolve => setImmediate(resolve));
 
-    // Detect needed languages and load grammars in the parse worker
-    const neededLanguages = preloadLanguagesForFiles(files, overrides);
-
-    // Parse files on a pool of worker threads (keeps the main thread free for UI
+    // Extract files on a pool of worker threads (keeps the main thread free for UI
     // and uses every core). Falls back to in-process parsing when the compiled
     // worker is unavailable (e.g. running from source in tests).
     const parseWorkerPath = path.join(__dirname, 'parse-worker.js');
@@ -1989,34 +1955,24 @@ export class ExtractionOrchestrator {
       // behaviour (the conservative rollback). Unset → clamp(cores-1, 1, 8),
       // with cores from availableParallelism — cpuset/affinity-honest, where
       // os.cpus() enumerates the host's CPUs and spawned 8 wasm workers (and
-      // their grammar heaps) inside a 2-CPU container for zero extra
+      // their isolates) inside a 2-CPU container for zero extra
       // throughput (§7a.1). Floored so a 2-core box still gets 2 workers:
-      // parse is worker-side CPU, and 1 worker measured 34% slower than the
+      // extraction is worker-side CPU, and 1 worker measured 34% slower than the
       // old oversubscribed pool on the kernel-scale 2-cpuset envelope
       // (493s vs 369s) — main + store-worker don't fill the second core.
       const poolSize = resolveParsePoolSize(process.env.AFYX_GRAPH_PARSE_WORKERS, Math.max(3, os.availableParallelism()));
-      // Read each needed grammar's WASM ONCE here and hand the bytes to every
-      // worker, so spawns/respawns load grammars from memory instead of
-      // re-reading them from disk (#1231: on an HDD, respawn re-reads amplify
-      // the very I/O contention that caused the respawn).
-      const grammarBuffers = await readGrammarWasmBytes(neededLanguages);
       pool = new ParseWorkerPool({
-        languages: neededLanguages,
         size: poolSize,
         workerScriptPath: parseWorkerPath,
         recycleInterval: WORKER_RECYCLE_INTERVAL,
         parseTimeoutMs: PARSE_TIMEOUT_MS,
         log,
-        grammarBuffers,
       });
       log(`Parse worker pool: ${poolSize} worker(s)`);
       // Bulk index: every core will be needed — spawn the whole pool now so
       // worker boot overlaps the first read batches instead of trickling in
       // behind queue-pressure growth.
       pool.prewarm();
-    } else {
-      // In-process fallback: load grammars locally and parse on the main thread.
-      await loadGrammarsForLanguages(neededLanguages);
     }
 
     // Dedicated store writer thread (fresh DB only — see the parameter doc).
@@ -2709,7 +2665,6 @@ export class ExtractionOrchestrator {
      */
     backpressure?: () => Promise<void> | null
   ): Promise<SyncResult> {
-    await initGrammars(); // Initialize WASM runtime (grammars loaded lazily below)
     const startTime = Date.now();
     let filesChecked = 0;
     let filesAdded = 0;
@@ -2839,12 +2794,6 @@ export class ExtractionOrchestrator {
     // definition set is readable.
     if (filesToIndex.length > 0) {
       for (const pair of this.queries.getNodeNamePairsByFiles(filesToIndex)) pairsBefore.add(pair);
-    }
-
-    // Load only grammars needed for changed files
-    if (filesToIndex.length > 0) {
-      const overrides = loadExtensionOverrides(this.rootDir);
-      await loadGrammarsForLanguages(preloadLanguagesForFiles(filesToIndex, overrides));
     }
 
     // Index changed files
