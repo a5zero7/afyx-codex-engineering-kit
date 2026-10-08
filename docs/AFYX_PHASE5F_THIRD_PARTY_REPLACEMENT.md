@@ -2399,3 +2399,103 @@ V1_SEMANTIC_CONTRACT = IMPLEMENT_REQUIRED_GAPS
 ```
 
 The single recommended next boundary is **Afyx V1 Required Behavior Closure**.
+
+## Afyx V1 Required Behavior Closure
+
+This consolidated closure starts from
+`06edea15a27ed87c2ecce86944758b4e36a58385`; its implementation checkpoint is
+`62621a0639f42db0eaac69ef087436d851cdba88`. Afyx Graph impact evidence bounded
+the work to native fact extraction/resolution, explore allocation/render dedup,
+and their focused contracts. No repository-wide implementation rewrite was
+needed.
+
+The first broken layers and fixes were:
+
+- **Real-index context:** native TypeScript/JavaScript call facts dropped the
+  explicit `new` receiver in `new Type().method()`, and resolution consequently
+  rejected the chain before context selection. Native facts now preserve that
+  receiver and the matcher resolves only explicit constructor-call chains; the
+  existing guard against arbitrary unknown factory chains remains intact.
+- **Explore allocation:** lower-ranked reservations were held at their nominal
+  value even when the corresponding source could not spend them, while a
+  qualifying whole-file render could not use the already-bounded shared
+  overshoot. Payable debt is capped by actual source size and merit buys may use
+  the remaining shared headroom. The existing source/render ceilings and
+  displacement guard remain hard limits.
+- **Cross-call dedup:** product rendering inherited the utility's eight-line
+  suppression threshold, so a fully covered short span was emitted again.
+  Product rendering now withholds fully covered spans from one line onward and
+  retains pointers plus genuinely new spans; the reusable utility keeps its
+  threshold behavior for partial overlap.
+- **Vue-store precision:** generic extraction treated an ordinary non-exported
+  object named `actions` as a store container. Store members now require a
+  recognized `defineStore(...)` call or a structurally supported Vuex export.
+  Real Pinia/Vuex positives remain green; missing `SET_TOKEN` recall remains
+  explicitly post-v1.
+- **Java abstract/anonymous correctness:** the Java member declaration scan
+  began too late to retain modifiers before multiline/bodiless methods, so the
+  abstract base definition disappeared before relationship recovery. The scan
+  now starts at the declaration boundary, preserving abstract definitions and
+  statically represented anonymous overrides without speculative inference.
+
+Final-head focused evidence:
+
+```text
+real-index context contract                 77/77 PASS
+explore allocation CG-21                     8/8 PASS
+cross-call source dedup                      27/27 PASS
+Vue-store positive + negative precision       2/2 PASS
+Java abstract/anonymous focused               1/1 PASS
+allocation/displacement/invariant follow-up  53/53 PASS
+shared extraction/context regression cone  1053 PASS
+post-assertion cleanup failures                 15 CLEANUP_ONLY_EPERM
+TypeScript typecheck                           PASS
+clean production/UI build                      PASS
+CLI/MCP smoke, default                       21/21 PASS
+CLI/MCP smoke, native                        21/21 PASS
+default semantic fixtures                      6/6 PASS
+git diff --check                               PASS
+```
+
+The one final native production campaign was run after the five behavioral
+fixes and before a final diagnostic-only reservation-accounting correction:
+
+```text
+PASS     5,622
+FAIL        54
+SKIP       213
+TOTAL    5,889
+```
+
+The diagnostic correction was then covered at final HEAD by the 53/53 focused
+allocation/displacement/invariant run; repeating the full campaign would not
+resolve another semantic risk. Remaining failures classify as the retained
+native deprioritization correction, legacy floating-score compatibility,
+documented post-v1 framework behavior (Expo attribution, RTK Query, Spring
+Event enrichment, Vuex mutation recall, and other already-known native
+extensions), or environment/tooling cases such as cleanup EPERM, host timing,
+old-Git/path probes, and parser-warning harness behavior. The historical
+1,500-character explore fixture is outside the exact qualifying CG-21 V1
+contract and remains in the later performance/token boundary. `UNKNOWN` product
+failures are zero. The 213 skips are unchanged conditional/platform/optional
+suite exclusions; no focused V1-required behavior is skipped and this closure
+adds no skip.
+
+Native semantic fixtures remain structurally identical; only the previously
+frozen runtime/index-derived floating search scores differ. No ranking tuning
+was performed.
+
+```text
+Real-index context          PASS
+Explore allocation          PASS
+Cross-call dedup            PASS
+Vue-store precision         PASS
+Java anonymous semantics    PASS
+
+V1_REQUIRED                 5 -> 0
+V1_SEMANTIC_CONTRACT        FROZEN
+```
+
+Native parser reachability, default fallback, parser bootstrap, 29 grammar
+WASM assets, parser dependencies, and legal/attribution state are unchanged.
+The exact next boundary is **Native Performance & Token Efficiency Baseline**.

@@ -479,13 +479,13 @@ The audit classified remaining behavioral differences into:
 - `POST_V1`.
 - `ENVIRONMENT_OR_TOOLING_NOISE`.
 
-Authoritative behavior-family accounting:
+Authoritative decision-gate accounting:
 
 ```text
 TOTAL ASSESSED DIFFERENCE FAMILIES = 14
 SEMANTIC / PRODUCT DIFFERENCES     = 11
 
-V1_REQUIRED                       = 5
+V1_REQUIRED                       = 5 -> 0
 NATIVE_CORRECTION                 = 1
 LEGACY_COMPATIBILITY_ONLY         = 1
 POST_V1                           = 4
@@ -508,13 +508,27 @@ Non-blocking decisions:
   enrichment, and Vuex mutation recall to post-v1;
 - keep environment/tooling noise separate from semantic implementation.
 
+Implementation checkpoint:
+
+`62621a0639f42db0eaac69ef087436d851cdba88`
+
+Closure evidence:
+
+- real-index context: `77/77 PASS`;
+- qualifying explore allocation: `8/8 PASS`;
+- cross-call source dedup: `27/27 PASS`;
+- Vue-store positive/negative precision: `2/2 PASS`;
+- Java abstract/anonymous contract: `1/1 PASS`;
+- final native campaign: `5,622 PASS / 54 FAIL / 213 SKIP`, with zero
+  remaining `V1_REQUIRED` or unknown product failures.
+
 Decision:
 
 ```text
-V1_SEMANTIC_CONTRACT = IMPLEMENT_REQUIRED_GAPS
+V1_SEMANTIC_CONTRACT = FROZEN
 ```
 
-Current implementation boundary:
+Completed implementation boundary:
 
 > **Afyx V1 Required Behavior Closure**
 
@@ -531,7 +545,11 @@ five V1-required behavior families
   -> semantic contract freeze
 ```
 
-After semantic freeze, the parser/runtime closure sequence is:
+The exact next boundary is:
+
+> **Native Performance & Token Efficiency Baseline**
+
+The remaining parser/runtime closure sequence is:
 
 ```text
 A. Native Performance & Token-Efficiency Baseline
