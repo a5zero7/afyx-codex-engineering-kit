@@ -13,7 +13,25 @@ function isStaticPath(value: string): boolean {
 }
 
 function attrName(tokens: readonly NativeToken[], start: number, end: number): string {
-  return tokens.slice(start, end).map((token) => token.kind === 'string' ? token.text.slice(1, -1) : token.text).join('');
+  return tokens.slice(start, end).map((token) => token.text).join('');
+}
+
+function isStaticAttrPath(tokens: readonly NativeToken[], start: number, end: number): boolean {
+  const validSegment = (segment: readonly NativeToken[]): boolean => {
+    if (segment.length === 1 && segment[0]!.kind === 'string') return !segment[0]!.text.includes('${');
+    if (segment.length === 0 || segment[0]!.kind !== 'identifier') return false;
+    for (let index = 1; index < segment.length; index += 2) {
+      if (segment[index]?.text !== '-' || segment[index + 1]?.kind !== 'identifier') return false;
+    }
+    return segment.length % 2 === 1;
+  };
+  let segmentStart = start;
+  for (let index = start; index <= end; index += 1) {
+    if (index < end && tokens[index]!.text !== '.') continue;
+    if (!validSegment(tokens.slice(segmentStart, index))) return false;
+    segmentStart = index + 1;
+  }
+  return true;
 }
 
 function pathAt(source: string, token: NativeToken): string | undefined {
@@ -86,7 +104,7 @@ export function extractNativeNixFacts(filePath: string, source: string) {
     while (start > 0 && ![';', '{', '}', 'let', 'in'].includes(tokens[start - 1]!.text)) start -= 1;
     if (start >= equals || tokens.slice(start, equals).some((token) => ['(', ')', ':'].includes(token.text))) continue;
     const name = attrName(tokens, start, equals).trim();
-    if (!name || name.startsWith('.') || KEYWORDS.has(name) || /[+*\/<>!?]/.test(name)) continue;
+    if (!name || name.startsWith('.') || KEYWORDS.has(name) || !isStaticAttrPath(tokens, start, equals)) continue;
     const end = statementEnd(tokens, scan.pairs, equals + 1);
     bindings.push({ start, equals, end, name, valueStart: equals + 1 });
   }

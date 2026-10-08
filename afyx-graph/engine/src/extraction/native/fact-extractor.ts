@@ -16,6 +16,7 @@ import { extractNativeVbnetFacts } from './vbnet-facts';
 import { extractNativeErlangFacts } from './erlang-facts';
 import { extractNativeTerraformFacts } from './terraform-facts';
 import { extractNativeCobolFacts } from './cobol-facts';
+import { addNativeLombokFacts } from './java-lombok-facts';
 
 const CALL_EXCLUSIONS = new Set([
   'if', 'for', 'while', 'switch', 'catch', 'with', 'function', 'typeof', 'delete',
@@ -290,10 +291,25 @@ export function extractNativeFacts(filePath: string, source: string, language: L
     }
     const arrow = findNext(tokens, marker, '=>', limit);
     if (arrow < 0) return undefined;
-    const bodyStart = tokens[arrow + 1]?.text === '{' ? arrow + 1 : arrow;
+    const expressionStart = arrow + 1;
+    const expressionClose = ['(', '['].includes(tokens[expressionStart]?.text ?? '')
+      ? scan.pairs.get(expressionStart)
+      : undefined;
+    if (expressionClose !== undefined && tokens[expressionClose + 1]?.text === '=>') {
+      const nested = callableValue(expressionStart, limit);
+      if (nested) return { ...nested, async: async || nested.async };
+    }
+    const wrappedObjectStart = tokens[expressionStart]?.text === '(' && tokens[expressionStart + 1]?.text === '{' &&
+      scan.pairs.get(expressionStart + 1) === expressionClose! - 1
+      ? expressionStart + 1
+      : undefined;
+    if (wrappedObjectStart !== undefined) {
+      return { bodyStart: wrappedObjectStart, bodyEnd: expressionClose! - 1, async };
+    }
+    const bodyStart = tokens[expressionStart]?.text === '{' ? expressionStart : arrow;
     const bodyEnd = tokens[bodyStart]?.text === '{'
       ? scan.pairs.get(bodyStart)
-      : Math.max(bodyStart, limit - 1);
+      : expressionClose ?? statementEnd(expressionStart);
     return bodyEnd === undefined ? undefined : { bodyStart, bodyEnd, async };
   };
   const directlyInside = (index: number, open: number, close: number): boolean => {
@@ -374,12 +390,11 @@ export function extractNativeFacts(filePath: string, source: string, language: L
         ? callableValue(callOpen + 1, callClose)
         : undefined;
       callable ||= hookWrapper && wrappedCallable !== undefined;
-      const marker = arrow >= 0 ? arrow : functionKeyword;
-      const callableBody = wrappedCallable?.bodyStart ??
-        (!callable || marker < 0 ? undefined : findNext(tokens, marker + 1, '{', limit));
+      const directCallable = callable ? callableValue(valueStart, limit) : undefined;
+      const callableBody = wrappedCallable?.bodyStart ?? directCallable?.bodyStart;
       const objectBody = !callable && valueToken?.text === '{' ? valueStart : undefined;
       const bodyStart = objectBody ?? callableBody;
-      const bodyEnd = wrappedCallable?.bodyEnd ??
+      const bodyEnd = wrappedCallable?.bodyEnd ?? directCallable?.bodyEnd ??
         (bodyStart === undefined || bodyStart < 0 ? undefined : scan.pairs.get(bodyStart));
       declarations.push({
         kind: componentWrapper ? 'component' : callable ? 'function' : token.text === 'const' ? 'constant' : 'variable',
@@ -388,7 +403,7 @@ export function extractNativeFacts(filePath: string, source: string, language: L
         bodyEnd,
         signature: equals < 0 ? undefined : `= ${source.slice(tokens[equals + 1]!.start.offset, tokens[Math.min(limit - 1, tokens.length - 1)]!.end.offset).slice(0, 100)}`,
         exported: tokens[i - 1]?.text === 'export',
-        async: tokens.slice(i + 2, marker < 0 ? limit : marker).some((item) => item.text === 'async'),
+        async: wrappedCallable?.async ?? directCallable?.async ?? false,
       });
     }
 
@@ -504,6 +519,9 @@ export function extractNativeFacts(filePath: string, source: string, language: L
         });
       }
       if (tokens[i]!.text !== 'func') continue;
+      // A function type (`type Handler func(...)`, a field, or a parameter)
+      // is not a declaration. Real Go `func` declarations start a statement.
+      if (tokens[i - 1]?.end.line === tokens[i]!.start.line && ![';', '}'].includes(tokens[i - 1]!.text)) continue;
       let nameIndex = i + 1;
       let receiverOwner: Declaration | undefined;
       let qualifiedOwner: string | undefined;
@@ -1123,6 +1141,7 @@ export function extractNativeFacts(filePath: string, source: string, language: L
           async: tokens.slice(start, member).some((item) => item.text === 'async'),
           static: tokens.slice(start, member).some((item) => item.text === 'static'),
           visibility: visibility(tokens, start, member),
+          decorators: arktsDecorators(member),
         });
       }
       let cursor = begin + 1;
@@ -1158,6 +1177,7 @@ export function extractNativeFacts(filePath: string, source: string, language: L
               static: segment.slice(0, nameIndex - cursor).some((token) => token.text === 'static'),
               visibility: visibility(tokens, cursor, nameIndex),
               signature: typeName ? `${typeName} ${tokens[nameIndex]!.text}` : undefined,
+              decorators: arktsDecorators(nameIndex),
             });
           }
         }
@@ -1954,7 +1974,7 @@ export function extractNativeFacts(filePath: string, source: string, language: L
       const receiverChain = memberCall ? receiverExpression(i - 1) : undefined;
       const receiver = tokens[i - 2]?.kind === 'identifier' && memberCall ? tokens[i - 2] : undefined;
       if (memberCall && !receiverChain &&
-          (TS_FAMILY_LANGUAGES.has(language) || language === 'python')) continue;
+          (TS_FAMILY_LANGUAGES.has(language) || language === 'python') && language !== 'arkts') continue;
       const rustPath = language === 'rust' && tokens[i - 2]?.kind === 'identifier' && tokens[i - 1]?.text === '::'
         ? tokens[i - 2]
         : undefined;
@@ -2298,14 +2318,19 @@ export function extractNativeFacts(filePath: string, source: string, language: L
     const rightPosition = positions.get(right.target) ?? [0, 0];
     return leftPosition[0] - rightPosition[0] || leftPosition[1] - rightPosition[1];
   });
-  refs.sort((left, right) => left.line - right.line || left.column - right.column);
+  refs.sort((left, right) => left.line - right.line || left.column - right.column ||
+    (TS_FAMILY_LANGUAGES.has(language) && left.referenceKind === 'calls' && right.referenceKind === 'calls'
+      ? right.referenceName.length - left.referenceName.length
+      : 0));
 
-  return addNativeValueReferences(source, language, {
+  const result = {
     nodes, edges, unresolvedReferences: refs,
     errors: scan.unterminated.map((kind) => ({
       message: `Incomplete ${kind} while scanning ${filePath}`,
       filePath, severity: 'warning' as const, code: 'native_incomplete_source',
     })),
     durationMs: Date.now() - started,
-  });
+  };
+  return addNativeValueReferences(source, language,
+    language === 'java' ? addNativeLombokFacts(filePath, source, result) : result);
 }

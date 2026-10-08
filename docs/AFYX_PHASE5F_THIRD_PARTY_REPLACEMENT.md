@@ -2211,3 +2211,99 @@ DEFAULT_FALLBACK_CLOSURE = NOT_READY
 The single recommended next boundary is **Native Extraction & Framework
 Synthesis Closure**. Ranking/explore, fallback removal, parser bootstrap, and
 later phases must not begin as part of this boundary.
+
+## Native Extraction & Framework Synthesis Closure
+
+This boundary starts from `f28ea56dcef93dc38c311429a472de2646562d38`
+with native routing still opt-in. The frozen legitimate inventory was 15
+framework/extraction candidates, six ranking/explore candidates, and one Other
+candidate. The selected 15 comprised five ArkTS facts, one Gin middleware
+fact, three Lombok facts, one nested JavaScript declarator fact, two Nix option
+path facts, one React Router fact, and two Express/UI Steps facts.
+
+First-broken-layer analysis located the selected defects in native fact
+extraction and bounded compile-time synthesis, not resolution or product
+relationship construction. TypeScript-family expression-bodied and curried
+arrow ranges could overrun or truncate their callable bodies; same-position
+nested calls were emitted in the wrong order for established framework
+consumers. ArkTS lost decorators on early member paths and rejected leading-dot
+DSL calls. Go interpreted `func` in function types as a declaration. Nix
+dropped quotes from static attribute paths and rejected static hyphenated
+segments such as `home-manager`. Java's parser-backed path synthesized Lombok
+members, but the native path had no equivalent compile-time synthesis.
+
+The native extractor now bounds expression-bodied and curried arrows, applies
+the outermost-first same-position call ordering only to TypeScript-family
+languages, preserves ArkTS decorators and DSL calls, and excludes Go function
+types from declarations. Nix retains quoted static segments and validates
+quoted or hyphenated attribute paths structurally. A bounded Afyx-owned Lombok
+synthesizer adds only members promised by recognized annotations, preserves
+explicit members, and respects static/final access rules; a negative annotation
+gate leaves ordinary Java unchanged. No framework name, fixture path, route
+literal, fallback, ranking, parser bootstrap, grammar, dependency, or legal
+record was changed.
+
+The two known Express/UI Steps gaps close through the generic callable-range
+and deterministic nested-call ordering corrections; no Express-specific
+heuristic was added. Positive and negative evidence covers ArkTS component and
+DSL facts, nested declarator functions, Gin middleware, Lombok accessors/logs/
+builders and ordinary Java, quoted and hyphenated Nix option paths, React
+Router, and UI Steps API/server relationships. The selected focused matrix is
+64/64 PASS. The final shared-extraction guardrail records 713 semantic
+assertions PASS; its six remaining failures occur only during Windows temporary
+directory cleanup (`CLEANUP_ONLY_EPERM`). The protected framework matrix
+records 315 semantic assertions PASS, apart from cleanup-only EPERM and one
+pre-existing Java anonymous-class contract outside the selected Lombok scope.
+
+The single Other candidate is classified `RANKING_EXPLORE`: native extraction
+produces the relevant graph facts, while the observable difference begins in
+context entry selection, expansion, and budgeting. It is therefore folded into
+the ranking/explore boundary and intentionally not changed here.
+
+The one requested full native production campaign completed before the final
+narrow Nix hyphen-path, TypeScript-family-only ordering, and ordinary-Java
+Lombok-gate refinements:
+
+```text
+passed:   5,604
+failed:      71
+skipped:    213
+total:    5,888
+```
+
+That campaign improved the prior checkpoint by eight passing assertions. Its
+remaining failures include the frozen ranking/explore contracts, cleanup
+EPERM, timeout/tooling/performance cases, and historical native framework
+contracts outside the selected 15 (including RTK Query, Spring events, Vue
+store, and Java anonymous-class behavior). Those non-selected contracts are
+not claimed closed. Final-head focused evidence supplements the campaign and
+proves the selected inventory at 15 -> 0 without reopening the expensive full
+campaign.
+
+Default semantic baseline remains green across six fixtures. Native structural
+output remains green while its known floating score values remain in the
+ranking/explore boundary. Default and native CLI/MCP smoke each pass all 21
+checks. TypeScript typecheck, clean production/UI build, viewer artifact check,
+and the 29-grammar inventory pass. Clean build did not modify or delete tracked
+source files.
+
+```text
+Route-level native semantic gaps:        0 -> 0
+Lexical receiver gaps:                   0 -> 0
+Framework/extraction gaps:              15 -> 0
+Ranking/explore gaps:                    6 -> 6
+Other:                                   1 -> 0 (reclassified RANKING_EXPLORE)
+Frozen legitimate selected inventory:   22 -> 6
+```
+
+This is closure of the frozen selected inventory, not global native production
+parity. Native semantic Tree-sitter reachability remains zero. Default fallback,
+parser bootstrap, 29 grammar WASM assets, existing `SyntaxNode` coupling, and
+parser dependencies remain unchanged.
+
+```text
+DEFAULT_FALLBACK_CLOSURE = NOT_READY
+```
+
+The single recommended next boundary is **Native Ranking & Explore Contract
+Closure**.
