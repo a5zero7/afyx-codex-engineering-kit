@@ -1633,3 +1633,333 @@ convergence are now closed. The only remaining Phase 5F surface is the global
 default fallback/bootstrap/runtime/grammar reachability boundary. The next
 boundary is **Global Default Fallback & Parser Reachability Closure Audit**;
 it is not started here, and Phase 5F is not marked complete.
+
+## Global Parser Reachability Closure Audit
+
+Baseline: `144cae1c5c2542e2aa839cd460af569575a8dfd5` on
+`afyx/native-phase5f-parser-grammar`. This audit changes documentation only. It
+does not remove the default fallback, parser bootstrap, grammar assets,
+dependencies, tests, development tools, or legal/attribution records.
+
+### Current invariants
+
+The established native invariant remains:
+
+| Metric | Value |
+| --- | ---: |
+| Native semantic parser reachability | 0 |
+| Native active syntax parse reachability | 0 |
+| Named parser-backed language routes | 0 |
+| Parser-coupled special-format semantic routes | 0 |
+| Known semantic gaps | 0 |
+| Native UI checks | 33/33 PASS |
+
+A minimal reconfirmation covered the last special-format seams: native Razor
+6/6, native special-format 10/10, and native CFML 5/5 (21/21 total). The
+established broad native result remains 648 semantic assertions with zero
+residuals; its seven Windows failures are temporary-directory teardown-only
+`EPERM` results. No production source changed, so the broad campaign and builds
+were not repeated for this audit.
+
+### Reachability matrix
+
+| Surface | Native mode | Default mode | Primary classification |
+| --- | --- | --- | --- |
+| Semantic extraction | Native extractors; no parser | Parser-backed fallback remains selected | `DEFAULT_FALLBACK_REACHABLE` |
+| Active syntax classification | Native tokenizers; no parser | Tree-walk fallback remains selectable | `DEFAULT_FALLBACK_REACHABLE` |
+| Grammarless syntax lookup | May initialize and look up, but cannot parse without a grammar | Same | `DEAD_OR_OBSOLETE` candidate |
+| Async engine/index lifecycle | Initializes runtime and loads needed grammars even when native | Same, then parses through fallback | `BOOTSTRAP_REACHABLE` |
+| Parse-worker pool | Runs native/kernel extraction too; grammar protocol remains active | Also runs parser fallback | Native pool plus fallback-only protocol |
+| UI browser bundle | No parser | No parser | Native/parser-free |
+| UI Node highlighting | Native for grammar-backed formats | Fallback remains selectable | `DEFAULT_FALLBACK_REACHABLE` |
+| Tests | Native assertions plus parser OLD oracles and dependency checks | Parser-backed assertions | `TEST_ONLY` secondary roots |
+| Add-language scripts | Direct parser/grammar imports | Direct parser/grammar imports | `DEV_TOOL_ONLY` |
+| Build and release | Copies all tracked WASM and bundles production dependencies | Same | `BUILD_REACHABLE` / `PACKAGING_REACHABLE` |
+| Notices and licenses | Retained | Retained | `LEGAL_METADATA_ONLY` |
+
+No route is `NATIVE_SEMANTIC_REACHABLE` or
+`NATIVE_SYNTAX_REACHABLE` through Tree-sitter. Parser lookup without a grammar
+is recorded separately from active parser execution.
+
+### Default fallback map and feature flag
+
+Native dispatch is selected only when `AFYX_GRAPH_NATIVE_PARSER` is exactly
+`1`. The absent or disabled flag therefore selects the parser-backed fallback
+in ordinary production. No CLI option, MCP configuration, installer/provider
+configuration, package script, or CI workflow sets the flag.
+
+All 31 native semantic language routes and all active syntax routes already
+have parser-free implementations. The fallback remains for default selection,
+compatibility, tests, and the transition oracle; it does not fill a known
+semantic or syntax capability gap. The only selection blocker to unconditional
+native extraction is changing/removing this default gate. Bootstrap, worker
+grammar messages, packaging, and test/tool dependencies are separate cleanup
+boundaries and do not block that dispatch change.
+
+### Parser entry points and caller graphs
+
+There are five production `getParser()` call sites:
+
+1. `TreeSitterExtractor.extract()` for generic semantic fallback.
+2. `CfmlExtractor` for the root CFML parser fallback.
+3. `syntax-tokens.ts` for the tree-walk syntax fallback.
+4. Async `guardsForFile()` for the branch-guard fallback.
+5. Sync `guardsForFileSync()` for the branch-guard fallback.
+
+Their production roots are:
+
+```text
+CLI async init/open/recreate -> indexAll/sync -> extraction dispatch
+  -> default semantic adapter -> TreeSitterExtractor/CfmlExtractor -> getParser
+
+MCP query-only openSync
+  -> no initial bootstrap
+MCP catch-up/watcher -> sync -> the same extraction/bootstrap path as CLI
+
+UI browser bundle
+  -> no parser
+UI Node server -> tokenizeSource
+  -> native grammar-backed highlighting, or default/generic syntax lookup
+
+Engine direct native extractFromSource
+  -> native extractor, no bootstrap
+Engine async lifecycle/indexing
+  -> initGrammars + needed-grammar loading, even in native mode
+
+Syntax/branch guards -> default fallback -> getParser
+```
+
+Tests reach these same exported paths. The add-language scripts do not call the
+repository helper; they import `web-tree-sitter` directly. Build and packaging
+copy parser artifacts but do not call `getParser()`.
+
+`TreeSitterExtractor` has six construction families, all default-fallback-only
+after the completed native migrations:
+
+1. Generic fallback in `tree-sitter.ts`.
+2. Bare CFScript.
+3. Embedded CFScript.
+4. Embedded CFQuery.
+5. Svelte/Vue/Astro JavaScript or TypeScript through `embedded-script.ts`.
+6. Razor/Blazor C# regions.
+
+The extractor and its adapters can be deleted only after the default path and
+OLD-oracle dependency are closed. None is a native production requirement.
+
+### Production roots
+
+- CLI indexing uses async `AfyxGraph.init/open/recreate` and `indexAll/sync`;
+  runtime bootstrap and conditional grammar loading still occur in native mode.
+- MCP query-only startup uses `openSync`, so it does not bootstrap initially.
+  Catch-up and watcher-driven `sync()` do bootstrap and load grammars.
+- The browser UI does not bundle the parser. Node-side viewer highlighting uses
+  native tokenization for grammar-backed formats.
+- A grammarless/custom-format highlight can still initialize the runtime and
+  attempt a parser lookup before returning plain/unclassified output. It never
+  performs an active Tree-sitter parse and is an obsolete lookup candidate.
+- Direct native `extractFromSource` avoids bootstrap; the async engine lifecycle
+  does not.
+
+Thus current native semantic parsing and native active syntax parsing are both
+zero, while incidental parser initialization and loading remain nonzero.
+
+### Bootstrap and worker graph
+
+The remaining initialization graph is:
+
+```text
+AfyxGraph.init/open/recreate or ExtractionOrchestrator.indexAll/sync
+  -> initGrammars()
+  -> Parser.init() and runtime/cache setup
+  -> detect project languages
+  -> read only the needed grammar bytes
+  -> parse-worker grammar transfer
+  -> loadGrammarsForLanguages()
+```
+
+The in-process fallback loads needed grammars locally; sync loads grammars for
+changed files; syntax and branch-guard fallback paths may load a grammar on
+demand. Grammar loading is conditional by detected language, not an eager load
+of all 29 files. The parse-worker pool is not parser-exclusive: it also hosts
+native/kernel extraction and must remain. Its grammar buffers, load messages,
+parser/language caches, and reset lifecycle are parser-exclusive and belong to
+the later bootstrap/protocol closure.
+
+### Staged grammar inventory (29/29)
+
+All tracked staged grammars have the same reachability classification: a native
+semantic route and native syntax route exist; default fallback remains
+reachable; bootstrap can conditionally load the grammar; tests and add-language
+tools can address it; `copy-assets` always stages it in `dist`; distribution
+verification requires it; and it becomes a removal candidate only after
+fallback, test-oracle, and bootstrap closure.
+
+| # | Staged grammar |
+| ---: | --- |
+| 1 | `tree-sitter-arkts.wasm` |
+| 2 | `tree-sitter-c.wasm` |
+| 3 | `tree-sitter-c_sharp.wasm` |
+| 4 | `tree-sitter-cfml.wasm` |
+| 5 | `tree-sitter-cfquery.wasm` |
+| 6 | `tree-sitter-cfscript.wasm` |
+| 7 | `tree-sitter-cobol.wasm` |
+| 8 | `tree-sitter-cpp.wasm` |
+| 9 | `tree-sitter-dart.wasm` |
+| 10 | `tree-sitter-erlang.wasm` |
+| 11 | `tree-sitter-go.wasm` |
+| 12 | `tree-sitter-java.wasm` |
+| 13 | `tree-sitter-javascript.wasm` |
+| 14 | `tree-sitter-kotlin.wasm` |
+| 15 | `tree-sitter-lua.wasm` |
+| 16 | `tree-sitter-luau.wasm` |
+| 17 | `tree-sitter-nix.wasm` |
+| 18 | `tree-sitter-pascal.wasm` |
+| 19 | `tree-sitter-php.wasm` |
+| 20 | `tree-sitter-python.wasm` |
+| 21 | `tree-sitter-r.wasm` |
+| 22 | `tree-sitter-ruby.wasm` |
+| 23 | `tree-sitter-rust.wasm` |
+| 24 | `tree-sitter-scala.wasm` |
+| 25 | `tree-sitter-swift.wasm` |
+| 26 | `tree-sitter-terraform.wasm` |
+| 27 | `tree-sitter-tsx.wasm` |
+| 28 | `tree-sitter-typescript.wasm` |
+| 29 | `tree-sitter-vbnet.wasm` |
+
+Objective-C and Solidity are additional default fallback grammars resolved from
+the installed `tree-sitter-wasms` package, not from this 29-file directory.
+That package contains 36 grammars, including unused assets. The existing
+Windows release measurement is therefore larger than the staged-source count:
+68 WASM files / 122,348,375 bytes, because `dist` grammars and installed-package
+runtime WASM coexist.
+
+### SyntaxNode coupling inventory (34/34)
+
+| Primary role | Count |
+| --- | ---: |
+| Language adapters, default semantic fallback | 24 |
+| Default semantic fallback core | 5 |
+| Default syntax fallback | 1 |
+| Default branch-guard fallback | 2 |
+| Runtime/bootstrap (`grammars.ts`) | 1 |
+| Build-time declaration (`web-tree-sitter.d.ts`) | 1 |
+| **Total** | **34** |
+
+The 24 language adapter files are:
+
+```text
+languages/arkts.ts       languages/c-cpp.ts      languages/cfscript.ts
+languages/cobol.ts       languages/csharp.ts     languages/dart.ts
+languages/erlang.ts      languages/go.ts         languages/java.ts
+languages/kotlin.ts      languages/lua.ts        languages/nix.ts
+languages/objc.ts        languages/pascal.ts     languages/php.ts
+languages/r.ts           languages/ruby.ts       languages/rust.ts
+languages/scala.ts       languages/solidity.ts   languages/swift.ts
+languages/terraform.ts   languages/typescript.ts languages/vbnet.ts
+```
+
+The five fallback-core files are `tree-sitter.ts`, `tree-sitter-types.ts`,
+`tree-sitter-helpers.ts`, `function-ref.ts`, and `cfml-extractor.ts`. The other
+files are `syntax-tokens.ts`, `graph/branch-guards.ts`,
+`graph/branch-guard-policy.ts`, `grammars.ts`, and `web-tree-sitter.d.ts`.
+
+`grammars.ts` is the sole runtime value importer of `web-tree-sitter`. Thirty-
+two files are structurally coupled to `SyntaxNode`/`Tree` for fallback behavior
+but use those names only as TypeScript types: 29 use explicit `import type`, and
+three use compilation-elided value-style imports in type positions. The final
+file is the local declaration shim. Tests and tooling are outside this 34-source
+count. Consequently the current count does not mean 34 active parser calls.
+
+### Tests and development tooling
+
+Parser-dependent tests cover differential OLD-oracle cells, extraction and
+grammar bytes, kernel/grammar parity, UI highlighting, distribution contracts,
+MCP initialization, and explicit parser-dependency presence. Closure must:
+
+1. freeze or replace OLD-oracle output with normalized expectations;
+2. isolate any retained differential harness as dev-only;
+3. replace presence checks with parser/asset-absence distribution checks; and
+4. avoid retaining production parser dependencies solely for tests.
+
+`scripts/add-lang/dump-ast.mjs` and `scripts/add-lang/check-grammar.mjs` import
+`web-tree-sitter` directly and resolve package/tracked grammars. They should be
+deleted or isolated outside the production package at the final dependency
+boundary; they are not a reason to retain a production runtime dependency.
+
+### Dependency, packaging, and legal boundary
+
+The direct production dependencies remain:
+
+| Dependency | Version | Current reason retained |
+| --- | --- | --- |
+| `web-tree-sitter` | 0.25.10 | Runtime `Parser`/`Language`, runtime WASM, tests, and tools |
+| `tree-sitter-wasms` | 0.1.13 | Package-resolved grammars, tests/tools, and installed WASM assets |
+
+Both remain in `package-lock.json`; `tree-sitter-wasms` records its package
+self-dependency, and `web-tree-sitter` has optional `@types/emscripten` peer
+metadata. No other direct parser helper dependency was found.
+
+`package.json` `copy-assets` copies every tracked grammar into `dist`, and the
+package `files` rule includes all of `dist`. Normal engine distribution
+verification requires every source grammar. Staged-bundle verification checks
+a ten-grammar sentinel subset. Standalone bundles include production
+`node_modules`, so the parser packages and their own runtime/WASM assets also
+ship. These rules, rather than current native parse execution, explain why all
+parser assets remain in release artifacts.
+
+Do not edit `afyx-graph/THIRD_PARTY_NOTICES.md`,
+`afyx-graph/LICENSES/THIRD_PARTY_ENGINE_MIT.txt`, or
+`afyx-graph/engine/LICENSE` during technical closure. Release bundles still
+require them. Grammar provenance/licenses are heterogeneous and partly recorded
+only in `grammars.ts` comments. Phase 5H must reassess attribution after
+technical removal; this audit makes no legal-removal conclusion.
+
+### Closure DAG and rollback boundaries
+
+```text
+Native semantic + syntax independence (complete)
+  -> A. Global Default Fallback Closure
+       Make native semantic/syntax/guard dispatch unconditional.
+       Freeze or replace the OLD oracle. Keep bootstrap temporarily.
+  -> B. Parser Bootstrap & Worker-Protocol Closure
+       Remove eager init roots, grammar reads/transfers/load messages, and
+       parser caches/reset. Keep the native parse-worker pool.
+  -> C. Parser Adapter & Tree-Walk Source Closure
+       Delete TreeSitterExtractor, language adapters, AST helpers/types, and
+       fallback syntax/branch walkers.
+  -> D. Grammar & Packaging Closure
+       Delete 29 tracked WASM, registry/copy requirements, package-resolved
+       grammar use, and update distribution absence contracts.
+  -> E. Runtime & Dev/Test Isolation
+       Remove web-tree-sitter/tree-sitter-wasms from production manifest and
+       lockfile; delete or isolate parser tooling and remaining oracles.
+  -> Phase 5H legal/attribution review (separate boundary)
+```
+
+Each arrow is a rollback boundary. Expected metric changes are:
+
+| Boundary | Expected delta |
+| --- | --- |
+| A | Default fallback `ACTIVE -> REMOVED`; six extractor construction families and five `getParser()` sites become unreachable from normal production dispatch |
+| B | Parser initialization roots and production grammar load/transfer protocol `nonzero -> 0` |
+| C | Production `SyntaxNode`/Tree-sitter adapter coupling `34 -> bootstrap/declaration remnants -> 0` |
+| D | Tracked release grammar WASM `29 -> 0` and package grammar staging requirements removed |
+| E | Production `web-tree-sitter` and `tree-sitter-wasms` requirement `true -> false` |
+
+Native semantic and native active syntax parser reachability remain zero at
+every boundary. Adapter deletion must not precede default/oracle closure;
+grammar and package deletion must not precede bootstrap/protocol closure.
+
+### Fallback readiness
+
+All production semantic routes are native, all active production syntax routes
+are parser-free, known semantic gaps are zero, native UI is clean, and fallback
+exists for default compatibility/selection rather than missing capability.
+Incidental bootstrap/loading and downstream tests, protocol, packaging, tools,
+dependencies, and legal metadata do not block making native dispatch
+unconditional; they remain explicit later boundaries.
+
+`DEFAULT_FALLBACK_CLOSURE = READY`
+
+The single recommended next implementation boundary is **Global Default
+Fallback Closure**. It is not started by this audit.
