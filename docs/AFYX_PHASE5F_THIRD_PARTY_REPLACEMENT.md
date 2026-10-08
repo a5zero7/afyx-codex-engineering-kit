@@ -1400,3 +1400,71 @@ next dependency-safe Phase 5F boundary is the combined CFML / CFScript /
 CFQuery mixed-format native convergence campaign. It must be designed and
 validated as one family. That boundary is not started here, and Phase 5F is
 not marked complete.
+
+### CFML / CFScript / CFQuery native convergence checkpoint
+
+Starting checkpoint `1a7be7cd47fa8a5e20b15f9e5b2ecdc56b175877`
+retained the final three named parser-backed routes as one mixed-format
+family. The native-gated route now uses one Afyx-owned orchestrator in
+`native/cfml-facts.ts`: a bounded CFML tag-region recognizer owns embedded
+CFScript and CFQuery regions, all facts retain absolute UTF-16 source
+coordinates, and no Tree-sitter node or grammar API crosses the seam.
+Ungated/default execution continues to use `CfmlExtractor` and the existing
+CFML, CFScript, and CFQuery grammars unchanged.
+
+The native CFML contract preserves file/component identity, explicit or
+filename-derived component names, tag functions, access/return metadata,
+extends/implements references, containment, unquoted attributes, BOM routing,
+and bounded incomplete tags. `cfargument` and `cfproperty` source remains
+available to the established receiver inferrer; no new graph nodes are
+invented where the parser-backed adapter emitted none. Static tag-only
+include/invocation facts likewise remain absent because they were not part of
+the established adapter contract.
+
+The CFScript recognizer preserves anonymous component/interface identity,
+methods and nested functions, visibility, static imports/includes,
+construction references, local/member calls, and the receiver spellings used
+by CFML type inference (`svc.save`, `variables.svc.save`). Static literals are
+recorded; runtime values, scopes, component lookup, and expression evaluation
+remain unresolved. Script declared at component scope produces methods;
+script nested in a tag function remains owned by that function, and nested
+script functions retain function ownership.
+
+CFQuery remains a bounded embedded region, not a SQL product. It creates no
+query, datasource, or query-parameter semantic node because the previous
+adapter created none. Only calls inside `#...#` interpolation become graph
+references, owned by the enclosing tag function/component. Native syntax
+classifies bounded SQL vocabulary, literals, identifiers, and interpolated CF
+expressions without executing SQL or resolving schemas. `cfqueryparam` is
+retained as tag/source syntax only.
+
+Direct seam evidence covers native-gated CFML and CFScript semantic routes,
+embedded CFQuery semantics, and separate CFML/CFScript/CFQuery syntax entry
+points: none requests `getParser()`. Three representative OLD/NEW cells
+(bare CFC, standalone CFS, mixed tag/script/query) are semantically identical.
+The durable family suite is 5/5 PASS; existing default/parser-backed CFML is
+22/22 PASS and native-gated CFML is 22/22 PASS. Receiver and inheritance
+resolution is 18/18 PASS. The established native syntax regression is 8/8
+PASS. The broad native campaign records 648 semantic assertions PASS and the
+same seven Windows temp-directory teardown failures, all classified
+`CLEANUP_ONLY_EPERM`; semantic residuals remain zero.
+
+Native UI highlighting is 33/33 PASS. TypeScript typecheck, clean production
+and UI builds, viewer/29-grammar artifact verification, the six-fixture
+semantic baseline, all 21 CLI/MCP smoke checks, and `git diff --check` pass.
+
+Native semantic languages increase from 29 to 31 under the established
+registered-file-language convention (CFML and CFScript; CFQuery is embedded).
+Known native semantic gaps remain zero. Named parser-backed language routes
+decrease from three to zero. Active `web-tree-sitter`/`SyntaxNode` source
+coupling remains 34 files (34 → 34), and staged grammar WASM remains 29
+(29 → 29). All three CFML-family grammars remain active default-production
+fallbacks, loaded by the parser bootstrap and copied into release artifacts;
+none is build-only, test-only, obsolete, or historical/legal-only. No parser,
+grammar, package, lockfile, adapter, attribution, or legal asset is removed.
+
+Remaining special-format coupling is now Svelte/Vue/Astro script-region
+delegation, Razor/Blazor C# region delegation, and the global default
+fallback/bootstrap/runtime/grammar reachability. The next dependency-safe
+Phase 5F boundary is Svelte/Vue/Astro script-region delegation convergence.
+It is not started here, and Phase 5F is not marked complete.
