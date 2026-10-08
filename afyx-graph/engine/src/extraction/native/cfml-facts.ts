@@ -1,8 +1,27 @@
 import * as path from 'path';
 import type { Edge, ExtractionError, ExtractionResult, Language, Node, NodeKind, UnresolvedReference } from '../../types';
 import { generateNodeId } from '../node-id';
-import { isBareScriptCfml } from '../cfml-extractor';
 import { scanSource, type NativeToken } from './scanner';
+
+/** Distinguish modern bare-script CFML from tag-based source. */
+export function isBareScriptCfml(source: string): boolean {
+  let index = 0;
+  while (index < source.length) {
+    const ch = source[index];
+    if (ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r' || ch === '\uFEFF') {
+      index++;
+    } else if (ch === '/' && source[index + 1] === '/') {
+      const newline = source.indexOf('\n', index);
+      index = newline === -1 ? source.length : newline + 1;
+    } else if (ch === '/' && source[index + 1] === '*') {
+      const end = source.indexOf('*/', index + 2);
+      index = end === -1 ? source.length : end + 2;
+    } else {
+      return ch !== '<';
+    }
+  }
+  return true;
+}
 
 interface TagRegion {
   name: string;

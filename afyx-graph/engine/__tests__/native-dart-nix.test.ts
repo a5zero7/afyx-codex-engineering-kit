@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { extractNativeFacts } from '../src/extraction/native/fact-extractor';
 import { tokenizeSource } from '../src/extraction/syntax-tokens';
-import { extractFromSource } from '../src/extraction/tree-sitter';
+import { extractFromSource } from '../src/extraction/extract';
 
 afterEach(() => { delete process.env.AFYX_GRAPH_NATIVE_PARSER; });
 

@@ -47,7 +47,7 @@
  *   returns all implementations even when Drupal core is not indexed.
  */
 
-import { generateNodeId } from '../../extraction/tree-sitter-helpers';
+import { generateNodeId } from '../../extraction/node-id';
 import { Node } from '../../types';
 import { FrameworkResolver, ResolutionContext, ResolvedRef, UnresolvedRef } from '../types';
 

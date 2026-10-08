@@ -1,18 +1,6 @@
-import { afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { initGrammars } from '../src/extraction/grammars';
-import { guardsInSource, guardsInSourceWithParserOracle } from '../src/graph/branch-guards';
+import { describe, expect, it } from 'vitest';
+import { guardsInSource } from '../src/graph/branch-guards';
 import type { Language } from '../src/types';
-
-const originalGate = process.env.AFYX_GRAPH_NATIVE_PARSER;
-
-beforeAll(async () => {
-  await initGrammars();
-});
-
-afterEach(() => {
-  if (originalGate === undefined) delete process.env.AFYX_GRAPH_NATIVE_PARSER;
-  else process.env.AFYX_GRAPH_NATIVE_PARSER = originalGate;
-});
 
 interface Fixture {
   language: Language;
@@ -133,11 +121,11 @@ class OwnerController {
   },
 ];
 
-async function results(fixture: Fixture, oracle = false) {
+async function results(fixture: Fixture) {
   const lines = fixture.source.split('\n');
   return Promise.all(fixture.sites.map(async (site) => {
     const row = lines.findIndex((line) => line.includes(site));
-    const guards = await (oracle ? guardsInSourceWithParserOracle : guardsInSource)(
+    const guards = await guardsInSource(
       fixture.source, fixture.language, row + 1, lines[row]!.indexOf(site)
     );
     return guards.map(({ text, negated, form, line, branch, armExit, exit }) => ({
@@ -146,14 +134,12 @@ async function results(fixture: Fixture, oracle = false) {
   }));
 }
 
-describe('native branch guard differential', () => {
+describe('native branch guard contract', () => {
   for (const fixture of fixtures) {
     it(`${fixture.language}: preserves guard structure and metadata`, async () => {
-      const native = await results(fixture);
-      const baseline = await results(fixture, true);
-      for (let index = 0; index < fixture.sites.length; index += 1) {
-        expect(native[index], fixture.sites[index]).toEqual(baseline[index]);
-      }
+      const first = await results(fixture);
+      expect(first.some((guards) => guards.length > 0)).toBe(true);
+      await expect(results(fixture)).resolves.toEqual(first);
     });
   }
 

@@ -4,18 +4,18 @@
  *
  * Routing policy is deliberately TS-side and per-language (migration plan §2):
  * a language routes to the kernel only after its equivalence gate passes;
- * everything else stays on the wasm path forever if need be. Rollback per
+ * everything else stays on the TypeScript-native path. Rollback per
  * language = removing it from DEFAULT_ROUTED (or AFYX_GRAPH_KERNEL=0 for all).
  *
  * Routing status: TypeScript/TSX/JavaScript/JSX are default-routed (R3 gate
  * passed 2026-07-16 — full-index dumps byte-identical on express/excalidraw/
  * vscode, control repo unchanged; see the migration plan §4a). Override with
  *   AFYX_GRAPH_KERNEL_LANGS=<langs|all>  (replaces the default set), or
- *   AFYX_GRAPH_KERNEL=0                  (kill switch, everything → wasm).
+ *   AFYX_GRAPH_KERNEL=0                  (kill switch, TypeScript-native only).
  */
 
 import type { ExtractionResult, Language } from '../../types';
-import { EXTRACTORS } from '../languages';
+import { preProcessSource } from '../languages';
 import { getKernel, kernelSupports } from './loader';
 import { decodeExtractBuffers } from './decode';
 import {
@@ -30,9 +30,8 @@ export { decodeExtractBuffers } from './decode';
 /**
  * Languages routed to the kernel by default (gate-passed only — see the
  * per-language tracker in docs/design/rust-kernel-migration-plan.md §4).
- * Per-file safety valve regardless of routing: a file whose parse tree
- * contains ERRORS defers to the wasm extractor (error recovery differs
- * between UTF-8 and UTF-16 parsing — wasm's recovery is canonical).
+ * Per-file safety valve regardless of routing: a file the native kernel
+ * cannot parse defers to the TypeScript-native fact extractor.
  */
 const DEFAULT_ROUTED: ReadonlySet<Language> = new Set<Language>([
   'typescript',
@@ -44,7 +43,7 @@ const DEFAULT_ROUTED: ReadonlySet<Language> = new Set<Language>([
   'go',
   // R7a (2026-07-17): parity swept 0-diff on redis/git/fmt/protobuf/ALS
   // (2,389 files compared) + full-init dump-diffs byte-identical; erroring
-  // files defer per-file to wasm (routine for macro-heavy C/C++ — see
+  // files defer per-file to the TypeScript-native extractor (routine for macro-heavy C/C++ — see
   // scripts/kernel-parity.mjs --max-deferral).
   'c',
   'cpp',
@@ -126,18 +125,15 @@ const POST_PASSES: Partial<Record<Language, KernelPostPass>> = {
 
 /**
  * The preParse hoist (checklist §arch-1): languages with an offset-preserving
- * `preParse` hook (c/cpp macro blanking, csharp #237, metal #1121, cuda #1172)
- * apply it HERE, before the kernel call, so both arms parse identical blanked
- * bytes and none of the blanking logic needs a Rust port. The wasm fallback
- * path is untouched — TreeSitterExtractor applies the same hook itself on the
- * RAW source it receives, so a kernel error/defer still extracts identically.
+ * source preprocessor (c/cpp macro blanking, csharp #237, metal #1121, cuda #1172)
+ * applies it HERE, before the kernel call, so native grammar input remains
+ * compatible without preserving the historical parser adapter.
  * Every blank is an equal-length-space replacement, so offsets, lines, and
  * columns survive; `filePath` rides along for the extension-gated dialect
  * blanks (`.metal` attributes; `.cu`/`.cuh` + content-gated CUDA).
  */
 function preParsedSource(filePath: string, source: string, language: Language): string {
-  const pre = EXTRACTORS[language]?.preParse;
-  return pre ? pre(source, filePath) : source;
+  return preProcessSource(filePath, source, language);
 }
 
 function isRouted(language: Language): boolean {
@@ -159,15 +155,14 @@ export function kernelRoutes(language: Language): boolean {
 const warned = new Set<string>();
 
 /**
- * One-slot defer memo. A file the kernel defers (parse errors → wasm) used to
+ * One-slot defer memo. A file the kernel defers used to
  * pay the full pipeline again at every seam: the worker's raw try blanked +
  * native-parsed it, extractFromSource's kernel try blanked + native-parsed it
- * AGAIN, and the wasm extractor then re-applied preParse a third time. On a
+ * again before native fallback. On a
  * high-deferral tree (the Linux kernel defers ~79% of files) that waste
  * dominated the arm's parse phase. The slot remembers the LAST deferred
  * (file, source, language) so (a) a repeat kernel attempt for the same file
- * short-circuits to null, and (b) the wasm fallback can reuse the
- * already-blanked source instead of re-running preParse. Source is matched by
+ * short-circuits to null. Source is matched by
  * string identity — the worker passes the same string through every seam.
  */
 let deferSlot: { filePath: string; source: string; language: Language; pre: string } | null = null;
@@ -243,7 +238,7 @@ export function tryKernelExtractRaw(
     if (!warned.has(language)) {
       warned.add(language);
       process.stderr.write(
-        `[afyx-graph-kernel] ${language} extraction failed (${message}) — falling back to the wasm path\n`
+        `[afyx-graph-kernel] ${language} extraction failed (${message}) — using the TypeScript-native path\n`
       );
     }
     return null;
@@ -274,10 +269,9 @@ export function materializeKernelResult(
 
 /**
  * Extract via the native kernel. Returns null when the kernel doesn't apply
- * (not routed / not available / kill switch) — the caller falls back to the
- * wasm TreeSitterExtractor. A kernel ERROR on a routed file also returns
- * null: per-file fallback keeps indexing correct while a kernel bug costs
- * only that file's speedup.
+ * (not routed / not available / kill switch) — the caller uses the native
+ * TypeScript fact extractor. A kernel ERROR on a routed file also returns
+ * null so one kernel defect costs only that file's speedup.
  */
 export function tryKernelExtract(
   filePath: string,
@@ -298,9 +292,8 @@ export function tryKernelExtract(
     return result;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    // `defer:` is the kernel's expected-routing signal (files with parse
-    // errors take the wasm path — its error RECOVERY is the canonical one;
-    // recovery differs between UTF-8 and UTF-16 parsing). Silent by design.
+    // `defer:` is the kernel's expected-routing signal; the caller continues
+    // through the native TypeScript extractor. Silent by design.
     if (message.includes('defer:')) {
       deferSlot = { filePath, source, language, pre };
       return null;
@@ -308,7 +301,7 @@ export function tryKernelExtract(
     if (!warned.has(language)) {
       warned.add(language);
       process.stderr.write(
-        `[afyx-graph-kernel] ${language} extraction failed (${message}) — falling back to the wasm path\n`
+        `[afyx-graph-kernel] ${language} extraction failed (${message}) — using the TypeScript-native path\n`
       );
     }
     return null;

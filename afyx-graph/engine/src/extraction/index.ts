@@ -2979,5 +2979,5 @@ export class ExtractionOrchestrator {
 }
 
 // Re-export useful types and functions
-export { extractFromSource } from './tree-sitter';
+export { extractFromSource } from './extract';
 export { detectLanguage, isSourceFile, isLanguageSupported, isGrammarLoaded, getSupportedLanguages, initGrammars, loadGrammarsForLanguages, loadAllGrammars } from './grammars';

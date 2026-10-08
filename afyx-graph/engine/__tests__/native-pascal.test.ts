@@ -1,6 +1,6 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import * as grammars from '../src/extraction/grammars';
-import { extractFromSource } from '../src/extraction/tree-sitter';
+import { extractFromSource } from '../src/extraction/extract';
 import { extractNativePascalFacts } from '../src/extraction/native/pascal-facts';
 import { scanSource } from '../src/extraction/native/scanner';
 import { tokenizeSource } from '../src/extraction/syntax-tokens';

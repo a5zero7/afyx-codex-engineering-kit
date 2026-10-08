@@ -34,8 +34,7 @@ import {
   TOKEN_CLASSES,
   type HighlightResult,
 } from '../src/ui-server/highlight';
-import { classifyTree, syntaxRegionsFor } from '../src/extraction/syntax-tokens';
-import { getParser, initGrammars, loadGrammarsForLanguages } from '../src/extraction/grammars';
+import { syntaxRegionsFor, tokenizeSource } from '../src/extraction/syntax-tokens';
 import { LANGUAGES } from '../src/types';
 import { decodeLine, type Token } from '../ui/src/lib/highlight';
 import { assignRefs, type LineRef } from '../ui/src/lib/symbol-model';
@@ -360,7 +359,7 @@ describe('cost', () => {
   it('classifies three thousand lines of TypeScript well inside the budget', async () => {
     clearHighlightCache();
     const lines = fs
-      .readFileSync(path.join(__dirname, '..', 'src', 'extraction', 'tree-sitter.ts'), 'utf-8')
+      .readFileSync(path.join(__dirname, '..', 'src', 'extraction', 'native', 'fact-extractor.ts'), 'utf-8')
       .split('\n')
       .slice(0, 3000);
     // Warm the grammar load, which is a one-off per language per process.
@@ -431,12 +430,9 @@ describe('the classifier itself', () => {
     const source = fs
       .readFileSync(path.join(__dirname, '..', 'src', 'ui-server', 'api', 'flow.ts'), 'utf-8')
       .slice(0, 40_000);
-    await initGrammars();
-    await loadGrammarsForLanguages(['typescript']);
-    const parser = getParser('typescript');
-    expect(parser).not.toBeNull();
-    const tree = (parser as NonNullable<typeof parser>).parse(source);
-    const spans = classifyTree((tree as NonNullable<typeof tree>).rootNode, source, 'typescript');
+    const result = await tokenizeSource(source, 'typescript');
+    expect(result).not.toBeNull();
+    const spans = result!.spans;
 
     expect(spans.length).toBeGreaterThan(1000);
     let previous = 0;

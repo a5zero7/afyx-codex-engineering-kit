@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import AfyxGraph from '../src/index';
-import { extractFromSource } from '../src/extraction/tree-sitter';
+import { extractFromSource } from '../src/extraction/extract';
 import { initGrammars, loadGrammarsForLanguages } from '../src/extraction/grammars';
 import type { Edge, Node, UnresolvedReference } from '../src/types';
 

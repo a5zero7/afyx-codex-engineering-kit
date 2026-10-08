@@ -2860,3 +2860,86 @@ PARSER_WORKER_PROTOCOL               CLOSED
 ```
 
 The exact next boundary is **Parser Adapter & Tree-Walk Source Closure**.
+
+## Parser Adapter & Tree-Walk Source Closure
+
+This source-eradication boundary starts from
+`e0bb1caa2b53226fc28b2c1dfce8f36035542b75`. Production routing, parser
+fallback, bootstrap, and worker protocol were already closed; this boundary
+removes the obsolete parser implementation that remained solely as an OLD
+oracle.
+
+### Dependency cone and source ownership
+
+The retained cone contained `TreeSitterExtractor`, its generic language
+configuration registry, `SyntaxNode` helper/types, function-reference tree
+walking, CFML parser delegation, and parser-backed syntax/branch readers. The
+only live behavior inside that cone was bounded source preprocessing for
+C/C++/C#/COBOL/VB.NET plus UI readings for call sites, triggers, loops,
+decorators, and member types.
+
+Final ownership is:
+
+| Surface | Final state |
+| --- | --- |
+| Production extraction dispatch | `extract.ts`, Afyx-native facts and explicit special-format extractors |
+| C/C++/C#/COBOL/VB.NET preprocessing | small native source-preprocessor registry; no AST types |
+| Syntax classification | scanner/fact based only |
+| Branch conditions | existing native branch reader |
+| Call-site/trigger/loop/decorator/member-type UI facts | bounded source-native readers |
+| Node identity shared by Drupal | `node-id.ts` |
+| CFML dialect sniffing | native CFML facts module |
+
+### Removed source and oracle migration
+
+Removed source includes `tree-sitter.ts`, `tree-sitter-types.ts`,
+`tree-sitter-helpers.ts`, `function-ref.ts`, `cfml-extractor.ts`, and 24
+language-specific AST configuration modules. The remaining five language
+files contain only source preprocessing required by the native grammar path.
+The broad native-versus-`TreeSitterExtractor` differential test was retired;
+syntax and branch tests now assert the Afyx contract directly. Product tests
+that imported the historical host now import the native extraction facade.
+
+`grammars.ts`, `web-tree-sitter.d.ts`, the 29 grammar WASM files, package
+dependencies, and staging/copy rules remain intentionally present. They are
+`GRAMMAR_PACKAGING` / `RUNTIME_DEPENDENCY` inputs for the next boundaries and
+are not production extraction, syntax, or guard paths.
+
+### Validation evidence
+
+```text
+TypeScript typecheck                                      PASS
+native syntax + guard contract                         78/78 PASS
+extraction/resolution/context/impact cone             197/197 PASS
+worker/default-routing/UI artifact cone                53/53 PASS
+clean production and UI build                              PASS
+UI artifact validation, retained grammars              29/29 PASS
+CLI/MCP smoke                                           21/21 PASS
+git diff --check                                            PASS
+```
+
+The frozen V1 semantic contract and native performance baseline were reused;
+the full 5,8xx semantic campaign and performance campaign were not repeated
+because targeted final-source evidence exposed no unresolved semantic or
+performance risk. No new failure or skip was introduced in the executed cone.
+
+### Source/reachability audit
+
+```text
+TreeSitterExtractor production caller       0
+TreeSitterExtractor retained source         0
+production SyntaxNode coupling              0
+parser AST/tree-walk production path        0
+parser-backed syntax production path        0
+parser-backed guard production path         0
+
+grammar WASM                               29
+web-tree-sitter                       PRESENT
+tree-sitter-wasms                     PRESENT
+
+V1_REQUIRED failure                         0
+UNKNOWN product failure                     0
+PARSER_ADAPTER_AND_TREE_WALK_SOURCE     CLOSED
+```
+
+The exact next boundary is **Grammar & Packaging Closure**.

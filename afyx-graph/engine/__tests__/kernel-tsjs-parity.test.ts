@@ -38,7 +38,7 @@ const REAL_SOURCES = [
   'src/extraction/kernel/loader.ts',
   'src/extraction/kernel/decode.ts',
   'src/extraction/parse-pool.ts',
-  'src/extraction/function-ref.ts',
+  'src/extraction/native/fact-extractor.ts',
   'src/mcp/tools.ts',
 ];
 

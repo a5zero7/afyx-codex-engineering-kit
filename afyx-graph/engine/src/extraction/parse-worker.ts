@@ -14,7 +14,7 @@ try {
 } catch { /* cache is best-effort */ }
 
 import { parentPort } from 'worker_threads';
-import { extractFromSource } from './tree-sitter';
+import { extractFromSource } from './extract';
 import { detectLanguage } from './grammars';
 import { tryKernelExtractRaw } from './kernel';
 import { getAllFrameworkResolvers, getApplicableFrameworks } from '../resolution/frameworks';

@@ -1,5 +1,5 @@
 import type { ExtractionResult, Language } from '../types';
-import { extractFromSource } from './tree-sitter';
+import { extractFromSource } from './extract';
 import { detectLanguage, isLanguageSupported } from './grammars';
 
 /**

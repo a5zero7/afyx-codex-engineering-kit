@@ -2,7 +2,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import * as grammars from '../src/extraction/grammars';
 import { extractNativeCobolFacts, scanCobolSource } from '../src/extraction/native/cobol-facts';
 import { tokenizeSource } from '../src/extraction/syntax-tokens';
-import { extractFromSource } from '../src/extraction/tree-sitter';
+import { extractFromSource } from '../src/extraction/extract';
 
 const FIXED = (body: string) => body.split('\n').map((line) => line ? `       ${line}` : line).join('\n');
 const SOURCE = FIXED(`IDENTIFICATION DIVISION.

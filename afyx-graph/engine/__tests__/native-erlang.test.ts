@@ -3,7 +3,7 @@ import * as grammars from '../src/extraction/grammars';
 import { extractNativeErlangFacts } from '../src/extraction/native/erlang-facts';
 import { scanSource } from '../src/extraction/native/scanner';
 import { tokenizeSource } from '../src/extraction/syntax-tokens';
-import { extractFromSource } from '../src/extraction/tree-sitter';
+import { extractFromSource } from '../src/extraction/extract';
 
 const SOURCE = `-module(native_sample).
 -behaviour(gen_server).

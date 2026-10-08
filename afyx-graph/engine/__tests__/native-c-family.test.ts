@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { extractNativeFacts } from '../src/extraction/native/fact-extractor';
-import { extractFromSource } from '../src/extraction/tree-sitter';
+import { extractFromSource } from '../src/extraction/extract';
 import { guardsInSource } from '../src/graph/branch-guards';
 import type { Language } from '../src/types';
 

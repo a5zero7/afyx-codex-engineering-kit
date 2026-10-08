@@ -129,7 +129,7 @@ describe('failure markers vs later real results (#1557 × #1541)', () => {
 
       // The retry pass succeeds with identical bytes — the marker must be
       // replaced, not treated as "no changes".
-      const { extractFromSource } = await import('../src/extraction/tree-sitter');
+      const { extractFromSource } = await import('../src/extraction/extract');
       const real = extractFromSource(rel, content, 'python');
       expect(real.nodes.length).toBeGreaterThan(0);
       await admission.admit(rel, content, 'python', stats, real);

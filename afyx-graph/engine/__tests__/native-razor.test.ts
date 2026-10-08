@@ -1,7 +1,7 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import * as grammars from '../src/extraction/grammars';
 import { syntaxRegionsFor, tokenizeSource } from '../src/extraction/syntax-tokens';
-import { extractFromSource } from '../src/extraction/tree-sitter';
+import { extractFromSource } from '../src/extraction/extract';
 
 const RAZOR = `<ServiceCard />
 @inject CatalogService Service

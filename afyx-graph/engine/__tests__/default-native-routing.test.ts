@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { extractFromSource } from '../src/extraction/tree-sitter';
+import { extractFromSource } from '../src/extraction/extract';
 import { tokenizeSource } from '../src/extraction/syntax-tokens';
 import { guardsInSource } from '../src/graph/branch-guards';
 

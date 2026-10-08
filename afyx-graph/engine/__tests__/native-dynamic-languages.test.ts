@@ -3,7 +3,7 @@ import { extractNativePhpFacts } from '../src/extraction/native/php-facts';
 import { extractNativeRubyFacts } from '../src/extraction/native/ruby-facts';
 import { extractNativeLuaFacts } from '../src/extraction/native/lua-facts';
 import { extractNativeRFacts } from '../src/extraction/native/r-facts';
-import { extractFromSource } from '../src/extraction/tree-sitter';
+import { extractFromSource } from '../src/extraction/extract';
 import { tokenizeSource } from '../src/extraction/syntax-tokens';
 
 afterEach(() => { delete process.env.AFYX_GRAPH_NATIVE_PARSER; });

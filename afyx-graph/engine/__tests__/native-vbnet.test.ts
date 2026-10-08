@@ -3,7 +3,7 @@ import * as grammars from '../src/extraction/grammars';
 import { extractNativeVbnetFacts } from '../src/extraction/native/vbnet-facts';
 import { scanSource } from '../src/extraction/native/scanner';
 import { tokenizeSource } from '../src/extraction/syntax-tokens';
-import { extractFromSource } from '../src/extraction/tree-sitter';
+import { extractFromSource } from '../src/extraction/extract';
 
 const SOURCE = `Imports System.Collections.Generic
 Namespace Acme.Billing

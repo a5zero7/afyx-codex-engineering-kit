@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractFromSource } from '../src/extraction/tree-sitter';
+import { extractFromSource } from '../src/extraction/extract';
 
 // Robustness of the MyBatis / iBatis mapper extractor. Four shapes the regex
 // scanner previously mishandled, all reported and diagnosed by @ESPINS in #1182:

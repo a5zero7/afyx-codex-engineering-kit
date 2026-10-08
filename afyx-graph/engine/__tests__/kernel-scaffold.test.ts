@@ -15,7 +15,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import { NODE_KINDS, EDGE_KINDS } from '../src/types';
-import { generateNodeId } from '../src/extraction/tree-sitter-helpers';
+import { generateNodeId } from '../src/extraction/node-id';
 import { getKernel, tryKernelExtract, kernelRoutes, resetKernelForTests } from '../src/extraction/kernel';
 import { extractFromSource } from '../src/extraction';
 import { initGrammars, loadGrammarsForLanguages } from '../src/extraction/grammars';
