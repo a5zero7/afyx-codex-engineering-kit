@@ -2,15 +2,15 @@
 
 Status: **Phase 5 active**  
 Canonical since: **2026-10-03**  
-Contract revision: **2026-10-04**  
+Contract revision: **2026-10-08**  
 v1 scope policy: **FROZEN — Phase 1 through Phase 11**  
 Post-v1 policy: **PLANNED EXPANSION — not a v1 release blocker**
 
 Current work: **Phase 5F — Third-Party Source / Runtime Replacement**  
 Task: `AFYX-91852`  
-Canonical merged main baseline: `ebe34a2b3781c664713a362714ccb92bba2bc8e6`  
+Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`  
 Active implementation branch: `afyx/native-phase5f-parser-grammar`  
-Latest verified parser checkpoint at this revision: `d9039bf784c33bb494fbc24c5eaa72a97b43c61e`  
+Latest verified Phase 5F implementation checkpoint at this revision: `3e6b624505680e264af3b5f681be0f806a84648d`  
 Last merged Phase 5F major checkpoint: **PR #57 — Utility Runtime + UI Runtime**  
 Phase 5E merge baseline: `48b6078ed37349e405213258819fa5225bcdb3fb`
 
@@ -44,6 +44,46 @@ Code understanding
 The product is not defined by parser count, tool count, or test count. It is
 defined by correctness, useful engineering context, bounded cost, reliable
 automation, maintainable ownership, and evidence-backed claims.
+
+### V1 optimization contract
+
+Afyx v1 optimizes for **quality-adjusted resource efficiency**, not for the
+smallest raw token count.
+
+Canonical rule:
+
+> **Use no less context, reasoning, tooling, or validation than required for the
+> target quality, and no more than produces useful evidence.**
+
+Therefore:
+
+- correctness and precision are hard gates;
+- token efficiency means eliminating irrelevant context, repeated discovery,
+  duplicate reads, redundant tool calls, and redundant validation;
+- Afyx must not starve an agent of context merely to reduce token usage;
+- Afyx Graph should reduce the search space toward the **minimum sufficient
+  engineering context**, especially for large repositories and workspaces;
+- validation scope is proportional to the real impact/risk of a change;
+- evidence that remains valid is reused rather than recomputed;
+- after correctness is established, prefer the most direct, efficient, and
+  performant Afyx-native implementation supported by measurement;
+- v1 requires no arbitrary percentage claim against the historical baseline;
+  comparative superiority claims require measured evidence.
+
+The intended engineering loop is:
+
+```text
+task
+  -> relevant graph / impact cone
+  -> minimum sufficient context
+  -> sufficient reasoning / tools
+  -> scoped implementation
+  -> minimum sufficient validation
+  -> closure evidence
+```
+
+Optimization is successful only when resource waste decreases **without reducing
+required output quality**.
 
 ## Canonical development method
 
@@ -351,17 +391,17 @@ Result:
 
 #### 5F.4 — Parser / Grammar Replacement
 
-Status: **ACTIVE NOW**
+Status: **ACTIVE — NATIVE ROUTES COMPLETE; V1 CONTRACT DECISION / ERADICATION PENDING**
 
 Current branch:
 
 `afyx/native-phase5f-parser-grammar`
 
-Latest verified checkpoint at this contract revision:
+Latest verified implementation checkpoint:
 
-`d9039bf784c33bb494fbc24c5eaa72a97b43c61e`
+`3e6b624505680e264af3b5f681be0f806a84648d`
 
-Native foundation complete:
+Current native foundation:
 
 - dependency-free bounded native scanner.
 - UTF-16 source-position contract.
@@ -369,96 +409,138 @@ Native foundation complete:
 - bounded delimiter handling.
 - malformed/incomplete source safety.
 - no fake historical AST compatibility layer.
+- native semantic Tree-sitter reachability = `0`.
+- native active syntax parser reachability = `0`.
+- named parser-backed native routes = `0`.
+- parser-backed special-format semantic routes = `0`.
 
-Native-complete fact/syntax routes at this checkpoint:
+Completed native semantic migration includes the supported language and
+special-format families established by the Phase 5F evidence ledger, including:
 
-- TypeScript.
-- TSX.
-- JavaScript.
-- JSX.
-- Python.
-- Go.
-- Java.
+- TypeScript / TSX / JavaScript / JSX.
+- Python / Go / Java.
+- Rust / Kotlin / Scala.
+- C / C++ / Objective-C / C#.
+- Swift / ArkTS / Solidity.
+- PHP / Ruby / Lua / Luau / R.
+- Dart / Nix / Pascal / VB.NET.
+- Erlang / Terraform / OpenTofu / COBOL.
+- CFML / CFScript / CFQuery.
+- Svelte / Vue / Astro embedded-script semantics.
+- Razor / Blazor C# regions.
 
-Native cross-cutting coverage at this checkpoint:
+Completed production-contract closure boundaries:
 
-- syntax tokens for all seven native routes.
-- function references for all seven native routes.
-- branch guards for TypeScript / TSX / JavaScript / JSX.
-- branch guards for Python / Java / Go.
+- native semantic primitive closure.
+- native resolution and conformance closure.
+- native lexical receiver precision closure.
+- frozen native extraction/framework-synthesis inventory closure.
 
-Current evidence:
+Current verified gap metrics:
 
-- focused branch-guard suite: **68/68 PASS**.
-- OLD/NEW branch-guard differential: **7/7 PASS**.
-- native cross-cutting gate: **139/139 PASS**.
-- TypeScript typecheck: PASS.
-- clean production/UI build: PASS.
-- CLI/MCP smoke: **21 checks PASS**.
-- normal semantic fixtures: **6 PASS**.
-- native extraction: functional assertions PASS.
-- four reported Windows extraction failures remain the established
-  temporary-directory cleanup-only `EPERM` class.
-- native-gated semantic structure remains equivalent; two floating search-score
-  values differ slightly and remain tracked as a checkpoint limitation.
+```text
+route-level native semantic gaps:       0
+lexical receiver/binding gaps:          0
+frozen framework/extraction inventory: 15 -> 0
+```
 
-Pending native semantic routes:
+The former selected inventory result `22 -> 6` is **not** a global production
+gap count. Six ranking/explore candidates remain in the frozen accounting, and
+the broader campaign also exposed historical native differences outside that
+selected inventory (for example RTK Query, Spring events, Vue store, and Java
+anonymous-class behavior). Their v1 status must be decided by product value and
+evidence rather than automatically reproduced.
 
-- ArkTS.
-- Rust.
-- Kotlin.
-- Scala.
-- C.
-- C++.
-- Objective-C.
-- C#.
-- Solidity.
-- PHP.
-- Ruby.
-- Swift.
-- Dart.
-- Lua.
-- Luau.
-- R.
-- Nix.
-- Pascal.
-- CFML.
-- CFScript.
-- CFQuery.
-- COBOL.
-- VB.NET.
-- Erlang.
-- Terraform / OpenTofu where parser-backed semantics are required.
-- parser-coupled SFC/template/special-format internals.
+Current physical/parser state intentionally remains transitional:
 
-Pending cross-cutting migration:
+```text
+default parser fallback:           ACTIVE
+parser bootstrap:                  ACTIVE
+tracked grammar WASM:              29
+SyntaxNode/parser coupling:        34-file checkpoint
+web-tree-sitter:                   PRESENT
+tree-sitter-wasms:                 PRESENT
+```
 
-- remaining branch-guard language routes.
-- remaining syntax-token consumers.
-- remaining function-reference consumers.
-- embedded language/source-offset routes.
-- special format parser coupling.
+Current decision boundary:
 
-Final parser closure items:
+> **Afyx V1 Contract Closure Decision Gate**
 
-- remove parser bootstrap/cache where obsolete.
-- remove `web-tree-sitter`.
-- remove `tree-sitter-wasms`.
-- remove tracked parser grammar WASM.
-- remove shipped parser grammar/runtime WASM.
-- reduce engine production parser dependency closure to zero.
-- validate fresh/incremental convergence.
-- validate deterministic graph semantics.
-- perform representative real-repository comparison.
-- perform controlled parser artifact audit.
-- run exact-head supported-platform CI.
-- create one major parser checkpoint PR only after the full parser boundary is complete.
+Every remaining difference must be classified as exactly one of:
+
+- `V1_REQUIRED`.
+- `NATIVE_CORRECTION`.
+- `LEGACY_COMPATIBILITY_ONLY`.
+- `POST_V1`.
+- `ENVIRONMENT_OR_TOOLING_NOISE`.
+
+Only `V1_REQUIRED` differences block semantic freeze. A failing historical test
+does not automatically define the Afyx v1 product contract, but no remaining
+failure or skip may stay unexplained.
+
+Semantic closure rule:
+
+```text
+V1 contract decision
+  -> one consolidated V1-required behavior closure, only if needed
+  -> semantic contract freeze
+```
+
+After semantic freeze, the parser/runtime closure sequence is:
+
+```text
+A. Native Performance & Token-Efficiency Baseline
+   Establish representative OLD/native measurements and large-repo context
+   efficiency evidence without requiring an arbitrary percentage claim.
+
+B. Global Default Fallback Closure
+   Make Afyx-native semantic/syntax/guard routing unconditional in production.
+   The historical parser may remain only as an explicitly isolated oracle if
+   still justified for a short transition.
+
+C. Parser Bootstrap & Worker-Protocol Closure
+   Remove parser initialization, grammar reads/transfers/load messages, and
+   parser caches while preserving the native worker pool.
+
+D. Parser Adapter & Tree-Walk Source Closure
+   Remove TreeSitterExtractor, parser adapters, AST/tree-walk helpers/types, and
+   obsolete parser-backed syntax/guard paths.
+
+E. Grammar & Packaging Closure
+   Remove tracked/shipped grammar WASM, grammar staging/copy requirements, and
+   package-resolved grammar use.
+
+F. Runtime & Dev/Test Isolation
+   Remove production web-tree-sitter/tree-sitter-wasms requirements and delete
+   or strictly isolate any remaining parser-only tooling/oracles.
+```
+
+Performance/token principle:
+
+> Afyx does not optimize by withholding resources required for quality. It
+> optimizes by using graph/impact evidence to avoid irrelevant context, repeated
+> discovery, unnecessary tool calls, and validation that cannot change the
+> engineering decision.
+
+Validation principle:
+
+- local changes use focused positive/negative tests and the smallest affected
+  regression set;
+- shared semantic/core changes add representative cross-language/integration
+  coverage;
+- full production campaigns, packaging, and independence audits are reserved
+  for architecture/release closure gates or when targeted evidence cannot
+  resolve a real risk;
+- every validation run must answer a specific unresolved risk;
+- already-valid evidence is reused when the dependency/impact boundary proves it
+  remains applicable.
 
 Parser principle:
 
-> Preserve graph meaning, not parser implementation.
+> Preserve or improve Afyx product meaning and quality, not historical parser
+> implementation details.
 
-No supported language may be silently dropped to simplify independence.
+No supported v1 language may be silently dropped to simplify independence.
 
 #### 5F.5 — Native Kernel Closure
 
@@ -632,6 +714,10 @@ Contract items:
 - Mutation Proof when justified.
 - Differential Proof when justified.
 - Performance Gate.
+- adaptive validation budget based on actual impact/risk.
+- evidence reuse when prior evidence remains valid.
+- failed-test classification.
+- skipped-test classification.
 - CI Evidence.
 - Documentation Evidence.
 - Merge Readiness.
@@ -652,6 +738,34 @@ Exit:
 > Engineering completion is evidence-based rather than inferred from code
 > modification alone.
 
+Assurance rules:
+
+```text
+UNKNOWN FAILED TEST = 0
+V1_REQUIRED correctness failure = 0
+UNJUSTIFIED SKIP = 0
+TEMPORARY SKIP = 0 before stable release
+```
+
+Expected platform/mode/optional-integration skips are allowed only when
+explicitly classified and documented.
+
+Validation levels:
+
+```text
+LEVEL 1 — local change
+  focused contract + negative precision + relevant static/type check
+
+LEVEL 2 — shared/core change
+  Level 1 + affected regression + representative integration/build
+
+LEVEL 3 — architecture/release closure
+  full campaign + product surfaces + packaging + independence/release evidence
+```
+
+A broader level is used only when the smaller level cannot resolve the actual
+risk.
+
 ## Phase 8 — Real-World Dogfood & Comparative Proof
 
 Status: **PLANNED**
@@ -660,9 +774,13 @@ Contract items:
 
 - real Odoo work.
 - real engineering repositories.
-- correctness measurement.
+- small, medium, large, and multi-module/workspace-scale repositories.
+- correctness and output-quality measurement.
 - context usefulness.
+- files/symbols retrieved or inspected.
+- irrelevant-context and duplicate-read evidence where measurable.
 - tool-call count.
+- validation work executed.
 - latency.
 - context/token volume.
 - repeatable controlled tasks.
@@ -676,7 +794,8 @@ Comparative campaign:
 
 Principle:
 
-> Correctness > token reduction.
+> Correctness and required output quality are hard gates; token efficiency comes
+> from eliminating waste, not starving the agent.
 
 Claims policy:
 
@@ -753,6 +872,10 @@ Required gates:
 - supported-platform CI PASS.
 - packaged artifact smoke PASS.
 - known limitations documented.
+- all remaining failed tests classified; unknown and v1-required correctness failures = 0.
+- all skipped tests classified; unjustified/temporary skips = 0.
+- minimum-sufficient context/validation behavior demonstrated on representative repositories.
+- performance/token-efficiency evidence documented without unsupported percentage claims.
 - no critical correctness/security issue open.
 
 Release:
@@ -801,175 +924,163 @@ internal development
 
 Status: **PLANNED — NOT A V1 RELEASE BLOCKER**
 
-The post-v1 program is part of the long-term Afyx development contract, but it
-does not reopen the frozen v1 feature scope.
+The frozen post-v1 track order is:
 
-Post-v1 work is organized into two parallel tracks so provider generalization
-does not block intelligence expansion, and intelligence expansion does not wait
-for every provider integration.
+```text
+TRACK A — AFYX FORGE
+TRACK B — PLATFORM GENERALIZATION
+TRACK C — ENGINEERING INTELLIGENCE EXPANSION
+```
 
-## Track A — Platform Generalization & Provider Expansion
+Tracks are ordered by the canonical product-development contract above. Track
+letters must not be reassigned. Work may still be prioritized by measured value
+once dependencies permit.
 
-Contract items:
+## Track A — Afyx Forge
 
-- provider-neutral core contracts.
-- stable `ProviderAdapter` contract.
-- provider/agent capability discovery.
-- provider feature negotiation.
-- provider-neutral task/context contract.
-- provider-neutral evidence contract.
-- additional coding-agent integrations based on measured demand.
-- preserve Codex integration while generalizing the core.
+Afyx Forge is post-v1. It must not become a blocker for the stable v1 release.
 
 Goal:
 
-> Generalize the stable v1 architecture without allowing provider-specific
-> behavior to leak into Afyx core ownership.
+> Convert the proven v1 engineering workflow into an adaptive Afyx-native
+> directive system that allocates the minimum sufficient context, reasoning,
+> tooling, and validation needed for the target quality.
 
-## Track B — Engineering Intelligence Expansion
+Principle:
 
-### B1 — Repository & Runtime Intelligence
+> Behavior reference, not source template. Architecture is chosen from
+> benchmark evidence rather than pre-frozen around an existing prompt/skill.
 
-Planned support:
+Canonical phases:
 
-- Shell:
-  - `.sh`
-  - `.bash`
-  - `.zsh`
-- PowerShell:
-  - `.ps1`
-  - `.psm1`
-  - `.psd1`
-- Build systems:
-  - `Makefile`
-  - `*.mk`
-  - `CMakeLists.txt`
-  - `*.cmake`
-- Runtime/deployment:
-  - `Dockerfile`
-  - Docker Compose
-- Project manifests:
-  - generic JSON / JSONC.
-  - TOML.
+- **A0 — Evaluation Freeze**
+  - freeze benchmark tasks, scoring, and evidence format.
+- **A1 — Capability Harvest**
+  - harvest useful behavior from Efficient Coding, the independent master
+    prompt, actual v1 workflows, and other legitimate behavioral references.
+- **A2 — Capability Matrix**
+  - map overlap, unique capabilities, cost, quality contribution, and failure
+    modes.
+- **A3 — Deduplication / Refinement**
+  - remove redundant instructions and preserve only behavior with demonstrated
+    value.
+- **A4 — Candidate Construction**
+  - B0: no directive.
+  - B1: Efficient Coding 1.2.0.
+  - B2: independent master prompt.
+  - B3: Efficient Coding + independent master prompt.
+  - B4: refined convergence candidate.
+  - B5: Afyx Forge native candidate.
+- **A5 — Benchmark Harness**
+  - run controlled, repeatable engineering tasks with quality/resource evidence.
+- **A6 — Quality Gate**
+  - correctness and engineering quality first.
+- **A7 — Efficiency Gate**
+  - context, reasoning, token, tool, and validation efficiency after quality.
+- **A8 — Data-Driven Architecture Decision**
+  - choose the Forge architecture from evidence.
+- **A9 — Forge Implementation**
+  - implement only if A8 supports it.
+- **A10 — Adaptive Engineering Directive**
+  - dynamically allocate context/reasoning/tool/validation budgets by task risk
+    and evidence.
+- **A11 — Dogfood & Optimization**
+  - use real engineering work and optimize measured bottlenecks.
+- **A12 — Stable**
+  - freeze the stable Forge contract.
 
-Target relationships:
+Odoo Engineering remains a separate domain skill and is not folded into Forge
+merely to reduce component count.
 
-- script -> invoked command.
-- build target -> source/output.
-- manifest -> dependency/workspace/entrypoint.
-- container -> copied artifact/entrypoint/service.
-- runtime -> project component.
-
-### B2 — Data & Infrastructure Intelligence
-
-Planned support:
-
-- SQL:
-  - PostgreSQL — **HIGH PRIORITY**.
-  - MySQL / MariaDB.
-  - SQLite.
-  - SQL Server / T-SQL.
-  - Oracle / PL-SQL later.
-- CI/CD:
-  - GitHub Actions.
-  - additional pipeline formats based on demand.
-- Infrastructure:
-  - Kubernetes.
-  - Ansible.
-  - Terraform/OpenTofu semantic enrichment.
-  - Docker Compose semantic enrichment.
-- environment/config relationships.
-
-Target relationships:
-
-- code -> query.
-- query -> table/view/function/procedure.
-- schema -> migration.
-- service -> container.
-- deployment -> config/secret/environment.
-- infrastructure resource -> runtime component.
-
-### B3 — API & Schema Intelligence
-
-Planned support:
-
-- GraphQL:
-  - `.graphql`
-  - `.gql`
-- Protocol Buffers:
-  - `.proto`
-- OpenAPI:
-  - YAML representation.
-  - JSON representation.
-- AsyncAPI later.
-- database/schema relationships.
-
-Target relationships:
-
-- API declaration -> route/RPC/query.
-- route/RPC/query -> implementation.
-- implementation -> service.
-- service -> persistence/schema.
-
-### B4 — Deep Framework Intelligence
-
-Priority candidate:
-
-#### Odoo intelligence
-
-Planned semantic relationships:
-
-- Python model.
-- `_inherit`.
-- fields.
-- compute.
-- `@api.depends`.
-- onchange.
-- XML views.
-- buttons.
-- actions.
-- menus.
-- `ir.model.access.csv`.
-- record rules.
-- cross-module relationships.
-
-Other planned framework families:
-
-- Django.
-- FastAPI.
-- Flask.
-- Spring.
-- Laravel.
-- Rails.
-- React.
-- Next.js.
-- Vue / Nuxt.
-- SvelteKit.
-- Flutter.
-- .NET / ASP.NET.
-- Android.
+## Track B — Platform Generalization
 
 Goal:
 
-> Move from language-level symbol understanding to framework-level engineering
-> relationships.
+> Generalize the stable v1 architecture beyond the primary Codex provider without
+> leaking provider-specific behavior into Afyx core ownership.
 
-### B5 — Programming Language Expansion
+Canonical phases:
+
+- **B0 — v1 Platform Contract Freeze**
+- **B1 — Provider-Neutral Core Contracts**
+- **B2 — Stable ProviderAdapter Contract**
+- **B3 — Capability Discovery / Negotiation**
+- **B4 — Provider-Neutral Task / Context / Evidence Contracts**
+- **B5 — Additional Provider Integrations by Measured Demand**
+- **B6 — Cross-Provider Validation / Hardening**
+- **B7 — Stable Generalized Platform**
+
+Preserve the stable Codex integration while generalizing the core.
+
+## Track C — Engineering Intelligence Expansion
+
+Goal:
+
+> Expand from language-level code understanding toward repository, framework,
+> data, API/schema, build, runtime, and infrastructure intelligence according to
+> measured engineering value.
+
+### C0 — Expansion Evaluation Freeze
+
+Freeze prioritization evidence and avoid language-count driven scope.
+
+### C1 — Repository & Runtime Intelligence
 
 Planned candidates:
 
-- Groovy — **HIGH ROI** because of Gradle/Jenkins ecosystems.
-- Elixir.
-- Zig.
-- F#.
-- Clojure.
-- Haskell.
-- OCaml.
-- Julia.
-- Perl.
-- additional languages chosen by measured demand.
+- Shell: `.sh`, `.bash`, `.zsh`.
+- PowerShell: `.ps1`, `.psm1`, `.psd1`.
+- Make / CMake.
+- Dockerfile / Docker Compose.
+- generic JSON / JSONC / TOML project manifests.
 
-Prioritization formula:
+Target relationships include script -> command, build target -> source/output,
+manifest -> dependency/workspace/entrypoint, and runtime/container -> component.
+
+### C2 — Data & Infrastructure Intelligence
+
+Planned candidates:
+
+- PostgreSQL — high priority.
+- MySQL / MariaDB.
+- SQLite.
+- SQL Server / T-SQL.
+- Oracle / PL-SQL later.
+- GitHub Actions and additional CI/CD by demand.
+- Kubernetes.
+- Ansible.
+- Terraform/OpenTofu enrichment.
+- Docker Compose enrichment.
+- environment/config relationships.
+
+### C3 — API & Schema Intelligence
+
+Planned candidates:
+
+- GraphQL.
+- Protocol Buffers.
+- OpenAPI YAML/JSON.
+- AsyncAPI later.
+
+Target relationships connect API/schema declarations to implementations,
+services, persistence, and runtime components.
+
+### C4 — Deep Framework Intelligence
+
+Priority candidate:
+
+- Odoo engineering relationships across Python models, `_inherit`, fields,
+  compute/`@api.depends`, onchange, XML views, buttons/actions/menus,
+  `ir.model.access.csv`, record rules, modules, database/migration, and runtime.
+
+Other candidates are selected by measured demand, including Django, FastAPI,
+Flask, Spring, Laravel, Rails, React/Next.js, Vue/Nuxt, SvelteKit, Flutter,
+.NET/ASP.NET, and Android.
+
+### C5 — Programming Language Expansion
+
+Candidates include Groovy, Elixir, Zig, F#, Clojure, Haskell, OCaml, Julia,
+Perl, and additional languages selected by:
 
 ```text
 user demand
@@ -980,9 +1091,22 @@ user demand
 
 Policy:
 
-> Do not optimize for language-count marketing. Deep repository, build,
-> runtime, database, API/schema, and framework understanding has higher product
-> value than adding low-demand parser breadth.
+> Do not optimize for language-count marketing. Deep engineering-system
+> understanding has higher value than low-demand parser breadth.
+
+### C6 — Cross-Domain Relationship Expansion
+
+Unify language, framework, config, database, API/schema, build, and deployment
+relationships where evidence shows product value.
+
+### C7 — Real-World Comparative Proof
+
+Measure whether expanded intelligence improves engineering outcomes without
+wasting context, tokens, or tool calls.
+
+### C8 — Stable Intelligence Expansion
+
+Freeze supported expansion contracts after evidence and hardening.
 
 # Long-term intelligence target
 
@@ -1041,12 +1165,75 @@ Otherwise it belongs to the post-v1 expansion program.
 
 ## Post-v1 rule
 
-Track A and Track B may progress independently after v1 and are prioritized by
-measured product value rather than numbering alone.
+Tracks A, B, and C begin only after the stable v1 boundary unless maintenance of a
+v1 guarantee requires otherwise. Their execution is prioritized by measured product value,
+while the canonical track identities/order remain fixed.
 
 ## Progress rule
 
 A merge is not sufficient evidence of roadmap completion.
+
+Every substantial task or closure boundary must update the appropriate
+source-of-truth document **during the task**, not only at the end:
+
+- the phase-specific evidence document records detailed implementation and
+  validation evidence;
+- this master roadmap is updated whenever roadmap status, active checkpoint,
+  next canonical boundary, contract, or release-relevant state changes;
+- status updates must distinguish verified completion, partial completion,
+  blocked work, and work merely planned;
+- evidence already proven and unaffected by the current dependency/impact cone
+  must be reused rather than rerun.
+
+### Task progress contract
+
+Each substantial task must leave a recoverable progress state containing:
+
+- task / roadmap boundary.
+- branch and starting HEAD.
+- current/final HEAD when available.
+- worktree state.
+- completed implementation concerns.
+- remaining concerns.
+- validations completed with exact results.
+- validations intentionally not rerun and why.
+- failures/skips requiring classification.
+- transitional dependencies/artifacts still present.
+- exact next action / boundary.
+- explicit stop conditions or blockers.
+
+### Session continuity / handoff contract
+
+When a chat/session approaches context or usage limits, is compacted, or is
+intentionally continued in a new chat, do **not** restart the engineering task.
+
+Create or preserve a concise handoff checkpoint containing:
+
+```text
+repository / branch
+starting HEAD
+current HEAD
+dirty files, if any
+completed decisions/implementation
+validated evidence that must be reused
+unresolved failures/risks
+work that is still pending
+do-not-repeat validations
+exact next action
+```
+
+Continuation rules:
+
+1. verify the saved branch/HEAD/worktree;
+2. preserve intentional dirty work;
+3. reuse valid evidence;
+4. rerun only evidence invalidated by subsequent changes or needed to resolve an
+   unresolved risk;
+5. never reset/restart solely because the chat/session changed;
+6. update the phase document and roadmap when the canonical state changes.
+
+This contract exists specifically to prevent token, tool, compute, and human
+time waste caused by repeated discovery or validation after session turnover.
 
 Every substantial task must report:
 
@@ -1094,6 +1281,10 @@ The v1 contract is satisfied only when:
 - Afyx Graph is usable and hardened.
 - Engineering Assurance is usable.
 - comparative proof is evidence-based.
+- minimum-sufficient context/reasoning/tool/validation behavior is demonstrated.
+- large-repository/workspace use does not depend on wasteful whole-repository context by default.
+- token/resource efficiency improvements preserve required output quality.
+- remaining failed/skipped tests satisfy the classification policy.
 - private beta is complete.
 - stable release gates pass.
 
