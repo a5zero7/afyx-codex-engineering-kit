@@ -2114,3 +2114,100 @@ DEFAULT_FALLBACK_CLOSURE = NOT_READY
 The single recommended next semantic boundary is **Native Lexical Receiver
 Precision Closure**. It should establish one bounded binding/scope primitive
 before any framework-synthesis or default-routing work begins.
+
+## Native Lexical Receiver Precision Closure
+
+This boundary starts from `7d9ed471af476768b7fb2e17d51d0168d70d8938`
+and keeps native routing opt-in. The 63 legitimate candidates from the prior
+campaign were decomposed before implementation:
+
+```text
+Lexical receiver/binding: 40
+Framework/extraction:     16
+Ranking/explore:           6
+Other:                     1
+```
+
+First-broken-layer analysis found bounded lexical facts rather than a need for
+general dataflow. PHP instance-property calls had dropped the `$this` root;
+Python module assignments had dropped initializer signatures and treated class
+and tuple targets as module bindings; optional JS/TS chains had dropped `?.`
+receiver separators; object-literal callables used container-qualified identity
+and could be duplicated; Python parameter annotations could add a spurious
+function-reference edge; and Rust retained the outer `self` call-result path
+where the established contract collapses it.
+
+The native fact layer now preserves PHP arrow receiver chains, bounded Python
+initializer signatures and module ownership, optional static member paths, and
+bare object-literal callable identity with one declaration. Python quoted and
+unquoted parameter annotations share the existing receiver-type inference
+without adding a callee edge for the annotation itself. Rust still preserves
+associated factory chains while collapsing only the established
+`self.method().member()` shape. Existing store alias/destructuring and shadow
+logic required no dataflow expansion once callable identity was corrected.
+No scanner, parser grammar, public graph schema, or fallback-routing change was
+made.
+
+Precision evidence covers typed and untyped PHP properties, deep PHP property
+chains, same-name local interference, collection-like Python names versus real
+project classes, store selector aliases and local/parameter/sibling shadows,
+optional versus ordinary chains, unrelated same-named object members, Python
+class/module ownership, quoted annotations, and Rust local/deep/call-result
+receivers. Static PHP factory, Rust associated factory, and the representative
+Ruby/Kotlin/Scala receiver contracts remain green.
+
+Focused native results are 64/64 for the selected lexical contracts, 72/72 for
+alias/value/factory protection, and 19/19 for the language-specific protection
+set. The framework/UI protection set is 102/104; its two Express failures are
+the same known non-lexical framework-synthesis candidates present at the OLD
+checkpoint. The default six-fixture semantic baseline passes, native UI passes
+20/20, and native CLI/MCP smoke passes all 21 checks. TypeScript typecheck,
+clean production/UI build, viewer plus 29-grammar artifact verification, and
+`git diff --check` pass. The clean build changed no tracked UI source.
+
+The final opt-in native production campaign reports:
+
+```text
+passed:   5,596
+failed:      79
+skipped:    213
+total:    5,888
+
+stable failure classification:
+  legitimate semantic/behavior candidates: 22
+  Windows cleanup EPERM:                    38
+  timeout-only:                             12
+  mode/score/tooling/performance noise:       7
+```
+
+Relative to the OLD campaign, 41 failed assertions became green: all 40
+lexical candidates plus one object-member framework/extraction assertion that
+shared the corrected identity primitive. Three newly observed failures are
+timeout-only git/sync cases; there is no new semantic regression. The remaining
+legitimate inventory is 15 framework/extraction, six ranking/explore, and one
+other candidate:
+
+```text
+Legitimate semantic/behavior candidates: 63 -> 22
+Lexical receiver/binding:                 40 -> 0
+```
+
+The normal semantic snapshot remains green. The opt-in native snapshot remains
+non-green on already separate structural and runtime-score gaps, so this
+boundary does not tune search weights or claim global semantic closure. Native
+semantic Tree-sitter reachability remains zero. Route-level gaps remain zero;
+default fallback, parser bootstrap, 29 grammar WASM assets, and the existing
+`SyntaxNode`/parser coupling remain unchanged. Because 22 legitimate non-lexical
+candidates remain, the production-default routing probe was deliberately not
+run.
+
+```text
+Route-level native semantic gaps:       0 -> 0
+Lexical receiver gaps:                 40 -> 0
+Full production semantic/behavior gaps: 63 -> 22
+DEFAULT_FALLBACK_CLOSURE = NOT_READY
+```
+
+The single recommended next boundary is **Native Extraction & Framework
+Synthesis Closure**. Ranking/explore, fallback removal, parser bootstrap, and
+later phases must not begin as part of this boundary.

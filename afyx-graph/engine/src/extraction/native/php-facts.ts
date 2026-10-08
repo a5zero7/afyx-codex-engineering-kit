@@ -279,7 +279,21 @@ export function extractNativePhpFacts(filePath: string, source: string) {
       }
     } else if (tokens[index - 1]?.text === '->' || tokens[index - 1]?.text === '?->' || tokens[index - 1]?.text === '::') {
       const receiver = tokens[index - 2];
-      if (receiver?.kind === 'identifier') { name = `${bare(receiver.text)}.${name}`; marker = index - 2; }
+      if (receiver?.kind === 'identifier') {
+        if (tokens[index - 1]?.text === '::') {
+          name = `${bare(receiver.text)}.${name}`;
+          marker = index - 2;
+        } else {
+          const receiverParts = [bare(receiver.text)];
+          marker = index - 2;
+          while (marker >= 2 && (tokens[marker - 1]?.text === '->' || tokens[marker - 1]?.text === '?->') &&
+                 tokens[marker - 2]?.kind === 'identifier') {
+            receiverParts.unshift(bare(tokens[marker - 2]!.text));
+            marker -= 2;
+          }
+          name = `${receiverParts.join('->')}.${name}`;
+        }
+      }
     }
     pushRef(marker, name, 'calls');
   }

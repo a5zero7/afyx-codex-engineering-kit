@@ -35,7 +35,7 @@ class Service extends Base implements Work {
     ]));
     expect(refs(result, 'extends')).toContain('Base');
     expect(refs(result, 'implements')).toEqual(expect.arrayContaining(['Work', 'Logs']));
-    expect(refs(result, 'calls')).toContain('client.send');
+    expect(refs(result, 'calls')).toContain('this->client.send');
     expect(refs(result, 'references')).toEqual(expect.arrayContaining(['Job', 'Result']));
   });
 
