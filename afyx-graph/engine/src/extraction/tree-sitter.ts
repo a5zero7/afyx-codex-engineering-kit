@@ -33,6 +33,7 @@ import { MyBatisExtractor } from './mybatis-extractor';
 import { CfmlExtractor } from './cfml-extractor';
 import { tryKernelExtract, takeDeferredPreParse } from './kernel';
 import { extractNativeFacts } from './native/fact-extractor';
+import { extractNativeCfmlFacts } from './native/cfml-facts';
 import {
   getAllFrameworkResolvers,
   getApplicableFrameworks,
@@ -7156,7 +7157,9 @@ export function extractFromSource(
 
   // During semantic convergence the native route is opt-in. The flag is
   // removed when every language family has passed OLD/NEW parity.
-  if (useNativeParser && ['typescript', 'tsx', 'javascript', 'jsx', 'arkts', 'python', 'go', 'java', 'rust', 'kotlin', 'scala', 'c', 'cpp', 'objc', 'csharp', 'swift', 'solidity', 'php', 'ruby', 'lua', 'luau', 'r', 'dart', 'nix', 'pascal', 'vbnet', 'erlang', 'terraform', 'cobol'].includes(detectedLanguage) &&
+  if (useNativeParser && (detectedLanguage === 'cfml' || detectedLanguage === 'cfscript')) {
+    result = extractNativeCfmlFacts(filePath, source, detectedLanguage);
+  } else if (useNativeParser && ['typescript', 'tsx', 'javascript', 'jsx', 'arkts', 'python', 'go', 'java', 'rust', 'kotlin', 'scala', 'c', 'cpp', 'objc', 'csharp', 'swift', 'solidity', 'php', 'ruby', 'lua', 'luau', 'r', 'dart', 'nix', 'pascal', 'vbnet', 'erlang', 'terraform', 'cobol'].includes(detectedLanguage) &&
       !(detectedLanguage === 'pascal' && (fileExtension === '.dfm' || fileExtension === '.fmx'))) {
     result = extractNativeFacts(filePath, source, detectedLanguage);
   // Use custom extractor for Svelte

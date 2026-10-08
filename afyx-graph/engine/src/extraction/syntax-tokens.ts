@@ -46,6 +46,7 @@ import type { LanguageExtractor } from './tree-sitter-types';
 import { extractNativeFacts } from './native/fact-extractor';
 import { scanSource, type NativeToken } from './native/scanner';
 import { scanCobolSource } from './native/cobol-facts';
+import { classifyNativeCfmlSyntax } from './native/cfml-facts';
 
 /* ------------------------------------------------------------- the classes -- */
 
@@ -419,6 +420,7 @@ const NATIVE_SYNTAX_LANGUAGES: ReadonlySet<Language> = new Set([
   'erlang',
   'terraform',
   'cobol',
+  'cfml', 'cfscript', 'cfquery',
 ]);
 
 const NATIVE_KEYWORDS: Readonly<Record<string, ReadonlySet<string>>> = {
@@ -631,6 +633,9 @@ async function tokenizeRegion(
   offset: number
 ): Promise<SyntaxSpan[] | null> {
   if (process.env.AFYX_GRAPH_NATIVE_PARSER === '1' && NATIVE_SYNTAX_LANGUAGES.has(language)) {
+    if (language === 'cfml' || language === 'cfscript' || language === 'cfquery') {
+      return classifyNativeCfmlSyntax(source, language, offset);
+    }
     return classifyNativeRegion(source, language, offset);
   }
   try {
