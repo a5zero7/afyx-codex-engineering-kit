@@ -1093,8 +1093,33 @@ export function extractNativeFacts(filePath: string, source: string, language: L
     }
   }
 
+  const hasPiniaStore = TS_FAMILY_LANGUAGES.has(language) && tokens.some(
+    (token, index) => token.text === 'defineStore' && tokens[index + 1]?.text === '('
+  );
+  const hasVuexModuleExport = TS_FAMILY_LANGUAGES.has(language) && tokens.some((token, index) => {
+    if (token.text !== 'export' || tokens[index + 1]?.text !== 'default' || tokens[index + 2]?.text !== '{') return false;
+    const close = scan.pairs.get(index + 2);
+    if (close === undefined) return false;
+    const exportedNames = new Set<string>();
+    for (let cursor = index + 3; cursor < close; cursor += 1) {
+      const candidate = tokens[cursor]!;
+      if (candidate.kind === 'identifier' && directlyInside(cursor, index + 2, close)) {
+        exportedNames.add(candidate.text);
+      }
+    }
+    const contractSignals = ['state', 'mutations', 'actions', 'getters', 'namespaced']
+      .filter((name) => exportedNames.has(name));
+    return exportedNames.has('actions') && contractSignals.length >= 2;
+  });
+  const hasRecognizedVueStore = hasPiniaStore || hasVuexModuleExport;
+  const vueStoreCollectionNames = new Set(['actions', 'mutations', 'getters']);
+
   const containers = declarations.filter((declaration) =>
-    declaration.bodyStart !== undefined && ['class', 'interface', 'struct', 'trait', 'type_alias', 'constant', 'variable'].includes(declaration.kind));
+    declaration.bodyStart !== undefined &&
+    ['class', 'interface', 'struct', 'trait', 'type_alias', 'constant', 'variable'].includes(declaration.kind) &&
+    !(TS_FAMILY_LANGUAGES.has(language) && !hasRecognizedVueStore &&
+      (declaration.kind === 'constant' || declaration.kind === 'variable') &&
+      !declaration.exported && vueStoreCollectionNames.has(declaration.name)));
 
   if (language === 'java') {
     for (const parent of containers.filter((item) => item.kind === 'class' || item.kind === 'interface')) {
@@ -1289,15 +1314,19 @@ export function extractNativeFacts(filePath: string, source: string, language: L
       let terminator = closeParen + 1;
       while (terminator < end && tokens[terminator]!.text !== '{' && tokens[terminator]!.text !== ';') terminator += 1;
       const bodyStart = tokens[terminator]?.text === '{' ? terminator : -1;
+      let memberStart = declarationStart(tokens, i);
+      if (language === 'java') {
+        memberStart = i;
+        while (memberStart > begin && ![';', '{', '}'].includes(tokens[memberStart - 1]!.text)) memberStart -= 1;
+      }
       if (bodyStart < 0) {
-        const start = declarationStart(tokens, i);
         const bodiless = parent.kind === 'interface' || parent.kind === 'type_alias' ||
-          tokens.slice(start, i).some((item) => item.text === 'abstract' || item.text === 'native');
+          tokens.slice(memberStart, i).some((item) => item.text === 'abstract' || item.text === 'native');
         if (bodiless) {
           const statementEnd = tokens[terminator]?.text === ';' ? terminator : -1;
           declarations.push({
-            kind: 'method', name: name.text, start: i, end: statementEnd < 0 ? closeParen : statementEnd,
-            parent, visibility: visibility(tokens, declarationStart(tokens, i), i),
+            kind: 'method', name: name.text, start: memberStart, end: statementEnd < 0 ? closeParen : statementEnd,
+            parent, visibility: visibility(tokens, memberStart, i),
           });
         }
         continue;
@@ -1305,11 +1334,6 @@ export function extractNativeFacts(filePath: string, source: string, language: L
       const bodyEnd = scan.pairs.get(bodyStart);
       if (bodyEnd === undefined || bodyEnd > end) continue;
       const start = declarationStart(tokens, i);
-      let memberStart = start;
-      if (language === 'java') {
-        while (memberStart > begin && tokens[memberStart - 1]!.start.line === name.start.line &&
-               ![';', '{', '}'].includes(tokens[memberStart - 1]!.text)) memberStart -= 1;
-      }
       declarations.push({
         kind: TS_FAMILY_LANGUAGES.has(language) && (parent.kind === 'constant' || parent.kind === 'variable')
           ? 'function'
@@ -1957,13 +1981,17 @@ export function extractNativeFacts(filePath: string, source: string, language: L
           const open = pairStart.get(tail);
           const called = open === undefined ? undefined : tokens[open - 1];
           if (open === undefined || !called || called.kind !== 'identifier') return undefined;
+          const constructed = tokens[open - 2]?.text === 'new';
           const dottedBase = isMemberSeparator(tokens[open - 2]?.text) ? receiverExpression(open - 2) : undefined;
           const scopedBase = language === 'rust' && tokens[open - 2]?.text === '::' && tokens[open - 3]?.kind === 'identifier'
             ? { name: tokens[open - 3]!.text, start: tokens[open - 3]! }
             : undefined;
           const base = dottedBase ?? scopedBase;
           const separator = scopedBase ? '::' : '.';
-          return { name: `${base ? `${base.name}${separator}` : ''}${called.text}()`, start: base?.start ?? called };
+          return {
+            name: `${constructed ? 'new ' : ''}${base ? `${base.name}${separator}` : ''}${called.text}()`,
+            start: constructed ? tokens[open - 2]! : base?.start ?? called,
+          };
         }
         const member = tokens[tail];
         if (!member || member.kind !== 'identifier') return undefined;

@@ -127,6 +127,11 @@ describe('range algebra', () => {
     expect(emit).toEqual([{ start: 1, end: 100 }]);
   });
 
+  it('withholds a short span when the entire requested range was already served', () => {
+    const range = { start: 20, end: 24 };
+    expect(dedupeRange(range, [range])).toEqual({ emit: [], covered: [range] });
+  });
+
   it('leaves an untouched span exactly as it was', () => {
     expect(dedupeRange({ start: 1, end: 50 }, [{ start: 200, end: 400 }]))
       .toEqual({ emit: [{ start: 1, end: 50 }], covered: [] });
@@ -296,20 +301,23 @@ describe('a second call against a real index', () => {
 
   it('re-emits in full when the file changed between the two calls', async () => {
     const session = new AfyxSessionContext();
-    const target = path.join(testDir, 'internal/usecase/payroll/payslip_builder.go');
+    const first = await explore(QUERY, session);
+    const delivered = [...fencedLines(first).entries()]
+      .filter(([, lines]) => lines.size > 20)
+      .sort((left, right) => right[1].size - left[1].size)[0];
+    expect(delivered, 'the first call should deliver a substantial source file').toBeDefined();
+    const targetRel = delivered![0];
+    const target = path.join(testDir, targetRel);
     const original = fs.readFileSync(target, 'utf-8');
     try {
-      const first = await explore(QUERY, session);
-      expect(fencedLines(first).has('internal/usecase/payroll/payslip_builder.go')).toBe(true);
-
-      fs.writeFileSync(target, original.replace('func sumKind(', 'func sumKindRenamed('), 'utf-8');
+      fs.writeFileSync(target, `${original}\n// fingerprint changed between explore calls\n`, 'utf-8');
       const second = await explore(QUERY, session);
 
       // The edited file is served again, whole — a pointer here would send the
       // agent to a copy of the file that no longer exists.
       const pointerLines = second.split('\n').filter((l) => l.includes(POINTER));
-      expect(pointerLines.some((l) => l.includes('payslip_builder.go'))).toBe(false);
-      expect(fencedLines(second).get('internal/usecase/payroll/payslip_builder.go')?.size ?? 0)
+      expect(pointerLines.some((l) => l.includes(targetRel))).toBe(false);
+      expect(fencedLines(second).get(targetRel)?.size ?? 0)
         .toBeGreaterThan(20);
     } finally {
       fs.writeFileSync(target, original, 'utf-8');

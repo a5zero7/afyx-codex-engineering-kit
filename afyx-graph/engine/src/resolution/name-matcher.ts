@@ -1431,6 +1431,18 @@ export function matchDottedCallChain(
   ref: UnresolvedRef,
   context: ResolutionContext,
 ): ResolvedRef | null {
+  const constructed = ref.referenceName.match(/^new\s+([A-Za-z_$][\w$]*)\(\)\.(\w+)$/);
+  if (constructed?.[1] && constructed[2]) {
+    return resolveMethodOnType(
+      constructed[1],
+      constructed[2],
+      ref,
+      context,
+      0.9,
+      'instance-method',
+      importedFqnOf(constructed[1], ref, context),
+    );
+  }
   const m = ref.referenceName.match(/^(.+)\(\)\.(\w+)$/);
   if (!m || !m[1] || !m[2]) return null;
   const inner = m[1]; // `Foo.getInstance`
@@ -3515,6 +3527,18 @@ export function matchReference(
     ref.language === 'pascal'
   ) {
     result = nmTimed('dottedChain', ref, () => matchDottedCallChain(ref, context));
+    if (result) return result;
+  }
+
+  // TS/JS constructors require `new`, which the native extractor preserves in
+  // the chain (`new CacheBuilder().build`). That explicit syntax makes the
+  // receiver type statically knowable without relaxing ordinary factory chains.
+  if (
+    /^new\s+[A-Za-z_$][\w$]*\(\)\./.test(ref.referenceName) &&
+    (ref.language === 'typescript' || ref.language === 'javascript' ||
+      ref.language === 'tsx' || ref.language === 'jsx')
+  ) {
+    result = nmTimed('constructedDottedChain', ref, () => matchDottedCallChain(ref, context));
     if (result) return result;
   }
 

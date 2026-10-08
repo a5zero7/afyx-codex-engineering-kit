@@ -167,7 +167,12 @@ export function dedupeRange(
   minCovered: number = EXPLORE_DEDUP.MIN_COVERED_LINES,
 ): RangeDedup {
   if (served.length === 0 || range.end < range.start) return { emit: [range], covered: [] };
-  const covered = intersectRange(range, served).filter((r) => r.end - r.start + 1 >= minCovered);
+  const intersections = intersectRange(range, served);
+  const fullyCovered = intersections.length === 1 &&
+    intersections[0]!.start <= range.start && intersections[0]!.end >= range.end;
+  const covered = fullyCovered
+    ? intersections
+    : intersections.filter((r) => r.end - r.start + 1 >= minCovered);
   if (covered.length === 0) return { emit: [range], covered: [] };
   return { emit: subtractRange(range, covered), covered };
 }

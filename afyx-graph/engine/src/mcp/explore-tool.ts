@@ -2711,6 +2711,27 @@ class ExploreTool {
       }
       return held;
     };
+    const sourceSizeCache = new Map<string, number>();
+    const owedSourceBelow = (fileIndex: number): number => {
+      let owed = 0;
+      for (let j = fileIndex + 1; j < sortedFiles.length; j++) {
+        const path = sortedFiles[j]![0];
+        const reservation = allocation.allowances.get(path);
+        if (reservation === undefined) continue;
+        let size = sourceSizeCache.get(path);
+        if (size === undefined) {
+          const absolute = validatePathWithinRoot(projectRoot, path);
+          try {
+            size = absolute && existsSync(absolute) ? readFileSync(absolute, 'utf-8').length : 0;
+          } catch {
+            size = 0;
+          }
+          sourceSizeCache.set(path, size);
+        }
+        owed += Math.min(reservation, size);
+      }
+      return owed;
+    };
 
     for (let fileIndex = 0; fileIndex < sortedFiles.length; fileIndex++) {
       const [filePath, group] = sortedFiles[fileIndex]!;
@@ -2825,12 +2846,13 @@ class ExploreTool {
        */
       const dedupeSpans = (
         parts: ReadonlyArray<{ range: ExploreLineRange; text: string }>,
+        minCovered: number = 1,
       ): { parts: Array<{ range: ExploreLineRange; text: string }>; covered: ExploreLineRange[] } => {
         if (served.length === 0) return { parts: [...parts], covered: [] };
         const kept: Array<{ range: ExploreLineRange; text: string }> = [];
         const covered: ExploreLineRange[] = [];
         for (const part of parts) {
-          const split = dedupeRange(part.range, served);
+          const split = dedupeRange(part.range, served, minCovered);
           if (split.covered.length === 0) {
             kept.push(part);
             continue;
@@ -3137,15 +3159,23 @@ class ExploreTool {
         Math.round(allowance * EXPLORE_ALLOCATION.WHOLE_FILE_GRACE_FRACTION),
       );
       // FUNDING, as one inequality: after this file ships whole, does the source
-      // still fit the promise-plus-overshoot line WITH every reservation below
-      // it left payable? `owedBelow` is what makes it a displacement guard
+      // still fit the promise-plus-overshoot line WITH every payable source
+      // reservation below it left intact? `owedBelow` caps each promise at the
+      // file bytes that can actually spend it; holding the unused remainder
+      // would strand source in this file without benefiting a lower-ranked one.
+      // That payable debt is what makes this a displacement guard
       // rather than a size cap — a buy that fits the line only by spending a
       // lower-ranked file's reservation is the trade that dropped
       // `payslip_builder.go`, and it is refused here. Self-limiting: each buy
       // grows `sourceSpent`, so the pool cannot be spent twice. The cluster path
       // below enforces the same inequality in render space — see
       // `fundedHeadroom` / `owedPayableBelow` (CG-31).
-      const owedBelow = Math.max(0, reservedTotal - reservedSoFar);
+      const owedBelow = owedSourceBelow(fileIndex);
+      const remainingBuyOvershoot = Math.max(
+        0,
+        sourceCeiling - reservedTotal - Math.max(0, sourceSpent - reservedSoFar),
+      );
+      const buyFundedHeadroom = Math.min(headroom, fundedHeadroom + remainingBuyOvershoot);
       // Third condition on the BUY arm only: it must also FIT. A whole render
       // that overruns the ceiling is skipped ENTIRELY (the branch refuses to
       // slice a file mid-method), so attempting a buy that cannot fit trades a
@@ -3169,10 +3199,11 @@ class ExploreTool {
       // The GRACE arm keeps its own bound (a file within a sliver of its
       // reservation) but is fit-tested on the render it actually produces, at
       // the emission site below, so it cannot displace either.
-      const buysWhole = fileContent.length <= graceBound
-        || (reserved >= fileContent.length * EXPLORE_ALLOCATION.WHOLE_FILE_BUY_FRACTION
+      const meritBuy = reserved >= fileContent.length * EXPLORE_ALLOCATION.WHOLE_FILE_BUY_FRACTION
             && sourceSpent + fileContent.length + owedBelow <= sourceCeiling
-            && fileContent.length <= fundedHeadroom);
+            && fileContent.length <= buyFundedHeadroom;
+      const buysWhole = fileContent.length <= graceBound || meritBuy;
+      const wholeFileHeadroom = meritBuy ? buyFundedHeadroom : fundedHeadroom;
       // Set by the whole-file arm when it actually emits. A whole render that
       // does not FIT no longer ends the file's turn (CG-26) — it falls through
       // to the cluster path below, which is bounded by `fundedHeadroom` and
@@ -3215,7 +3246,8 @@ class ExploreTool {
         // the header, fences and body actually fit what is left. The second one
         // is exact now that the loop charges real section costs.
         const wholeCost = wholeHeader.length + 2 + wholeSection.length + lang.length + 11;
-        if (wholeSection.length <= fundedHeadroom && totalChars + wholeCost <= renderCeiling) {
+        if (wholeSection.length <= wholeFileHeadroom && totalChars + wholeCost <= renderCeiling) {
+          if (meritBuy) diag?.recordFunded(filePath, wholeFileHeadroom);
           emitFileSection({
             header: wholeHeader,
             body: wholeSection,
