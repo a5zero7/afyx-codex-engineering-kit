@@ -993,11 +993,34 @@ The frozen post-v1 track order is:
 TRACK A — AFYX FORGE
 TRACK B — PLATFORM GENERALIZATION
 TRACK C — ENGINEERING INTELLIGENCE EXPANSION
+TRACK D — AFYX NATIVE ENGINE OPTIMIZATION
 ```
 
 Tracks are ordered by the canonical product-development contract above. Track
 letters must not be reassigned. Work may still be prioritized by measured value
 once dependencies permit.
+
+The optimization sequence is intentionally two-generation:
+
+```text
+Generation 1 — Independence
+  behavior harvest
+  -> independent Afyx-native reimplementation
+  -> stable v1 product
+
+Generation 2 — Native optimization
+  mature Afyx-native workloads
+  -> profile / measure
+  -> evidence-driven redesign
+  -> optimized Afyx-native engine
+```
+
+Track D does not postpone obvious optimization until post-v1. V1 must still fix
+clear waste, pathological complexity, correctness-affecting inefficiency,
+duplicate context, unnecessary I/O, and material regressions when evidence
+justifies the change. Track D is the later deep systematic optimization program
+that operates after Forge, provider generalization, and broader intelligence
+support have created a more representative production workload.
 
 ## Track A — Afyx Forge
 
@@ -1171,6 +1194,97 @@ wasting context, tokens, or tool calls.
 
 Freeze supported expansion contracts after evidence and hardening.
 
+## Track D — Afyx Native Engine Optimization
+
+Status: **PLANNED — POST-v1**
+
+Goal:
+
+> Evolve Afyx Graph from an independently reimplemented native engine into an
+> evidence-driven, deeply optimized native engine using real production
+> workloads rather than historical implementation constraints.
+
+Track D is not a second rewrite of CodeGraph. It starts from Afyx-owned behavior,
+architecture, and workload evidence.
+
+Canonical optimization rule:
+
+```text
+measure
+  -> profile
+  -> identify the real bottleneck
+  -> redesign/optimize the Afyx-native layer
+  -> re-benchmark
+  -> retain only quality-safe, material improvements
+```
+
+Hard constraints:
+
+- correctness and precision remain hard gates;
+- do not optimize by starving context required for a correct result;
+- do not reproduce historical architecture merely for parity;
+- do not retain benchmark-only complexity whose gain is within noise;
+- optimize actual Afyx workloads, including Forge/provider/intelligence usage;
+- prefer algorithmic/work-avoidance gains over cosmetic micro-optimization;
+- large-repository and workspace scaling is a first-class target;
+- token efficiency means maximizing useful information per unit of context and
+  eliminating repeated/irrelevant work.
+
+Canonical phases:
+
+- **D0 — Optimization Baseline Freeze**
+  - freeze representative post-v1 workloads and reproducible benchmark methods;
+  - preserve correctness/output digests and environment metadata.
+- **D1 — Production Workload Harvest**
+  - collect representative Forge, provider, language, framework, large-repo, and
+    monorepo workload shapes.
+- **D2 — CPU / Memory / I/O Profiling**
+  - identify actual hotspots, allocation pressure, persistence cost,
+    serialization cost, worker contention, and I/O waste before deep code
+    changes.
+- **D3 — Indexing & Incremental Sync Optimization**
+  - reduce unnecessary scanning, reads, hashing, extraction, normalization,
+    resolution, persistence, and incremental dirty-set work.
+- **D4 — Graph Storage & Query Optimization**
+  - optimize storage/query/index strategy only where profiling proves material
+    product cost.
+- **D5 — Search / Resolution / Traversal Optimization**
+  - reduce unnecessary graph work while preserving or improving relevant-result
+    recall, precision, and relationship correctness.
+- **D6 — Context & Explore Efficiency Optimization**
+  - maximize relevant information density;
+  - minimize irrelevant source, duplicate bytes, unused budget, fallback Reads,
+    and avoidable context expansion.
+- **D7 — MCP / Daemon / Concurrency Optimization**
+  - optimize startup, steady-state dispatch, worker/daemon coordination, and
+    concurrent-client behavior based on real contention evidence.
+- **D8 — Memory & Artifact Footprint Optimization**
+  - reduce peak memory, retained state, serialization overhead, package size,
+    and runtime footprint where the change is materially useful.
+- **D9 — Large Repository / Monorepo Optimization**
+  - evaluate scaling behavior across increasing repository/workspace sizes and
+    remove poor-complexity paths or whole-repository work where avoidable.
+- **D10 — Token & Tool-Efficiency Optimization**
+  - optimize successful-task cost across context tokens, tool calls, file reads,
+    duplicate reads, validation executions, and rework;
+  - quality/output correctness must remain equal or better.
+- **D11 — Integrated Performance Campaign**
+  - compare the optimized engine against frozen Afyx-native pre-optimization
+    baselines on identical tasks, environments, and correctness gates.
+- **D12 — Native Optimized Stable**
+  - freeze the optimized engine contract after measurable gains and diminishing
+    returns justify stopping.
+
+Track D stopping rule:
+
+> Stop when correctness/precision are stable, material bottlenecks have been
+> addressed, repeated optimization iterations produce only noise/non-material
+> gains, or the next gain would impose disproportionate complexity or
+> maintenance cost.
+
+Track D is where Afyx moves beyond **native replacement** into **native
+architectural optimization** based primarily on Afyx's own data.
+
 # Long-term intelligence target
 
 The desired post-v1 graph combines:
@@ -1228,9 +1342,31 @@ Otherwise it belongs to the post-v1 expansion program.
 
 ## Post-v1 rule
 
-Tracks A, B, and C begin only after the stable v1 boundary unless maintenance of a
-v1 guarantee requires otherwise. Their execution is prioritized by measured product value,
-while the canonical track identities/order remain fixed.
+Tracks A, B, C, and D begin only after the stable v1 boundary unless
+maintenance of a v1 guarantee requires otherwise. Their execution is
+prioritized by measured product value while the canonical track identities/order
+remain fixed.
+
+Canonical dependency intent:
+
+```text
+A — Forge
+  -> exposes adaptive engineering workloads
+
+B — Platform Generalization
+  -> exposes provider-neutral and cross-provider workloads
+
+C — Engineering Intelligence Expansion
+  -> broadens language/framework/data/build/runtime workloads
+
+D — Native Engine Optimization
+  -> profiles and optimizes the mature Afyx-native engine against those broader
+     representative workloads
+```
+
+Tracks A/B/C may have limited overlap where dependencies permit; Track D should
+consume their mature workload evidence rather than optimize against a narrow,
+historical-only fixture set.
 
 ## Progress rule
 
@@ -1355,5 +1491,6 @@ Then, and only then:
 
 > **Afyx Code Engineering Kit v1.0.0 — Stable**
 
-After v1, expansion follows Track A / Track B without reopening the v1 feature
-contract unless maintenance of an existing v1 guarantee requires it.
+After v1, evolution follows Track A / Track B / Track C / Track D without
+reopening the v1 feature contract unless maintenance of an existing v1
+guarantee requires it.
