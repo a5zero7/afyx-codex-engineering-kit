@@ -1,23 +1,21 @@
 /**
- * The viewer's server-side syntax classification (CG-43, rebuilt on the
- * engine's own tree-sitter parse in CG-57).
+ * The viewer's server-side Afyx-native syntax classification.
  *
  * Two things are worth pinning here and they are not the colours. The first is
  * that a call-site link lands on the callee's own name — the accent underline
  * is the only colour in the code block, and putting it on the receiver or on a
  * word inside a comment is worse than not drawing it. The second is that
  * highlighting never becomes a way for a source request to fail: a language
- * with no grammar, an oversized slice, a minified line all have to answer with
+ * with no classifier, an oversized slice, a minified line all have to answer with
  * the source and an honest `engine: 'plain'`.
  *
  * The end-to-end shape is deliberate: the server's tokens are fed straight
  * through the viewer's own `decodeLine` and `assignRefs`, because the seam
- * between "how a grammar chose to cut a line" and "which token the overlay
+ * between "how the classifier chose to cut a line" and "which token the overlay
  * claims" is exactly where this breaks.
  *
- * These run against the real grammars, which live in `src/extraction/wasm/`
- * and `tree-sitter-wasms` — the same ones indexing uses — so unlike the Shiki
- * era there is nothing to build first and nothing to skip.
+ * These run against the same native classifier used by the product, so there
+ * is nothing separate to build or stage.
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';

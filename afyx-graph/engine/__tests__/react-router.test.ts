@@ -15,7 +15,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { AfyxGraph } from '../src';
-import { initGrammars, loadAllGrammars } from '../src/extraction/grammars';
+
 import { buildScreens } from '../src/ui-server/api/screens';
 import { buildSteps } from '../src/ui-server/api/steps';
 import { reactRouterRoot, reactRouterNavVerb } from '../src/resolution/frameworks/react-router';
@@ -71,8 +71,6 @@ describe('react-router: a routed app end to end', () => {
   }
 
   beforeAll(async () => {
-    await initGrammars();
-    await loadAllGrammars();
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-react-router-'));
     write('package.json', JSON.stringify({ name: 'shop', private: true }));
     write(
@@ -345,8 +343,6 @@ describe('react-router: the shapes proshop is written in', () => {
   }
 
   beforeAll(async () => {
-    await initGrammars();
-    await loadAllGrammars();
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-rr-shapes-'));
     write('package.json', JSON.stringify({ name: 'shop', dependencies: { react: '18', 'react-router-dom': '5' } }));
     // One component, four addresses — proshop renders HomeScreen at all four.

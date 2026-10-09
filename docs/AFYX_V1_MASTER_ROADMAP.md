@@ -456,13 +456,16 @@ selected inventory (for example RTK Query, Spring events, Vue store, and Java
 anonymous-class behavior). Their v1 status must be decided by product value and
 evidence rather than automatically reproduced.
 
-Current physical/parser state intentionally remains transitional:
+Current physical/parser state after grammar and packaging closure:
 
 ```text
-default parser fallback:           ACTIVE
-parser bootstrap:                  ACTIVE
-tracked grammar WASM:              29
-SyntaxNode/parser coupling:        34-file checkpoint
+default parser fallback:           CLOSED
+parser bootstrap:                  CLOSED
+tracked grammar WASM:              0
+shipped grammar WASM:              0
+grammar staging/copy:              0
+package-resolved grammar use:      0
+SyntaxNode/parser coupling:        0
 web-tree-sitter:                   PRESENT
 tree-sitter-wasms:                 PRESENT
 ```
@@ -568,7 +571,7 @@ tokens and a large real-repository agent campaign remain explicitly unmeasured.
 
 The exact next boundary is:
 
-> **Global Default Fallback Closure**
+> **Runtime & Dev/Test Isolation**
 
 The remaining parser/runtime closure sequence is:
 
@@ -590,11 +593,11 @@ D. Parser Adapter & Tree-Walk Source Closure [COMPLETE]
    Remove TreeSitterExtractor, parser adapters, AST/tree-walk helpers/types, and
    obsolete parser-backed syntax/guard paths.
 
-E. Grammar & Packaging Closure [NEXT]
+E. Grammar & Packaging Closure [COMPLETE]
    Remove tracked/shipped grammar WASM, grammar staging/copy requirements, and
    package-resolved grammar use.
 
-F. Runtime & Dev/Test Isolation
+F. Runtime & Dev/Test Isolation [NEXT]
    Remove production web-tree-sitter/tree-sitter-wasms requirements and delete
    or strictly isolate any remaining parser-only tooling/oracles.
 ```
@@ -606,6 +609,9 @@ GLOBAL_DEFAULT_FALLBACK = CLOSED
 PARSER_BOOTSTRAP = CLOSED
 PARSER_WORKER_PROTOCOL = CLOSED
 PARSER_ADAPTER_AND_TREE_WALK_SOURCE = CLOSED
+GRAMMAR_AND_PACKAGING = CLOSED
+TRACKED_GRAMMAR_WASM = 0
+SHIPPED_GRAMMAR_WASM = 0
 ```
 
 Performance/token principle:

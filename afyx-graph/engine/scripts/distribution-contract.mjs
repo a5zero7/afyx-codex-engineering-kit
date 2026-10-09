@@ -50,7 +50,7 @@ function localAssetPaths(html) {
     .filter(Boolean);
 }
 
-export function verifyEngineDistribution(root = SCRIPT_ROOT, { staged = false } = {}) {
+export function verifyEngineDistribution(root = SCRIPT_ROOT) {
   const dist = join(resolve(root), 'dist');
   const viewer = join(dist, 'viewer');
   const index = requireFile(join(viewer, 'index.html'), 'dist/viewer/index.html');
@@ -64,22 +64,16 @@ export function verifyEngineDistribution(root = SCRIPT_ROOT, { staged = false } 
   for (const file of DISTRIBUTION_PRODUCT.engineSentinels) {
     requireFile(join(dist, ...file.split('/')), `dist/${file}`);
   }
-
-  const wasm = join(dist, 'extraction', 'wasm');
-  if (!existsSync(wasm)) throw new DistributionError('missing dist/extraction/wasm');
-  const expected = new Set(DISTRIBUTION_PRODUCT.requiredGrammars);
-  const sourceWasm = join(resolve(root), 'src', 'extraction', 'wasm');
-  if (!staged && existsSync(sourceWasm)) {
-    for (const file of readdirSync(sourceWasm)) if (file.endsWith('.wasm')) expected.add(file);
+  const shippedGrammars = walkFiles(dist).filter((file) => file.endsWith('.wasm'));
+  if (shippedGrammars.length > 0) {
+    throw new DistributionError('dist must not contain grammar WASM');
   }
-  for (const grammar of expected) requireFile(join(wasm, grammar), `dist/extraction/wasm/${grammar}`);
-  const grammarCount = readdirSync(wasm).filter((file) => file.endsWith('.wasm')).length;
 
   const engineMaps = walkFiles(dist).filter((file) => file.endsWith('.js.map') && !file.includes(`${sep}viewer${sep}`));
   if (engineMaps.length === 0) throw new DistributionError('engine JavaScript source maps are missing');
   const viewerMaps = walkFiles(viewer).filter((file) => file.endsWith('.map'));
   if (viewerMaps.length > 0) throw new DistributionError('viewer source maps must remain disabled');
-  return { assets: assets.length, grammarCount, engineSourceMaps: engineMaps.length };
+  return { assets: assets.length, engineSourceMaps: engineMaps.length };
 }
 
 export function verifyBundle(root, target) {
@@ -87,7 +81,7 @@ export function verifyBundle(root, target) {
   const plan = artifactPlan(target);
   const windows = plan.family === 'win32';
   const lib = join(bundle, 'lib');
-  const engine = verifyEngineDistribution(lib, { staged: true });
+  const engine = verifyEngineDistribution(lib);
   const manifest = JSON.parse(readFileSync(requireFile(join(lib, 'package.json'), 'lib/package.json'), 'utf8'));
   if (manifest.name !== DISTRIBUTION_PRODUCT.packageName ||
       manifest.bin?.[DISTRIBUTION_PRODUCT.cli] !== `./dist/bin/${DISTRIBUTION_PRODUCT.cli}.js`) {
@@ -111,6 +105,11 @@ export function verifyBundle(root, target) {
     throw new DistributionError('launcher does not target lib/dist/bin/afyx-graph.js');
   }
   if (!existsSync(join(lib, 'node_modules'))) throw new DistributionError('production node_modules is missing');
+  const dependencyGrammars = walkFiles(join(lib, 'node_modules', 'tree-sitter-wasms'))
+    .filter((file) => file.endsWith('.wasm'));
+  if (dependencyGrammars.length > 0) {
+    throw new DistributionError('bundle must not contain tree-sitter grammar WASM');
+  }
   for (const forbidden of ['src', '__tests__', 'ui']) {
     if (existsSync(join(lib, forbidden))) throw new DistributionError(`development-only lib/${forbidden} is packaged`);
   }

@@ -2980,4 +2980,4 @@ export class ExtractionOrchestrator {
 
 // Re-export useful types and functions
 export { extractFromSource } from './extract';
-export { detectLanguage, isSourceFile, isLanguageSupported, isGrammarLoaded, getSupportedLanguages, initGrammars, loadGrammarsForLanguages, loadAllGrammars } from './grammars';
+export { detectLanguage, isSourceFile, isLanguageSupported, getSupportedLanguages } from './grammars';

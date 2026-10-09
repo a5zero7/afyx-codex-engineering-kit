@@ -23,7 +23,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { AfyxGraph } from '../src';
-import { initGrammars, loadGrammarsForLanguages } from '../src/extraction/grammars';
+
 import { tryKernelExtractRaw } from '../src/extraction/kernel';
 import { ExtractionAdmission } from '../src/extraction/extraction-admission';
 import type { ExtractionResult } from '../src/types';
@@ -45,8 +45,6 @@ describe.skipIf(!kernelBuilt)('kernel buffer-transport storage (#1541)', () => {
   beforeEach(async () => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kernel-retry-mat-'));
     cg = await AfyxGraph.init(dir);
-    await initGrammars();
-    await loadGrammarsForLanguages(['python']);
   });
 
   afterEach(() => {

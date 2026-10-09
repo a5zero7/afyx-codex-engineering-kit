@@ -16,12 +16,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { AfyxGraph } from '../src';
-import { initGrammars, loadAllGrammars } from '../src/extraction/grammars';
 
-beforeAll(async () => {
-  await initGrammars();
-  await loadAllGrammars();
-});
+
 
 describe('ArkTS attribute-chain resolution precision', () => {
   let tmpDir: string | undefined;

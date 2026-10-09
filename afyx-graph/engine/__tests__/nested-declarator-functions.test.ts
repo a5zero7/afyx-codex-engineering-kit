@@ -9,12 +9,8 @@
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { extractFromSource } from '../src/extraction';
-import { initGrammars, loadAllGrammars } from '../src/extraction/grammars';
 
-beforeAll(async () => {
-  await initGrammars();
-  await loadAllGrammars();
-});
+
 
 const refsFrom = (result: ReturnType<typeof extractFromSource>, id: string) =>
   result.unresolvedReferences.filter((r) => r.fromNodeId === id).map((r) => r.referenceName);

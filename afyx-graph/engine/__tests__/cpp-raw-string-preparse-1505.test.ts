@@ -1,6 +1,5 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { extractFromSource } from '../src/extraction';
-import { getParser, initGrammars, loadGrammarsForLanguages } from '../src/extraction/grammars';
 import {
   blankCppAnnotationMacroCalls,
   blankCppInlineAnnotationMacros,
@@ -9,12 +8,9 @@ import {
   blankCFileScopePrefixedDeclMacros,
   blankCParameterizedAnnotationMacros,
   blankCDesignatedMacroArgs,
-  cExtractor,
-  cppExtractor,
 } from '../src/extraction/languages/c-cpp';
 
-// The original parses cleanly; #1505 is preParse corrupting its short delimiter,
-// distinct from the vendored grammar's 16-character delimiter error (#1522).
+// The original must remain extractable while native blankers preserve raw strings.
 function scaffoldSource(delimiter = 'GEN'): string {
   return `#include <string>
 
@@ -41,29 +37,14 @@ const annotationBlankers = [
   { name: 'inline annotations', blank: blankCppInlineAnnotationMacros },
 ];
 
-describe('C/C++ raw strings survive preParse (#1505)', () => {
-  beforeAll(async () => {
-    await initGrammars();
-    await loadGrammarsForLanguages(['cpp']);
-  });
-
-  it('indexes both functions after the anonymous namespace without introducing a parse error', () => {
+describe('C/C++ raw strings survive native preprocessing (#1505)', () => {
+  it('indexes both functions after the anonymous namespace', () => {
     const source = scaffoldSource();
-    const rewritten = cppExtractor.preParse!(source, 'scaffold.cpp');
-    for (const text of [source, rewritten]) {
-      const tree = getParser('cpp')!.parse(text)!;
-      try {
-        expect(tree.rootNode.hasError).toBe(false);
-      } finally {
-        tree.delete();
-      }
-    }
     const result = extractFromSource('scaffold.cpp', source);
     expect(result.nodes.filter((node) => node.kind === 'function').map((node) => node.name))
       .toEqual(['create_scaffold', 'helper_after']);
     expect(result.nodes.some((node) => node.name === 'Ignored')).toBe(false);
     expect(result.errors).toEqual([]);
-    expect(rewritten).toBe(source);
   });
 
   it('keeps the raw-string terminator at its original offset', () => {
@@ -139,8 +120,6 @@ UE_DEPRECATED(
     { name: 'C declaration macros', blank: blankCFileScopePrefixedDeclMacros },
     { name: 'C parameterized annotations', blank: blankCParameterizedAnnotationMacros },
     { name: 'C designated initializer arguments', blank: blankCDesignatedMacroArgs },
-    { name: 'C preParse', blank: (source: string) => cExtractor.preParse!(source) },
-    { name: 'C++ preParse', blank: (source: string) => cppExtractor.preParse!(source, 'template.cpp') },
   ])('$name leaves macro-like raw-string contents untouched', ({ blank }) => {
     const source = `const auto* text = u8R"TAG(
   for_each_item(item, list) {

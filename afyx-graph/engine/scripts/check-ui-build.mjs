@@ -11,10 +11,10 @@ const root = staged
   : resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 try {
-  const result = verifyEngineDistribution(root, { staged });
+  const result = verifyEngineDistribution(root);
   console.log(
     `[check-ui-build] dist/viewer ok (index.html + ${result.assets} referenced asset(s)); ` +
-      `dist/extraction/wasm ok (${result.grammarCount} grammars); dist/ engine intact`,
+      'dist/ engine intact',
   );
 } catch (error) {
   const message = error instanceof DistributionError || error instanceof Error

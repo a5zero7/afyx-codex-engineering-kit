@@ -2943,3 +2943,102 @@ PARSER_ADAPTER_AND_TREE_WALK_SOURCE     CLOSED
 ```
 
 The exact next boundary is **Grammar & Packaging Closure**.
+
+## Grammar & Packaging Closure
+
+This boundary starts from `29dbaab326ec6008b2eae5d5fa8f737e7cf0d841`.
+Production fallback, parser bootstrap/worker protocol, and parser-backed source
+were already closed. The remaining 29 tracked grammar binaries and their
+loading, copying, verification, test-oracle, and release ownership were dead
+packaging residue.
+
+### Inventory and removal
+
+| Category | Before | After |
+| --- | ---: | ---: |
+| Tracked grammar WASM | 29 files / 68,192,092 bytes | 0 files / 0 bytes |
+| `dist` grammar WASM | 29 | 0 |
+| Windows archive grammar WASM | tracked copies plus dependency grammars | 0 |
+| Grammar copy/staging rules | 1 | 0 |
+| Production grammar resolution/load/cache APIs | present in `grammars.ts` | 0 |
+| Package-resolved grammar use | present | 0 |
+
+The complete `src/extraction/wasm/` inventory was deleted. `grammars.ts` now
+owns only language detection and native-support metadata; parser runtime,
+grammar caches, grammar paths, load/error/reset APIs, and their public exports
+were removed. The UI language classifier now asks the native syntax classifier
+directly.
+
+Obsolete grammar-only tooling was also removed:
+
+- `scripts/add-lang/check-grammar.mjs`;
+- `scripts/add-lang/dump-ast.mjs`;
+- `scripts/kernel-parity.mjs` (the removed fallback differential);
+- `__tests__/kernel-grammar-parity.test.ts`;
+- the no-longer-needed local `web-tree-sitter.d.ts` declaration.
+
+Behavioral tests no longer bootstrap grammars. The C++ raw-string regression
+tests now assert the native behavior, including successful extraction through
+a legal 16-character delimiter, rather than preserving the removed WASM
+scanner defect.
+
+### Packaging and artifact composition
+
+`copy-assets` now copies only the database schema. Distribution metadata and
+UI artifact checks no longer require a grammar directory or grammar count.
+Both `dist` and staged bundles reject grammar WASM. The Windows bundle retains
+the dependency declarations for the next boundary but excludes the unused
+`tree-sitter-wasms` package from the shipped runtime. The three remaining WASM
+entries in that archive are `web-tree-sitter` runtime binaries, not grammar
+assets; runtime dependency removal is explicitly deferred.
+
+Measured artifact footprint:
+
+```text
+tracked grammar WASM     68,192,092 bytes / 29 -> 0 bytes / 0
+dist                     77,318,737 bytes       -> 9,099,061 bytes
+dist grammar WASM        29                     -> 0
+win32-x64 archive        48,932,591 bytes       -> 39,054,071 bytes
+archive grammar WASM     dependency + staged    -> 0
+npm pack dry-run         2,263,794 bytes compressed / 9,270,237 unpacked
+npm pack grammar WASM    0
+```
+
+### Validation and failure classification
+
+```text
+TypeScript typecheck                                  PASS
+focused packaging/native/syntax regressions         122/122 PASS
+distribution grammar-exclusion contract                9/9 PASS
+main extraction guardrail                            649 semantic PASS
+main extraction cleanup-only failures                  6 EPERM
+clean production/UI build                              PASS
+UI/distribution artifact verification                  PASS
+CLI/MCP smoke                                         21/21 PASS
+Bash installer syntax + validate-only                   PASS
+PowerShell installer validate-only                      PASS
+git diff --check                                        PASS
+```
+
+All six guardrail failures occurred after their assertions while Windows was
+removing temporary directories (`CLEANUP_ONLY_EPERM`). The frozen V1 semantic
+contract, prior full semantic campaign, and native performance baseline were
+reused; no full semantic or performance campaign was repeated for this static
+asset/packaging closure.
+
+```text
+V1_REQUIRED failure              0
+UNKNOWN product failure          0
+
+tracked grammar WASM             0
+shipped grammar WASM             0
+grammar staging/copy             0
+package-resolved grammar use     0
+production grammar runtime use   0
+web-tree-sitter                  PRESENT (deferred)
+tree-sitter-wasms                PRESENT in manifest/lock (deferred)
+
+GRAMMAR_AND_PACKAGING            CLOSED
+```
+
+The exact next boundary is **Runtime & Dev/Test Isolation**.

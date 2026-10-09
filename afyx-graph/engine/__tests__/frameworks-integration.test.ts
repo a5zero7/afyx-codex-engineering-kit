@@ -7,12 +7,8 @@ import { DatabaseConnection, getDatabasePath } from '../src/db';
 import { QueryBuilder } from '../src/db/queries';
 import { createResolver } from '../src/resolution';
 import type { Node } from '../src/types';
-import { initGrammars, loadAllGrammars } from '../src/extraction/grammars';
 
-beforeAll(async () => {
-  await initGrammars();
-  await loadAllGrammars();
-});
+
 
 describe('Express middleware imports', () => {
   it('does not resolve package imports into license headings', async () => {

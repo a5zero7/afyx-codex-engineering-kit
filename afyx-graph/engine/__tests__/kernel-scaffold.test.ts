@@ -18,7 +18,7 @@ import { NODE_KINDS, EDGE_KINDS } from '../src/types';
 import { generateNodeId } from '../src/extraction/node-id';
 import { getKernel, tryKernelExtract, kernelRoutes, resetKernelForTests } from '../src/extraction/kernel';
 import { extractFromSource } from '../src/extraction';
-import { initGrammars, loadGrammarsForLanguages } from '../src/extraction/grammars';
+
 
 const KERNEL_PATH = path.join(
   __dirname,
@@ -172,11 +172,6 @@ describe.skipIf(!kernelBuilt)('kernel scaffold', () => {
   });
 
   describe('extractFromSource seam', () => {
-    beforeAll(async () => {
-      await initGrammars();
-      await loadGrammarsForLanguages(['typescript']);
-    });
-
     it('kill switch routes through the wasm extractor unchanged', () => {
       process.env.AFYX_GRAPH_KERNEL = '0';
       const result = extractFromSource('src/a.ts', 'export const f = () => 1;\n', 'typescript');

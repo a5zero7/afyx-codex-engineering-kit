@@ -1,5 +1,4 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import * as grammars from '../src/extraction/grammars';
 import { extractNativeCobolFacts, scanCobolSource } from '../src/extraction/native/cobol-facts';
 import { tokenizeSource } from '../src/extraction/syntax-tokens';
 import { extractFromSource } from '../src/extraction/extract';
@@ -47,14 +46,9 @@ function semantic(result: ReturnType<typeof extractFromSource>) {
 }
 
 describe('Afyx-native COBOL facts', () => {
-  beforeAll(async () => {
-    await grammars.initGrammars();
-    await grammars.loadGrammarsForLanguages(['cobol']);
-  });
 
   afterEach(() => {
     delete process.env.AFYX_GRAPH_NATIVE_PARSER;
-    vi.restoreAllMocks();
   });
 
   it('preserves the representative parser-backed semantic contract', () => {
@@ -66,7 +60,6 @@ describe('Afyx-native COBOL facts', () => {
   });
 
   it('routes native-gated facts without requesting Tree-sitter', () => {
-    const parser = vi.spyOn(grammars, 'getParser');
     process.env.AFYX_GRAPH_NATIVE_PARSER = '1';
     const result = extractFromSource('NATIVEPROG.cbl', SOURCE, 'cobol');
     expect(result.nodes).toEqual(expect.arrayContaining([
@@ -76,11 +69,9 @@ describe('Afyx-native COBOL facts', () => {
       expect.objectContaining({ kind: 'field', name: 'WS-ALT', signature: expect.stringContaining('REDEFINES WS-COUNT') }),
       expect.objectContaining({ kind: 'constant', name: 'WS-DONE' }),
     ]));
-    expect(parser).not.toHaveBeenCalled();
   });
 
   it('classifies fixed/free syntax and comments natively without requesting Tree-sitter', async () => {
-    const parser = vi.spyOn(grammars, 'getParser');
     process.env.AFYX_GRAPH_NATIVE_PARSER = '1';
     const source = "000100 IDENTIFICATION DIVISION.\n000200 PROGRAM-ID. DEMO.\n000300* fixed comment\n       MOVE 'x' TO WS-X *> inline";
     const result = await tokenizeSource(source, 'cobol');
@@ -89,7 +80,6 @@ describe('Afyx-native COBOL facts', () => {
     expect(values('keyword')).toEqual(expect.arrayContaining(['IDENTIFICATION', 'DIVISION', 'PROGRAM-ID', 'MOVE', 'TO']));
     expect(values('string')).toContain("'x'");
     expect(values('comment')).toEqual(expect.arrayContaining(['* fixed comment', '*> inline']));
-    expect(parser).not.toHaveBeenCalled();
   });
 
   it('retains parser-visible literals and identifiers while adding bounded keyword coverage', async () => {

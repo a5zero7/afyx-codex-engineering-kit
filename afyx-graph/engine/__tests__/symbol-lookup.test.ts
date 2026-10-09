@@ -16,14 +16,10 @@ import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { initGrammars, loadAllGrammars } from '../src/extraction/grammars';
+
 import { matchesSymbol, lookupSymbolNodes, isQualifiedSymbol } from '../src/graph/symbol-lookup';
 import type { Node } from '../src/types';
 
-beforeAll(async () => {
-  await initGrammars();
-  await loadAllGrammars();
-});
 
 function hasSqliteBindings(): boolean {
   try {

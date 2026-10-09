@@ -9,14 +9,12 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { AfyxGraph } from '../src';
-import { initGrammars, loadAllGrammars } from '../src/extraction/grammars';
+
 
 let dir: string;
 let cg: AfyxGraph;
 
 beforeAll(async () => {
-  await initGrammars();
-  await loadAllGrammars();
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-1684-'));
   fs.mkdirSync(path.join(dir, 'pkg'));
   fs.writeFileSync(path.join(dir, 'pkg', '__init__.py'), '');

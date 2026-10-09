@@ -2,13 +2,9 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { ExtractorRegistry } from '../src/extraction/extractor-registry';
 import { definitionDelta, reconcileSources } from '../src/extraction/reconciliation';
 import { hashContent } from '../src/extraction/content-hash';
-import { initGrammars, loadGrammarsForLanguages } from '../src/extraction/grammars';
+
 import type { FileRecord } from '../src/types';
 
-beforeAll(async () => {
-  await initGrammars();
-  await loadGrammarsForLanguages(['typescript']);
-});
 
 function tracked(path: string, content: string, modifiedAt = 1): FileRecord {
   return {

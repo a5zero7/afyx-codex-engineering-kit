@@ -1,5 +1,4 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import * as grammars from '../src/extraction/grammars';
 import { extractFromSource } from '../src/extraction/extract';
 import { extractNativePascalFacts } from '../src/extraction/native/pascal-facts';
 import { scanSource } from '../src/extraction/native/scanner';
@@ -54,14 +53,9 @@ function semantic(result: ReturnType<typeof extractFromSource>) {
 }
 
 describe('Afyx-native Pascal facts', () => {
-  beforeAll(async () => {
-    await grammars.initGrammars();
-    await grammars.loadGrammarsForLanguages(['pascal']);
-  });
 
   afterEach(() => {
     delete process.env.AFYX_GRAPH_NATIVE_PARSER;
-    vi.restoreAllMocks();
   });
 
   it('preserves the established semantic contract against the parser fallback', () => {
@@ -73,24 +67,20 @@ describe('Afyx-native Pascal facts', () => {
   });
 
   it('routes native-gated semantic extraction without requesting a parser', () => {
-    const parser = vi.spyOn(grammars, 'getParser');
     process.env.AFYX_GRAPH_NATIVE_PARSER = '1';
     const result = extractFromSource('Demo.pas', SOURCE, 'pascal');
     expect(result.nodes).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: 'class', name: 'TWorker' }),
       expect.objectContaining({ kind: 'method', name: 'Run' }),
     ]));
-    expect(parser).not.toHaveBeenCalled();
   });
 
   it('classifies Pascal source natively, including both comment forms', async () => {
-    const parser = vi.spyOn(grammars, 'getParser');
     process.env.AFYX_GRAPH_NATIVE_PARSER = '1';
     const source = "{ brace } (* paren *) type TThing = class end;";
     const result = await tokenizeSource(source, 'pascal');
     expect(result?.spans.filter((span) => span.cls === 'comment')).toHaveLength(2);
     expect(result?.spans.some((span) => span.cls === 'def' && source.slice(span.start, span.end) === 'TThing')).toBe(true);
-    expect(parser).not.toHaveBeenCalled();
   });
 
   it('keeps useful prefix facts for an incomplete editor buffer', () => {

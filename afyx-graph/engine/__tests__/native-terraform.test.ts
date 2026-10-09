@@ -1,5 +1,4 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import * as grammars from '../src/extraction/grammars';
 import { extractNativeTerraformFacts } from '../src/extraction/native/terraform-facts';
 import { scanSource } from '../src/extraction/native/scanner';
 import { tokenizeSource } from '../src/extraction/syntax-tokens';
@@ -41,14 +40,9 @@ function semantic(result: ReturnType<typeof extractFromSource>) {
 }
 
 describe('Afyx-native Terraform and OpenTofu facts', () => {
-  beforeAll(async () => {
-    await grammars.initGrammars();
-    await grammars.loadGrammarsForLanguages(['terraform']);
-  });
 
   afterEach(() => {
     delete process.env.AFYX_GRAPH_NATIVE_PARSER;
-    vi.restoreAllMocks();
   });
 
   it('preserves the representative parser-backed semantic contract', () => {
@@ -60,17 +54,14 @@ describe('Afyx-native Terraform and OpenTofu facts', () => {
   });
 
   it('routes native-gated Terraform and OpenTofu without requesting a parser', () => {
-    const parser = vi.spyOn(grammars, 'getParser');
     process.env.AFYX_GRAPH_NATIVE_PARSER = '1';
     for (const file of ['main.tf', 'variables.tfvars', 'versions.tofu']) {
       const result = extractFromSource(file, file.endsWith('.tfvars') ? 'region = "east"' : SOURCE, 'terraform');
       expect(result.errors.filter((error) => error.severity === 'error')).toHaveLength(0);
     }
-    expect(parser).not.toHaveBeenCalled();
   });
 
   it('classifies Terraform syntax natively without requesting a parser', async () => {
-    const parser = vi.spyOn(grammars, 'getParser');
     process.env.AFYX_GRAPH_NATIVE_PARSER = '1';
     const source = '# note\nvariable "region" { type = string }\nresource "aws_instance" "web" { count = 2 enabled = true values = [for x in var.items : x if x] }';
     const result = await tokenizeSource(source, 'terraform');
@@ -81,7 +72,6 @@ describe('Afyx-native Terraform and OpenTofu facts', () => {
     expect(values('ident')).toEqual(expect.arrayContaining(['variable', 'resource']));
     expect(values('string')).toEqual(expect.arrayContaining(['"region"', '"aws_instance"', '"web"']));
     expect(values('other')).toContain('2');
-    expect(parser).not.toHaveBeenCalled();
   });
 
   it('preserves representative parser-backed syntax classes', async () => {

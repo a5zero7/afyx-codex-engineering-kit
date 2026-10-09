@@ -24,7 +24,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import { extractFromSource } from '../src/extraction';
-import { initGrammars, loadGrammarsForLanguages } from '../src/extraction/grammars';
+
 import { tryKernelExtract, resetKernelForTests } from '../src/extraction/kernel';
 import type { ExtractionResult } from '../src/types';
 
@@ -56,10 +56,6 @@ const ENV_KEYS = ['AFYX_GRAPH_KERNEL', 'AFYX_GRAPH_KERNEL_LANGS'] as const;
 let savedEnv: Record<string, string | undefined>;
 
 describe.skipIf(!kernelBuilt)('kernel Ruby extraction parity', () => {
-  beforeAll(async () => {
-    await initGrammars();
-    await loadGrammarsForLanguages(['ruby']);
-  });
 
   beforeEach(() => {
     savedEnv = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));

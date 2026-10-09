@@ -14,7 +14,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { AfyxGraph } from '../src';
-import { initGrammars, loadAllGrammars } from '../src/extraction/grammars';
+
 import { buildScreens } from '../src/ui-server/api/screens';
 import { svelteResolver } from '../src/resolution/frameworks/svelte';
 import { svelteKitHrefArgument } from '../src/resolution/frameworks/sveltekit-router';
@@ -65,8 +65,6 @@ describe('sveltekit: a routed app end to end', () => {
   }
 
   beforeAll(async () => {
-    await initGrammars();
-    await loadAllGrammars();
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-sveltekit-'));
     write('package.json', JSON.stringify({ name: 'conduit', devDependencies: { '@sveltejs/kit': '2', svelte: '5' } }));
     write(

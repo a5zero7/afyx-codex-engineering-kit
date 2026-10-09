@@ -17,7 +17,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { AfyxGraph } from '../src';
 import { ToolHandler } from '../src/mcp/tools';
-import { initGrammars, loadAllGrammars } from '../src/extraction/grammars';
+
 
 let tmpDir: string;
 let cg: AfyxGraph;
@@ -29,8 +29,6 @@ const text = async (tool: string, args: Record<string, unknown>): Promise<string
 };
 
 beforeAll(async () => {
-  await initGrammars();
-  await loadAllGrammars();
 
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-764-'));
   const mk = (rel: string, content: string) => {

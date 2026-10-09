@@ -3,14 +3,11 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { AfyxGraph } from '../src';
-import { initGrammars } from '../src/extraction/grammars';
+
 import { callArgumentsInSource, guardsInSource, guardLabel, supportsBranchGuards, triggerInSource } from '../src/graph/branch-guards';
 import { buildNode } from '../src/ui-server/api/node';
 import { buildFlow } from '../src/ui-server/api/flow';
 
-beforeAll(async () => {
-  await initGrammars();
-});
 
 /** Line (1-based) of the first line containing `needle`. */
 function lineOf(src: string, needle: string): number {

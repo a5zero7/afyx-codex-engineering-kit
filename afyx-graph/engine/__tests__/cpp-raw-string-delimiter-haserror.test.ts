@@ -1,6 +1,5 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { extractFromSource } from '../src/extraction';
-import { getParser, initGrammars, loadGrammarsForLanguages } from '../src/extraction/grammars';
 
 function rawStringSource(delimiter: string): string {
   return `const char* kTemplate = R"${delimiter}(
@@ -13,28 +12,13 @@ int after_the_raw_string(int x) {
 `;
 }
 
-describe('C++ raw-string delimiter parse collapse (#1522)', () => {
-  beforeAll(async () => {
-    await initGrammars();
-    await loadGrammarsForLanguages(['cpp', 'c']);
-  });
-
-  it('warns when a legal 16-character delimiter swallows every symbol', () => {
+describe('C++ raw-string delimiter extraction (#1522)', () => {
+  it('extracts through a legal 16-character delimiter', () => {
     const result = extractFromSource('min.cpp', rawStringSource('FILE_TEMPLATE_V1'));
 
-    // The vendored tree-sitter-cpp scanner currently rejects the standard's
-    // maximum delimiter length, consuming the following function as ERROR.
-    expect(result.nodes.filter((n) => n.kind === 'function')).toEqual([]);
-    expect(result.nodes.map((n) => n.kind)).toEqual(['file']);
-    expect(result.errors).toEqual([
-      {
-        message:
-          'min.cpp: parse produced no symbols (tree has errors) — ' +
-          'the file is indexed but contributes nothing to the graph',
-        severity: 'warning',
-        code: 'parse_error',
-      },
-    ]);
+    expect(result.nodes.filter((n) => n.kind === 'function').map((n) => n.name))
+      .toEqual(['after_the_raw_string']);
+    expect(result.errors).toEqual([]);
   });
 
   it('extracts the function after a 15-character delimiter without warning', () => {
@@ -59,19 +43,12 @@ describe('C++ raw-string delimiter parse collapse (#1522)', () => {
     expect(result.errors).toEqual([]);
   });
 
-  it('does not warn on parse errors when a function survives', () => {
+  it('extracts functions on both sides of a raw string without warning', () => {
     const source = 'int before_the_raw_string() { return 0; }\n' + rawStringSource('FILE_TEMPLATE_V1');
-    const tree = getParser('cpp')!.parse(source)!;
-    try {
-      expect(tree.rootNode.hasError).toBe(true);
-    } finally {
-      tree.delete();
-    }
-
     const result = extractFromSource('min.cpp', source);
 
     expect(result.nodes.filter((n) => n.kind === 'function').map((n) => n.name))
-      .toEqual(['before_the_raw_string']);
+      .toEqual(['before_the_raw_string', 'after_the_raw_string']);
     expect(result.errors).toEqual([]);
   });
 });

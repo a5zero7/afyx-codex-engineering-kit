@@ -10,7 +10,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { AfyxGraph } from '../src';
-import { initGrammars, loadAllGrammars } from '../src/extraction/grammars';
+
 import { drupalResolver } from '../src/resolution/frameworks/drupal';
 import type { ResolutionContext } from '../src/resolution/types';
 
@@ -532,10 +532,6 @@ describe('drupalResolver.resolve', () => {
 // End-to-end integration test
 // ---------------------------------------------------------------------------
 
-beforeAll(async () => {
-  await initGrammars();
-  await loadAllGrammars();
-});
 
 describe('Drupal end-to-end — route node linked to controller method', () => {
   let tmpDir: string | undefined;

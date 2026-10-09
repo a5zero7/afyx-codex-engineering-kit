@@ -13,14 +13,12 @@ import * as os from 'os';
 import * as path from 'path';
 import { AfyxGraph } from '../src';
 import { extractFromSource } from '../src/extraction';
-import { initGrammars, loadAllGrammars } from '../src/extraction/grammars';
+
 
 let dir: string;
 let cg: AfyxGraph;
 
 beforeAll(async () => {
-  await initGrammars();
-  await loadAllGrammars();
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-1683-'));
   fs.mkdirSync(path.join(dir, 'py'));
   fs.mkdirSync(path.join(dir, 'js'));

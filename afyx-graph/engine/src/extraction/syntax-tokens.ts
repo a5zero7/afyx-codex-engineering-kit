@@ -122,6 +122,11 @@ const NATIVE_SYNTAX_LANGUAGES: ReadonlySet<Language> = new Set([
   'cobol',
   'cfml', 'cfscript', 'cfquery',
 ]);
+
+/** Whether the Afyx-native syntax classifier supports this language. */
+export function supportsNativeSyntax(language: string | undefined | null): boolean {
+  return !!language && NATIVE_SYNTAX_LANGUAGES.has(language as Language);
+}
 const NATIVE_TS_FAMILY_LANGUAGES: ReadonlySet<Language> = new Set([
   'typescript', 'tsx', 'javascript', 'jsx', 'arkts',
 ]);

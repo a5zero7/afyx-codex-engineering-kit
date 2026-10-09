@@ -14,14 +14,12 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { AfyxGraph } from '../src';
-import { initGrammars, loadAllGrammars } from '../src/extraction/grammars';
+
 
 let dir: string;
 let cg: AfyxGraph;
 
 beforeAll(async () => {
-  await initGrammars();
-  await loadAllGrammars();
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-1496-'));
   fs.mkdirSync(path.join(dir, 'src'));
   const w = (rel: string, body: string) => fs.writeFileSync(path.join(dir, 'src', rel), body);

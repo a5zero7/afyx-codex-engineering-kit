@@ -12,9 +12,6 @@ import {
   verifyBundle,
 } from '../scripts/distribution-contract.mjs';
 
-const grammars = [
-  'typescript', 'tsx', 'javascript', 'go', 'python', 'rust', 'swift', 'c_sharp', 'ruby', 'php',
-];
 const roots: string[] = [];
 
 function file(root: string, relative: string, content = 'fixture'): void {
@@ -32,7 +29,6 @@ function bundle(): string {
   file(root, 'lib/dist/index.js');
   file(root, 'lib/dist/index.js.map');
   file(root, 'lib/dist/ui/shimmer-progress.js');
-  for (const grammar of grammars) file(root, `lib/dist/extraction/wasm/tree-sitter-${grammar}.wasm`);
   file(root, 'lib/package.json', JSON.stringify({ name: '@a5zero7/afyx-graph', bin: { 'afyx-graph': './dist/bin/afyx-graph.js' } }));
   mkdirSync(join(root, 'lib', 'node_modules'), { recursive: true });
   file(root, 'metadata.json', JSON.stringify({ product_name: 'Afyx Graph', cli: 'afyx-graph' }));
@@ -87,7 +83,6 @@ describe('Afyx distribution contract', () => {
   it.each([
     ['runtime artifact', 'node.exe'],
     ['viewer asset', 'lib/dist/viewer/assets/app.js'],
-    ['wasm grammar', 'lib/dist/extraction/wasm/tree-sitter-python.wasm'],
     ['required notice', 'licenses/THIRD_PARTY_NOTICES.md'],
     ['launcher', 'bin/afyx-graph.cmd'],
   ])('rejects a missing %s', (_label, relative) => {
@@ -100,6 +95,12 @@ describe('Afyx distribution contract', () => {
     const root = bundle();
     file(root, 'lib/src/stale.ts');
     expect(() => verifyBundle(root, 'win32-x64')).toThrow(/development-only/);
+  });
+
+  it('rejects grammar WASM from a staged dependency', () => {
+    const root = bundle();
+    file(root, 'lib/node_modules/tree-sitter-wasms/out/tree-sitter-python.wasm');
+    expect(() => verifyBundle(root, 'win32-x64')).toThrow(/grammar WASM/);
   });
 
   it('rejects wrong CLI metadata', () => {

@@ -6,13 +6,10 @@
  * passed, what is called as written, and what is written on its definition.
  */
 import { describe, it, expect, beforeAll } from 'vitest';
-import { initGrammars } from '../src/extraction/grammars';
+
 import { callSiteInSource, decoratorsInSource, guardsInSource, guardLabel, loopsInSource, memberTypesInSource, supportsBranchGuards } from '../src/graph/branch-guards';
 import type { Language } from '../src/types';
 
-beforeAll(async () => {
-  await initGrammars();
-});
 
 function lineOf(src: string, needle: string): number {
   const i = src.split('\n').findIndex((l) => l.includes(needle));

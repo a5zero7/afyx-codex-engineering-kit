@@ -9,7 +9,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { AfyxGraph } from '../src';
 import { ToolHandler } from '../src/mcp/tools';
-import { initGrammars, loadAllGrammars } from '../src/extraction/grammars';
+
 
 let tmpDir: string;
 let cg: AfyxGraph;
@@ -23,8 +23,6 @@ const text = async (tool: string, args: Record<string, unknown>): Promise<string
 const CALLERS = 25;
 
 beforeAll(async () => {
-  await initGrammars();
-  await loadAllGrammars();
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-1674-'));
   fs.mkdirSync(path.join(tmpDir, 'src'));
   // `warm` lives in a file of another name: one definition, the flat list.

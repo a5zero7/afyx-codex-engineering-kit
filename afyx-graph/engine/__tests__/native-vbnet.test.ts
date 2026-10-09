@@ -1,5 +1,4 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import * as grammars from '../src/extraction/grammars';
 import { extractNativeVbnetFacts } from '../src/extraction/native/vbnet-facts';
 import { scanSource } from '../src/extraction/native/scanner';
 import { tokenizeSource } from '../src/extraction/syntax-tokens';
@@ -58,14 +57,9 @@ function contract(result: ReturnType<typeof extractFromSource>) {
 }
 
 describe('Afyx-native VB.NET facts', () => {
-  beforeAll(async () => {
-    await grammars.initGrammars();
-    await grammars.loadGrammarsForLanguages(['vbnet']);
-  });
 
   afterEach(() => {
     delete process.env.AFYX_GRAPH_NATIVE_PARSER;
-    vi.restoreAllMocks();
   });
 
   it('preserves the established semantic contract against the parser fallback', () => {
@@ -78,7 +72,6 @@ describe('Afyx-native VB.NET facts', () => {
   });
 
   it('routes native-gated semantic extraction without requesting a parser', () => {
-    const parser = vi.spyOn(grammars, 'getParser');
     process.env.AFYX_GRAPH_NATIVE_PARSER = '1';
     const result = extractFromSource('Invoice.vb', SOURCE, 'vbnet');
     expect(result.nodes).toEqual(expect.arrayContaining([
@@ -86,7 +79,6 @@ describe('Afyx-native VB.NET facts', () => {
       expect.objectContaining({ kind: 'method', name: 'AddLine' }),
       expect.objectContaining({ kind: 'type_alias', name: 'Mapper' }),
     ]));
-    expect(parser).not.toHaveBeenCalled();
   });
 
   it('handles VB lexical boundaries without leaking XML or comments into facts', () => {
@@ -103,14 +95,12 @@ describe('Afyx-native VB.NET facts', () => {
   });
 
   it('classifies mixed-case VB.NET source natively', async () => {
-    const parser = vi.spyOn(grammars, 'getParser');
     process.env.AFYX_GRAPH_NATIVE_PARSER = '1';
     const source = "pUbLiC cLaSs Worker\n  Public Function Run(value As Integer) As String\n  End Function\nEnd Class";
     const result = await tokenizeSource(source, 'vbnet');
     expect(result?.spans.some((span) => span.cls === 'keyword' && source.slice(span.start, span.end) === 'cLaSs')).toBe(true);
     expect(result?.spans.some((span) => span.cls === 'type' && source.slice(span.start, span.end) === 'Integer')).toBe(true);
     expect(result?.spans.some((span) => span.cls === 'def' && source.slice(span.start, span.end) === 'Run')).toBe(true);
-    expect(parser).not.toHaveBeenCalled();
   });
 
   it('keeps multiline lambda calls owned by the enclosing routine', () => {

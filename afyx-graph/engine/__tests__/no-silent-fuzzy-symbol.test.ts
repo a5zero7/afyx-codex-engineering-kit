@@ -9,14 +9,10 @@ import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { initGrammars, loadAllGrammars } from '../src/extraction/grammars';
+
 
 const BIN = path.resolve(__dirname, '../dist/bin/afyx-graph.js');
 
-beforeAll(async () => {
-  await initGrammars();
-  await loadAllGrammars();
-});
 
 function hasSqliteBindings(): boolean {
   try {

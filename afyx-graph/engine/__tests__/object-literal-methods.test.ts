@@ -19,12 +19,8 @@ import * as path from 'path';
 import * as os from 'os';
 import { AfyxGraph } from '../src';
 import { extractFromSource } from '../src/extraction';
-import { initGrammars, loadAllGrammars } from '../src/extraction/grammars';
 
-beforeAll(async () => {
-  await initGrammars();
-  await loadAllGrammars();
-});
+
 
 describe('object-literal method extraction', () => {
   it('extracts Zustand store actions (object returned by create()) as function nodes', () => {

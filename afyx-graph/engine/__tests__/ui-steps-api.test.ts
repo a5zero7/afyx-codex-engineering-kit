@@ -15,7 +15,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { AfyxGraph } from '../src';
-import { initGrammars, loadAllGrammars } from '../src/extraction/grammars';
+
 import { buildSteps, crossing, effectCategory, isStoreFile } from '../src/ui-server/api/steps';
 
 let tmpDir: string;
@@ -28,8 +28,6 @@ function write(rel: string, content: string): void {
 }
 
 beforeAll(async () => {
-  await initGrammars();
-  await loadAllGrammars();
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-ui-steps-'));
   write('package.json', JSON.stringify({ name: 'app', dependencies: { expo: '52', 'expo-router': '4', 'react-native': '0.76' } }));
   write('src/app/_layout.tsx', 'export default function Layout() { return null }\n');

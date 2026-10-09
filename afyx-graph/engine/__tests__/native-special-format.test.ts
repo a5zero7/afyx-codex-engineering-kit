@@ -1,5 +1,4 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import * as grammars from '../src/extraction/grammars';
 import { syntaxRegionsFor, tokenizeSource } from '../src/extraction/syntax-tokens';
 import { extractFromSource } from '../src/extraction/extract';
 
@@ -39,14 +38,9 @@ function contract(result: ReturnType<typeof extractFromSource>) {
 }
 
 describe('Afyx-native Svelte/Vue/Astro script regions', () => {
-  beforeAll(async () => {
-    await grammars.initGrammars();
-    await grammars.loadGrammarsForLanguages(['javascript', 'typescript']);
-  });
 
   afterEach(() => {
     delete process.env.AFYX_GRAPH_NATIVE_PARSER;
-    vi.restoreAllMocks();
   });
 
   it.each([
@@ -95,7 +89,6 @@ describe('Afyx-native Svelte/Vue/Astro script regions', () => {
   });
 
   it('uses JS/TS native semantics and syntax for all three formats without requesting a parser', async () => {
-    const parser = vi.spyOn(grammars, 'getParser');
     process.env.AFYX_GRAPH_NATIVE_PARSER = '1';
     for (const [language, file, source] of [
       ['svelte', 'Component.svelte', SOURCES.svelte],
@@ -105,7 +98,6 @@ describe('Afyx-native Svelte/Vue/Astro script regions', () => {
       expect(extractFromSource(file, source, language).nodes.some((node) => node.kind === 'function')).toBe(true);
       expect((await tokenizeSource(source, language))?.spans.length).toBeGreaterThan(0);
     }
-    expect(parser).not.toHaveBeenCalled();
   });
 
   it('selects JavaScript by default and TypeScript for lang=ts while accepting an unclosed native region', () => {

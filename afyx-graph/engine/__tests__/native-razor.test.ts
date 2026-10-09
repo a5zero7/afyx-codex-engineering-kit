@@ -1,5 +1,4 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import * as grammars from '../src/extraction/grammars';
 import { syntaxRegionsFor, tokenizeSource } from '../src/extraction/syntax-tokens';
 import { extractFromSource } from '../src/extraction/extract';
 
@@ -26,14 +25,9 @@ function referenceContract(result: ReturnType<typeof extractFromSource>) {
 }
 
 describe('Afyx-native Razor/Blazor C# regions', () => {
-  beforeAll(async () => {
-    await grammars.initGrammars();
-    await grammars.loadGrammarsForLanguages(['csharp']);
-  });
 
   afterEach(() => {
     delete process.env.AFYX_GRAPH_NATIVE_PARSER;
-    vi.restoreAllMocks();
   });
 
   it.each([
@@ -53,13 +47,11 @@ describe('Afyx-native Razor/Blazor C# regions', () => {
   });
 
   it('uses native C# semantic and syntax routes without requesting a parser', async () => {
-    const parser = vi.spyOn(grammars, 'getParser');
     process.env.AFYX_GRAPH_NATIVE_PARSER = '1';
     expect(extractFromSource('Component.razor', RAZOR, 'razor').unresolvedReferences.length).toBeGreaterThan(0);
     expect(extractFromSource('View.cshtml', CSHTML, 'razor').unresolvedReferences.length).toBeGreaterThan(0);
     expect((await tokenizeSource(RAZOR, 'razor'))?.grammars).toEqual(['csharp']);
     expect((await tokenizeSource(CSHTML, 'razor'))?.grammars).toEqual(['csharp']);
-    expect(parser).not.toHaveBeenCalled();
   });
 
   it('maps same-line and later-region references to absolute UTF-16 positions and component ownership', () => {

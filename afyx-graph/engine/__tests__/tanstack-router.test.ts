@@ -14,7 +14,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { AfyxGraph } from '../src';
-import { initGrammars, loadAllGrammars } from '../src/extraction/grammars';
+
 import { buildScreens } from '../src/ui-server/api/screens';
 import {
   parseTanstackRoutes,
@@ -188,8 +188,6 @@ describe('tanstack: a routed app end to end', () => {
   }
 
   beforeAll(async () => {
-    await initGrammars();
-    await loadAllGrammars();
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-tanstack-'));
     write('package.json', JSON.stringify({ name: 'app', dependencies: { react: '19', '@tanstack/react-router': '1' } }));
     write(

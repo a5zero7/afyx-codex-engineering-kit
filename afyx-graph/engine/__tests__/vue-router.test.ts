@@ -15,7 +15,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { AfyxGraph } from '../src';
-import { initGrammars, loadAllGrammars } from '../src/extraction/grammars';
+
 import { buildScreens } from '../src/ui-server/api/screens';
 import { parseVueRoutes, vueNavVerb, routeNameInExpression } from '../src/resolution/frameworks/vue-router';
 import type { Node } from '../src/types';
@@ -123,8 +123,6 @@ describe('vue-router: a routed app end to end', () => {
   }
 
   beforeAll(async () => {
-    await initGrammars();
-    await loadAllGrammars();
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-vue-router-'));
     write('package.json', JSON.stringify({ name: 'conduit', dependencies: { vue: '3', 'vue-router': '4' } }));
     write(

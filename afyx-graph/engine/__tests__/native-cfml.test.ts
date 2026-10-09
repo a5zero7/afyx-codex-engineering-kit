@@ -1,5 +1,4 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import * as grammars from '../src/extraction/grammars';
 import { tokenizeSource } from '../src/extraction/syntax-tokens';
 import { extractFromSource } from '../src/extraction/extract';
 
@@ -17,14 +16,9 @@ function semantic(result: ReturnType<typeof extractFromSource>) {
 }
 
 describe('Afyx-native CFML family', () => {
-  beforeAll(async () => {
-    await grammars.initGrammars();
-    await grammars.loadGrammarsForLanguages(['cfml', 'cfscript', 'cfquery']);
-  });
 
   afterEach(() => {
     delete process.env.AFYX_GRAPH_NATIVE_PARSER;
-    vi.restoreAllMocks();
   });
 
   const bare = `component extends="Base" implements="IRun" {
@@ -82,7 +76,6 @@ describe('Afyx-native CFML family', () => {
   });
 
   it('routes CFML, CFScript, and CFQuery semantic/syntax without requesting a parser', async () => {
-    const parser = vi.spyOn(grammars, 'getParser');
     process.env.AFYX_GRAPH_NATIVE_PARSER = '1';
     expect(extractFromSource('Mixed.cfc', mixed, 'cfml').nodes.some((node) => node.name === 'run')).toBe(true);
     expect(extractFromSource('Service.cfs', bare, 'cfscript').nodes.some((node) => node.name === 'run')).toBe(true);
@@ -97,6 +90,5 @@ describe('Afyx-native CFML family', () => {
     expect(values(bare, scriptSyntax, 'def')).toEqual(expect.arrayContaining(['run']));
     expect(values('SELECT #currentUser().getId()#', querySyntax, 'keyword')).toContain('SELECT');
     expect(values('SELECT #currentUser().getId()#', querySyntax, 'ident')).toEqual(expect.arrayContaining(['currentUser', 'getId']));
-    expect(parser).not.toHaveBeenCalled();
   });
 });

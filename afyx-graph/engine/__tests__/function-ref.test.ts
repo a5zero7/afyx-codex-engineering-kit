@@ -25,12 +25,8 @@ import * as path from 'path';
 import * as os from 'os';
 import { AfyxGraph } from '../src';
 import type { Edge } from '../src/types';
-import { initGrammars, loadAllGrammars } from '../src/extraction/grammars';
 
-beforeAll(async () => {
-  await initGrammars();
-  await loadAllGrammars();
-});
+
 
 /** Incoming edges to `name`'s node that came from function-as-value capture. */
 function fnRefEdgesInto(cg: AfyxGraph, name: string): Edge[] {

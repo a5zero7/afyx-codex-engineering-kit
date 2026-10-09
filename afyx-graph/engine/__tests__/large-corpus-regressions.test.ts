@@ -112,9 +112,6 @@ describe('failure markers vs later real results (#1557 × #1541)', () => {
       const content = 'def real_fn():\n    return 1\n\nclass RealClass:\n    def m(self):\n        return 2\n';
       fs.writeFileSync(path.join(dir, rel), content);
       const cg = await AfyxGraph.init(dir, { silent: true });
-      const { initGrammars, loadGrammarsForLanguages } = await import('../src/extraction/grammars');
-      await initGrammars();
-      await loadGrammarsForLanguages(['python']);
       const admission = new ExtractionAdmission((cg as any).queries);
       const stats = fs.statSync(path.join(dir, rel));
 

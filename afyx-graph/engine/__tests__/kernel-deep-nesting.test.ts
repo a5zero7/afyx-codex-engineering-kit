@@ -29,7 +29,7 @@ import * as path from 'path';
 import { execFileSync } from 'child_process';
 import { Worker } from 'worker_threads';
 import { extractFromSource } from '../src/extraction';
-import { initGrammars, loadGrammarsForLanguages } from '../src/extraction/grammars';
+
 import { kernelRoutes, resetKernelForTests } from '../src/extraction/kernel';
 import type { Language } from '../src/types';
 
@@ -120,8 +120,6 @@ describe.skipIf(!kernelBuilt)('kernel deep-nesting guard (#1581)', () => {
     resetKernelForTests();
     routed = CANDIDATES.filter((l) => kernelRoutes(l));
     expect(routed.length).toBeGreaterThan(0);
-    await initGrammars();
-    await loadGrammarsForLanguages(routed);
   });
 
   beforeEach(() => {

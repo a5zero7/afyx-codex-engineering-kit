@@ -7,12 +7,8 @@
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { extractFromSource } from '../src/extraction';
-import { initGrammars, loadAllGrammars } from '../src/extraction/grammars';
 
-beforeAll(async () => {
-  await initGrammars();
-  await loadAllGrammars();
-});
+
 
 const fnNames = (code: string, file = 'store.ts') =>
   extractFromSource(file, code)

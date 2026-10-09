@@ -11,7 +11,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { AfyxGraph } from '../src';
-import { initGrammars, loadAllGrammars } from '../src/extraction/grammars';
+
 import { buildScreens } from '../src/ui-server/api/screens';
 import { buildSteps } from '../src/ui-server/api/steps';
 import { nextjsResolver, nextRouteForFile, nextNavVerb } from '../src/resolution/frameworks/nextjs';
@@ -115,8 +115,6 @@ describe('nextjs: end to end', () => {
   }
 
   beforeAll(async () => {
-    await initGrammars();
-    await loadAllGrammars();
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-nextjs-'));
     write('package.json', JSON.stringify({ name: 'site', dependencies: { next: '15', react: '19', '@prisma/client': '5' } }));
     write('lib/db.ts', "import { PrismaClient } from '@prisma/client'\nexport const prisma = new PrismaClient()\n");

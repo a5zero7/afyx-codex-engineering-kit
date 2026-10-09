@@ -21,7 +21,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { AfyxGraph } from '../src';
-import { initGrammars, loadAllGrammars } from '../src/extraction/grammars';
+
 import { loadDeprioritizePatterns } from '../src/project-config';
 import { nameMatchBonus, scorePathRelevance } from '../src/search/query-utils';
 import { DEPRIORITIZED_NAME_BONUS_SCALE } from '../src/db/queries';
@@ -136,8 +136,6 @@ describe('#982 minimal repro — ranking with and without deprioritize', () => {
   let cfgCg: AfyxGraph;
 
   beforeAll(async () => {
-    await initGrammars();
-    await loadAllGrammars();
 
     baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-deprio-base-'));
     writeRepro(baseDir);

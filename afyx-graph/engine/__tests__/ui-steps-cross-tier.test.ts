@@ -14,7 +14,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { AfyxGraph } from '../src';
-import { initGrammars, loadAllGrammars } from '../src/extraction/grammars';
+
 import { buildSteps } from '../src/ui-server/api/steps';
 import type { Edge, Node } from '../src/types';
 
@@ -28,8 +28,6 @@ function write(rel: string, content: string): void {
 }
 
 beforeAll(async () => {
-  await initGrammars();
-  await loadAllGrammars();
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-ui-steps-tier-'));
   write(
     'package.json',

@@ -57,6 +57,9 @@ stage_application() {
   done < <(node "$CONTRACT" legal-files)
   echo "[bundle] installing production dependencies"
   (cd "$STAGE/lib" && npm ci --omit=dev --ignore-scripts >/dev/null 2>&1)
+  # The dependency declaration remains until Runtime & Dev/Test Isolation, but
+  # native production does not ship the package's unused grammar binaries.
+  rm -rf "$STAGE/lib/node_modules/tree-sitter-wasms"
   rm -f "$STAGE/lib/package-lock.json"
 }
 
@@ -70,7 +73,7 @@ stage_optional_kernel() {
       return
     fi
   done
-  echo "[bundle] no native kernel for $TARGET — bundle uses the wasm extraction path"
+  echo "[bundle] no optional native kernel for $TARGET — bundle uses the native TypeScript extraction path"
 }
 
 write_launcher() {

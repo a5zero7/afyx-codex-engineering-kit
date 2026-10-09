@@ -1,5 +1,4 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import * as grammars from '../src/extraction/grammars';
 import { extractNativeErlangFacts } from '../src/extraction/native/erlang-facts';
 import { scanSource } from '../src/extraction/native/scanner';
 import { tokenizeSource } from '../src/extraction/syntax-tokens';
@@ -32,14 +31,9 @@ function semantic(result: ReturnType<typeof extractFromSource>) {
 }
 
 describe('Afyx-native Erlang facts', () => {
-  beforeAll(async () => {
-    await grammars.initGrammars();
-    await grammars.loadGrammarsForLanguages(['erlang']);
-  });
 
   afterEach(() => {
     delete process.env.AFYX_GRAPH_NATIVE_PARSER;
-    vi.restoreAllMocks();
   });
 
   it('preserves the representative parser-backed semantic contract', () => {
@@ -51,7 +45,6 @@ describe('Afyx-native Erlang facts', () => {
   });
 
   it('routes gated semantic extraction without requesting Tree-sitter', () => {
-    const parser = vi.spyOn(grammars, 'getParser');
     process.env.AFYX_GRAPH_NATIVE_PARSER = '1';
     const result = extractFromSource('src/native_sample.erl', SOURCE, 'erlang');
     expect(result.nodes).toEqual(expect.arrayContaining([
@@ -59,11 +52,9 @@ describe('Afyx-native Erlang facts', () => {
       expect.objectContaining({ kind: 'function', qualifiedName: 'native_sample::run/1' }),
       expect.objectContaining({ kind: 'function', qualifiedName: 'native_sample::run/2' }),
     ]));
-    expect(parser).not.toHaveBeenCalled();
   });
 
   it('classifies Erlang definitions, keywords, literals, and percent comments natively', async () => {
-    const parser = vi.spyOn(grammars, 'getParser');
     process.env.AFYX_GRAPH_NATIVE_PARSER = '1';
     const source = "% note\n-module(m).\nrun(X) when is_atom(X) -> 'ok'.";
     const result = await tokenizeSource(source, 'erlang');
@@ -73,7 +64,6 @@ describe('Afyx-native Erlang facts', () => {
     expect(values('def')).toContain('run');
     expect(values('keyword')).toEqual(expect.arrayContaining(['when']));
     expect(values('string')).toContain("'ok'");
-    expect(parser).not.toHaveBeenCalled();
   });
 
   it('preserves established syntax classes for the ordinary Erlang surface', async () => {

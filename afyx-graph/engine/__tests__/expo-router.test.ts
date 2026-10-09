@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { AfyxGraph } from '../src';
-import { initGrammars, loadAllGrammars } from '../src/extraction/grammars';
+
 import { buildScreens } from '../src/ui-server/api/screens';
 import { buildSteps } from '../src/ui-server/api/steps';
 import {
@@ -412,10 +412,6 @@ describe('expo-router: resolve', () => {
 // =============================================================================
 
 describe('expo-router: end-to-end', () => {
-  beforeAll(async () => {
-    await initGrammars();
-    await loadAllGrammars();
-  });
 
   let tmpDir: string | undefined;
   afterEach(() => {
