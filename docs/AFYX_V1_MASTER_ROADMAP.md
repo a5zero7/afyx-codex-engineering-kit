@@ -821,6 +821,99 @@ Exit:
 
 No earlier Phase 5 subphase may make this final claim.
 
+## V1 Maturity / Test Milestones
+
+These milestones define when Afyx may move from internal engineering into
+progressively broader real-use testing. They do not replace the numbered phases;
+they are release-maturity gates layered on top of them.
+
+```text
+CURRENT DEVELOPMENT
+  |
+  +-- Phase 5 complete / Phase 5I PASS
+  |     |
+  |     +--> TECHNICAL ALPHA
+  |
+  +-- Phase 6 + Phase 7 complete
+  |     |
+  |     +--> ALPHA
+  |
+  +-- Phase 8 + Phase 9 complete
+  |     |
+  |     +--> PRIVATE BETA READINESS
+  |              |
+  |              +--> Phase 10 — Private Beta
+  |
+  +-- Phase 10 exit gates PASS
+        |
+        +--> Phase 11 — STABLE AFYX v1.0
+```
+
+### Technical Alpha
+
+Entry gate:
+
+- Phase 5F product viability and final artifact audit: PASS.
+- Phase 5G identity/artifact eradication: PASS.
+- Phase 5H license closure: PASS.
+- Phase 5I final independence audit: PASS.
+- `AFYX_FULLY_INDEPENDENT = TRUE`.
+- install -> first run -> init real workspace -> index -> query -> MCP ->
+  restart/reopen -> incremental sync has proven PASS from the actual product
+  artifact.
+
+Purpose:
+
+- daily internal use by the developer on real projects.
+- discover product-flow, installer, init/index, runtime, persistence, MCP, and
+  workflow defects as early as possible.
+- bugs and rough ergonomics are expected; release stability is not yet claimed.
+
+### Alpha
+
+Entry gate:
+
+- Technical Alpha has no unresolved blocker preventing normal daily use.
+- Phase 6 Unified Kit & Provider Control Plane: PASS.
+- Phase 7 Engineering Assurance: PASS.
+- installer/update/verify lifecycle and evidence-based engineering safeguards are
+  usable enough for repeated real work.
+
+Purpose:
+
+- sustained real-project use by the developer and selected technical testers.
+- validate daily workflow, lifecycle/control-plane behavior, diagnostics, and
+  assurance before broader beta exposure.
+- product may still contain known non-release-blocking defects.
+
+### Private Beta
+
+Readiness gate:
+
+- Alpha evidence is sufficient to continue.
+- Phase 8 real-world dogfood/comparative proof: PASS.
+- Phase 9 product hardening/release engineering: PASS.
+- no unresolved release-blocking install/init/runtime/data-integrity defect.
+
+Execution:
+
+- Phase 10 is the canonical Private Beta phase.
+- use controlled private users and real environments.
+- stabilize installer/runtime/configuration/upgrade behavior and triage
+  release-blocking defects.
+
+### Stable v1
+
+Entry gate:
+
+- Phase 10 Private Beta exit criteria: PASS.
+- all Phase 11 stable-release gates: PASS.
+- no unresolved critical correctness/security or release-blocking defect.
+
+Release:
+
+> **Afyx Code Engineering Kit v1.0.0 — Stable**
+
 ## Phase 6 — Unified Kit & Provider Control Plane
 
 Status: **PLANNED**
@@ -883,6 +976,11 @@ Exit:
 
 > Engineering completion is evidence-based rather than inferred from code
 > modification alone.
+
+Release maturity:
+
+> Completion of Phase 6 and Phase 7, with Technical Alpha free of blocking
+> daily-use defects, opens the **Alpha** testing milestone.
 
 Assurance rules:
 
@@ -980,6 +1078,11 @@ Exit:
 
 > Afyx fails safely and predictably under realistic operational failure modes.
 
+Release maturity:
+
+> Completion of Phase 8 and Phase 9 opens **Private Beta readiness**. Phase 10
+> is the canonical execution phase for that Private Beta.
+
 ## Phase 10 — Afyx v0.1 / Private Beta
 
 Status: **PLANNED**
@@ -1056,14 +1159,15 @@ Phase 11 is reached only after:
 6. Phase 10 private beta produces no unresolved release-blocking defect.
 7. no critical correctness/security issue remains open.
 
-Version path:
+Version / maturity path:
 
 ```text
 internal development
-  -> 0.x alpha/internal bundle
-  -> v0.1 Private Beta
-  -> 0.x stabilization / release candidate
-  -> v1.0.0 Stable
+  -> Technical Alpha   (after Phase 5I)
+  -> Alpha             (after Phase 6 + Phase 7)
+  -> Private Beta      (Phase 10, after Phase 8 + Phase 9)
+  -> stabilization / release candidate
+  -> v1.0.0 Stable     (Phase 11)
 ```
 
 # Post-v1 expansion program
