@@ -31,8 +31,7 @@ function bundle(): string {
   file(root, 'lib/dist/ui/shimmer-progress.js');
   file(root, 'lib/package.json', JSON.stringify({ name: '@a5zero7/afyx-graph', bin: { 'afyx-graph': './dist/bin/afyx-graph.js' } }));
   file(root, 'metadata.json', JSON.stringify({ product_name: 'Afyx Graph', cli: 'afyx-graph' }));
-  file(root, 'licenses/THIRD_PARTY_NOTICES.md');
-  file(root, 'licenses/THIRD_PARTY_ENGINE_MIT.txt');
+  file(root, 'LICENSE', 'MIT License\n\nCopyright (c) 2026 Afyx\n');
   file(root, 'bin/afyx-graph.cmd', 'where node\nNode.js was not found on PATH\nnode --disable-warning lib\\dist\\bin\\afyx-graph.js');
   return root;
 }
@@ -77,7 +76,7 @@ describe('Afyx distribution contract', () => {
 
   it('accepts a complete staged bundle and emits a stable sorted manifest', () => {
     const root = bundle();
-    expect(verifyBundle(root, 'win32-x64')).toMatchObject({ legalFiles: 2, target: 'win32-x64' });
+    expect(verifyBundle(root, 'win32-x64')).toMatchObject({ legalFiles: 1, target: 'win32-x64' });
     const first = artifactManifest(root);
     expect(first).toEqual(artifactManifest(root));
     expect(first.map((entry: { path: string }) => entry.path)).toEqual(first.map((entry: { path: string }) => entry.path).sort());
@@ -85,7 +84,7 @@ describe('Afyx distribution contract', () => {
 
   it.each([
     ['viewer asset', 'lib/dist/viewer/assets/app.js'],
-    ['required notice', 'licenses/THIRD_PARTY_NOTICES.md'],
+    ['current product license', 'LICENSE'],
     ['launcher', 'bin/afyx-graph.cmd'],
   ])('rejects a missing %s', (_label, relative) => {
     const root = bundle();

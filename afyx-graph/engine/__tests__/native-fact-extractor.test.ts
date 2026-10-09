@@ -38,3 +38,51 @@ describe('Afyx-native JS/TS fact extraction', () => {
     ]));
   });
 });
+
+describe('Afyx-native Python fact extraction', () => {
+  it('preserves positional class bases and ignores keyword class options', () => {
+    const result = extractNativeFacts(
+      'service.py',
+      'class ApiService(core.BaseService, AuditMixin, metaclass=ServiceMeta):\n    pass\n',
+      'python',
+    );
+
+    expect(result.unresolvedReferences.filter((ref) => ref.referenceKind === 'extends')).toEqual([
+      expect.objectContaining({ referenceName: 'core.BaseService' }),
+      expect.objectContaining({ referenceName: 'AuditMixin' }),
+    ]);
+  });
+
+  it('emits self calls as class-local names without flattening other receivers', () => {
+    const result = extractNativeFacts(
+      'service.py',
+      'class Service:\n    def run(self):\n        self.flush()\n        worker.flush()\n',
+      'python',
+    );
+    const calls = result.unresolvedReferences
+      .filter((ref) => ref.referenceKind === 'calls')
+      .map((ref) => ref.referenceName);
+
+    expect(calls).toContain('flush');
+    expect(calls).toContain('worker.flush');
+    expect(calls).not.toContain('self.flush');
+  });
+});
+
+describe('Afyx-native Java fact extraction', () => {
+  it('preserves a field type as a reference from the field', () => {
+    const result = extractNativeFacts(
+      'Renderer.java',
+      'class Renderer {\n  private final Formatter formatter = new UpperFormatter();\n}\n',
+      'java',
+    );
+    const field = result.nodes.find((node) => node.kind === 'field' && node.name === 'formatter');
+
+    expect(field).toBeDefined();
+    expect(result.unresolvedReferences).toContainEqual(expect.objectContaining({
+      fromNodeId: field!.id,
+      referenceKind: 'references',
+      referenceName: 'Formatter',
+    }));
+  });
+});

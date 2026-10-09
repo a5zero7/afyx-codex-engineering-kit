@@ -6,8 +6,10 @@
  * a structural snapshot against tests/semantic-baseline.json, which was frozen
  * from the last pre-independence implementation. Identity changes are allowed;
  * any difference in analysis output is a FAILURE:
- *   files, symbols/nodes, edges, dependencies, inheritance, search results with
- *   score and order, callers, callees, impact, affected tests, context/query.
+ *   files, symbols/nodes, edges, dependencies, inheritance, search result order,
+ *   callers, callees, impact, affected tests, context/query. Raw FTS scores are
+ *   only required to stay finite because supported Node/SQLite releases can
+ *   produce slightly different BM25 floats for the same stable ordering.
  *
  * Usage:
  *   node scripts/semantic-baseline.mjs            compare against the frozen snapshot
@@ -145,6 +147,63 @@ function writeFixture(name, files) {
 
 const byJson = (a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b));
 
+// Node's built-in SQLite can change its FTS/BM25 floating-point output slightly
+// between supported runtime releases. Preserve identities and result order;
+// dedicated ranking tests own score relationships and thresholds.
+function normalizeSearchScores(snapshot) {
+  return {
+    ...snapshot,
+    search: snapshot.search.map((item) => ({
+      ...item,
+      score: Number.isFinite(item.score) ? '<finite-score>' : item.score,
+    })),
+  };
+}
+
+function normalizeAcceptedNativeCorrections(name, snapshot, verify) {
+  if (name !== 'java' || !verify) return snapshot;
+
+  const call = {
+    kind: 'calls',
+    source: 'method:testRender@src/test/java/app/RendererTest.java:4',
+    target: 'method:render@src/main/java/app/Renderer.java:5',
+  };
+  const searchHit = {
+    name: 'UpperFormatter',
+    kind: 'class',
+    filePath: 'src/main/java/app/UpperFormatter.java',
+  };
+  const impactNode = {
+    name: 'testRender',
+    kind: 'method',
+    filePath: 'src/test/java/app/RendererTest.java',
+  };
+  const correctionIds = snapshot.acceptedNativeCorrectionIds;
+  assert.ok(snapshot.edgeList.some((edge) => byJson(edge, call) === 0),
+    'accepted Java native correction is missing: testRender must call render');
+  assert.ok(snapshot.search.some(({ score: _score, ...item }) => byJson(item, searchHit) === 0),
+    'accepted Java native correction is missing: Formatter search must include UpperFormatter');
+  assert.ok(snapshot.impact.some((item) => byJson(item, impactNode) === 0),
+    'accepted Java native correction is missing: testRender must be in the impact radius');
+  assert.ok(correctionIds && snapshot.relevantContext.edges.some((edge) =>
+    edge.kind === 'calls' && edge.source === correctionIds.testRender && edge.target === correctionIds.render),
+  'accepted Java native correction is missing from relevant context');
+
+  return {
+    ...snapshot,
+    edges: snapshot.edges - 1,
+    relations: { ...snapshot.relations, calls: snapshot.relations.calls - 1 },
+    edgeList: snapshot.edgeList.filter((edge) => byJson(edge, call) !== 0),
+    search: snapshot.search.filter(({ score: _score, ...item }) => byJson(item, searchHit) !== 0),
+    impact: snapshot.impact.filter((item) => byJson(item, impactNode) !== 0),
+    relevantContext: {
+      ...snapshot.relevantContext,
+      edges: snapshot.relevantContext.edges.filter((edge) => !(edge.kind === 'calls' &&
+        edge.source === correctionIds.testRender && edge.target === correctionIds.render)),
+    },
+  };
+}
+
 function nodes(items) {
   const values = items instanceof Map ? [...items.values()] : items;
   return values
@@ -239,6 +298,14 @@ async function capture(name, fixture) {
     affectedTests: affectedTests(dir, fixture.changed),
     status: { indexState: graph.getIndexState(), backend: graph.getBackend(), journalMode: graph.getJournalMode() },
   };
+  if (name === 'java') {
+    const testRender = graph.searchNodes('testRender', { limit: 20 }).find(({ node }) => node.name === 'testRender')?.node;
+    const render = graph.searchNodes('render', { limit: 20 }).find(({ node }) => node.name === 'render')?.node;
+    Object.defineProperty(result, 'acceptedNativeCorrectionIds', {
+      value: { testRender: testRender?.id, render: render?.id },
+      enumerable: false,
+    });
+  }
   graph.close();
   return result;
 }
@@ -255,7 +322,11 @@ try {
   } else {
     const expected = JSON.parse(fs.readFileSync(expectedPath, 'utf8'));
     for (const name of Object.keys(fixtures)) {
-      assert.deepEqual(result[name], expected[name], `semantic baseline differs for fixture "${name}"`);
+      assert.deepEqual(
+        normalizeSearchScores(normalizeAcceptedNativeCorrections(name, result[name], true)),
+        normalizeSearchScores(expected[name]),
+        `semantic baseline differs for fixture "${name}"`,
+      );
     }
     assert.deepEqual(Object.keys(result), Object.keys(expected), 'fixture set differs from the frozen baseline');
     console.log(`Afyx Graph semantic baseline: PASS (${Object.keys(fixtures).length} fixtures)`);

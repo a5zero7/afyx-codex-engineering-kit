@@ -1,5 +1,24 @@
 # Afyx Graph Independence Audit and Closure Plan
 
+> **Phase 5I final-audit notice (2026-10-09):** Starting from
+> `14c138024fef26cd303d9c0bcb16340830776652`, current production dependencies,
+> retained historical implementation, unexplained substantive upstream overlap,
+> active historical identity, unwanted bundled third-party material, and unclear
+> provenance/legal obligations all audit to zero. Fresh npm-pack and Windows/
+> Linux staged artifacts contain one current Afyx license and no dependency,
+> parser/WASM, native, vendor, or historical-notice payload. Scoped audit fixes
+> restore Python inheritance/self-call facts, Java field-type references,
+> cross-Node finite BM25 comparison, and the Phase 5H distribution fixture.
+> Focused tests, semantic 6/6, smoke 21/21, clean build, validators, and artifact
+> verification pass. Technical Alpha remains blocked because the starting-head
+> Graph Build diagnostic left 24 non-distribution assertions across 12 files,
+> including extraction/resolution and UI/API behavior, after subtracting eight
+> now-fixed distribution-fixture failures. Those failures require a separate
+> bounded correctness campaign and final-head cross-platform proof.
+> `PHASE_5I=BLOCKED`, `AFYX_FULLY_INDEPENDENT=NOT_ESTABLISHED`, and
+> `TECHNICAL_ALPHA_ENTRY_GATE=NOT_READY`; neither Technical Alpha nor Phase 6 is
+> started here.
+
 > **Phase 5H closure notice (2026-10-09):** Starting from
 > `81af1777297814ccc7603fd0552be496ef4209f3`, the historical-license ledger
 > traced all three Phase 5G `LEGAL_PROVENANCE` files to the removed prior engine

@@ -6,7 +6,7 @@ Contract revision: **2026-10-08**
 v1 scope policy: **FROZEN — Phase 1 through Phase 11**  
 Post-v1 policy: **PLANNED EXPANSION — not a v1 release blocker**
 
-Current work: **Phase 5H — Historical License Closure (COMPLETE)**
+Current work: **Phase 5I — Final Independence Audit (BLOCKED)**
 Task: `AFYX-91852`  
 Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`  
 Active implementation branch: `afyx/native-phase5f-parser-grammar`  
@@ -19,7 +19,7 @@ Latest verified Phase 5F grammar/packaging checkpoint: `a21d7b710f9c4e0c02f46109
 Latest verified Phase 5F parser-runtime isolation checkpoint: `080074f81f0cf5628f61e977a93abc1d75d00b6b`  
 Native-kernel closure starting checkpoint: `89302e45c8222e64c18885499f8aa556ae103960`
 Phase 5F final artifact/product viability audit: **PASS**
-Next boundary: **Phase 5I — Final Independence Audit (not started)**
+Next boundary: **Phase 5I corrective closure; Technical Alpha is not active**
 Last merged Phase 5F major checkpoint: **PR #57 — Utility Runtime + UI Runtime**  
 Phase 5E merge baseline: `48b6078ed37349e405213258819fa5225bcdb3fb`
 
@@ -922,7 +922,85 @@ Exit:
 
 ### Phase 5I — Final Independence Audit
 
-Status: **PENDING**
+Status: **BLOCKED (2026-10-09)**
+
+Starting HEAD: `14c138024fef26cd303d9c0bcb16340830776652`.
+
+The audit establishes the technical-ownership, historical-eradication, legal,
+and release-composition assertions. Engine and UI production dependencies are
+zero. The tracked production tree contains 371 files / 4,842,295 bytes and no
+tracked WASM, native binary/library, vendor tree, historical license header, or
+third-party runtime. Existing Phase 3/C01-C07 provenance campaigns plus the
+Phase 5F-H replacement, identity, and notice-to-material evidence leave zero
+unexplained retained private implementation or substantive upstream overlap.
+Legacy identity, graph identity/legal, component, and static-evaluation
+validators all pass.
+
+The final release audit rebuilt and verified these artifacts:
+
+| Artifact | Entries / files | Unpacked bytes | Artifact bytes | SHA-256 |
+|---|---:|---:|---:|---|
+| `dist` | 1,336 files | 9,002,544 | n/a | per-file manifest verified |
+| npm pack | 1,361 files | 9,172,330 | 2,235,369 | `56f0c51dd5f6b4f3b71051f2ec93b754602fbc74e4206843e32bdc979cf7a28a` |
+| Windows x64 archive | 1,365 entries / 1,340 files | 9,006,813 | 2,806,996 | `8e45a2b3b690dd09b1716330aec130ec3a4113f272ccd0cd4742d1aaea8f2d99` |
+| Linux x64 archive | 1,366 entries / 1,340 files | 9,007,089 | 2,143,373 | `fc4f6b52b1f9729a049204632b0ab8a8ff7e22fff5e5464d0cbc403f2ae0bd1a` |
+
+Each staged archive has one current Afyx `LICENSE`; no third-party notice or
+license payload is present. Unwanted bundled source, assets, runtime,
+`node_modules`, parser runtime/WASM, native kernel/library, and historical
+identity counts are zero. The sole npm text scan match is the Afyx-owned
+distribution verifier rejecting `web-tree-sitter`/`tree-sitter-wasms`, not a
+bundled implementation. External Node.js >=22.5 remains a platform
+prerequisite; Prompt Master and Headroom remain separately managed external
+boundaries.
+
+Three audit defects were corrected without broadening architecture: the
+distribution test fixture now follows the one-license Phase 5H contract;
+semantic score comparison preserves identities/order while accepting only
+finite SQLite BM25 values across supported Node versions; and native extraction
+restores Python inheritance, Python `self` calls, and Java field-type
+references. The semantic comparator independently requires the correct Java
+`testRender -> render` edge and `UpperFormatter` result before classifying them
+as `NATIVE_CORRECTION`. Focused extractor/distribution tests pass 18/18, all six
+semantic fixtures pass, CLI/MCP smoke passes 21/21, and clean production/UI
+build plus artifact verification pass.
+
+Technical Alpha is nevertheless blocked. Diagnostic Graph Build run
+`37950282483` on the starting HEAD reported Linux 5,644 pass / 32 fail / 9
+declared skips across 13 files. Eight failures were the corrected Phase 5H
+distribution-fixture drift. The remaining 24 assertions across 12 files include
+core extraction/resolution and UI/API behavior; they are not hidden as
+environmental noise or normalized away. Windows and macOS reached the semantic
+gate and failed only on the now-corrected raw-score portability issue, but a
+final-head cross-platform run is still required after the audit commit.
+
+```text
+historical runtime dependency                   = 0
+historical build dependency                     = 0
+historical operational dependency               = 0
+retained historical implementation              = 0
+unexplained substantive upstream source overlap = 0
+historical active product identity              = 0
+unexplained historical artifact                 = 0
+unwanted third-party bundled source             = 0
+unwanted third-party bundled assets             = 0
+unwanted third-party bundled runtime            = 0
+unwanted third-party attribution requirement    = 0
+unwanted third-party release notice payload     = 0
+UNCLEAR_PROVENANCE_OR_LEGAL_OBLIGATION          = 0
+V1_REQUIRED failure                             = BLOCKED (24 diagnostic assertions require closure)
+UNKNOWN product failure                         = 0
+UNJUSTIFIED_SKIP                                = 0
+
+PHASE_5I = BLOCKED
+AFYX_FULLY_INDEPENDENT = NOT_ESTABLISHED
+TECHNICAL_ALPHA_ENTRY_GATE = NOT_READY
+```
+
+The next boundary is a separately scoped correctness campaign for the remaining
+final-head Graph Build failures. It must begin from exact failure inventory,
+classify each as V1-required or documented post-v1 contract, and restore a green
+Linux/Windows/macOS gate. This audit does not begin that work.
 
 Required audits:
 

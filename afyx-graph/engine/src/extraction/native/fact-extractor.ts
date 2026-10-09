@@ -51,7 +51,9 @@ interface Declaration {
   readonly visibility?: Node['visibility'];
   readonly signature?: string;
   readonly extendsName?: string;
+  readonly extendsNames?: readonly string[];
   readonly embeddedTypes?: readonly string[];
+  readonly referencedTypes?: readonly string[];
   readonly returnType?: string;
   readonly decorators?: string[];
 }
@@ -215,6 +217,7 @@ export function extractNativeFacts(filePath: string, source: string, language: L
   });
   const tokens = scan.tokens;
   const declarations: Declaration[] = [];
+  const pythonInheritanceTokenIndexes = new Set<number>();
   const pairStart = new Map<number, number>();
   for (const [open, close] of scan.pairs) pairStart.set(close, open);
   const tokenLineEnd = (from: number): number => {
@@ -439,6 +442,29 @@ export function extractNativeFacts(filePath: string, source: string, language: L
       if (keyword.text !== 'class' && keyword.text !== 'def') continue;
       const name = tokens[i + 1]!;
       if (name.kind !== 'identifier') continue;
+      const extendsNames: string[] = [];
+      if (keyword.text === 'class' && tokens[i + 2]?.text === '(') {
+        const close = scan.pairs.get(i + 2);
+        if (close !== undefined) {
+          let cursor = i + 3;
+          while (cursor < close) {
+            const segmentStart = cursor;
+            while (cursor < close && tokens[cursor]?.text !== ',') cursor += 1;
+            const segment = tokens.slice(segmentStart, cursor);
+            if (!segment.some((token) => token.text === '=') &&
+                segment.every((token) => token.kind === 'identifier' || token.text === '.')) {
+              const baseName = segment.map((token) => token.text).join('');
+              if (baseName) {
+                extendsNames.push(baseName);
+                for (let index = segmentStart; index < cursor; index += 1) {
+                  pythonInheritanceTokenIndexes.add(index);
+                }
+              }
+            }
+            cursor += 1;
+          }
+        }
+      }
       let end = tokens.length - 1;
       for (let j = i + 2; j < tokens.length; j += 1) {
         const candidate = tokens[j]!;
@@ -451,6 +477,7 @@ export function extractNativeFacts(filePath: string, source: string, language: L
         kind: keyword.text === 'class' ? 'class' : 'function',
         name: name.text, start: i, end, bodyStart: i + 1, bodyEnd: end,
         async: tokens[i - 1]?.text === 'async',
+        extendsNames,
       });
     }
     const classes = declarations.filter((item) => item.kind === 'class');
@@ -1058,6 +1085,10 @@ export function extractNativeFacts(filePath: string, source: string, language: L
           kind: 'field', name: tokens[nameIndex]!.text, start, end: statementEnd,
           bodyStart: i, bodyEnd: statementEnd, parent,
           static: tokens.slice(start, nameIndex).some((token) => token.text === 'static'),
+          referencedTypes: tokens.slice(start, nameIndex)
+            .filter((token) => token.kind === 'identifier' && !MODIFIERS.has(token.text))
+            .slice(-1)
+            .map((token) => token.text),
           visibility: visibility(tokens, start, nameIndex),
         });
         i = statementEnd;
@@ -1136,6 +1167,7 @@ export function extractNativeFacts(filePath: string, source: string, language: L
         declarations.push({
           kind: 'field', name: name.text, start: index, end: memberEnd, parent,
           signature: `${type.text} ${name.text}`,
+          referencedTypes: [type.text],
           visibility: visibility(tokens, declarationStart(tokens, index), index),
         });
         index = memberEnd;
@@ -1551,15 +1583,23 @@ export function extractNativeFacts(filePath: string, source: string, language: L
     nodes.push(node);
     nodeByDeclaration.set(declaration, node);
     edges.push({ source: parentNode?.id ?? fileNode.id, target: node.id, kind: 'contains' });
-    if (declaration.extendsName) {
+    const inheritedTypes = [...(declaration.extendsNames ?? [])];
+    if (declaration.extendsName) inheritedTypes.push(declaration.extendsName);
+    for (const inheritedType of new Set(inheritedTypes)) {
       refs.push({
-        fromNodeId: node.id, referenceName: declaration.extendsName, referenceKind: 'extends',
+        fromNodeId: node.id, referenceName: inheritedType, referenceKind: 'extends',
         line: start.start.line, column: start.start.column,
       });
     }
     for (const embeddedType of declaration.embeddedTypes ?? []) {
       refs.push({
         fromNodeId: node.id, referenceName: embeddedType, referenceKind: 'implements',
+        line: start.start.line, column: start.start.column,
+      });
+    }
+    for (const referencedType of declaration.referencedTypes ?? []) {
+      refs.push({
+        fromNodeId: node.id, referenceName: referencedType, referenceKind: 'references',
         line: start.start.line, column: start.start.column,
       });
     }
@@ -1648,6 +1688,7 @@ export function extractNativeFacts(filePath: string, source: string, language: L
       for (let i = 0; i < tokens.length; i += 1) {
         const token = tokens[i]!;
         if (token.kind !== 'identifier') continue;
+        if (language === 'python' && pythonInheritanceTokenIndexes.has(i)) continue;
         if (TS_FAMILY_LANGUAGES.has(language) &&
             token.text === 'this' && tokens[i + 1]?.text === '.' && tokens[i + 2]?.kind === 'identifier') {
           const member = tokens[i + 2]!;
@@ -2026,7 +2067,9 @@ export function extractNativeFacts(filePath: string, source: string, language: L
       refs.push({
         fromNodeId: from.id,
         referenceName: arktsMember ?? rustSelfField ??
-          (language === 'rust' && receiverChain?.name.startsWith('self.') && receiverChain.name.includes('()')
+          (language === 'python' && receiverChain?.name === 'self'
+            ? callee.text
+            : language === 'rust' && receiverChain?.name.startsWith('self.') && receiverChain.name.includes('()')
             ? callee.text
             : rustDeepChain ? callee.text : rustPathName ??
           (receiverChain?.name.startsWith('window.') ? callee.text : receiverChain ? `${receiverChain.name}.${callee.text}` : callee.text)),
@@ -2124,7 +2167,9 @@ export function extractNativeFacts(filePath: string, source: string, language: L
       if (callee.kind !== 'identifier' || tokens[i + 1]?.text !== '(' || CALL_EXCLUSIONS.has(callee.text)) continue;
       if (tokens[i - 1]?.text === 'def' || tokens[i - 1]?.text === 'class') continue;
       const receiver = tokens[i - 2]?.kind === 'identifier' && tokens[i - 1]?.text === '.' ? tokens[i - 2] : undefined;
-      const referenceName = receiver ? `${receiver.text}.${callee.text}` : callee.text;
+      const referenceName = receiver?.text === 'self'
+        ? callee.text
+        : receiver ? `${receiver.text}.${callee.text}` : callee.text;
       const column = receiver?.start.column ?? callee.start.column;
       const key = `${referenceName}\0${callee.start.line}\0${column}`;
       if (seenCalls.has(key)) continue;
