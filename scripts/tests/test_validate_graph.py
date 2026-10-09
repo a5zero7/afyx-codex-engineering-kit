@@ -20,12 +20,11 @@ ROOT = Path(__file__).resolve().parents[2]
 VALIDATOR = ROOT / "scripts" / "validate-afyx-graph.py"
 
 COPIED = (
+    "LICENSE",
     "scripts/validate-afyx-graph.py",
     "scripts/install-afyx-graph.ps1",
     "scripts/install-afyx-graph.sh",
     "afyx-graph/afyx-graph.json",
-    "afyx-graph/THIRD_PARTY_NOTICES.md",
-    "afyx-graph/LICENSES/THIRD_PARTY_ENGINE_MIT.txt",
     "afyx-graph/engine/LICENSE",
     "afyx-graph/engine/package.json",
     "afyx-graph/engine/ui/package.json",
@@ -64,35 +63,41 @@ class ValidatorTests(unittest.TestCase):
         result = self.validate()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
-    def test_bundle_with_both_legal_files_passes(self) -> None:
-        self.write_bundle(["metadata.json", "licenses/THIRD_PARTY_NOTICES.md", "licenses/THIRD_PARTY_ENGINE_MIT.txt"])
+    def test_bundle_with_current_license_passes(self) -> None:
+        self.write_bundle(["metadata.json", "LICENSE"])
         self.assertEqual(self.validate().returncode, 0)
 
-    def test_bundle_with_a_stale_license_layout_is_rejected(self) -> None:
-        stale_name = "licenses/" + "Code" + "Graph-MIT.txt"
-        self.write_bundle(["metadata.json", "licenses/THIRD_PARTY_NOTICES.md", stale_name])
+    def test_bundle_missing_current_license_is_rejected(self) -> None:
+        self.write_bundle(["metadata.json"])
         result = self.validate()
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("THIRD_PARTY_ENGINE_MIT.txt", result.stdout + result.stderr)
+        self.assertIn("root-level LICENSE", result.stdout + result.stderr)
 
-    def test_bundle_missing_the_notices_is_rejected(self) -> None:
-        self.write_bundle(["metadata.json", "licenses/THIRD_PARTY_ENGINE_MIT.txt"])
+    def test_bundle_with_stale_historical_payload_is_rejected(self) -> None:
+        self.write_bundle(["metadata.json", "LICENSE", "licenses/THIRD_PARTY_ENGINE_MIT.txt"])
+        result = self.validate()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("obsolete or unexplained legal payload", result.stdout + result.stderr)
+
+    def test_reintroduced_old_source_notice_is_rejected(self) -> None:
+        path = self.tree / "afyx-graph" / "THIRD_PARTY_NOTICES.md"
+        path.write_text("historical notice", encoding="utf-8")
         self.assertNotEqual(self.validate().returncode, 0)
 
-    def test_altered_license_text_is_rejected(self) -> None:
+    def test_reintroduced_old_source_license_is_rejected(self) -> None:
         path = self.tree / "afyx-graph" / "LICENSES" / "THIRD_PARTY_ENGINE_MIT.txt"
-        path.write_text(path.read_text(encoding="utf-8").replace("Permission is hereby granted", "Permission is denied"), encoding="utf-8")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("historical license", encoding="utf-8")
         self.assertNotEqual(self.validate().returncode, 0)
 
-    def test_changed_copyright_holder_is_rejected(self) -> None:
-        for rel in ("afyx-graph/LICENSES/THIRD_PARTY_ENGINE_MIT.txt", "afyx-graph/engine/LICENSE"):
-            path = self.tree / rel
-            path.write_text(path.read_text(encoding="utf-8").replace("Colby Mchenry", "Afyx"), encoding="utf-8")
+    def test_changed_engine_license_is_rejected(self) -> None:
+        path = self.tree / "afyx-graph" / "engine" / "LICENSE"
+        path.write_text(path.read_text(encoding="utf-8").replace("Copyright (c) 2026 Afyx", "Copyright (c) 2026 Elsewhere"), encoding="utf-8")
         self.assertNotEqual(self.validate().returncode, 0)
 
-    def test_installer_that_stops_requiring_a_legal_file_is_rejected(self) -> None:
+    def test_installer_that_stops_requiring_license_is_rejected(self) -> None:
         path = self.tree / "scripts" / "install-afyx-graph.sh"
-        path.write_text(path.read_text(encoding="utf-8").replace("THIRD_PARTY_ENGINE_MIT.txt", "LICENSE"), encoding="utf-8")
+        path.write_text(path.read_text(encoding="utf-8").replace("metadata.json LICENSE", "metadata.json"), encoding="utf-8")
         self.assertNotEqual(self.validate().returncode, 0)
 
 

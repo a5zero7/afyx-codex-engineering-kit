@@ -24,12 +24,8 @@
   ],
   "legalFiles": [
     {
-      "source": "../THIRD_PARTY_NOTICES.md",
-      "bundlePath": "licenses/THIRD_PARTY_NOTICES.md"
-    },
-    {
-      "source": "../LICENSES/THIRD_PARTY_ENGINE_MIT.txt",
-      "bundlePath": "licenses/THIRD_PARTY_ENGINE_MIT.txt"
+      "source": "LICENSE",
+      "bundlePath": "LICENSE"
     }
   ]
 }

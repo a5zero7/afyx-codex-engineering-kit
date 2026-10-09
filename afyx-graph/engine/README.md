@@ -26,7 +26,6 @@ Install and release Afyx Graph only through the kit-level scripts and workflows:
 `scripts/install-afyx-graph.ps1`, `scripts/install-afyx-graph.sh`,
 `.github/workflows/graph-build.yml`, and `.github/workflows/graph-release.yml`.
 
-Portions of Afyx Graph incorporate software originally authored by Colby Mchenry
-and distributed under the MIT License. The applicable copyright and permission
-notice is in `LICENSE`, `../LICENSES/THIRD_PARTY_ENGINE_MIT.txt`, and
-`../THIRD_PARTY_NOTICES.md`.
+Afyx Graph is licensed under the MIT License in `LICENSE`. Historical
+implementation and attribution evidence is retained in the repository's Phase
+5 documentation and Git history; it is not part of the current release payload.

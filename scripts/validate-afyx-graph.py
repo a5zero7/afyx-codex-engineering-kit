@@ -22,23 +22,28 @@ metadata_path = GRAPH / "afyx-graph.json"
 package_path = ENGINE / "package.json"
 ui_package_path = ENGINE / "ui" / "package.json"
 product_path = ENGINE / "src" / "product.ts"
-license_path = GRAPH / "LICENSES" / "THIRD_PARTY_ENGINE_MIT.txt"
+root_license_path = ROOT / "LICENSE"
 engine_license_path = ENGINE / "LICENSE"
-notices_path = GRAPH / "THIRD_PARTY_NOTICES.md"
+obsolete_legal_paths = (
+    GRAPH / "LICENSES" / "THIRD_PARTY_ENGINE_MIT.txt",
+    GRAPH / "THIRD_PARTY_NOTICES.md",
+)
 bundle_script_path = ENGINE / "scripts" / "build-bundle.sh"
 distribution_product_path = ENGINE / "scripts" / "distribution-product.json"
 release_dir = ENGINE / "release"
 installer_paths = (ROOT / "scripts" / "install-afyx-graph.ps1", ROOT / "scripts" / "install-afyx-graph.sh")
 
-# Legal attribution that must stay intact, and the neutral files that carry it.
-COPYRIGHT_LINE = "Copyright (c) 2026 Colby Mchenry"
+# The product ships the current Afyx license only. Historical third-party
+# attribution remains available in Git history and the Phase 5 evidence docs.
+COPYRIGHT_LINE = "Copyright (c) 2026 Afyx"
 LICENSE_MARKERS = (
     "MIT License",
     "Permission is hereby granted, free of charge",
     "The above copyright notice and this permission notice shall be included in all",
     'THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND',
 )
-LEGAL_FILES = ("THIRD_PARTY_NOTICES.md", "THIRD_PARTY_ENGINE_MIT.txt")
+EXPECTED_LEGAL_FILES = [{"source": "LICENSE", "bundlePath": "LICENSE"}]
+OBSOLETE_LEGAL_NAMES = ("THIRD_PARTY_NOTICES.md", "THIRD_PARTY_ENGINE_MIT.txt")
 
 REQUIRED_METADATA = {
     "product_name",
@@ -112,23 +117,21 @@ if product_constant(product, "MCP_TOOL_PREFIX") != metadata["mcp_server"] + "_":
 if metadata["state_directory"] != ".afyx-graph" or metadata["database_filename"] != "afyx-graph.db":
     fail("state directory and database filename must be .afyx-graph / afyx-graph.db")
 
-# Legal attribution stays intact, in neutrally named files.
-license_text = license_path.read_text(encoding="utf-8")
+# The repository and engine package use one current Afyx MIT license.
+license_text = root_license_path.read_text(encoding="utf-8")
 if COPYRIGHT_LINE not in license_text:
-    fail(f"original copyright line {COPYRIGHT_LINE!r} is missing from LICENSES/THIRD_PARTY_ENGINE_MIT.txt")
+    fail(f"current copyright line {COPYRIGHT_LINE!r} is missing from root LICENSE")
 for marker in LICENSE_MARKERS:
     if marker not in license_text:
         fail(f"MIT license text is incomplete: missing {marker!r}")
 if license_text.splitlines() != engine_license_path.read_text(encoding="utf-8").splitlines():
-    fail("engine/LICENSE and LICENSES/THIRD_PARTY_ENGINE_MIT.txt must be identical")
-notices_text = notices_path.read_text(encoding="utf-8")
-if "Colby Mchenry" not in notices_text or "LICENSES/THIRD_PARTY_ENGINE_MIT.txt" not in notices_text:
-    fail("THIRD_PARTY_NOTICES.md must credit the original author and point to LICENSES/THIRD_PARTY_ENGINE_MIT.txt")
-if re.search(r"https?://", notices_text):
-    fail("THIRD_PARTY_NOTICES.md must not carry operational URLs")
+    fail("engine/LICENSE and root LICENSE must be identical")
+for obsolete_path in obsolete_legal_paths:
+    if obsolete_path.exists():
+        fail(f"obsolete historical legal payload must not exist: {obsolete_path.relative_to(ROOT).as_posix()}")
 
-# Every bundle must ship both legal files. The artifact plan is the source of
-# truth and the shell must consume its legal-file staging command.
+# Every bundle must ship exactly the current Afyx license. The artifact plan is
+# the source of truth and the shell must consume its legal-file staging command.
 bundle_script = bundle_script_path.read_text(encoding="utf-8")
 distribution_product = json.loads(distribution_product_path.read_text(encoding="utf-8"))
 runtime = distribution_product.get("runtime", {})
@@ -144,22 +147,20 @@ if package.get("engines", {}).get("node") != f">={runtime['minimumVersion']}":
 for forbidden in ("nodejs.org/dist", "npm ci --omit=dev", '"$STAGE/node"', '"$STAGE/node.exe"'):
     if forbidden in bundle_script:
         fail(f"build-bundle.sh still owns a bundled runtime/dependency tree: {forbidden}")
-planned_legal_paths = {
-    entry.get("bundlePath")
-    for entry in distribution_product.get("legalFiles", [])
-    if isinstance(entry, dict)
-}
-for legal_file in LEGAL_FILES:
-    if f"licenses/{legal_file}" not in planned_legal_paths:
-        fail(f"distribution-product.json does not ship licenses/{legal_file}")
-    for installer in installer_paths:
-        installer_text = installer.read_text(encoding="utf-8")
-        if legal_file not in installer_text:
-            fail(f"{installer.name} does not require licenses/{legal_file} in a staged bundle")
+if distribution_product.get("legalFiles") != EXPECTED_LEGAL_FILES:
+    fail("distribution-product.json must ship exactly root LICENSE as the current product license")
+for installer in installer_paths:
+    installer_text = installer.read_text(encoding="utf-8")
+    if "LICENSE" not in installer_text:
+        fail(f"{installer.name} does not require LICENSE in a staged bundle")
+    for obsolete_name in OBSOLETE_LEGAL_NAMES:
+        if obsolete_name in installer_text:
+            fail(f"{installer.name} still references obsolete legal payload {obsolete_name}")
 if "legal-files" not in bundle_script:
     fail("build-bundle.sh does not consume the artifact plan's legal files")
 
-# Any locally built bundle must contain both legal files.
+# Any locally built bundle must contain the current license and no obsolete
+# historical-only legal payload.
 if release_dir.is_dir():
     for archive in sorted(release_dir.glob("afyx-graph-*")):
         if archive.suffix == ".zip":
@@ -170,8 +171,22 @@ if release_dir.is_dir():
                 names = bundle.getnames()
         else:
             continue
-        for legal_file in LEGAL_FILES:
-            if not any(name.endswith(f"/licenses/{legal_file}") for name in names):
-                fail(f"{archive.name} does not contain licenses/{legal_file}")
+        normalized_names = [name.replace("\\", "/") for name in names]
+        root_licenses = [
+            name
+            for name in normalized_names
+            if len([part for part in name.split("/") if part not in ("", ".")]) == 2
+            and name.rstrip("/").endswith("/LICENSE")
+        ]
+        if len(root_licenses) != 1:
+            fail(f"{archive.name} does not contain root-level LICENSE")
+        for normalized in normalized_names:
+            basename = normalized.rstrip("/").rsplit("/", 1)[-1]
+            legal_candidate = (
+                basename.upper() in {"LICENSE", "NOTICE", "COPYING", "ATTRIBUTION"}
+                or "THIRD_PARTY" in basename.upper()
+            )
+            if legal_candidate and normalized not in root_licenses:
+                fail(f"{archive.name} contains obsolete or unexplained legal payload {normalized}")
 
-print("Afyx Graph identity, metadata and attribution: PASS")
+print("Afyx Graph identity, metadata and legal payload: PASS")

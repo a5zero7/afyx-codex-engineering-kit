@@ -44,14 +44,14 @@ class AuditTests(unittest.TestCase):
         self.write("src/app.ts", "export const name = 'afyx-graph';\n")
         self.assertEqual(run_audit(self.repo).returncode, 0)
 
-    def test_legal_provenance_is_classified(self) -> None:
+    def test_obsolete_product_notice_is_not_exempt(self) -> None:
         self.write(
             "afyx-graph/THIRD_PARTY_NOTICES.md",
             f"Portions of Afyx Graph incorporate historical {PRODUCT} software.\n",
         )
         result = run_audit(self.repo)
-        self.assertEqual(result.returncode, 0)
-        self.assertIn("LEGAL_PROVENANCE=1", result.stdout)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("afyx-graph/THIRD_PARTY_NOTICES.md", result.stdout)
 
     def test_historical_evidence_is_classified(self) -> None:
         self.write("docs/AFYX_INDEPENDENCE_PLAN.md", f"Historical ancestor: {PRODUCT}.\n")

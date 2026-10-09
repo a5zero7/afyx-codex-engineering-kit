@@ -68,7 +68,7 @@ Afyx Graph dipasang sebagai runtime opsional di `~/.afyx/graph/`; ia tidak ditem
 
 Afyx Graph hanya mengenali `.afyx-graph/` sebagai state project; direktori state lain tidak dibaca, dimigrasikan, atau diubah. Tidak ada alias CLI, environment, maupun tool MCP selain identitas di atas.
 
-Instalasi normal tidak mengubah konfigurasi MCP. Afyx Graph dikelola sebagai komponen Afyx yang mandiri; instalasi lain di mesin yang sama tidak dideteksi dan tidak dikelola. Riwayat lisensi dan atribusi tersedia di `afyx-graph/THIRD_PARTY_NOTICES.md` dan `afyx-graph/LICENSES/THIRD_PARTY_ENGINE_MIT.txt`.
+Instalasi normal tidak mengubah konfigurasi MCP. Afyx Graph dikelola sebagai komponen Afyx yang mandiri; instalasi lain di mesin yang sama tidak dideteksi dan tidak dikelola. Bukti historis implementasi dan atribusi tetap tersedia di dokumen Phase 5 dan riwayat Git, terpisah dari payload release saat ini.
 
 ## Perintah
 
@@ -134,4 +134,4 @@ Evidence historis technical independence Afyx Graph tersedia di [docs/AFYX_INDEP
 
 ## Lisensi dan atribusi
 
-Wrapper installer dan Efficient Coding dilisensikan MIT. Prompt Master tidak dibundel; paket ini mengambilnya dari upstream yang memiliki lisensi MIT sendiri. Sebagian Afyx Graph memuat perangkat lunak yang semula ditulis oleh Colby Mchenry dan didistribusikan dengan MIT License; pemberitahuan copyright dan lisensi aslinya dipertahankan di `afyx-graph/LICENSES/THIRD_PARTY_ENGINE_MIT.txt`.
+Wrapper installer, Efficient Coding, dan Afyx Graph dilisensikan MIT. Prompt Master tidak dibundel; paket ini mengambilnya dari upstream yang memiliki lisensi sendiri. Headroom hanya dideteksi dan tetap dikelola secara eksternal. Bukti historis sebelum penutupan independensi dipertahankan dalam dokumentasi Phase 5 dan riwayat Git, bukan sebagai notice release aktif.

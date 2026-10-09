@@ -118,7 +118,7 @@ expected_lower="$(printf '%s' "$expected" | tr '[:upper:]' '[:lower:]')"
 mkdir -p "$transaction/extract" "$transaction/prepared"
 tar -xzf "$archive_path" -C "$transaction/extract"
 bundle="$transaction/extract/afyx-graph-$target"
-for required in bin/afyx-graph metadata.json licenses/THIRD_PARTY_NOTICES.md licenses/THIRD_PARTY_ENGINE_MIT.txt; do
+for required in bin/afyx-graph metadata.json LICENSE; do
   [[ -f "$bundle/$required" ]] || { printf 'Staged Afyx Graph bundle is incomplete: %s\n' "$required" >&2; exit 1; }
 done
 grep -q '"product_version"[[:space:]]*:[[:space:]]*"'"$VERSION"'"' "$bundle/metadata.json" || {

@@ -90,7 +90,7 @@ function Test-ArchiveChecksum([string]$Path) {
 }
 
 function Test-StagedBundle([string]$Path) {
-    $required = @('bin\afyx-graph.cmd', 'metadata.json', 'licenses\THIRD_PARTY_NOTICES.md', 'licenses\THIRD_PARTY_ENGINE_MIT.txt')
+    $required = @('bin\afyx-graph.cmd', 'metadata.json', 'LICENSE')
     foreach ($relative in $required) {
         if (-not (Test-Path -LiteralPath (Join-Path $Path $relative) -PathType Leaf)) {
             throw "Afyx Graph staged bundle is incomplete: $relative is missing."

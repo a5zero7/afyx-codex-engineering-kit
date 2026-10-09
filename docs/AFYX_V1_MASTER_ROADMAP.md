@@ -6,7 +6,7 @@ Contract revision: **2026-10-08**
 v1 scope policy: **FROZEN — Phase 1 through Phase 11**  
 Post-v1 policy: **PLANNED EXPANSION — not a v1 release blocker**
 
-Current work: **Phase 5G — Legacy Product Identity / Historical Artifact Eradication (COMPLETE)**
+Current work: **Phase 5H — Historical License Closure (COMPLETE)**
 Task: `AFYX-91852`  
 Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`  
 Active implementation branch: `afyx/native-phase5f-parser-grammar`  
@@ -19,7 +19,7 @@ Latest verified Phase 5F grammar/packaging checkpoint: `a21d7b710f9c4e0c02f46109
 Latest verified Phase 5F parser-runtime isolation checkpoint: `080074f81f0cf5628f61e977a93abc1d75d00b6b`  
 Native-kernel closure starting checkpoint: `89302e45c8222e64c18885499f8aa556ae103960`
 Phase 5F final artifact/product viability audit: **PASS**
-Next boundary: **Phase 5H — Historical License Closure (not started)**
+Next boundary: **Phase 5I — Final Independence Audit (not started)**
 Last merged Phase 5F major checkpoint: **PR #57 — Utility Runtime + UI Runtime**  
 Phase 5E merge baseline: `48b6078ed37349e405213258819fa5225bcdb3fb`
 
@@ -846,7 +846,64 @@ Exit:
 
 ### Phase 5H — Historical License Closure
 
-Status: **PENDING**
+Status: **COMPLETE (2026-10-09)**
+
+Starting HEAD: `81af1777297814ccc7603fd0552be496ef4209f3`
+
+The legal/provenance ledger traced all three Phase 5G files to the previously
+incorporated engine implementation:
+
+| File | Historical coverage | Current/shipped corresponding material | Decision |
+|---|---|---:|---|
+| `afyx-graph/THIRD_PARTY_NOTICES.md` | prior engine implementation attribution | 0 / 0 | `REMOVE_OBSOLETE` |
+| `afyx-graph/LICENSES/THIRD_PARTY_ENGINE_MIT.txt` | prior engine implementation license | 0 / 0 | `REMOVE_OBSOLETE` |
+| `afyx-graph/engine/LICENSE` | prior engine implementation license copied into npm package | 0 / 0 | retain path, replace with current Afyx MIT license identical to root `LICENSE` |
+
+The notice-to-material trace ends at the Phase 5F removals: no covered source,
+asset, runtime, binary, generated material, grammar, parser, native kernel, or
+library remains in the tracked product or release artifacts. Git history and
+the Phase 5 evidence sections retain the truthful historical record; historical
+evidence is not an active release notice.
+
+| Artifact | Current Afyx license | Third-party license | Third-party notice | Historical-only legal material | Unexplained legal material |
+|---|---:|---:|---:|---:|---:|
+| npm pack (1,361 entries) | 1 | 0 | 0 | 0 | 0 |
+| Windows archive | 1 | 0 | 0 | 0 | 0 |
+| Linux archive | 1 | 0 | 0 | 0 | 0 |
+| staged release tree | 1 | 0 | 0 | 0 | 0 |
+
+`distribution-product.json`, both installers, the release workflow, bundle
+builder, repository validator, and regression tests enforce a single root-level
+current `LICENSE` and reject either obsolete historical legal filename.
+
+Engine and UI production dependencies remain zero. Development tooling is not
+bundled production material. Node.js >=22.5.0 is an externally supplied
+platform runtime; no Node binary, source, or `node_modules` tree is
+redistributed, so no Node notice is bundled. Prompt Master is fetched from its
+separately managed upstream repository and is not shipped in Afyx Graph.
+Headroom remains a detection-only external exception and is not shipped.
+
+Validation: legal validator unit tests `18/18 PASS`; legacy identity audit,
+repository validator, static evaluation validator, clean production/UI build,
+21-check CLI/MCP smoke, distribution verifier, npm pack legal inventory,
+Windows archive inventory, Linux archive inventory, and `git diff --check`
+pass. Phase 5F product viability evidence remains valid because no runtime
+behavior source changed.
+
+```text
+UNCLEAR_LEGAL_OBLIGATION                      = 0
+unwanted third-party attribution requirement = 0
+unwanted third-party release notice payload  = 0
+unexplained shipped legal material           = 0
+V1_REQUIRED failure                           = 0
+LEGAL_CLOSURE_BLOCKER                         = 0
+UNKNOWN product failure                       = 0
+PHASE_5H                                      = COMPLETE
+```
+
+This is an engineering artifact/provenance determination, not broader legal
+advice. It does not declare `AFYX_FULLY_INDEPENDENT = TRUE`; Technical Alpha
+remains inactive pending Phase 5I.
 
 Contract items:
 

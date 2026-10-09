@@ -1,5 +1,23 @@
 # Afyx Graph Independence Audit and Closure Plan
 
+> **Phase 5H closure notice (2026-10-09):** Starting from
+> `81af1777297814ccc7603fd0552be496ef4209f3`, the historical-license ledger
+> traced all three Phase 5G `LEGAL_PROVENANCE` files to the removed prior engine
+> implementation. Current corresponding tracked and shipped material is zero.
+> `afyx-graph/THIRD_PARTY_NOTICES.md` and
+> `afyx-graph/LICENSES/THIRD_PARTY_ENGINE_MIT.txt` were removed as obsolete;
+> `afyx-graph/engine/LICENSE` now matches the current root Afyx MIT `LICENSE`.
+> The distribution manifest, bundle builder, installers, release workflow,
+> validator, and tests enforce one current root-level license and reject the old
+> payload. Measured npm-pack, Windows archive, Linux archive, and staged-release
+> composition is `current Afyx license=1`, `third-party license=0`,
+> `third-party notice=0`, `historical-only legal=0`, `unexplained legal=0`.
+> Node.js remains an unbundled external platform runtime; Prompt Master is
+> externally fetched; Headroom is detection-only. `UNCLEAR_LEGAL_OBLIGATION=0`,
+> `LEGAL_CLOSURE_BLOCKER=0`, and `PHASE_5H=COMPLETE`. This preserves historical
+> Phase 5 evidence and makes no broader legal conclusion. Technical Alpha stays
+> inactive; the exact next boundary is Phase 5I — Final Independence Audit.
+
 Status: Phase 3B.12B audit complete  
 Baseline: `e401cbf002a0d0e57fcb9774d22c974abe580c4e`  
 Historical comparison commit: `b7a1aa2718dc1f6940e483043733f67020d9a62f`  

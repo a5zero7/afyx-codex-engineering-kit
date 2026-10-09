@@ -21,7 +21,7 @@ validate_target() {
 build_application() { echo "[bundle] building app"; (cd "$ENGINE_ROOT" && npm run build >/dev/null); }
 
 stage_application() {
-  mkdir -p "$STAGE/lib" "$STAGE/bin" "$STAGE/licenses"
+  mkdir -p "$STAGE/lib" "$STAGE/bin"
   cp -R "$ENGINE_ROOT/dist" "$STAGE/lib/dist"
   cp "$ENGINE_ROOT/package.json" "$STAGE/lib/"
   cp "$ENGINE_ROOT/../afyx-graph.json" "$STAGE/metadata.json"

@@ -28,4 +28,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           version=$(python -c "import json; print(json.load(open('afyx-graph/afyx-graph.json'))['product_version'])")
-          gh release create "afyx-graph-v$version" afyx-graph/engine/release/afyx-graph-* afyx-graph/engine/release/SHA256SUMS --title "Afyx Graph v$version" --notes "Afyx Graph requires external Node.js 22.5.0 or newer. See the bundled third-party notices."
+          gh release create "afyx-graph-v$version" afyx-graph/engine/release/afyx-graph-* afyx-graph/engine/release/SHA256SUMS --title "Afyx Graph v$version" --notes "Afyx Graph is licensed under MIT and requires external Node.js 22.5.0 or newer."
