@@ -727,6 +727,26 @@ Required gates:
 - core regression: PASS.
 - release artifact audit: PASS.
 - supported-platform CI: PASS.
+- fresh product install from the release/distribution boundary: PASS.
+- first-run launcher/runtime detection: PASS.
+- real repository/workspace initialization and first index: PASS.
+- search/context/callers/callees/impact/affected query flow on that initialized repository: PASS.
+- MCP initialize and real query from the installed artifact: PASS.
+- clean shutdown, restart, reopen existing index, incremental file change/sync, and re-query: PASS.
+- product viability smoke has zero install/init/index/startup/reopen/incremental-sync crash, zero unhandled exception, zero silent empty result for known-positive queries, zero corrupt index, and zero UNKNOWN product failure.
+
+Hard product-viability gate:
+
+```text
+AFYX_PRODUCT_INSTALL_SMOKE        = PASS
+AFYX_REPO_INIT_SMOKE              = PASS
+AFYX_REAL_END_TO_END_PRODUCT_SMOKE = PASS
+```
+
+These gates must execute from the actual built/release artifact in a fresh
+temporary installation location with only the documented external runtime
+prerequisites. Running solely from the development repository or its existing
+`node_modules` is insufficient evidence.
 
 Historical legal evidence may still remain until Phase 5H.
 
