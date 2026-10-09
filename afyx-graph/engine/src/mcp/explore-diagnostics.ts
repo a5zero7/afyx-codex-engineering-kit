@@ -1,5 +1,5 @@
 /**
- * Per-file allocation diagnostic for `afyx_graph_explore` (CG-4).
+ * Per-file allocation diagnostic for `afyx_graph_explore`.
  *
  * The explore response is a fixed byte envelope (`budget.maxOutputChars`, hard-
  * capped at 25K so the host never externalizes the result). WHICH files fill it,
@@ -41,13 +41,13 @@ export type ExploreRenderMode =
   | 'focused'       // per-symbol view, named/spine bodies full
   | 'skeleton'      // per-symbol view, signatures only
   | 'stale-omitted' // drifted on disk; source deliberately withheld
-  | 'backref'       // fully served by an earlier call this session (CG-18)
+  | 'backref'       // fully served by an earlier call this session (cross-call deduplication)
   | 'dropped';      // rendered into `lines` but cut by the final hard ceiling
 
 /** Why a ranked candidate never reached the output. */
 export type ExploreSkipReason =
   | 'max-files'          // maxFiles reached before this file
-  | 'cliff'              // below the relevance cliff — pointer, not bytes (CG-12)
+  | 'cliff'              // below the relevance cliff — pointer, not bytes (proportional allocation)
   | 'budget-whole-file'  // whole-file render wouldn't fit under the hard ceiling
   | 'budget-clusters'    // cluster render wouldn't fit under the hard ceiling
   | 'unreadable'         // outside root, missing, or read error
@@ -70,7 +70,7 @@ export interface ExploreCandidateMeta {
   generated: boolean;
   /**
    * Nothing but type declarations in this file, and nothing in the index
-   * depends on it (CG-28) — it cannot answer a flow question, so it ranks on
+   * depends on it (declaration-only penalty) — it cannot answer a flow question, so it ranks on
    * discounted signals unless the query named one of the types it declares.
    */
   ambientDeclaration: boolean;
@@ -78,7 +78,7 @@ export interface ExploreCandidateMeta {
    * Multiplier `rankPenalty` applied to BOTH `score` and `graphScore` (1 = no
    * penalty). Generated and test/i18n files rank on discounted signals, so the
    * raw values are `score / penalty` — worth reporting, since "why did this
-   * generated file lose?" is otherwise invisible in the numbers (CG-10).
+   * generated file lose?" is otherwise invisible in the numbers (relevance scoring).
    */
   penalty: number;
   /**
@@ -93,7 +93,7 @@ export interface ExploreCandidateMeta {
 interface FileRecord extends ExploreCandidateMeta {
   path: string;
   /**
-   * Chars this file was RESERVED by the proportional allocator (CG-12), before
+   * Chars this file was RESERVED by the proportional allocator (proportional allocation), before
    * it rendered anything. `0` = cliffed; `null` = never reached the allocator.
    * The gap between this and `emittedChars` is the whole story of a budget bug:
    * reserved-but-unspent means the file had nothing to say, spent-over-reserved
@@ -112,7 +112,7 @@ interface FileRecord extends ExploreCandidateMeta {
    */
   spendable: number | null;
   /**
-   * The DISPLACEMENT-GUARDED ceiling (CG-31): the most this file may render
+   * The DISPLACEMENT-GUARDED ceiling (displacement guard): the most this file may render
    * without spending a reservation still owed to a file the loop has not
    * reached AND can still pay. `spendable` is what the file was promised, this
    * is what is actually still there to pay it with — every render path is
@@ -125,7 +125,7 @@ interface FileRecord extends ExploreCandidateMeta {
   render?: ExploreRenderMode;
   /**
    * Source chars this call did NOT re-send because an earlier call in the
-   * session already did (CG-18). Reclaimed, not lost: it leaves through
+   * session already did (cross-call deduplication). Reclaimed, not lost: it leaves through
    * `sourceSpent` (the carry-forward pool hands it to lower-ranked files) and,
    * for a fully back-referenced file, through the freed `maxFiles` slot. The
    * reallocation is legible as the difference between this file's
@@ -186,7 +186,7 @@ export interface ExploreDiagnosticFile extends ExploreCandidateMeta {
 
 /**
  * This session's explore history for this project, as of BEFORE the call being
- * reported (CG-17). Present only when the caller tracks session state — the CLI
+ * reported (session emission record). Present only when the caller tracks session state — the CLI
  * and bare-handler callers don't, so it is absent there rather than zeroed.
  */
 export interface ExploreDiagnosticSession {
@@ -207,7 +207,7 @@ export interface ExploreDiagnosticReport {
   projectRoot: string;
   indexedFileCount: number;
   note?: string;
-  /** Session-scoped call state (CG-17); absent when the caller tracks none. */
+  /** Session-scoped emission record; absent when the caller tracks none. */
   session?: ExploreDiagnosticSession;
   budget: {
     maxOutputChars: number;
@@ -240,7 +240,7 @@ export interface ExploreDiagnosticReport {
     filesInFinalOutput: number;
   };
   /**
-   * Cross-call source dedup (CG-18): what this call did NOT re-send because an
+   * Cross-call source dedup (cross-call deduplication): what this call did NOT re-send because an
    * earlier call in this session already sent it, and where those bytes went.
    * `savedChars` 0 with a non-empty session block means nothing overlapped.
    */
@@ -250,7 +250,7 @@ export interface ExploreDiagnosticReport {
     /** Files fully replaced by a pointer — each one also freed a `maxFiles` slot. */
     fullyBackReferenced: string[];
   };
-  /** The proportional split (CG-12): what each file was promised, and why. */
+  /** The proportional allocation: what each file was promised, and why. */
   allocation: {
     /** Chars divided among admitted files (envelope minus per-file overhead). */
     pool: number;
@@ -345,7 +345,7 @@ export class ExploreDiagnostics {
   }
 
   /**
-   * Record what this session had already been served for this project (CG-17),
+   * Record what this session had already been served for this project (session emission record),
    * so the report says which call in the session it is and what the earlier ones
    * cost. Read-only for now: nothing in the render loop consults it, which is
    * what keeps the response byte-identical at this stage.
@@ -403,7 +403,7 @@ export class ExploreDiagnostics {
   }
 
   /**
-   * Record the proportional split (CG-12), taken right after ranking and before
+   * Record the proportional split (proportional allocation), taken right after ranking and before
    * a single byte renders. Called once per explore.
    */
   setAllocation(
@@ -436,7 +436,7 @@ export class ExploreDiagnostics {
 
   /**
    * What the render loop will let this file spend once the reservations still
-   * owed BELOW it are held back (CG-31). Called alongside `recordSpendable`.
+   * owed BELOW it are held back (displacement guard). Called alongside `recordSpendable`.
    */
   recordFunded(path: string, chars: number): void {
     const rec = this.files.get(path);
@@ -454,7 +454,7 @@ export class ExploreDiagnostics {
   }
 
   /**
-   * Source this call withheld because the session already holds it (CG-18).
+   * Source this call withheld because the session already holds it (cross-call deduplication).
    * Called with `(path, 0, [])` to clear a record — the anti-abandonment restore
    * puts a suppressed file's source back, and a diagnostic still claiming the
    * saving would misreport where the envelope went.
@@ -502,7 +502,7 @@ export class ExploreDiagnostics {
         rec.allocatedShare = allocatedChars > 0 ? rec.emittedChars / allocatedChars : 0;
         // Rendered into `lines` but absent from the final text → the hard
         // ceiling dropped its whole section. A back-referenced file has no
-        // fenced source BY DESIGN (CG-18), so it is never "dropped".
+        // fenced source BY DESIGN (cross-call deduplication), so it is never "dropped".
         if (rec.render && rec.render !== 'stale-omitted' && rec.render !== 'backref'
             && rec.finalChars === 0) {
           rec.render = 'dropped';

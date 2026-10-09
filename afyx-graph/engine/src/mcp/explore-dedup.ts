@@ -1,7 +1,7 @@
 /**
- * Cross-call source dedup for `afyx_graph_explore` (CG-18).
+ * Cross-call source deduplication for `afyx_graph_explore`.
  *
- * The session record (CG-17) knows what earlier calls already sent. This module
+ * The session emission record knows what earlier calls already sent. This module
  * is the algebra that turns that record into a decision for the call being
  * rendered: of the line ranges this call WOULD emit, which does the agent
  * already hold, and what is genuinely new.
@@ -51,7 +51,7 @@ export const EXPLORE_DEDUP = {
    * Below this many chars of NEW source, a file's remainder is folded into its
    * back-reference instead of being fenced on its own.
    *
-   * The shape this exists for, seen on the CG-17 fixture: a third call whose
+   * The shape this exists for: a third call whose
    * only unheld line was the file's trailing blank one, rendered as a code fence
    * containing `228\t`. A fence holding two lines of nothing reads as a broken
    * response, and reading as broken is the expensive failure — it is the thing

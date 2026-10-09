@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Product-level explore benchmark for first-call delivery and session-scoped
- * cross-call deduplication. Uses the existing payroll fixture and CG-4
+ * cross-call deduplication. Uses the existing payroll fixture and allocation
  * diagnostic; it does not modify ranking, allocation, or rendering behavior.
  */
 import crypto from 'node:crypto';

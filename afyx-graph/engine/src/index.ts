@@ -936,7 +936,7 @@ export class AfyxGraph {
         }
 
         // Re-open resolution edges this sync may have invalidated ELSEWHERE in
-        // the repo (CG-33). Everything above re-resolves references in the
+        // the repo (incremental convergence). Everything above re-resolves references in the
         // changed files; this covers the opposite direction — references in
         // files the sync never touched whose answer depended on a definition
         // that just appeared or disappeared. Without it a synced index never
@@ -1888,7 +1888,7 @@ export class AfyxGraph {
    * A `(path) => boolean` ambient-declaration test over a BOUNDED candidate
    * list: true for a file that declares nothing but types, originates no call
    * edge, and that nothing in the index depends on — an ambient `.d.ts` of
-   * global shims, vendored typings, module augmentation (CG-28). Structural
+   * global shims, vendored typings, module augmentation (declaration-only penalty). Structural
    * rather than extension-based, and deliberately narrow: see
    * `QueryBuilder.getAmbientDeclarationPathsAmong` for why each condition is
    * there, in particular why a `types.ts` the codebase imports is NOT flagged.

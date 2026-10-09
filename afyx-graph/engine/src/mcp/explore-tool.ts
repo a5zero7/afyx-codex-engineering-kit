@@ -218,7 +218,7 @@ export function getExploreOutputBudget(fileCount: number): ExploreOutputBudget {
   };
 }
 
-// ── Explore relevance scoring (CG-10 / #1500) ──────────────────────────────
+// ── Explore relevance scoring ──────────────────────────────────────────────
 //
 // A file earns its slice of the explore envelope from the symbols in it that the
 // query matched. Before this weighting every match counted the same per tier, so
@@ -331,7 +331,7 @@ const GENERATED_RANK_PENALTY = 0.3;
 const LOW_VALUE_RANK_PENALTY = 0.5;
 /**
  * Ambient declaration files — a hand-written `.d.ts` of global shims, vendored
- * typings, module augmentation (CG-28). Declares nothing but types, and nothing
+ * typings, module augmentation (declaration-only penalty). Declares nothing but types, and nothing
  * in the index depends on it.
  *
  * Such a file cannot answer a FLOW question no matter how much its identifiers
@@ -395,7 +395,7 @@ const SCORE_FLOOR_MAX = 10;
  */
 const SCORE_FLOOR_KEEP_MIN = 3;
 
-// ── Score-proportional byte allocation (CG-12 / #1500) ─────────────────────
+// ── Score-proportional byte allocation ─────────────────────────────────────
 //
 // The score floor above decides WHICH files reach the response. This decides how
 // the byte envelope is SPLIT among them — and until this existed, it wasn't
@@ -493,7 +493,7 @@ export const EXPLORE_ALLOCATION = {
   WHOLE_FILE_GRACE_MAX: 800,
   /**
    * A reservation that already covers this fraction of a file BUYS THE WHOLE
-   * FILE (CG-21), even though the file is bigger than the reservation.
+   * FILE (reservation guarantee), even though the file is bigger than the reservation.
    *
    * The grace above is calibrated as a *sliver* — it only rescues a file that
    * essentially fits. Below it there is a hole the render loop cannot fill:
@@ -544,7 +544,7 @@ export interface ExploreAllocationCandidate {
    * (it name-collides on every domain word) while its bytes stay mechanical
    * boilerplate the agent gains nothing from reading — so `rankPenalty` is
    * applied a SECOND time here. That is what finally sinks the #1500 generated
-   * layer below the cliff: it survived CG-10's single penalty because the sort's
+   * layer below the cliff: it survived relevance scoring's single penalty because the sort's
    * leading keys (entry-point, graph mass) are structural, and a big densely
    * self-referential generated file scores well on both.
    */
@@ -965,7 +965,7 @@ class ExploreTool {
       };
       /**
        * No narrative to print — but the agent still NAMED symbols, and their
-       * identity is a separate output from the prose (CG-38).
+       * identity is a separate output from the prose (named-symbol guarantee).
        *
        * `namedNodeIds` is not decoration: downstream it injects the named def into
        * the file's cluster ranges and ranks it importance 9, which is the whole
@@ -1223,7 +1223,7 @@ class ExploreTool {
         if (count < MIN_SUPPORT) continue;
         // The implementer count is `countImplementers` — the same function the
         // viewer's type-hierarchy fan counts with, so "dispatch to N types
-        // implementing X" is the same N on both surfaces (CG-58). Distinct
+        // implementing X" is the same N on both surfaces (type hierarchy). Distinct
         // types, not edges: a class tied to its supertype by both a parsed
         // `extends` and a synthesized `implements` is one implementation.
         const impl = countImplementers(cg, node.id);
@@ -1506,20 +1506,20 @@ class ExploreTool {
     const pinnedSet = new Set(pinnedFiles);
     const pinnedOrder = new Map(pinnedFiles.map((p, i) => [p, i]));
 
-    // Per-file allocation diagnostic (CG-4). `null` unless AFYX_GRAPH_EXPLORE_DEBUG
+    // Per-file allocation diagnostic. `null` unless AFYX_GRAPH_EXPLORE_DEBUG
     // is set — every `diag?.` below is then a no-op and the response is
     // byte-identical. It only OBSERVES: it must never feed back into rendering.
     const diag = ExploreDiagnostics.start(query, projectRoot, budget, maxFiles, indexedFileCount);
 
-    // What this session has already been served for THIS project (CG-17), and
-    // whether this call may act on it (CG-18). Dedup is off on the session's
+    // What this session has already been served for THIS project (session emission record), and
+    // whether this call may act on it (cross-call deduplication). Dedup is off on the session's
     // first call by construction — there is nothing to point back AT — and off
     // entirely under `AFYX_GRAPH_EXPLORE_DEDUP=0`.
     const priorCalls = viewForProject(readExploreSessionView(args), projectRoot);
     diag?.noteSession(priorCalls);
     const dedupEnabled = exploreDedupEnabled() && (priorCalls?.calls.length ?? 0) > 0;
 
-    // Cross-call dedup accounting (CG-18). `newSourceChars` is the load-bearing
+    // Cross-call dedup accounting (cross-call deduplication). `newSourceChars` is the load-bearing
     // one: a response whose source is ENTIRELY back-references is the shape that
     // reads as a failure, so the loop keeps the top suppressed file's real
     // section in hand and restores it if nothing new made it in — see
@@ -1533,7 +1533,7 @@ class ExploreTool {
     // record is what the agent actually received rather than what the loop
     // hoped to send.
     //
-    // Back-referenced spans are recorded too, with zero bytes (CG-18): the
+    // Back-referenced spans are recorded too, with zero bytes (cross-call deduplication): the
     // record means "source the agent HOLDS for this file", not "bytes this call
     // spent". Re-recording them refreshes them inside the retained-call window,
     // so a file pointed at across many calls doesn't age out of the history and
@@ -1676,7 +1676,7 @@ class ExploreTool {
     // overloads (the query also named the type) all earn it. (#1064)
     const tierSeedIds = new Set<string>();
     // Files declaring a TYPE the query named by name — the counter-case guard
-    // for the declaration-only penalty (CG-28). Populated in the token loop.
+    // for the declaration-only penalty. Populated in the token loop.
     const namedTypeFiles = new Set<string>();
     {
       const FILE_EXT = /\.(?:java|kt|kts|ts|tsx|js|jsx|mjs|cjs|cs|py|go|rb|php|swift|rs|cpp|cc|cxx|c|h|hpp|scala|lua|dart|vue|svelte|astro|erl|hrl)$/i;
@@ -1754,7 +1754,7 @@ class ExploreTool {
         // A query that NAMES a declared type is a question ABOUT that type, and
         // must still reach its declaration file at full weight — so record the
         // files those declarations live in and exempt them from the
-        // declaration-only penalty below (CG-28). Only PRECISE tokens count, by
+        // declaration-only penalty below. Only PRECISE tokens count, by
         // the same NL-stopword reasoning as the seeding above: "…the file body…"
         // must not exempt a `Body` interface it never meant to name. Kept
         // separate from `namedSeedIds`, which is callable-only by construction —
@@ -1847,8 +1847,8 @@ class ExploreTool {
         // `metadata` are member names in any platform `.d.ts`, and each one
         // corroborates the next through `coNamedInFile`, so an ambient shim
         // walks past the NL-stopword guard and lands above every implementation
-        // file — the exact inversion CG-28 exists to prevent, arriving on a key
-        // that sorts above the CG-28 penalty.
+        // file — the exact inversion declaration-only penalty exists to prevent, arriving on a key
+        // that sorts above the declaration-only penalty penalty.
         for (const n of tierPicks) {
           if (!isInterfaceOwnedMethod(n)) tierSeedIds.add(n.id);
         }
@@ -2021,7 +2021,7 @@ class ExploreTool {
     };
 
     // One DB probe over every file the query touched, then O(1) per lookup.
-    // Unions the index-time content-banner flag (CG-5) with the filename
+    // Unions the index-time content-banner flag (generated-content detection) with the filename
     // convention, so a Go monorepo's generated CRUD (`payroll.go` carrying a
     // DO-NOT-EDIT banner and nothing in its name) down-ranks the same way
     // `.pb.go` always has (#1500). Covers the whole subgraph, not just the
@@ -2032,7 +2032,7 @@ class ExploreTool {
     ]);
     const isGeneratedCandidate = cg.generatedFilePredicate(penaltyCandidates);
     // Second bounded probe over the same set: files declaring nothing but types
-    // that nothing in the index depends on (CG-28). A query that NAMED one of
+    // that nothing in the index depends on (declaration-only penalty). A query that NAMED one of
     // those types is asking about the declaration, so its file is exempt and
     // ranks at full weight.
     const isAmbientDeclaration = cg.ambientDeclarationFilePredicate(penaltyCandidates);
@@ -2050,7 +2050,7 @@ class ExploreTool {
      * never multiplied: a generated `.d.ts` has one property — "not the
      * implementation" — that both signals happen to see, and charging it twice is
      * how a file gets cliffed out of answers where it is genuinely relevant
-     * (CG-28). The low-value multiplier is orthogonal (a test file that is also
+     * (declaration-only penalty). The low-value multiplier is orthogonal (a test file that is also
      * generated is two independent reasons) and still compounds.
      */
     const rankPenalty = (filePath: string): number =>
@@ -2453,7 +2453,7 @@ class ExploreTool {
       });
     }
 
-    // Score-proportional byte allocation (CG-12). Every file's share of the
+    // Score-proportional byte allocation (proportional allocation). Every file's share of the
     // envelope is reserved HERE, before a single byte renders, so the render loop
     // spends a reservation instead of racing for whatever the files above it left.
     const allocation = allocateExploreBudget(
@@ -2541,7 +2541,7 @@ class ExploreTool {
     // file the agent Reads back (a 35K vscode explore did exactly this in the
     // n=4 A/B).
     const hardCeiling = Math.min(Math.round(budget.maxOutputChars * 1.5), 25000);
-    // What the epilogue is OWED — the part of it the loop must not spend (CG-26).
+    // What the epilogue is OWED — the part of it the loop must not spend (reservation invariant).
     // Not a flat margin: the old 600 was neither the epilogue's size (1,064 on
     // gin, 2,231 on excalidraw) nor a bound on it, so the loop budgeted for a
     // thing that did not exist and the response then discarded the whole
@@ -2550,12 +2550,12 @@ class ExploreTool {
     //   - the one-line note that says an uncovered area exists (always), and
     //   - a pointer for every file whose source was deliberately WITHHELD.
     //     A cliffed file's bytes were traded away on the promise that the agent
-    //     can still name it in a follow-up call (CG-12); if the ceiling then
+    //     can still name it in a follow-up call (proportional allocation); if the ceiling then
     //     eats that name the trade was a silent drop.
     // Everything above the floor — the rest of the pointer list, the reminders
     // — is elastic and fitted to the room that is actually left, at the end of
     // this method. Sized from the REAL strings, never tuned: a constant swept
-    // against the suite is what CG-30's record warns about.
+    // against the suite is what bounded oversize rendering's record warns about.
     const cliffPointerFloor = [...cliffedFiles]
       .slice(0, POINTER_MAX_FILES)
       .reduce((n, fp) => {
@@ -2573,7 +2573,7 @@ class ExploreTool {
     // the final output — so the render loop has to spend against it, and it
     // never did. Counting it is what makes `renderCeiling` the ceiling it
     // claims to be: without it the loop believed it had room for a trailing
-    // section the final truncation then threw away whole, and (CG-31) the
+    // section the final truncation then threw away whole, and (displacement guard) the
     // displacement guard dutifully held bytes back to pay for that section —
     // taking them off a file the agent DOES receive and handing them to one it
     // never sees.
@@ -2591,7 +2591,7 @@ class ExploreTool {
     // instead of a different symbol's code under the requested name.
     const staleRendered: string[] = [];
     const staleOmitted: string[] = [];
-    // Anti-abandonment hold-back (CG-18). The first file dedup suppressed
+    // Anti-abandonment hold-back (cross-call deduplication). The first file dedup suppressed
     // ENTIRELY, kept with its real section so it can be put back if the loop
     // ends with no new source anywhere. A response made only of pointers is the
     // shape that reads as "afyx-graph has nothing" — and one such response early
@@ -2613,7 +2613,7 @@ class ExploreTool {
       fingerprint: string;
     };
     let suppressedFallback: SuppressedFallback | null = null;
-    // Reservation carry-forward (CG-21). A reservation is a promise the render
+    // Reservation carry-forward (reservation guarantee). A reservation is a promise the render
     // loop has to KEEP, not a cap it may quietly under-use: a file that cannot
     // spend what it was given — thin matched-symbol set, unreadable, drifted off
     // disk, skipped for the ceiling — must hand the difference DOWN the rank
@@ -2642,7 +2642,7 @@ class ExploreTool {
     /**
      * What a file's section costs BESIDES its source, in render space: the
      * header (path + up to `maxSymbolsInFileHeader` symbol names) plus the code
-     * fence and the blank lines around them (CG-26).
+     * fence and the blank lines around them (reservation invariant).
      *
      * `EXPLORE_ALLOCATION.FILE_OVERHEAD` is the ALLOCATOR's constant — the flat
      * 200 it charges each admitted file when it splits the envelope — and using
@@ -2668,7 +2668,7 @@ class ExploreTool {
     };
     /**
      * How much of what is still owed BELOW `fileIndex` the response can actually
-     * still PAY, in render-space chars (CG-31).
+     * still PAY, in render-space chars (displacement guard).
      *
      * Not the same as the sum of those reservations. The allocator splits the
      * envelope; the render loop spends against a ceiling that also has to hold
@@ -2694,7 +2694,7 @@ class ExploreTool {
         const overhead = sectionOverhead(path, sortedFiles[j]![1].nodes);
         const need = r + overhead;
         if (held + need > budgetLeft) {
-          // PART of a reservation is still a delivered file (CG-26). Holding
+          // PART of a reservation is still a delivered file (reservation invariant). Holding
           // all-or-nothing zeroed the last admitted file whenever its full
           // reservation no longer fit: on the precise-query fixture the rank-5
           // file took 4,134 chars against a 2,948 reservation while rank 6 —
@@ -2768,7 +2768,7 @@ class ExploreTool {
       );
       reservedSoFar += reserved;
       diag?.recordSpendable(filePath, allowance);
-      // DISPLACEMENT GUARD, in render space (CG-31). `allowance` says what this
+      // DISPLACEMENT GUARD, in render space (displacement guard). `allowance` says what this
       // file MAY spend; it does not say the bytes are still there to spend. The
       // hard ceiling is shared with every file the loop has not reached yet, and
       // their reservations are promises the allocator already made — so what is
@@ -2822,7 +2822,7 @@ class ExploreTool {
       // those holes still needs their defs (#1711).
       const fileIndexNodes = cg.getNodesInFile(filePath);
 
-      // Cross-call dedup (CG-18). `served` is what THIS session already sent the
+      // Cross-call dedup (cross-call deduplication). `served` is what THIS session already sent the
       // agent for THIS file, and it is empty unless the file still hashes to the
       // bytes those spans were sliced from — an edit between calls means the
       // agent's copy is wrong, so nothing is withheld. Every render path below
@@ -2904,7 +2904,7 @@ class ExploreTool {
         const ranges = folded ? [] : opts.ranges;
         const at = lines.length;
         lines.push(opts.header, '');
-        // Charge what the section ACTUALLY costs, not a flat 200 (CG-26). A
+        // Charge what the section ACTUALLY costs, not a flat 200 (reservation invariant). A
         // header carries the path plus up to `maxSymbolsInFileHeader` symbol
         // names and routinely runs 300–500 chars, so the flat charge made the
         // loop believe it had room it did not have: okhttp rendered 26,601
@@ -3030,7 +3030,7 @@ class ExploreTool {
         // windows such a file too (~190 lines at a time), so this mimics, not
         // truncates. Always emit ≥1 (never an empty section).
         //
-        // Held to `fundedHeadroom` as well (CG-31) so this path cannot spend a
+        // Held to `fundedHeadroom` as well (displacement guard) so this path cannot spend a
         // reservation still owed below it either. It never exceeds `allowance`
         // today, so the bound only bites once the ceiling is genuinely tight —
         // but "every render path" has to mean every one, or the guard is just a
@@ -3139,7 +3139,7 @@ class ExploreTool {
       // reservation removes the swing without touching the rule's purpose (a small
       // file sliced is a lossy subset the agent just Reads in full anyway).
       const WHOLE_FILE_MAX_LINES = isCentralFile ? 280 : 220;
-      // Two bounds, whichever is larger (CG-21):
+      // Two bounds, whichever is larger (reservation guarantee):
       //   GRACE — the reservation plus a sliver, for a file that essentially fits;
       //   BUY   — the reservation already covers most of the file, so the rest is
       //           cheaper to ship than to lose. A file between the two used to
@@ -3168,7 +3168,7 @@ class ExploreTool {
       // `payslip_builder.go`, and it is refused here. Self-limiting: each buy
       // grows `sourceSpent`, so the pool cannot be spent twice. The cluster path
       // below enforces the same inequality in render space — see
-      // `fundedHeadroom` / `owedPayableBelow` (CG-31).
+      // `fundedHeadroom` / `owedPayableBelow` (displacement guard).
       const owedBelow = owedSourceBelow(fileIndex);
       const remainingBuyOvershoot = Math.max(
         0,
@@ -3184,7 +3184,7 @@ class ExploreTool {
       // `fundedHeadroom` and always renders something.
       //
       // Measured against `fundedHeadroom`, not against `renderCeiling - totalChars`
-      // (CG-26). The two differ by exactly the displacement term: room before
+      // (reservation invariant). The two differ by exactly the displacement term: room before
       // the ceiling belongs to every file the loop has not reached yet, and
       // this arm used to read the raw room while its source-space sibling
       // (`owedBelow`, above) refused the same trade. Source-space alone was not
@@ -3204,7 +3204,7 @@ class ExploreTool {
       const buysWhole = fileContent.length <= graceBound || meritBuy;
       const wholeFileHeadroom = meritBuy ? buyFundedHeadroom : fundedHeadroom;
       // Set by the whole-file arm when it actually emits. A whole render that
-      // does not FIT no longer ends the file's turn (CG-26) — it falls through
+      // does not FIT no longer ends the file's turn (reservation invariant) — it falls through
       // to the cluster path below, which is bounded by `fundedHeadroom` and
       // renders something. Skipping outright was the trade the funding pool
       // exists to refuse: a clustered section traded for no section at all.
@@ -3235,7 +3235,7 @@ class ExploreTool {
         // The fit test, on the bytes this render ACTUALLY costs (the numbered
         // body, after dedup) rather than on the raw file — and against
         // `fundedHeadroom`, so a whole render can no more spend a pending
-        // file's reservation than a clustered one can (CG-26). Both whole-file
+        // file's reservation than a clustered one can (reservation invariant). Both whole-file
         // arms come through here, which is what closes the invariant on the
         // GRACE path: grace is measured against this file's own allowance and
         // says nothing about whether the bytes are still there to spend.
@@ -3425,9 +3425,9 @@ class ExploreTool {
       const SPINE_WINDOW = 28; // lines each side of the next-hop call site
       // Returns the rendered text as SPAN-KEYED PARTS. Every part carries the
       // exact line range its text was sliced from, which two things depend on:
-      // the session record (CG-17) — a record claiming lines it never sent would
+      // the session record (session emission record) — a record claiming lines it never sent would
       // withhold them from a later call, costing a Read — and cross-call dedup
-      // (CG-18), which rebuilds a part's text from a narrower span when the
+      // (cross-call deduplication), which rebuilds a part's text from a narrower span when the
       // agent already holds the rest. Both read the spans from the function that
       // does the slicing; a second function mirroring these window/padding rules
       // would drift.
@@ -3475,7 +3475,7 @@ class ExploreTool {
 
       /**
        * Shrink an oversize cluster to the highest-importance symbols inside it
-       * that fit `cap`, rendered in source order with gap markers (CG-12).
+       * that fit `cap`, rendered in source order with gap markers (proportional allocation).
        *
        * A cluster is a MERGE of whole symbol ranges, and on a densely-packed file
        * every symbol merges into one blob spanning the file — cycle.go's 209-line
@@ -3498,7 +3498,7 @@ class ExploreTool {
        * the last member that fits whole, and the released bytes carry forward to
        * lower-ranked files (payroll-go's `runPayrollCycleAll` body lost its
        * `s.store.Upsert` call to a rank-5 file). What the slack must NOT do is
-       * decide WHICH members survive: that is the ceiling trim's job, and CG-38 is
+       * decide WHICH members survive: that is the ceiling trim's job, and named-symbol guarantee is
        * why that trim now protects the named spans instead of cutting in source
        * order. See `docs/benchmarks/explore-tail-render-cg38.md`.
        */
@@ -3513,7 +3513,7 @@ class ExploreTool {
           const sz = sizeOf(r) + GAP_MARKER.length;
           // Always keep the most important range, even if it alone is oversize —
           // an empty section sends the agent to Read, which costs far more. How
-          // far it may overshoot is bounded by the caller's ceiling (CG-30), which
+          // far it may overshoot is bounded by the caller's ceiling (bounded oversize rendering), which
           // windows a runaway member instead of dropping it.
           if (keep.length > 0 && kept + sz > cap) continue;
           keep.push(r);
@@ -3533,7 +3533,7 @@ class ExploreTool {
       };
 
       /**
-       * Bounded overshoot for one cluster's render (CG-30).
+       * Bounded overshoot for one cluster's render (bounded oversize rendering).
        *
        * `shrinkCluster` keeps the highest-importance member whole even when that
        * member alone is oversize — an empty file section sends the agent to Read,
@@ -3595,8 +3595,8 @@ class ExploreTool {
        * because an empty section is the one outcome worse than an oversize one.
        *
        * `focusLines` are the lines this trim must not lose: the spine's next-hop
-       * call site (CG-30) and every definition the agent NAMED inside the cluster
-       * (CG-38). The head fill is source-ordered, so a named def in the TAIL of a
+       * call site (bounded oversize rendering) and every definition the agent NAMED inside the cluster
+       * (named-symbol guarantee). The head fill is source-ordered, so a named def in the TAIL of a
        * large file is otherwise always the first thing an over-ceiling render
        * drops — the one span the agent asked for by name, cut in favour of
        * head-of-file filler it did not ask for. The full-ceiling fill is tried
@@ -3699,7 +3699,7 @@ class ExploreTool {
 
       /**
        * One cluster's final parts: built, shrunk if it overruns `cap`, then
-       * passed through the session history (CG-18).
+       * passed through the session history (cross-call deduplication).
        *
        * The shrink decision reads the DEDUPED length on purpose. A cluster whose
        * bytes the agent already holds costs this response nothing, so shrinking
@@ -3710,7 +3710,7 @@ class ExploreTool {
         c: ExploreCluster,
         cap: number,
         /**
-         * Hard bound on the rendered result (CG-30). `cap` is what selection asks
+         * Hard bound on the rendered result (bounded oversize rendering). `cap` is what selection asks
          * for; this is how far a single oversize member is allowed to overshoot it
          * before being windowed. Always >= `cap`, so a cluster that already fits is
          * never touched.
@@ -3773,9 +3773,9 @@ class ExploreTool {
       // It used to be `min(maxCharsPerFile, remaining)`: a flat cap that clipped the
       // top-scoring file at the same 3,800 as the weakest one, while the whole-file
       // branch above handed a small file 3x that. The reservation is the whole point
-      // of CG-12 — bytes follow relevance, not file size.
+      // of proportional allocation — bytes follow relevance, not file size.
       //
-      // `fundedHeadroom`, not `headroom` (CG-31): what is left before the hard
+      // `fundedHeadroom`, not `headroom` (displacement guard): what is left before the hard
       // ceiling includes every unreached file's reservation, and spending that
       // is how one clustered file zeroed five admitted peers. It is ≤ `headroom`
       // by construction, so it is the only bound these three lines need.
@@ -3805,7 +3805,7 @@ class ExploreTool {
         // past the per-file budget up to the spine ceiling; non-spine clusters obey
         // the normal per-file budget.
         const cap = rc.c.hasSpine ? SPINE_CEILING : fileBudget;
-        // CG-30: shrinking keeps the top member whole however big it is, so bound
+        // bounded oversize rendering: shrinking keeps the top member whole however big it is, so bound
         // how far that member may overshoot — the same 1.5x-of-reservation bound
         // SPINE_CEILING already draws, never below `cap` (a cluster that fits its
         // cap is never windowed). A spine cluster's cap already IS that bound, so
@@ -3825,12 +3825,12 @@ class ExploreTool {
         // unspent — django's `sql/query.py` keeps a 22-line glue cluster (one
         // importance-6 bridging symbol) and drops the 624-line `Query` body
         // beneath it whole, spending 1,923 of 7,947; the slack then carries
-        // forward to a file scoring a fifth as much (CG-36). Same shape in
+        // forward to a file scoring a fifth as much (cluster starvation guard). Same shape in
         // okhttp's `RealInterceptorChain.kt`, where an import header displaces
         // the chain itself.
         //
         // So a later cluster is shrunk INTO the remainder by the same whole-member
-        // rule the first one already uses — CG-26's between-FILES lesson ("hold the
+        // rule the first one already uses — reservation invariant's between-FILES lesson ("hold the
         // remainder while it is still worth a section; zeroing it delivers
         // nothing") applied between CLUSTERS. Below `MIN_CHARS` the remainder can't
         // hold one readable block, so it stays a drop rather than a stutter of
@@ -3855,7 +3855,7 @@ class ExploreTool {
       // Emit chosen clusters in source order so the file reads top-to-bottom.
       // Assembled through a function because it may have to run more than once:
       // the fit test below trims the weakest cluster and re-assembles rather
-      // than skipping the file (CG-26).
+      // than skipping the file (reservation invariant).
       const assembleSection = (chosen: ReadonlySet<number>) => {
         const parts: SectionPart[] = [];
         const symbols: string[] = [];
@@ -3895,7 +3895,7 @@ class ExploreTool {
       // single MEMBER (one long monolithic function) is kept whole for as long as
       // it fits the bounded overshoot (half a method is useless — the agent just
       // Reads the rest, the fallback explore exists to prevent); past that bound it
-      // is WINDOWED on whole lines rather than dropped (CG-30), so a god-method
+      // is WINDOWED on whole lines rather than dropped (bounded oversize rendering), so a god-method
       // can neither be silently lost nor spend the response's whole envelope.
       if (chosenIndices.size < clusters.length || anyClusterShrunk) {
         anyFileTrimmed = true;
@@ -3923,7 +3923,7 @@ class ExploreTool {
       // first cluster, taken whole rather than sliced mid-method) ran the response
       // out of room.
       //
-      // Exact, like the whole-file arm above (CG-26): header + fences + body,
+      // Exact, like the whole-file arm above (reservation invariant): header + fences + body,
       // not body + a flat 200. The displacement half of the invariant is
       // already enforced on the body itself (`bodyCap` / `SPINE_CEILING` read
       // `fundedHeadroom`); this is the ceiling half. And because it is exact it
@@ -3939,7 +3939,7 @@ class ExploreTool {
       const costOfSection = (header: string, body: string) =>
         header.length + 2 + (body.length > 0 ? body.length + lang.length + 11 : 0);
       // The weakest cluster is SHRUNK into the room that is left before it is
-      // dropped (CG-36). Dropping it whole makes this loop as all-or-nothing as
+      // dropped (cluster starvation guard). Dropping it whole makes this loop as all-or-nothing as
       // the selection above it was, and at the same cost: on excalidraw's
       // `typeChecks.ts` the estimate missed by 13 chars and a 1,512-char cluster
       // — the file's highest-SCORING one, last only because rank breaks ties on
@@ -3986,7 +3986,7 @@ class ExploreTool {
       // One cluster left and still over — by the header estimate's error, at
       // most a few hundred chars. Re-render it INTO the room that is actually
       // left rather than skip the file: the same whole-line windowing an
-      // oversize cluster already gets (CG-30), just against an exact bound.
+      // oversize cluster already gets (bounded oversize rendering), just against an exact bound.
       // The header is built from the cluster's symbols, not its text, so
       // re-rendering cannot move the target.
       if (totalChars + costOfSection(fileHeader, assembled.text) > renderCeiling
@@ -4033,7 +4033,7 @@ class ExploreTool {
       });
     }
 
-    // Anti-abandonment restore (CG-18). Dedup withheld everything and nothing new
+    // Anti-abandonment restore (cross-call deduplication). Dedup withheld everything and nothing new
     // took its place — the response would be pointers only, which is the shape
     // that reads as "afyx-graph found nothing" and sends the agent to Read for
     // good. Put the top suppressed file back, in full, and keep its pointer off.
@@ -4089,7 +4089,7 @@ class ExploreTool {
 
     // Everything pushed from here on is EPILOGUE — meta-text ABOUT the response
     // rather than part of it. Marked so the hard-ceiling cut at the end can
-    // spend it before it spends a rendered file section (CG-31): a section is
+    // spend it before it spends a rendered file section (displacement guard): a section is
     // source the agent otherwise has to Read; the epilogue is a pointer list and
     // two reminders, and the note that replaces it carries their instruction.
     //
@@ -4111,8 +4111,8 @@ class ExploreTool {
     // in the source section, and a trailing pointer list is pure overhead. But a
     // CLIFFED file is source we deliberately withheld, so the list is forced on
     // whenever there is one: withholding a file's bytes is only cheap if the agent
-    // can still name it in a follow-up call (CG-12).
-    // The epilogue's three blocks are BUILT here and FITTED below (CG-26) —
+    // can still name it in a follow-up call (proportional allocation).
+    // The epilogue's three blocks are BUILT here and FITTED below (reservation invariant) —
     // they are not pushed straight into `lines` any more. The render loop
     // budgets for the epilogue floor it committed to (`EPILOGUE_FLOOR`); what
     // the response can afford above that floor is only known now, so the
@@ -4167,13 +4167,13 @@ class ExploreTool {
       }
     }
 
-    // FIT THE EPILOGUE (CG-26). Before this, the epilogue was emitted whole and
+    // FIT THE EPILOGUE (reservation invariant). Before this, the epilogue was emitted whole and
     // then, on a saturated response, discarded whole by the hard ceiling — four
     // of six suite repos shipped with no pointer list and no reminders at all,
     // and the render loop had "budgeted" 600 chars for something that measures
     // 1,064–2,231. Neither number was the real one, because the epilogue is not
     // one thing: a fixed floor the loop reserves for (the cut note, plus a
-    // pointer for every file whose bytes were deliberately WITHHELD — CG-12
+    // pointer for every file whose bytes were deliberately WITHHELD — proportional allocation
     // makes those names load-bearing) and an elastic tail that takes what is
     // left. Assembled in priority order — the do-not-re-read reminder first,
     // then pointers in rank order, then the budget note — and emitted in
@@ -4225,7 +4225,7 @@ class ExploreTool {
 
     const output = flow.text + lines.join('\n');
     let finalText: string;
-    // The epilogue costs less than a file section, so it is cut FIRST (CG-31).
+    // The epilogue costs less than a file section, so it is cut FIRST (displacement guard).
     // Dropping a trailing section throws away source the render loop had already
     // set that file's reservation aside for — the exact starvation the
     // displacement guard exists to prevent, arriving after the guard has done
@@ -4288,14 +4288,14 @@ class ExploreTool {
     finalText = finalText.replace(SUMMARY_SENTINEL, summaryLine);
 
     // Emit the allocation diagnostic from the FINAL text, so per-file bytes and
-    // shares account for the hard-ceiling truncation above (CG-4).
+    // shares account for the hard-ceiling truncation above (allocation diagnostic).
     diag?.finish(finalText, output.length, hardCeiling, filesIncluded);
 
-    // Session record (CG-17): only the files that SURVIVED the hard ceiling —
+    // Session record (session emission record): only the files that SURVIVED the hard ceiling —
     // a section the truncation dropped was never delivered, and recording it
     // would let a later call withhold source the agent has never seen.
     //
-    // A back-referenced file records its spans at ZERO bytes (CG-18) — it is
+    // A back-referenced file records its spans at ZERO bytes (cross-call deduplication) — it is
     // still source the agent holds for this file, which is what the record
     // means; dropping it would let the span age out of the retained window and
     // be re-served for nothing.
@@ -4322,7 +4322,7 @@ class ExploreTool {
   }
 
   /**
-   * An explore response plus the record of what it emitted (CG-17). The record
+   * An explore response plus the record of what it emitted (session emission record). The record
    * rides the result only as far as {@link execute}, which files it into the
    * calling session's state and deletes it — see {@link EXPLORE_EMISSION_KEY}.
    */

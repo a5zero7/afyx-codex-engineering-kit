@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for the legacy identity audit: no allowlist, contents/names/directories all checked."""
+"""Tests for the legacy identity audit and its bounded evidence classifications."""
 
 from __future__ import annotations
 
@@ -44,12 +44,20 @@ class AuditTests(unittest.TestCase):
         self.write("src/app.ts", "export const name = 'afyx-graph';\n")
         self.assertEqual(run_audit(self.repo).returncode, 0)
 
-    def test_neutral_legal_attribution_passes(self) -> None:
+    def test_legal_provenance_is_classified(self) -> None:
         self.write(
             "afyx-graph/THIRD_PARTY_NOTICES.md",
-            "Portions of Afyx Graph incorporate software originally authored by Colby Mchenry.\n",
+            f"Portions of Afyx Graph incorporate historical {PRODUCT} software.\n",
         )
-        self.assertEqual(run_audit(self.repo).returncode, 0)
+        result = run_audit(self.repo)
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("LEGAL_PROVENANCE=1", result.stdout)
+
+    def test_historical_evidence_is_classified(self) -> None:
+        self.write("docs/AFYX_INDEPENDENCE_PLAN.md", f"Historical ancestor: {PRODUCT}.\n")
+        result = run_audit(self.repo)
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("HISTORICAL_EVIDENCE=1", result.stdout)
 
     def test_source_reference_fails_and_is_redacted(self) -> None:
         self.write("src/app.ts", f"const legacy = '{PRODUCT}';\n")
@@ -58,8 +66,8 @@ class AuditTests(unittest.TestCase):
         self.assertIn("src/app.ts:1", result.stdout)
         self.assertNotIn(PRODUCT, result.stdout.lower())
 
-    def test_no_file_is_exempt(self) -> None:
-        for rel in ("afyx-graph/THIRD_PARTY_NOTICES.md", "README.md", "scripts/audit-legacy-identity.py"):
+    def test_active_files_are_not_exempt(self) -> None:
+        for rel in ("README.md", "scripts/audit-legacy-identity.py", "src/runtime.ts"):
             with self.subTest(rel=rel):
                 self.write(rel, f"{PRODUCT}\n")
                 self.assertEqual(run_audit(self.repo).returncode, 1)
@@ -84,8 +92,14 @@ class AuditTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("file name", result.stdout)
 
-    def test_legacy_directory_name_fails_even_when_empty(self) -> None:
+    def test_external_index_directory_is_classified(self) -> None:
         (self.repo / f".{PRODUCT}").mkdir()
+        result = run_audit(self.repo)
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("EXTERNAL_EXCEPTION=1", result.stdout)
+
+    def test_nested_legacy_directory_name_fails_even_when_empty(self) -> None:
+        (self.repo / "src" / f".{PRODUCT}").mkdir(parents=True)
         result = run_audit(self.repo)
         self.assertEqual(result.returncode, 1)
         self.assertIn("directory name", result.stdout)

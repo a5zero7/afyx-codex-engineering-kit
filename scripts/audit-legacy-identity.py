@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Independence gate: the working tree must carry no legacy product identity.
+"""Independence gate: active product surfaces must carry no legacy identity.
 
 The forbidden tokens are assembled from neutral fragments, so this file never
-contains them and is scanned like every other file. There is no allowlist:
-file contents, tracked and untracked file names, and directory names must all be
-free of the legacy identity. Matches are redacted in the output. Zero-token and
-deterministic; reads the repository only.
+contains them and is scanned like every other active file. Exact historical and
+legal evidence files are classified rather than erased, and the ignored local
+developer index is an external exception. Matches are redacted in the output.
+Zero-token and deterministic; reads the repository only.
 
 usage: audit-legacy-identity.py [--root DIR]
 """
@@ -23,6 +23,15 @@ FORBIDDEN_TOKENS = ("code" + "graph", "colby" + "mchenry")
 PATTERN = re.compile("|".join(re.escape(token) for token in FORBIDDEN_TOKENS), re.IGNORECASE)
 REDACTION = "<legacy-identity>"
 SKIPPED_DIRECTORIES = {".git", "node_modules"}
+PERMITTED_CONTENT_PATHS = {
+    "docs/AFYX_INDEPENDENCE_PLAN.md": "HISTORICAL_EVIDENCE",
+    "docs/AFYX_PHASE5F_THIRD_PARTY_REPLACEMENT.md": "HISTORICAL_EVIDENCE",
+    "docs/AFYX_V1_MASTER_ROADMAP.md": "HISTORICAL_EVIDENCE",
+    "afyx-graph/THIRD_PARTY_NOTICES.md": "LEGAL_PROVENANCE",
+    "afyx-graph/LICENSES/THIRD_PARTY_ENGINE_MIT.txt": "LEGAL_PROVENANCE",
+    "afyx-graph/engine/LICENSE": "LEGAL_PROVENANCE",
+}
+EXTERNAL_DIRECTORY = "." + FORBIDDEN_TOKENS[0]
 
 
 def repository_files(root: Path) -> list[str]:
@@ -33,14 +42,22 @@ def repository_files(root: Path) -> list[str]:
     return [line for line in out.splitlines() if line and (root / line).is_file()]
 
 
-def directory_names(root: Path) -> list[str]:
+def directory_names(root: Path) -> tuple[list[str], list[str]]:
     found: list[str] = []
+    external: list[str] = []
     for current, dirs, _files in os.walk(root):
-        dirs[:] = [name for name in dirs if name not in SKIPPED_DIRECTORIES]
+        relative_current = Path(current).relative_to(root)
+        if relative_current == Path(".") and EXTERNAL_DIRECTORY in dirs:
+            external.append(EXTERNAL_DIRECTORY)
+        dirs[:] = [
+            name for name in dirs
+            if name not in SKIPPED_DIRECTORIES
+            and not (relative_current == Path(".") and name == EXTERNAL_DIRECTORY)
+        ]
         for name in dirs:
             if PATTERN.search(name):
                 found.append(Path(current, name).relative_to(root).as_posix())
-    return found
+    return found, external
 
 
 def redact(text: str) -> str:
@@ -53,6 +70,7 @@ def main() -> int:
     root = Path(parser.parse_args().root).resolve()
 
     findings: list[str] = []
+    permitted = {"HISTORICAL_EVIDENCE": 0, "LEGAL_PROVENANCE": 0, "EXTERNAL_EXCEPTION": 0}
     for rel in repository_files(root):
         if PATTERN.search(rel):
             findings.append(f"{redact(rel)}: file name carries the legacy identity")
@@ -61,11 +79,17 @@ def main() -> int:
         except OSError:
             continue
         hits = [(number, line.strip()) for number, line in enumerate(text.splitlines(), start=1) if PATTERN.search(line)]
+        classification = PERMITTED_CONTENT_PATHS.get(Path(rel).as_posix())
+        if classification:
+            permitted[classification] += len(hits)
+            continue
         for number, line in hits[:3]:
             findings.append(f"{redact(rel)}:{number}: {redact(line)[:120]}")
         if len(hits) > 3:
             findings.append(f"{redact(rel)}: ... {len(hits) - 3} more")
-    for directory in directory_names(root):
+    directories, external_directories = directory_names(root)
+    permitted["EXTERNAL_EXCEPTION"] += len(external_directories)
+    for directory in directories:
         findings.append(f"{redact(directory)}/: directory name carries the legacy identity")
 
     if findings:
@@ -74,7 +98,13 @@ def main() -> int:
             print(f"  {finding}")
         print(f"Legacy identity audit: FAIL ({len(findings)} finding line(s))")
         return 1
-    print("Legacy identity audit: PASS (contents, file names and directory names are clean)")
+    print("Legacy identity audit: PASS (active contents, file names and directory names are clean)")
+    print(
+        "Permitted classified residue: "
+        f"HISTORICAL_EVIDENCE={permitted['HISTORICAL_EVIDENCE']} "
+        f"LEGAL_PROVENANCE={permitted['LEGAL_PROVENANCE']} "
+        f"EXTERNAL_EXCEPTION={permitted['EXTERNAL_EXCEPTION']}"
+    )
     return 0
 
 

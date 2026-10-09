@@ -12,6 +12,20 @@ Classification: `INDEPENDENCE_PLAN_READY_WITH_GAPS`
 > 5B — Native MCP/CLI Runtime Reimplementation. Historical evidence blocks,
 > SHAs, counts, PR numbers, and measurements remain unchanged.
 
+> **Phase 5G closure notice (2026-10-09):** starting from
+> `f7f3294bdbb4150a3e037622feda9ad6e1a164d8`, the active legacy-identity,
+> runtime-config, path/env, implementation-residue, obsolete-compatibility, and
+> unclassified-residue counts are all zero. Ninety-two historical ticket labels
+> were removed from shipped source/script comments and replaced with behavioral
+> terminology; executable behavior did not change. The permitted ledger retains
+> 144 historical evidence references, three legal-provenance files, one ignored
+> external developer-index directory, and 150 non-product false positives (145
+> ephemeral test-directory prefixes and five generic “code graph” domain
+> phrases). Identity audit tests, static validators, clean production/UI build,
+> CLI/MCP smoke, npm-pack inventory, and the staged distribution scan pass.
+> Phase 5F viability evidence remains valid. Technical Alpha is inactive; the
+> exact next boundary is Phase 5H — Historical License Closure.
+
 This document records technical provenance and plans implementation closure. It
 does not make a legal conclusion, authorize removal of attribution, or begin a
 rewrite. Detailed machine-readable evidence is stored outside the repository in

@@ -6,7 +6,7 @@ Contract revision: **2026-10-08**
 v1 scope policy: **FROZEN — Phase 1 through Phase 11**  
 Post-v1 policy: **PLANNED EXPANSION — not a v1 release blocker**
 
-Current work: **Phase 5F — Third-Party Source / Runtime Replacement**  
+Current work: **Phase 5G — Legacy Product Identity / Historical Artifact Eradication (COMPLETE)**
 Task: `AFYX-91852`  
 Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`  
 Active implementation branch: `afyx/native-phase5f-parser-grammar`  
@@ -19,7 +19,7 @@ Latest verified Phase 5F grammar/packaging checkpoint: `a21d7b710f9c4e0c02f46109
 Latest verified Phase 5F parser-runtime isolation checkpoint: `080074f81f0cf5628f61e977a93abc1d75d00b6b`  
 Native-kernel closure starting checkpoint: `89302e45c8222e64c18885499f8aa556ae103960`
 Phase 5F final artifact/product viability audit: **PASS**
-Next boundary: **Phase 5G — not started**
+Next boundary: **Phase 5H — Historical License Closure (not started)**
 Last merged Phase 5F major checkpoint: **PR #57 — Utility Runtime + UI Runtime**  
 Phase 5E merge baseline: `48b6078ed37349e405213258819fa5225bcdb3fb`
 
@@ -777,7 +777,57 @@ still requires Phase 5G, Phase 5H, and Phase 5I PASS.
 
 ### Phase 5G — Legacy Product Identity / Historical Artifact Eradication
 
-Status: **PENDING**
+Status: **COMPLETE**
+
+Canonical starting HEAD: `f7f3294bdbb4150a3e037622feda9ad6e1a164d8`.
+
+The inventory classified every literal identity family before editing. Active
+source held 91 historical ticket labels and the shipped explore benchmark held
+one; all 92 were replaced with behavior-owned terminology without changing
+executable code. The remaining ledger is deliberately non-active:
+
+- `HISTORICAL_EVIDENCE`: 144 textual references (143 regression/evidence
+  ticket references and one truthful ancestry reference);
+- `LEGAL_PROVENANCE`: three retained attribution/license files;
+- `EXTERNAL_EXCEPTION`: one ignored local developer-index directory;
+- `FALSE_POSITIVE`: 145 ephemeral `cg-*` test-directory prefixes plus five
+  uses of the generic domain phrase “code graph”.
+
+The `cg-*` prefixes are arbitrary test isolation names: they are not shipped,
+runtime-reachable, user-visible, configuration, compatibility aliases, or
+product identity. Current Afyx compatibility surfaces (public installer
+exports, provider migration cleanup, schema migration, CLI contracts, and
+daemon upgrade safety) remain because they have current V1 value; none is a
+historical-product compatibility dependency.
+
+The identity audit now enforces active surfaces while classifying the exact
+historical/legal evidence paths and ignored external index instead of erasing
+truthful evidence. Its focused suite passes 10/10. Static identity metadata,
+the repository evaluator, clean TypeScript/UI production build, 21-check
+CLI/MCP smoke, distribution verifier, npm-pack inventory, and a verified
+1,367-entry Windows bundle all pass. Package and bundle scans found zero active
+historical identity, historical config/path residue, or obsolete compatibility
+payload.
+
+Closure counts:
+
+```text
+ACTIVE_PRODUCT_IDENTITY        = 0
+ACTIVE_RUNTIME_CONFIG          = 0
+ACTIVE_PATH_OR_ENV             = 0
+ACTIVE_IMPLEMENTATION_RESIDUE  = 0
+OBSOLETE_COMPATIBILITY         = 0
+TEST_ONLY_OBSOLETE             = 0
+UNCLASSIFIED_RESIDUE           = 0
+V1_REQUIRED failure            = 0
+UNKNOWN product failure        = 0
+PHASE_5G                       = COMPLETE
+```
+
+Phase 5F product-viability evidence remains valid because Phase 5G changed no
+runtime behavior, dependency, parser, grammar, kernel, config, path, or public
+contract. Technical Alpha remains inactive. Phase 5H is the exact next
+boundary and is not started here.
 
 Contract items:
 
