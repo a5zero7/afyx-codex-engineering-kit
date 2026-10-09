@@ -799,7 +799,6 @@ describe('Generator Function Extraction (#1741)', () => {
       .sort();
 
   it('extracts function* and async function* declarations in TypeScript', () => {
-    process.env.AFYX_GRAPH_KERNEL = '0';
     const code = `
 function plain() { return 1; }
 function* gen() { yield 2; }
@@ -810,7 +809,6 @@ async function* asyncGen() { yield 4; }
   });
 
   it('extracts function* and async function* declarations in JavaScript', () => {
-    process.env.AFYX_GRAPH_KERNEL = '0';
     const code = `
 function plain() { return 1; }
 function* gen() { yield 2; }
@@ -821,7 +819,6 @@ async function* asyncGen() { yield 4; }
   });
 
   it('extracts const-assigned generator and async generator expressions (TS)', () => {
-    process.env.AFYX_GRAPH_KERNEL = '0';
     const code = `
 const g = function* () { yield 1; };
 const ag = async function* () { yield 2; };
@@ -835,7 +832,6 @@ export const exportedGen = function* () { yield 3; };
   });
 
   it('extracts const-assigned generator and async generator expressions (JS)', () => {
-    process.env.AFYX_GRAPH_KERNEL = '0';
     const code = `
 const g = function* () { yield 1; };
 const ag = async function* () { yield 2; };

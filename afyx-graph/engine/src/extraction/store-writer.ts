@@ -19,23 +19,8 @@ export interface StoreBundle {
 }
 
 /**
- * A kernel deferred-decode payload: the file's raw table buffers plus the
- * FileRecord the main thread built from meta counts. The store WORKER decodes
- * and finalizes (same filters as the object path), so per-node objects never
- * exist on the main thread.
- */
-export interface KernelStoreBundle {
-  kernel: true;
-  filePath: string;
-  language: Language;
-  buffers: NonNullable<ExtractionResult['kernelBuffers']>;
-  file: FileRecord;
-}
-
-/**
  * The validation/denormalization every bundle gets before storeFileBundle —
- * shared by the orchestrator's object path and the store worker's kernel
- * decode path so the two can never drift:
+ * shared by the orchestrator and store worker so the two can never drift:
  *   - nodes missing identity fields are dropped (#42-class safety),
  *   - edges must connect inserted nodes (FK integrity),
  *   - refs must originate from inserted nodes and carry the denormalized
@@ -146,7 +131,7 @@ export class StoreWriter {
   }
 
   /** Post one file's bundle. Throws immediately if the writer already failed. */
-  send(bundle: StoreBundle | KernelStoreBundle): void {
+  send(bundle: StoreBundle): void {
     if (this.firstError) throw this.firstError;
     if (this.exited) throw new Error('store worker already exited');
     this.outstanding++;

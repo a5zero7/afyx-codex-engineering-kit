@@ -3140,3 +3140,103 @@ TREE_SITTER_WASMS                          0
 ```
 
 The exact next boundary is **Native Kernel Closure**.
+
+## Native Kernel Closure
+
+This boundary starts from `89302e45c8222e64c18885499f8aa556ae103960`.
+The optional Rust/N-API kernel was reachable only as an acceleration path: a
+missing, disabled, deferred, stale, or failing kernel always selected the
+Afyx-native TypeScript extractor. `POST_PASSES` was empty, framework extraction
+already forced decoded TypeScript behavior, and the native C function-pointer
+sweep retained a record-identical TypeScript implementation. It therefore had
+no unique correctness or frozen V1 contribution.
+
+```text
+KERNEL_VALUE = NONE
+```
+
+The frozen native performance baseline remains the product performance
+authority. No evidence established a material kernel benefit sufficient to
+justify a second language toolchain, platform binary loading, dedicated worker
+transport, 74 Cargo packages, or 66,249,394 tracked bytes. Speculative optional
+acceleration is not retained.
+
+### Inventory and disposition
+
+| Component | Previous role | Reachability | Ownership | Final state |
+| --- | --- | --- | --- | --- |
+| Rust extractors and N-API entrypoint | `PERFORMANCE_ONLY` optional extractor | production when a compatible binary was present | Afyx glue plus third-party Rust crates and grammar implementations | removed |
+| `Cargo.toml`, `Cargo.lock`, `build.rs` | `BUILD_ONLY` native build | release/CI build | 74 resolved third-party packages | removed |
+| generated Dart/Kotlin/Lua/Scala grammar C | `VENDORED_THIRD_PARTY` | compiled into optional kernel | 23 files / 65,228,661 bytes | removed |
+| TypeScript kernel loader/router/decoder/layout | `HISTORICAL_COMPATIBILITY` and performance transport | parse worker and store boundary | Afyx transition code coupled to native ABI | removed |
+| raw kernel buffers/counts and store-worker decode | `PERFORMANCE_ONLY` | fresh-index worker path | kernel-specific protocol | removed |
+| native C function-pointer sweep | `PERFORMANCE_ONLY` | optional resolution acceleration | Rust implementation plus N-API boundary | removed; established TypeScript path retained |
+| build script, bundle staging, Cargo CI | `BUILD_ONLY` | build/release | native toolchain and binary distribution | removed |
+| parity/defer/materialization tests and fixtures | `TEST_ONLY` | tests only | kernel-specific oracle/infrastructure | removed |
+| historical legal/provenance evidence | legal history | no runtime reachability | evidence only | retained unchanged for Phase 5H |
+
+Direct crate families removed were N-API (`napi`, `napi-derive`, `napi-build`),
+Tree-sitter core/language crates, `sha2`, `regex`, `libc`, `cc`, and
+`tree-sitter-language`, together with their transitive lock graph. Their prior
+MIT or MIT/Apache-2.0 upstream licensing remains historical evidence; none is
+now a shipped kernel dependency. Vendored/generated grammar source and its
+embedded licenses were removed from the technical product tree; repository
+legal records were intentionally not cleaned in this boundary.
+
+### Runtime, build, and distribution closure
+
+The parse worker now calls `extractFromSource` directly. Extraction admission,
+the store writer, and retry paths carry only normal `ExtractionResult` objects.
+The bundle script cannot stage a kernel, the package exposes no kernel build
+command, and normal CI no longer owns a Cargo/kernel job.
+
+Artifact audit after a clean build:
+
+```text
+tracked kernel source / Cargo payload     0
+dist kernel/native-library matches        0
+npm pack kernel/Cargo/vendor/native       0
+win32-x64 kernel/Cargo/vendor/native      0
+win32-x64 native libraries                0
+
+dist bytes                         8,995,476
+npm pack compressed                2,233,424
+npm pack unpacked                  9,162,832
+win32-x64 archive                 37,276,780
+```
+
+The four npm paths containing `cargo-workspace` are Afyx's JavaScript framework
+resolver, not Cargo manifests, vendor payload, native source, or libraries.
+
+### Validation and final state
+
+```text
+focused extraction/worker/c-fnptr/distribution         93/93 PASS
+resolution/context/impact/affected ground truth      106/106 PASS
+CLI/MCP smoke                                          21/21 PASS
+TypeScript typecheck                                        PASS
+clean production/UI build                                  PASS
+distribution contract                                  10/10 PASS
+npm pack                                                     PASS
+win32-x64 bundle                                             PASS
+```
+
+The default semantic fixture still differs only in the two previously frozen
+runtime/index-derived floating search scores (`parseToken` and `./parser`);
+graph shape, nodes, edges, relations, and all non-ranking contract content are
+unchanged. This is reused frozen evidence, not a kernel-removal regression.
+
+```text
+V1_REQUIRED failure                     0
+UNKNOWN product failure                 0
+
+third-party kernel ownership            0
+third-party native crates               0
+vendored/generated grammar source       0
+kernel runtime dependency               0
+
+NATIVE_KERNEL_CLOSURE              CLOSED
+THIRD_PARTY_KERNEL_OWNERSHIP             0
+```
+
+The exact next boundary is **Runtime / Distribution Closure**.

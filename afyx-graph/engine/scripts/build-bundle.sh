@@ -60,19 +60,6 @@ stage_application() {
   rm -f "$STAGE/lib/package-lock.json"
 }
 
-stage_optional_kernel() {
-  local candidate
-  for candidate in "$ENGINE_ROOT/release/kernel/$TARGET/afyx-graph-kernel.node" "$ENGINE_ROOT/afyx-graph-kernel/prebuilds/$TARGET/afyx-graph-kernel.node"; do
-    if [ -f "$candidate" ]; then
-      mkdir -p "$STAGE/lib/kernel"
-      cp "$candidate" "$STAGE/lib/kernel/afyx-graph-kernel.node"
-      echo "[bundle] native kernel included ($candidate)"
-      return
-    fi
-  done
-  echo "[bundle] no optional native kernel for $TARGET — bundle uses the native TypeScript extraction path"
-}
-
 write_launcher() {
   if [ "$FAMILY" = "win32" ]; then
     cp "$RUNTIME_SOURCE" "$STAGE/node.exe"
@@ -118,7 +105,6 @@ echo "[bundle] target=$TARGET node=$NODE_VERSION"
 fetch_runtime
 build_application
 stage_application
-stage_optional_kernel
 write_launcher
 node "$CONTRACT" verify-bundle --root "$STAGE" --target "$TARGET" >/dev/null
 archive_bundle

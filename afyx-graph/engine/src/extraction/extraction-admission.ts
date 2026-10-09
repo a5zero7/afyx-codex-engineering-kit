@@ -9,7 +9,6 @@ import type {
 } from '../types';
 import type { QueryBuilder } from '../db/queries';
 import type { MaybeYield } from '../resolution/cooperative-yield';
-import { materializeKernelResult } from './kernel';
 import { detectGeneratedFile } from './generated-detection';
 import { hashContent } from './content-hash';
 import { isFileLevelOnlyLanguage } from './grammars';
@@ -123,10 +122,9 @@ export class ExtractionAdmission {
     content: string,
     language: Language,
     stats: ExtractionFileStat,
-    rawResult: ExtractionResult,
+    result: ExtractionResult,
     onYield?: MaybeYield,
   ): Promise<void> {
-    const result = materializeKernelResult(rawResult, filePath, language);
     const contentHash = hashContent(content);
     const existing = this.queries.getFileByPath(filePath);
 

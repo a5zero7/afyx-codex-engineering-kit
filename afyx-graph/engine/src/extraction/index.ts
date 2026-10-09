@@ -18,7 +18,6 @@ import {
 import { QueryBuilder } from '../db/queries';
 import { ParseWorkerPool, resolveParsePoolSize, resolveParseTimeoutMs } from './parse-pool';
 import { StoreWriter } from './store-writer';
-import { materializeKernelResult } from './kernel';
 import { isSourceFile, isLanguageSupported, isFileLevelOnlyLanguage } from './grammars';
 import { loadExtensionOverrides, loadIncludeIgnoredPatterns, loadExcludePatterns, loadIncludePatterns, PROJECT_CONFIG_FILENAME } from '../project-config';
 import { isAfyxGraphDataDir } from '../directory';
@@ -2041,33 +2040,18 @@ export class ExtractionOrchestrator {
       const bp = walBackpressure?.();
       if (bp) await bp;
 
-      // Kernel deferred-decode results carry table sizes in kernelCounts
-      // (their object arrays are empty — decode happens at the store).
-      const nodeCount = result.kernelCounts?.nodes ?? result.nodes.length;
-      const edgeCount = result.kernelCounts?.edges ?? result.edges.length;
+      const nodeCount = result.nodes.length;
+      const edgeCount = result.edges.length;
 
       // Store: on the writer thread when active (fresh DB — bundles applied
       // in the same file order this chain dispatches them), else on the main
       // thread (SQLite connections are per-thread).
       const language = extractorRegistry.languageFor(filePath, content);
       if (storeWriter) {
-        if (result.kernelBuffers) {
-          // Buffers go to the writer as-is; the worker decodes + finalizes.
-          // The main thread's only per-file work stays O(1) + the content hash.
-          storeWriter.send({
-            kernel: true,
-            filePath,
-            language,
-            buffers: result.kernelBuffers,
-            file: this.admission.fileRecord(filePath, content, language, stats, nodeCount, result.errors),
-          });
-        } else {
-          storeWriter.send(this.admission.freshBundle(filePath, content, language, stats, result));
-        }
+        storeWriter.send(this.admission.freshBundle(filePath, content, language, stats, result));
         await storeWriter.waitBelow(STORE_WRITER_WINDOW);
       } else {
-        const materialized = materializeKernelResult(result, filePath, language);
-        await this.admission.admit(filePath, content, language, stats, materialized, commitYield);
+        await this.admission.admit(filePath, content, language, stats, result, commitYield);
       }
 
       if (result.errors.length > 0) {
@@ -2342,14 +2326,7 @@ export class ExtractionOrchestrator {
           continue;
         }
 
-        // The pool hands kernel results back as an undecoded buffer transport
-        // (`nodes`/`edges` EMPTY, tables in kernelBuffers). The main loop
-        // decodes or forwards to the store worker; this path stores directly,
-        // so decode here — otherwise a kernel-language retry passes the gate
-        // below via `errors.length === 0`, stores nothing, and the file is
-        // permanently recorded as "(0 symbols)" with the error erased (#1541).
         const language = extractorRegistry.languageFor(filePath, content);
-        result = materializeKernelResult(result, filePath, language);
 
         if (result.nodes.length > 0 || result.errors.length === 0) {
           const stats = await fsp.stat(path.join(this.rootDir, filePath));
@@ -2400,9 +2377,7 @@ export class ExtractionOrchestrator {
             continue;
           }
 
-          // Same undecoded-transport hazard as the first retry pass (#1541).
           const language = extractorRegistry.languageFor(filePath, fullContent);
-          result = materializeKernelResult(result, filePath, language);
 
           if (result.nodes.length > 0 || result.errors.length === 0) {
             const stats = await fsp.stat(path.join(this.rootDir, filePath));

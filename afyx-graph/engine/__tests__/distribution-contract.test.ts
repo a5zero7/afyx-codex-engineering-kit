@@ -102,6 +102,12 @@ describe('Afyx distribution contract', () => {
     expect(() => verifyBundle(root, 'win32-x64')).toThrow(/parser runtime/);
   });
 
+  it('rejects staged native kernel source or runtime', () => {
+    const root = bundle();
+    file(root, 'lib/kernel/afyx-graph-kernel.node');
+    expect(() => verifyBundle(root, 'win32-x64')).toThrow(/native kernel/);
+  });
+
   it('rejects wrong CLI metadata', () => {
     const root = bundle();
     file(root, 'lib/package.json', JSON.stringify({ name: '@a5zero7/afyx-graph', bin: { 'afyx-graph': './wrong.js' } }));

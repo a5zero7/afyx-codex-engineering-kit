@@ -67,7 +67,6 @@ describe('Afyx Graph environment namespace', () => {
 
   it('importing the product identity adds no environment variables', async () => {
     process.env.AFYX_GRAPH_NO_DAEMON = '1';
-    process.env.AFYX_GRAPH_KERNEL = '0';
     const before = new Set(Object.keys(process.env));
     await import('../src/product');
     await import('../src/directory');

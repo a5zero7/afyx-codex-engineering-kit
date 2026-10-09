@@ -1,8 +1,8 @@
 name: Afyx Graph Build
 
 # Normal Afyx Graph CI: host build, unit tests, semantic baseline, CLI smoke and
-# MCP smoke on Linux, Windows and macOS (Node 24), plus Cargo verification of the
-# native kernel. Zero-model. The six platform bundles are built only by
+# MCP smoke on Linux, Windows and macOS (Node 24). Zero-model. The six platform
+# bundles are built only by
 # graph-release.yml, not on every pull request.
 
 on:
@@ -107,37 +107,3 @@ jobs:
       - name: CLI and MCP smoke
         working-directory: afyx-graph/engine
         run: npm run test:smoke
-
-  rust-kernel:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: afyx-graph/engine/package-lock.json
-      - name: Toolchain versions
-        run: |
-          rustc --version
-          cargo --version
-      - name: Cargo check
-        working-directory: afyx-graph/engine/afyx-graph-kernel
-        run: cargo check --locked --all-targets
-      - name: Cargo test
-        working-directory: afyx-graph/engine/afyx-graph-kernel
-        run: cargo test --locked
-      - name: Install locked dependencies
-        working-directory: afyx-graph/engine
-        run: npm ci
-      - name: Clean build
-        working-directory: afyx-graph/engine
-        run: npm run build:clean
-      - name: Build the native kernel
-        working-directory: afyx-graph/engine
-        run: bash scripts/build-kernel.sh
-      - name: Kernel parity tests (the built kernel must load)
-        working-directory: afyx-graph/engine
-        env:
-          AFYX_GRAPH_KERNEL_EXPECT: '1'
-        run: npx vitest run __tests__/kernel-

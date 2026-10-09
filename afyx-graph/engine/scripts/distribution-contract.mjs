@@ -113,6 +113,16 @@ export function verifyBundle(root, target) {
   if (parserRuntimeFiles.length > 0) {
     throw new DistributionError('bundle must not contain a third-party parser runtime');
   }
+  const kernelFiles = walkFiles(lib).filter((file) => {
+    const shippedPath = relative(lib, file).split(sep).join('/').toLowerCase();
+    return shippedPath.includes('afyx-graph-kernel') ||
+      shippedPath.startsWith('kernel/') ||
+      shippedPath.endsWith('/cargo.toml') ||
+      shippedPath.endsWith('/cargo.lock');
+  });
+  if (kernelFiles.length > 0) {
+    throw new DistributionError('bundle must not contain native kernel source or runtime');
+  }
   for (const forbidden of ['src', '__tests__', 'ui']) {
     if (existsSync(join(lib, forbidden))) throw new DistributionError(`development-only lib/${forbidden} is packaged`);
   }

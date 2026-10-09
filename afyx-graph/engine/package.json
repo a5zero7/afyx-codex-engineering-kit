@@ -26,7 +26,6 @@
     "preuninstall": "node dist/bin/uninstall.js",
     "copy-assets": "node -e \"const fs=require('fs');fs.mkdirSync('dist/db',{recursive:true});fs.copyFileSync('src/db/schema.sql','dist/db/schema.sql')\"",
     "dev": "tsc --watch",
-    "build:kernel": "bash scripts/build-kernel.sh",
     "cli": "npm run build && node dist/bin/afyx-graph.js",
     "build:clean": "npm run clean && npm run build",
     "pretest": "node scripts/check-dist-clean.mjs",

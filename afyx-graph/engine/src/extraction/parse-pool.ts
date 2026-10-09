@@ -197,11 +197,8 @@ export class ParseWorkerPool {
     } else if (opts.workerScriptPath) {
       const scriptPath = opts.workerScriptPath;
       // Deliberately no `resourceLimits.stackSizeMb`: a bigger worker stack
-      // only moves the cliff a deeply nested file falls off (#1581 — the
-      // 8 MiB main thread still dies at 100k levels). The native kernel
-      // guards its own recursion against THIS thread's real stack bounds
-      // (afyx-graph-kernel/src/stack.rs) and defers such a file to the
-      // TypeScript-native path, which catches its JS RangeError per file.
+      // only moves the cliff a deeply nested file falls off (#1581). The
+      // TypeScript-native path catches a JS RangeError per file.
       this.createWorker = () => new Worker(scriptPath);
     } else {
       throw new Error('ParseWorkerPool requires workerScriptPath or createWorker');

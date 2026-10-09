@@ -17,7 +17,8 @@ Latest verified Phase 5F fallback-closure checkpoint: `16c8e84ce7dc036141a680dba
 Latest verified Phase 5F bootstrap/protocol checkpoint: `81695bb7659bd05a06f00e9fe0e36d5e6e933191`  
 Latest verified Phase 5F grammar/packaging checkpoint: `a21d7b710f9c4e0c02f461096e9f39a47171a664`  
 Latest verified Phase 5F parser-runtime isolation checkpoint: `080074f81f0cf5628f61e977a93abc1d75d00b6b`  
-Current Phase 5F boundary: **Native Kernel Closure**
+Native-kernel closure starting checkpoint: `89302e45c8222e64c18885499f8aa556ae103960`
+Current Phase 5F boundary: **Runtime / Distribution Closure**
 Last merged Phase 5F major checkpoint: **PR #57 — Utility Runtime + UI Runtime**  
 Phase 5E merge baseline: `48b6078ed37349e405213258819fa5225bcdb3fb`
 
@@ -648,7 +649,7 @@ No supported v1 language may be silently dropped to simplify independence.
 
 #### 5F.5 — Native Kernel Closure
 
-Status: **PENDING**
+Status: **COMPLETE**
 
 Contract items:
 
@@ -664,6 +665,17 @@ Contract items:
 Exit:
 
 > Shipped Afyx product has no third-party native-kernel ownership.
+
+Closure state:
+
+```text
+KERNEL_VALUE = NONE
+third-party kernel ownership = 0
+third-party native crates = 0
+vendored/generated grammar source = 0
+kernel runtime dependency = 0
+NATIVE_KERNEL_CLOSURE = CLOSED
+```
 
 #### 5F.6 — Runtime / Distribution Closure
 
