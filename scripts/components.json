@@ -53,8 +53,8 @@
       "version_source": "metadata.json#product_version",
       "version_required": "true",
       "required_files": "metadata.json",
-      "required_files_windows": "current/bin/afyx-graph.cmd;current/node.exe",
-      "required_files_unix": "current/bin/afyx-graph;current/node",
+      "required_files_windows": "current/bin/afyx-graph.cmd",
+      "required_files_unix": "current/bin/afyx-graph",
       "marker_file": "metadata.json",
       "marker_field": "product_name",
       "marker_value": "Afyx Graph"

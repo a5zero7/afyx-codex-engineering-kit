@@ -131,6 +131,19 @@ if re.search(r"https?://", notices_text):
 # truth and the shell must consume its legal-file staging command.
 bundle_script = bundle_script_path.read_text(encoding="utf-8")
 distribution_product = json.loads(distribution_product_path.read_text(encoding="utf-8"))
+runtime = distribution_product.get("runtime", {})
+if runtime != {
+    "name": "Node.js",
+    "ownership": "external_platform",
+    "executable": "node",
+    "minimumVersion": "22.5.0",
+}:
+    fail(f"distribution runtime contract is invalid: {runtime!r}")
+if package.get("engines", {}).get("node") != f">={runtime['minimumVersion']}":
+    fail("package engine floor differs from the distribution runtime contract")
+for forbidden in ("nodejs.org/dist", "npm ci --omit=dev", '"$STAGE/node"', '"$STAGE/node.exe"'):
+    if forbidden in bundle_script:
+        fail(f"build-bundle.sh still owns a bundled runtime/dependency tree: {forbidden}")
 planned_legal_paths = {
     entry.get("bundlePath")
     for entry in distribution_product.get("legalFiles", [])

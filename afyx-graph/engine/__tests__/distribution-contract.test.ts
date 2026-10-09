@@ -33,8 +33,7 @@ function bundle(): string {
   file(root, 'metadata.json', JSON.stringify({ product_name: 'Afyx Graph', cli: 'afyx-graph' }));
   file(root, 'licenses/THIRD_PARTY_NOTICES.md');
   file(root, 'licenses/THIRD_PARTY_ENGINE_MIT.txt');
-  file(root, 'node.exe');
-  file(root, 'bin/afyx-graph.cmd', 'node.exe lib\\dist\\bin\\afyx-graph.js');
+  file(root, 'bin/afyx-graph.cmd', 'where node\nNode.js was not found on PATH\nnode --disable-warning lib\\dist\\bin\\afyx-graph.js');
   return root;
 }
 
@@ -52,7 +51,12 @@ describe('Afyx distribution contract', () => {
       productName: 'Afyx Graph',
       packageName: '@a5zero7/afyx-graph',
       cli: 'afyx-graph',
-      defaultNodeVersion: 'v24.16.0',
+      runtime: {
+        name: 'Node.js',
+        ownership: 'external_platform',
+        executable: 'node',
+        minimumVersion: '22.5.0',
+      },
     });
     expect(artifactPlan('linux-x64')).toMatchObject({
       family: 'linux',
@@ -65,7 +69,7 @@ describe('Afyx distribution contract', () => {
       family: 'win32',
       arch: 'arm64',
       archiveName: 'afyx-graph-win32-arm64.zip',
-      runtimeName: 'node.exe',
+      runtime: { ownership: 'external_platform', minimumVersion: '22.5.0' },
       launcherPath: 'bin/afyx-graph.cmd',
     });
     expect(() => artifactPlan('unsupported-x64')).toThrow(/unsupported target/);
@@ -80,7 +84,6 @@ describe('Afyx distribution contract', () => {
   });
 
   it.each([
-    ['runtime artifact', 'node.exe'],
     ['viewer asset', 'lib/dist/viewer/assets/app.js'],
     ['required notice', 'licenses/THIRD_PARTY_NOTICES.md'],
     ['launcher', 'bin/afyx-graph.cmd'],
@@ -94,6 +97,24 @@ describe('Afyx distribution contract', () => {
     const root = bundle();
     file(root, 'lib/src/stale.ts');
     expect(() => verifyBundle(root, 'win32-x64')).toThrow(/development-only/);
+  });
+
+  it.each(['node.exe', 'node'])('rejects bundled Node runtime %s', (runtime) => {
+    const root = bundle();
+    file(root, runtime);
+    expect(() => verifyBundle(root, 'win32-x64')).toThrow(/bundled Node runtime/);
+  });
+
+  it('rejects any shipped node_modules tree', () => {
+    const root = bundle();
+    file(root, 'lib/node_modules/example/index.js');
+    expect(() => verifyBundle(root, 'win32-x64')).toThrow(/node_modules/);
+  });
+
+  it('rejects a launcher without an actionable external-runtime diagnostic', () => {
+    const root = bundle();
+    file(root, 'bin/afyx-graph.cmd', 'node lib\\dist\\bin\\afyx-graph.js');
+    expect(() => verifyBundle(root, 'win32-x64')).toThrow(/external Node.js runtime contract/);
   });
 
   it('rejects a staged third-party parser runtime', () => {

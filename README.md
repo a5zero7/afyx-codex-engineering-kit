@@ -11,7 +11,7 @@ Paket ini memasang `efficient-coding` dan `odoo-engineering`, serta mengambil `p
 | Efficient Coding | Salinan utuh dari `~/.agents/skills/efficient-coding`, termasuk `references/` | Dipasang ke skill root yang dipilih tanpa mengubah isinya |
 | Odoo Engineering | Dibundel di repositori ini | Stable Odoo 10–20 |
 | Prompt Master | [nidhinjs/prompt-master](https://github.com/nidhinjs/prompt-master) | Dipasang atau diganti melalui staging, validasi, backup, dan swap aman |
-| Afyx Graph | Komponen Afyx, dibundel di `afyx-graph/` | Komponen opsional untuk structural intelligence lokal; runtime mandiri tanpa Node.js sistem |
+| Afyx Graph | Komponen Afyx, dibundel di `afyx-graph/` | Komponen opsional untuk structural intelligence lokal; memerlukan Node.js eksternal 22.5.0 atau lebih baru |
 | Headroom | [headroomlabs-ai/headroom](https://github.com/headroomlabs-ai/headroom) | Enhancement eksternal opsional; hanya dideteksi |
 | Codex Usage Tracking | Dibundel di `tools/codex-usage/` | Optional; ringkasan token/cost otomatis melalui global Stop hook |
 

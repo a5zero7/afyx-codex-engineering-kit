@@ -14,7 +14,7 @@ export function distributionTargets() {
   return [...DISTRIBUTION_PRODUCT.targets];
 }
 
-export function artifactPlan(target, nodeVersion = DISTRIBUTION_PRODUCT.defaultNodeVersion) {
+export function artifactPlan(target) {
   if (!DISTRIBUTION_PRODUCT.targets.includes(target)) {
     throw new DistributionError(`unsupported target: ${target}`);
   }
@@ -26,10 +26,9 @@ export function artifactPlan(target, nodeVersion = DISTRIBUTION_PRODUCT.defaultN
     target,
     family,
     arch,
-    nodeVersion,
     bundleName,
     archiveName: `${bundleName}.${family === 'win32' ? 'zip' : 'tar.gz'}`,
-    runtimeName: family === 'win32' ? 'node.exe' : 'node',
+    runtime: { ...DISTRIBUTION_PRODUCT.runtime },
     launcherPath: `bin/${family === 'win32' ? `${DISTRIBUTION_PRODUCT.cli}.cmd` : DISTRIBUTION_PRODUCT.cli}`,
     legalFiles: DISTRIBUTION_PRODUCT.legalFiles.map((entry) => ({ ...entry })),
   };
@@ -95,7 +94,11 @@ export function verifyBundle(root, target) {
     const file = requireFile(join(bundle, ...legal.bundlePath.split('/')), legal.bundlePath);
     if (statSync(file).size === 0) throw new DistributionError(`${legal.bundlePath} is empty`);
   }
-  requireFile(join(bundle, windows ? 'node.exe' : 'node'), windows ? 'node.exe' : 'node');
+  for (const bundledRuntime of ['node', 'node.exe']) {
+    if (existsSync(join(bundle, bundledRuntime))) {
+      throw new DistributionError(`bundle must not contain a bundled Node runtime: ${bundledRuntime}`);
+    }
+  }
   const launcher = requireFile(
     join(bundle, ...plan.launcherPath.split('/')),
     plan.launcherPath,
@@ -103,6 +106,9 @@ export function verifyBundle(root, target) {
   const launcherText = readFileSync(launcher, 'utf8');
   if (!launcherText.includes('lib') || !launcherText.includes('dist') || !launcherText.includes('afyx-graph.js')) {
     throw new DistributionError('launcher does not target lib/dist/bin/afyx-graph.js');
+  }
+  if (!launcherText.includes('Node.js was not found on PATH') || !launcherText.includes('node ')) {
+    throw new DistributionError('launcher does not enforce the external Node.js runtime contract');
   }
   const parserRuntimeFiles = walkFiles(lib).filter((file) => {
     const shippedPath = relative(lib, file).split(sep).join('/').toLowerCase();
@@ -122,6 +128,12 @@ export function verifyBundle(root, target) {
   });
   if (kernelFiles.length > 0) {
     throw new DistributionError('bundle must not contain native kernel source or runtime');
+  }
+  const shippedDependencies = walkFiles(bundle).filter((file) =>
+    relative(bundle, file).split(sep).some((part) => part === 'node_modules')
+  );
+  if (shippedDependencies.length > 0) {
+    throw new DistributionError('bundle must not contain node_modules');
   }
   for (const forbidden of ['src', '__tests__', 'ui']) {
     if (existsSync(join(lib, forbidden))) throw new DistributionError(`development-only lib/${forbidden} is packaged`);
@@ -168,9 +180,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     const command = process.argv[2];
     const root = resolve(argument('--root', SCRIPT_ROOT));
     if (command === 'targets') console.log(distributionTargets().join(' '));
-    else if (command === 'default-node-version') console.log(DISTRIBUTION_PRODUCT.defaultNodeVersion);
     else if (command === 'plan') {
-      const plan = artifactPlan(argument('--target', ''), argument('--node-version', DISTRIBUTION_PRODUCT.defaultNodeVersion));
+      const plan = artifactPlan(argument('--target', ''));
       const field = argument('--field', '');
       console.log(field ? String(plan[field] ?? '') : JSON.stringify(plan, null, 2));
     }
@@ -180,7 +191,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     else if (command === 'verify-dist') console.log(JSON.stringify(verifyEngineDistribution(root), null, 2));
     else if (command === 'verify-bundle') console.log(JSON.stringify(verifyBundle(root, argument('--target', '')), null, 2));
     else if (command === 'manifest') console.log(JSON.stringify(artifactManifest(root), null, 2));
-    else throw new DistributionError('usage: distribution-contract.mjs targets|default-node-version|plan|legal-files|verify-dist|verify-bundle|manifest [options]');
+    else throw new DistributionError('usage: distribution-contract.mjs targets|plan|legal-files|verify-dist|verify-bundle|manifest [options]');
   } catch (error) {
     console.error(`[distribution] ${error instanceof Error ? error.message : String(error)}`);
     process.exitCode = 1;

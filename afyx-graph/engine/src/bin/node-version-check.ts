@@ -6,17 +6,31 @@
  */
 
 /**
- * Lowest supported Node.js major version. Matches the `engines` floor in
- * package.json. Below this, Afyx Graph relies on language features / native APIs
+ * Lowest supported Node.js version. Matches the `engines` floor in package.json.
+ * Below this, Afyx Graph relies on language features / native APIs
  * that aren't present, and the combination is untested. `engines` alone only
  * *warns* on install (unless the user set `engine-strict`), so the CLI bootstrap
  * also hard-blocks here to actually enforce the floor.
  */
-export const MIN_NODE_MAJOR = 20;
+export const MIN_NODE_VERSION = '22.5.0';
+
+const MINIMUM = [22, 5, 0] as const;
+
+/** Return whether a Node version provides the built-in `node:sqlite` backend. */
+export function isSupportedNodeVersion(nodeVersion: string): boolean {
+  const match = /^(\d+)\.(\d+)\.(\d+)/.exec(nodeVersion);
+  if (!match) return false;
+  const current = match.slice(1).map(Number);
+  for (let index = 0; index < MINIMUM.length; index++) {
+    if (current[index]! > MINIMUM[index]!) return true;
+    if (current[index]! < MINIMUM[index]!) return false;
+  }
+  return true;
+}
 
 /**
- * Build the bordered banner shown when Afyx Graph detects a Node.js major below
- * {@link MIN_NODE_MAJOR}. Pinned via unit test so the recovery commands and the
+ * Build the bordered banner shown when Afyx Graph detects a Node.js version below
+ * {@link MIN_NODE_VERSION}. Pinned via unit test so the recovery commands and the
  * override env var can't be silently stripped by future edits.
  *
  * Uses ASCII glyphs to stay readable on Windows OEM-codepage consoles
@@ -28,7 +42,7 @@ export function buildNodeTooOldBanner(nodeVersion: string): string {
     sep,
     `[Afyx Graph] Unsupported Node.js version: ${nodeVersion}`,
     sep,
-    `Afyx Graph requires Node.js ${MIN_NODE_MAJOR} or newer. Older versions lack`,
+    `Afyx Graph requires Node.js ${MIN_NODE_VERSION} or newer. Older versions lack`,
     'language features and native APIs Afyx Graph depends on, and are not',
     'tested or supported.',
     '',

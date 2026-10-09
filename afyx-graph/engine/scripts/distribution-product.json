@@ -3,7 +3,12 @@
   "packageName": "@a5zero7/afyx-graph",
   "cli": "afyx-graph",
   "bundlePrefix": "afyx-graph",
-  "defaultNodeVersion": "v24.16.0",
+  "runtime": {
+    "name": "Node.js",
+    "ownership": "external_platform",
+    "executable": "node",
+    "minimumVersion": "22.5.0"
+  },
   "targets": [
     "darwin-arm64",
     "darwin-x64",

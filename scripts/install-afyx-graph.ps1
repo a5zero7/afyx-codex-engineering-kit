@@ -47,8 +47,7 @@ function Update-UserPath([switch]$Remove) {
 function Get-State {
     if (-not (Test-Path -LiteralPath $RuntimeRoot)) { return 'NOT INSTALLED' }
     if (-not (Test-Path -LiteralPath $rootMetadata -PathType Leaf) -or
-        -not (Test-Path -LiteralPath $launcher -PathType Leaf) -or
-        -not (Test-Path -LiteralPath (Join-Path $current 'node.exe') -PathType Leaf)) { return 'INCOMPLETE' }
+        -not (Test-Path -LiteralPath $launcher -PathType Leaf)) { return 'INCOMPLETE' }
     try {
         $installed = Get-Content -Raw -LiteralPath $rootMetadata -Encoding utf8 | ConvertFrom-Json
         if ($installed.product_name -ne 'Afyx Graph' -or -not $installed.product_version) { return 'INVALID' }
@@ -91,7 +90,7 @@ function Test-ArchiveChecksum([string]$Path) {
 }
 
 function Test-StagedBundle([string]$Path) {
-    $required = @('node.exe', 'bin\afyx-graph.cmd', 'metadata.json', 'licenses\THIRD_PARTY_NOTICES.md', 'licenses\THIRD_PARTY_ENGINE_MIT.txt')
+    $required = @('bin\afyx-graph.cmd', 'metadata.json', 'licenses\THIRD_PARTY_NOTICES.md', 'licenses\THIRD_PARTY_ENGINE_MIT.txt')
     foreach ($relative in $required) {
         if (-not (Test-Path -LiteralPath (Join-Path $Path $relative) -PathType Leaf)) {
             throw "Afyx Graph staged bundle is incomplete: $relative is missing."

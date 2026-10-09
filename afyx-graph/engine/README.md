@@ -15,6 +15,8 @@ Regression gates, all local and deterministic (no model calls):
 Project state lives in `.afyx-graph/` (database `afyx-graph.db`, override the
 directory name with `AFYX_GRAPH_DIR`). An optional, committed `afyx-graph.json`
 at the project root maps custom file extensions to supported languages.
+The shipped product requires external Node.js 22.5.0 or newer on `PATH`; release
+archives do not bundle Node or a `node_modules` dependency tree.
 `afyx-graph status` reports index freshness (`MISSING`, `FRESH`, `STALE`,
 `INVALID`, `UNKNOWN`) from `.afyx-graph/freshness.json`, which the engine
 rewrites after every successful index or sync. Afyx Graph makes no outbound network

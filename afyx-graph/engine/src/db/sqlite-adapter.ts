@@ -5,9 +5,8 @@
  * storage-agnostic surface in front of it — statements, pragmas, transactions,
  * idempotent close — so nothing above it depends on the driver's own API shape.
  *
- * Afyx Graph ships with a bundled Node runtime, so `node:sqlite` (real SQLite with WAL
- * and FTS5) is always present: there is no native build step and no fallback backend.
- * Running from source needs Node >= 22.5.
+ * Afyx Graph requires external Node >= 22.5, where `node:sqlite` provides real SQLite
+ * with WAL and FTS5. There is no native build step and no fallback backend.
  */
 
 export interface SqliteStatement {
@@ -147,8 +146,8 @@ export function createDatabase(dbPath: string, opts?: { readOnly?: boolean }): {
     const cause = error instanceof Error ? error.message : String(error);
     throw new Error(
       'Failed to open SQLite via the built-in node:sqlite module.\n' +
-      'Afyx Graph requires node:sqlite (Node.js 22.5+). Install the self-contained\n' +
-      'Afyx Graph release (it bundles a compatible Node), or run on Node 22.5+.\n' +
+      'Afyx Graph requires node:sqlite (Node.js 22.5+). Install or select a supported\n' +
+      'external Node.js runtime, then retry.\n' +
       `Underlying error: ${cause}`
     );
   }

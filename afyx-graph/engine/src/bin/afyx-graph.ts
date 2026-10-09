@@ -50,7 +50,7 @@ import { getGlyphs } from '../ui/glyphs';
 import { ansiColorsEnabled } from '../ui/color';
 import { afyxTerminal, type AfyxTerminal } from '../runtime/terminal';
 
-import { buildNodeTooOldBanner, MIN_NODE_MAJOR } from './node-version-check';
+import { buildNodeTooOldBanner, isSupportedNodeVersion } from './node-version-check';
 import { installFatalHandlers } from './fatal-handler';
 import { installCommandSupervision } from './command-supervision';
 import { EXTRACTION_VERSION } from '../extraction/extraction-version';
@@ -99,11 +99,10 @@ async function loadAfyxGraph(): Promise<typeof import('../index')> {
 }
 
 const nodeVersion = process.versions.node;
-const nodeMajor = parseInt(nodeVersion.split('.')[0] ?? '0', 10);
 // Enforce the supported Node floor. `engines` in package.json only *warns* on
 // install (unless engine-strict), so hard-block here to actually keep users off
 // unsupported versions. See package.json `engines`.
-if (nodeMajor < MIN_NODE_MAJOR) {
+if (!isSupportedNodeVersion(nodeVersion)) {
   process.stderr.write(buildNodeTooOldBanner(nodeVersion) + '\n');
   if (!process.env.AFYX_GRAPH_ALLOW_UNSAFE_NODE) {
     process.exit(1);

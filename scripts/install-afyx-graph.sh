@@ -32,7 +32,7 @@ VERSION="$(json_value product_version)"
 
 graph_state() {
   if [[ ! -e "$RUNTIME_ROOT" ]]; then printf '%s' 'NOT INSTALLED'; return; fi
-  if [[ ! -f "$RUNTIME_ROOT/metadata.json" || ! -x "$RUNTIME_ROOT/current/bin/afyx-graph" || ! -x "$RUNTIME_ROOT/current/node" ]]; then
+  if [[ ! -f "$RUNTIME_ROOT/metadata.json" || ! -x "$RUNTIME_ROOT/current/bin/afyx-graph" ]]; then
     printf '%s' 'INCOMPLETE'; return
   fi
   if ! grep -q '"product_name"[[:space:]]*:[[:space:]]*"Afyx Graph"' "$RUNTIME_ROOT/metadata.json"; then
@@ -118,7 +118,7 @@ expected_lower="$(printf '%s' "$expected" | tr '[:upper:]' '[:lower:]')"
 mkdir -p "$transaction/extract" "$transaction/prepared"
 tar -xzf "$archive_path" -C "$transaction/extract"
 bundle="$transaction/extract/afyx-graph-$target"
-for required in node bin/afyx-graph metadata.json licenses/THIRD_PARTY_NOTICES.md licenses/THIRD_PARTY_ENGINE_MIT.txt; do
+for required in bin/afyx-graph metadata.json licenses/THIRD_PARTY_NOTICES.md licenses/THIRD_PARTY_ENGINE_MIT.txt; do
   [[ -f "$bundle/$required" ]] || { printf 'Staged Afyx Graph bundle is incomplete: %s\n' "$required" >&2; exit 1; }
 done
 grep -q '"product_version"[[:space:]]*:[[:space:]]*"'"$VERSION"'"' "$bundle/metadata.json" || {

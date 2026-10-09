@@ -3,44 +3,19 @@ set -euo pipefail
 
 readonly ENGINE_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 readonly CONTRACT="$ENGINE_ROOT/scripts/distribution-contract.mjs"
-readonly TARGET="${1:?usage: build-bundle.sh <target> [node-version]}"
-readonly NODE_VERSION="${2:-$(node "$CONTRACT" default-node-version)}"
+readonly TARGET="${1:?usage: build-bundle.sh <target>}"
 readonly RELEASE_ROOT="$ENGINE_ROOT/release"
 readonly TEMP_ROOT="$(mktemp -d)"
-readonly ARCH="${TARGET##*-}"
 readonly FAMILY="${TARGET%-*}"
-readonly BUNDLE_NAME="$(node "$CONTRACT" plan --target "$TARGET" --node-version "$NODE_VERSION" --field bundleName)"
+readonly BUNDLE_NAME="$(node "$CONTRACT" plan --target "$TARGET" --field bundleName)"
 readonly STAGE="$TEMP_ROOT/$BUNDLE_NAME"
-RUNTIME_SOURCE=""
 ARCHIVE=""
 
 cleanup() { rm -rf "$TEMP_ROOT"; }
 trap cleanup EXIT
 
 validate_target() {
-  node "$CONTRACT" plan --target "$TARGET" --node-version "$NODE_VERSION" >/dev/null
-}
-
-fetch_runtime() {
-  local distribution url archive
-  if [ "$FAMILY" = "win32" ]; then
-    distribution="node-${NODE_VERSION}-win-${ARCH}"
-    archive="$TEMP_ROOT/node.zip"
-    url="https://nodejs.org/dist/${NODE_VERSION}/${distribution}.zip"
-    echo "[bundle] downloading $url"
-    curl -fsSL "$url" -o "$archive"
-    if command -v unzip >/dev/null 2>&1; then unzip -q "$archive" -d "$TEMP_ROOT"; else tar -xf "$archive" -C "$TEMP_ROOT"; fi
-    RUNTIME_SOURCE="$TEMP_ROOT/$distribution/node.exe"
-  else
-    distribution="node-${NODE_VERSION}-${TARGET}"
-    archive="$TEMP_ROOT/node.tar.gz"
-    url="https://nodejs.org/dist/${NODE_VERSION}/${distribution}.tar.gz"
-    echo "[bundle] downloading $url"
-    curl -fsSL "$url" -o "$archive"
-    tar -xzf "$archive" -C "$TEMP_ROOT"
-    RUNTIME_SOURCE="$TEMP_ROOT/$distribution/bin/node"
-  fi
-  [ -f "$RUNTIME_SOURCE" ] || { echo "[bundle] runtime binary missing: $RUNTIME_SOURCE" >&2; exit 1; }
+  node "$CONTRACT" plan --target "$TARGET" >/dev/null
 }
 
 build_application() { echo "[bundle] building app"; (cd "$ENGINE_ROOT" && npm run build >/dev/null); }
@@ -48,28 +23,26 @@ build_application() { echo "[bundle] building app"; (cd "$ENGINE_ROOT" && npm ru
 stage_application() {
   mkdir -p "$STAGE/lib" "$STAGE/bin" "$STAGE/licenses"
   cp -R "$ENGINE_ROOT/dist" "$STAGE/lib/dist"
-  cp "$ENGINE_ROOT/package.json" "$ENGINE_ROOT/package-lock.json" "$STAGE/lib/"
+  cp "$ENGINE_ROOT/package.json" "$STAGE/lib/"
   cp "$ENGINE_ROOT/../afyx-graph.json" "$STAGE/metadata.json"
   # Required attribution contract is owned by the artifact plan.
   while IFS='|' read -r source destination; do
     mkdir -p "$STAGE/$(dirname "$destination")"
     cp "$ENGINE_ROOT/$source" "$STAGE/$destination"
   done < <(node "$CONTRACT" legal-files)
-  echo "[bundle] installing production dependencies"
-  (cd "$STAGE/lib" && npm ci --omit=dev --ignore-scripts >/dev/null 2>&1)
-  rm -f "$STAGE/lib/package-lock.json"
 }
 
 write_launcher() {
   if [ "$FAMILY" = "win32" ]; then
-    cp "$RUNTIME_SOURCE" "$STAGE/node.exe"
-    printf '@echo off\r\n@"%%~dp0..\\node.exe" --disable-warning=ExperimentalWarning "%%~dp0..\\lib\\dist\\bin\\afyx-graph.js" %%*\r\n' > "$STAGE/bin/afyx-graph.cmd"
+    printf '@echo off\r\nwhere node >nul 2>&1\r\nif errorlevel 1 (\r\n  echo [Afyx Graph] Node.js was not found on PATH. Install Node.js 22.5.0 or newer: https://nodejs.org/ 1>&2\r\n  exit /b 1\r\n)\r\nnode --disable-warning=ExperimentalWarning "%%~dp0..\\lib\\dist\\bin\\afyx-graph.js" %%*\r\nexit /b %%ERRORLEVEL%%\r\n' > "$STAGE/bin/afyx-graph.cmd"
     return
   fi
-  cp "$RUNTIME_SOURCE" "$STAGE/node"
-  chmod +x "$STAGE/node"
   cat > "$STAGE/bin/afyx-graph" <<'LAUNCHER'
 #!/bin/sh
+if ! command -v node >/dev/null 2>&1; then
+  printf '%s\n' '[Afyx Graph] Node.js was not found on PATH. Install Node.js 22.5.0 or newer: https://nodejs.org/' >&2
+  exit 1
+fi
 SELF="$0"
 while [ -L "$SELF" ]; do
   link="$(readlink "$SELF")"
@@ -78,7 +51,7 @@ done
 BUNDLE_DIR="$(cd "$(dirname "$SELF")/.." && pwd)"
 AFYX_GRAPH_HOST_PPID="${AFYX_GRAPH_HOST_PPID:-$PPID}"
 export AFYX_GRAPH_HOST_PPID
-exec "$BUNDLE_DIR/node" --disable-warning=ExperimentalWarning "$BUNDLE_DIR/lib/dist/bin/afyx-graph.js" "$@"
+exec node --disable-warning=ExperimentalWarning "$BUNDLE_DIR/lib/dist/bin/afyx-graph.js" "$@"
 LAUNCHER
   chmod +x "$STAGE/bin/afyx-graph"
 }
@@ -101,8 +74,7 @@ archive_bundle() {
 }
 
 validate_target
-echo "[bundle] target=$TARGET node=$NODE_VERSION"
-fetch_runtime
+echo "[bundle] target=$TARGET runtime=external-node"
 build_application
 stage_application
 write_launcher

@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parents[2]
 BASH_LIB = ROOT / "scripts" / "lib" / "afyx-components.sh"
 PS_MODULE = ROOT / "scripts" / "lib" / "AfyxComponents.psm1"
 WINDOWS = sys.platform == "win32"
-GRAPH_FILES = ("current/bin/afyx-graph.cmd", "current/node.exe") if WINDOWS else ("current/bin/afyx-graph", "current/node")
+GRAPH_FILES = ("current/bin/afyx-graph.cmd",) if WINDOWS else ("current/bin/afyx-graph",)
 
 
 def posix(path: Path) -> str:

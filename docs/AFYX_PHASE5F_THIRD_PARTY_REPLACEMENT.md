@@ -4,7 +4,7 @@ Task: `AFYX-91852`
 Inventory date: 2026-10-04
 Canonical baseline: `ebe34a2b3781c664713a362714ccb92bba2bc8e6`
 Branch: `afyx/native-phase5f-parser-grammar`
-Status: **IN PROGRESS — PARSER / GRAMMAR REPLACEMENT ACTIVE**
+Status: **IN PROGRESS — RUNTIME / DISTRIBUTION CLOSED; FINAL ARTIFACT AUDIT NEXT**
 
 PR #57 (inventory, utility runtime, and UI runtime) is **MERGED / FROZEN** at
 `ebe34a2b3781c664713a362714ccb92bba2bc8e6`.
@@ -3058,7 +3058,7 @@ caller and were obsolete.
 | `web-tree-sitter` | direct production dependency; unused runtime binaries entered the Windows bundle | dead runtime dependency | removed from manifest, lockfile, install tree, and artifacts |
 | `tree-sitter-wasms` | direct production dependency; bundle script removed it after install | dead packaging dependency | removed from manifest, lockfile, install tree, and artifacts |
 | `wasm-runtime-flags.ts` and `--liftoff-only` relaunch | parser-WASM OOM workaround | dead parser bootstrap | removed; CLI starts directly |
-| Node 25 parser-WASM block | parser-WASM OOM guard | dead runtime restriction | removed; package engine contract is now Node `>=20.0.0` |
+| Node 25 parser-WASM block | parser-WASM OOM guard | dead runtime restriction | removed; that parser checkpoint temporarily used Node `>=20.0.0`, superseded by the evidence-based 22.5 floor in Runtime / Distribution Closure |
 | parser package pin/runtime-flag tests | transition-only test scaffolding | dead test tooling | retired or rewritten as absence/distribution contracts |
 | `AFYX_GRAPH_HOST_PPID` | process supervision contract | product lifecycle behavior | retained under `mcp/ppid-watchdog.ts` |
 | historical kernel/legal references | provenance and attribution evidence | legal/historical evidence | retained unchanged |
@@ -3240,3 +3240,101 @@ THIRD_PARTY_KERNEL_OWNERSHIP             0
 ```
 
 The exact next boundary is **Runtime / Distribution Closure**.
+
+## Runtime / Distribution Closure
+
+This boundary starts from `4c8bd1fedef937a2dff8572171201a1121719eff`.
+The release builder previously downloaded Node `v24.16.0`, staged a platform
+`node`/`node.exe`, and ran `npm ci --omit=dev` inside the bundle. That ownership
+was unnecessary: compiled Afyx Graph has zero production npm dependencies, and
+its only platform runtime requirement is Node's built-in APIs.
+
+The effective runtime floor is Node.js `22.5.0`, not the former manifest floor
+of Node 20. Afyx's sole database backend is `node:sqlite`, introduced in Node
+22.5. The package engine constraint, distribution contract, CLI hard block,
+recovery banner, and SQLite diagnostic now state the same evidence-based floor.
+
+### Runtime inventory and final contract
+
+| Component | Previous ownership | Final ownership | Final state |
+| --- | --- | --- | --- |
+| `node` / `node.exe` | bundled general runtime downloaded per target | external platform prerequisite | absent from all product artifacts |
+| staged `node_modules` | shipped dependency tree created by bundle build | none | absent; production dependency count is zero |
+| TypeScript/Vitest/jsdom/types | build/dev/test workspace packages | build/dev/test only | retained outside product artifacts |
+| Windows launcher | bundled-runtime launcher | Afyx launcher resolving `node` on PATH | actionable missing-runtime error; CLI enforces version |
+| POSIX launcher | bundled-runtime launcher | Afyx launcher resolving `node` on PATH | actionable missing-runtime error; CLI enforces version |
+| installer runtime checks | required bundled runtime file | launcher/metadata integrity | no runtime provisioning or bundled-runtime requirement |
+
+Final runtime contract:
+
+```text
+Runtime                    external Node.js
+Minimum version            22.5.0
+Resolution                 node from PATH
+Bundled runtime            none
+Missing runtime            explicit diagnostic and exit 1
+Unsupported runtime        CLI compatibility banner and exit 1
+Unsafe override            existing AFYX_GRAPH_ALLOW_UNSAFE_NODE behavior
+Child/command exit status  propagated by both launchers
+```
+
+### Distribution composition and measurements
+
+The clean build produced 1,336 `dist` files / 8,996,595 bytes. Artifact scans
+found no bundled Node, `node_modules`, parser runtime, grammar WASM, kernel
+source/runtime, native library, or other executable binary.
+
+| Artifact | Compressed bytes | Unpacked bytes / entries | Forbidden payload |
+| --- | ---: | ---: | ---: |
+| npm pack | 2,233,523 | 9,163,270 / 1,361 entries | 0 |
+| `win32-x64` archive | 2,806,607 | 9,001,254 / 1,341 files | 0 |
+| `linux-x64` archive | 2,142,695 | 1,368 archive entries | 0 |
+
+The Windows archive and installer were measured locally, including a runtime
+root containing spaces. The Windows and POSIX launchers both returned `1.0.0`
+with the host runtime, emitted the pinned missing-runtime diagnostic with an
+empty runtime PATH, and propagated an unknown-command exit code of 1. Linux and
+macOS archive logic share the statically validated POSIX launcher; native OS
+execution remains CI evidence rather than a fabricated local claim.
+
+### Validation
+
+```text
+runtime/distribution focused tests                    23/23 PASS
+CLI semantic contract                                 10/10 PASS
+CLI/MCP built-artifact smoke                           21/21 PASS
+component/validator unit tests                    14 PASS, 1 SKIP
+repository and component validators                        PASS
+TypeScript typecheck                                       PASS
+clean production/UI build                                 PASS
+Bash syntax (Git Bash)                                     PASS
+PowerShell syntax                                          PASS
+Windows installer install/validate                         PASS
+npm pack and payload scan                                  PASS
+win32-x64 bundle/launcher/payload scan                      PASS
+linux-x64 bundle/POSIX launcher/payload scan                PASS
+```
+
+The frozen V1 semantic contract, native parser performance baseline, parser /
+grammar closure, and native-kernel closure evidence were reused. No semantic,
+parser, grammar, kernel, ranking, legal, or identity behavior changed, so their
+expensive campaigns were not rerun.
+
+```text
+V1_REQUIRED failure                    0
+UNKNOWN product failure                0
+
+bundled Node runtime                   0
+shipped node_modules                   0
+bundled general-purpose runtime        0
+third-party parser runtime             0
+third-party grammar assets             0
+third-party kernel runtime             0
+
+RUNTIME_DISTRIBUTION_CLOSURE      CLOSED
+BUNDLED_NODE                            0
+SHIPPED_NODE_MODULES                    0
+```
+
+Historical legal records remain unchanged for Phase 5H. The exact next
+boundary is **Final Phase 5F Artifact Audit**.

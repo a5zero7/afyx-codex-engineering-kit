@@ -679,7 +679,7 @@ NATIVE_KERNEL_CLOSURE = CLOSED
 
 #### 5F.6 — Runtime / Distribution Closure
 
-Status: **PENDING**
+Status: **COMPLETE**
 
 Contract items:
 
@@ -697,6 +697,16 @@ Exit:
 
 > Afyx release artifact contains no bundled general-purpose third-party runtime
 > or dependency tree under the agreed strict product boundary.
+
+Closure state:
+
+```text
+Runtime = external Node.js >=22.5.0
+bundled Node runtime = 0
+shipped node_modules = 0
+bundled general-purpose runtime = 0
+RUNTIME_DISTRIBUTION_CLOSURE = CLOSED
+```
 
 #### 5F.7 — Final Phase 5F Artifact Audit
 
