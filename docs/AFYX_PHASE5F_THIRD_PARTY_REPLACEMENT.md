@@ -4,7 +4,7 @@ Task: `AFYX-91852`
 Inventory date: 2026-10-04
 Canonical baseline: `ebe34a2b3781c664713a362714ccb92bba2bc8e6`
 Branch: `afyx/native-phase5f-parser-grammar`
-Status: **IN PROGRESS — RUNTIME / DISTRIBUTION CLOSED; FINAL ARTIFACT AUDIT NEXT**
+Status: **COMPLETE — FINAL ARTIFACT AND PRODUCT VIABILITY AUDIT PASSED**
 
 PR #57 (inventory, utility runtime, and UI runtime) is **MERGED / FROZEN** at
 `ebe34a2b3781c664713a362714ccb92bba2bc8e6`.
@@ -3338,3 +3338,183 @@ SHIPPED_NODE_MODULES                    0
 
 Historical legal records remain unchanged for Phase 5H. The exact next
 boundary is **Final Phase 5F Artifact Audit**.
+
+## Final Phase 5F Artifact and Product Viability Audit
+
+Audit branch: `afyx/native-phase5f-parser-grammar`. Canonical starting HEAD:
+`57b48cef89d42002e7acb30085b5d58c84923e1d`. The authoritative final HEAD is
+the closure commit containing this section and is also recorded in the final
+task report; no production correction was required by the audit.
+
+### Final artifact boundary
+
+The audit rebuilt both release archives from a clean `dist`, created a fresh
+npm pack, installed the Windows archive through the real kit installer, and
+scanned the tracked product tree, `dist`, npm pack, Windows staged bundle, and
+Linux archive.
+
+```text
+unwanted third-party product runtime dependencies    0
+bundled Node                                         0
+shipped node_modules                                 0
+bundled general-purpose runtime                      0
+tracked third-party grammar WASM                     0
+shipped third-party grammar WASM                     0
+third-party parser runtime                           0
+vendored third-party grammar source                  0
+third-party UI runtime/assets                        0
+third-party native kernel                            0
+new unwanted third-party product dependencies        0
+native executables                                   0
+native libraries (.dll/.so/.dylib/.node)             0
+```
+
+Both engine and UI production dependency counts are zero. The native viewer is
+three files / 85,615 bytes and contains zero Svelte, XYFlow, fontsource, Archivo,
+or IBM Plex runtime/asset markers. Historical legal/provenance evidence remains
+unchanged for Phase 5H.
+
+### Fresh installed product
+
+Artifact:
+`afyx-graph/engine/release/afyx-graph-win32-x64.zip`.
+
+Fresh install root:
+`%TEMP%/afyx-phase5f-final-20261009/run-161c5db0a1e5451980075981c95db276/fresh install`.
+
+External Node.js `26.7.0` satisfied the documented `>=22.5.0` prerequisite.
+The installed launcher returned version `1.0.0`, rendered canonical help, and
+preserved a failing child exit code. With Node absent from PATH it emitted the
+actionable install diagnostic and exited 1. Injecting `22.4.0` into the
+installed artifact's immutable runtime-version input exercised the actual boot
+guard: it rendered the unsupported-version banner and exited 1.
+
+### Real repository initialization and queries
+
+The fixture is a temporary copy of the real engine's complete `src` and
+`__tests__` trees plus package/compiler manifests: 795 files / 10,744,750
+bytes. It is not a synthetic one-file project. The audit added one isolated
+probe to the copied `node-version-check.ts`, initialized a local Git baseline,
+and never changed the canonical repository.
+
+Fresh installed-artifact `init --yes` created only project state and indexed:
+
+```text
+files indexed               771
+nodes                    29,402
+edges                    71,850
+internal index duration    16.2 s
+wall-clock init duration   26.243 s
+database bytes         86,695,936
+database backend       node-sqlite / WAL
+index state            complete
+pending refs           0
+freshness after Git baseline sync  FRESH
+```
+
+Known-positive installed-artifact query evidence:
+
+| Operation | Target | Required fact | Result |
+| --- | --- | --- | --- |
+| Search | `isSupportedNodeVersion` | function in `src/bin/node-version-check.ts` | found at line 20 |
+| Context | `isSupportedNodeVersion runtime validation` | useful source and relationships | 9 symbols / 6 files / 7 relationships; source included |
+| Callers | `isSupportedNodeVersion` | CLI/test callers | 4 callers including `afyx-graph.ts` and `nodePrerequisiteBanner` |
+| Callees | `nodePrerequisiteBanner` | call to version predicate | `isSupportedNodeVersion` found |
+| Impact | `isSupportedNodeVersion` | downstream code/tests | 6 nodes / 7 edges including CLI and two test files |
+| Affected tests | `src/bin/node-version-check.ts` | known importing tests | two tests found: CLI semantic and node-version contracts |
+
+Silent empty known-positive results: zero.
+
+### Installed MCP, reopen, and incremental behavior
+
+The installed `lib/dist/bin/afyx-graph.js` was launched with the documented
+external Node runtime in direct MCP mode (no development import path). MCP
+`initialize` returned `afyx_graph` version `1.0.0`; `tools/list` exposed the
+controlled search/callers/explore/status surface. Real search, contextual
+explore, and callers requests all returned the known symbol/relationship. EOF
+shutdown exited 0. A second complete MCP lifecycle also passed; its recorded
+writer PID was dead after exit, and the stale-lock acquisition contract allowed
+the restart normally.
+
+Reopening the same database reported `complete` / `FRESH`, retained the original
+index timestamp without a full rebuild, and returned the positive query again.
+
+Incremental evidence renamed the copied `phaseFiveAuditProbe` to
+`phaseFiveAuditProbeUpdated` and added a call to `isSupportedNodeVersion`.
+Before sync the tracked change was `STALE`; incremental sync processed exactly
+one modified file / six nodes in 1.1 seconds. The old exact symbol count became
+zero, the new symbol appeared, and its new callee relationship appeared. After
+the fixture commit plus metadata sync, freshness was `FRESH`. The audit then
+reverted the fixture commit, synced that one file again, proved the inverse
+symbol transition, and left the fixture Git-clean and `FRESH`.
+
+### Platform, validation, and governance
+
+```text
+Windows     MEASURED_LOCAL
+Linux       STATICALLY_VALIDATED
+macOS       STATICALLY_VALIDATED
+```
+
+Git Bash execution or source inspection is not claimed as native Linux/macOS
+execution. No matching branch CI run existed for the canonical audit HEAD.
+
+Executed gates:
+
+```text
+fresh artifact install / launcher / negative runtime cases       PASS
+real init/index/query/MCP/reopen/incremental lifecycle            PASS
+runtime/distribution/CLI semantic focused tests              33/33 PASS
+TypeScript typecheck                                              PASS
+clean production/UI build                                        PASS
+distribution verifier (dist and staged Windows bundle)            PASS
+repository and component validators                               PASS
+Bash and PowerShell syntax                                        PASS
+npm pack and Windows/Linux artifact scans                          PASS
+git diff --check                                                   PASS
+```
+
+Frozen V1 semantic, parser/grammar, runtime-isolation, kernel, and
+performance-baseline evidence was reused; the huge semantic campaign was not
+rerun. Native Linux/macOS execution and a physical Node 22.4 binary were not
+run. The unsupported-version boot guard was instead executed from the installed
+artifact with its version input injected to 22.4.0.
+
+```text
+V1_REQUIRED failure                 0
+NATIVE_CORRECTION                   0
+LEGACY_COMPATIBILITY_ONLY           0
+POST_V1                             0
+ENVIRONMENT_OR_TOOLING_NOISE        1  (Windows CIM process enumeration denied)
+UNKNOWN product failure             0
+
+EXPECTED_PLATFORM_SKIP              0
+EXPECTED_MODE_SKIP                  0
+OPTIONAL_INTEGRATION_SKIP            0
+KNOWN_TEST_INFRA_SKIP               0
+TEMPORARY_SKIP                      0
+UNJUSTIFIED_SKIP                    0
+```
+
+Artifact footprint:
+
+| Artifact | Final measurement |
+| --- | ---: |
+| `dist` | 1,336 files / 8,996,599 bytes |
+| npm pack | 2,233,600 compressed / 9,163,420 unpacked bytes / 1,361 entries |
+| Windows archive | 2,806,600 compressed / 9,001,258 unpacked bytes / 1,341 files |
+| Linux archive | 2,142,595 compressed bytes / 1,368 entries |
+
+```text
+AFYX_PRODUCT_INSTALL_SMOKE           = PASS
+AFYX_REPO_INIT_SMOKE                  = PASS
+AFYX_REAL_END_TO_END_PRODUCT_SMOKE   = PASS
+
+PHASE_5F_ARTIFACT_AUDIT              = PASS
+PHASE_5F                             = COMPLETE
+```
+
+This does not activate Technical Alpha. The canonical maturity sequence remains
+Phase 5G, Phase 5H, and Phase 5I; only Phase 5I PASS enters Technical Alpha. The
+exact next boundary is **Phase 5G — Legacy Product Identity / Historical
+Artifact Eradication**, not started by this audit.

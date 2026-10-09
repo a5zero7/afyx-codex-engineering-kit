@@ -18,7 +18,8 @@ Latest verified Phase 5F bootstrap/protocol checkpoint: `81695bb7659bd05a06f00e9
 Latest verified Phase 5F grammar/packaging checkpoint: `a21d7b710f9c4e0c02f461096e9f39a47171a664`  
 Latest verified Phase 5F parser-runtime isolation checkpoint: `080074f81f0cf5628f61e977a93abc1d75d00b6b`  
 Native-kernel closure starting checkpoint: `89302e45c8222e64c18885499f8aa556ae103960`
-Current Phase 5F boundary: **Runtime / Distribution Closure**
+Phase 5F final artifact/product viability audit: **PASS**
+Next boundary: **Phase 5G — not started**
 Last merged Phase 5F major checkpoint: **PR #57 — Utility Runtime + UI Runtime**  
 Phase 5E merge baseline: `48b6078ed37349e405213258819fa5225bcdb3fb`
 
@@ -710,7 +711,7 @@ RUNTIME_DISTRIBUTION_CLOSURE = CLOSED
 
 #### 5F.7 — Final Phase 5F Artifact Audit
 
-Status: **PENDING**
+Status: **COMPLETE**
 
 Required gates:
 
@@ -749,6 +750,30 @@ prerequisites. Running solely from the development repository or its existing
 `node_modules` is insufficient evidence.
 
 Historical legal evidence may still remain until Phase 5H.
+
+Closure evidence from canonical starting HEAD
+`57b48cef89d42002e7acb30085b5d58c84923e1d`:
+
+```text
+strict product runtime/dependency/parser/grammar/UI/kernel forbidden counts = 0
+fresh Windows artifact install                                              PASS
+real 795-file workspace init and 771-file index                             PASS
+search/context/callers/callees/impact/affected known-positive flow          PASS
+installed-artifact MCP initialize/list/query/shutdown                       PASS
+restart/reopen existing index                                               PASS
+one-file incremental rename/sync/re-query/restore                           PASS
+
+AFYX_PRODUCT_INSTALL_SMOKE           = PASS
+AFYX_REPO_INIT_SMOKE                  = PASS
+AFYX_REAL_END_TO_END_PRODUCT_SMOKE   = PASS
+PHASE_5F_ARTIFACT_AUDIT              = PASS
+PHASE_5F                             = COMPLETE
+```
+
+Windows was measured locally. Linux and macOS remain statically validated for
+this audit because no matching branch CI run existed; native execution is not
+fabricated. The next boundary is Phase 5G. Technical Alpha remains inactive and
+still requires Phase 5G, Phase 5H, and Phase 5I PASS.
 
 ### Phase 5G — Legacy Product Identity / Historical Artifact Eradication
 
