@@ -171,7 +171,10 @@ function callsIn(source: string): RawCall[] {
     if (close < 0) continue;
     let callee = match[0].slice(0, match[0].lastIndexOf('(')).trim();
     if (/^(?:if|for|while|switch|catch|function|func|def|sizeof)\b/.test(callee)) continue;
-    callee = callee.replace(/^new\s+/, '').replace(/\?\./g, '.').replace(/\([^()]*\)/g, '()').replace(/\s+/g, '');
+    // Keep arguments of inner calls in a chain. They are part of the observable
+    // site (`res.status(201).json`, `ResponseEntity.status(CREATED).body`) and
+    // carry response semantics; only the outer call's arguments live in `args`.
+    callee = callee.replace(/^new\s+/, '').replace(/\?\./g, '.').replace(/\s+/g, '');
     out.push({ callee, start: match.index, open, close, argsStart: open + 1, argsEnd: close });
   }
   return out;
@@ -250,8 +253,9 @@ function callAt(source: string, line: number, column: number | null, want?: stri
   const candidates = calls.filter((call) =>
     (offset >= call.start && offset <= call.close) || (offset >= call.start - 4 && offset <= call.open)
   );
+  const wanted = want?.replace(/\([^()]*\)/g, '').split('.').at(-1);
   let call = candidates
-    .filter((candidate) => !want || candidate.callee.split('.').at(-1) === want)
+    .filter((candidate) => !wanted || candidate.callee.replace(/\([^()]*\)/g, '').split('.').at(-1) === wanted)
     .sort((left, right) => (left.close - left.start) - (right.close - right.start))[0];
   if (!call) {
     call = calls
@@ -539,7 +543,19 @@ export async function decoratorsInSource(
   if (!supportsBranchGuards(language)) return null;
   const lines = source.split('\n');
   if (line < 1 || line > lines.length) return null;
-  const own = leadingDecorators(lines, line - 1, language);
+  let own = leadingDecorators(lines, line - 1, language);
+  // Native extraction may anchor a declaration at its first decorator rather
+  // than at the signature. In that case read the forward decorator stack too.
+  if (/^@/.test(lines[line - 1]?.trim() ?? '')) {
+    own = [];
+    for (let index = line - 1; index < lines.length; index++) {
+      const text = lines[index]!.trim();
+      if (!text) continue;
+      const at = /^@(.+)$/.exec(text);
+      if (!at) break;
+      own.push(cut(at[1]!, 80));
+    }
+  }
   let classLine = -1;
   for (let index = line - 2; index >= 0; index--) {
     if (/\b(?:class|struct|object)\s+[A-Za-z_$][\w$]*/.test(lines[index]!)) {

@@ -280,7 +280,7 @@ function looksLikeObjc(source: string): boolean {
  * Check if a language is supported by Afyx-native extraction.
  */
 export function isLanguageSupported(language: Language): boolean {
-  return language !== 'unknown';
+  return language !== 'unknown' && (LANGUAGES as readonly string[]).includes(language);
 }
 
 /**

@@ -95,13 +95,13 @@ describe('Old git without `ls-files -s --recurse-submodules` support (#1549)', (
     // Baseline: the real git resolves both files.
     const withRealGit = scanDirectory(root);
     expect(withRealGit).toContain('a.ts');
-    expect(withRealGit).toContain(path.join('dir_b', 'b.ts'));
+    expect(withRealGit).toContain('dir_b/b.ts');
 
     installOldGitShim();
 
     // The opted-in file must survive the unsupported-mode failure, not vanish.
     const withOldGit = scanDirectory(root);
     expect(withOldGit).toContain('a.ts');
-    expect(withOldGit).toContain(path.join('dir_b', 'b.ts'));
+    expect(withOldGit).toContain('dir_b/b.ts');
   });
 });

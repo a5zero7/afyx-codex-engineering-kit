@@ -158,20 +158,31 @@ describe('#982 minimal repro — ranking with and without deprioritize', () => {
     for (const d of [baseDir, cfgDir]) if (d) fs.rmSync(d, { recursive: true, force: true });
   });
 
-  it('control: without the config the usage() helpers still take the top ranks', () => {
-    // This is the status quo the issue reports, and the shape the corpus-frequency
-    // discount cannot fix (only two symbols are named `usage` here, so it is rare).
+  it('control: native zero-config ranking already puts product code before usage() helpers', () => {
+    // Native scoring no longer reproduces the historical bad baseline. Keep the
+    // control useful by freezing the independently correct zero-config ordering
+    // while proving the peripheral helpers remain in the candidate set.
     const results = baseCg.searchNodes(QUERY, { limit: 20 });
     expect(results.length).toBeGreaterThanOrEqual(2);
-    expect(results.slice(0, 2).every(isHelper)).toBe(true);
+    const firstHelper = results.findIndex(isHelper);
+    const firstProduct = results.findIndex((r) => r.node.filePath.includes('apps/desktop'));
+    expect(firstHelper).toBeGreaterThanOrEqual(0);
+    expect(firstProduct).toBeGreaterThanOrEqual(0);
+    expect(firstProduct).toBeLessThan(firstHelper);
   });
 
   it('with deprioritize, product code outranks the peripheral helpers', () => {
     const results = cfgCg.searchNodes(QUERY, { limit: 20 });
+    const baseline = baseCg.searchNodes(QUERY, { limit: 20 });
     const firstHelper = results.findIndex(isHelper);
     const firstProduct = results.findIndex((r) => r.node.filePath.includes('apps/desktop'));
+    const baselineHelper = baseline.find(isHelper);
+    const configuredHelper = results.find(isHelper);
     expect(firstProduct).toBeGreaterThanOrEqual(0);
     expect(firstHelper === -1 || firstProduct < firstHelper).toBe(true);
+    expect(baselineHelper).toBeDefined();
+    expect(configuredHelper).toBeDefined();
+    expect(configuredHelper!.score).toBeLessThan(baselineHelper!.score);
   });
 
   it('is a ranking lever, not exclude: the helpers stay indexed and findable', () => {
@@ -221,7 +232,12 @@ describe('#982 minimal repro — ranking with and without deprioritize', () => {
       await cg.indexAll();
       const before = cg.searchNodes(QUERY, { limit: 20 });
       expect(before.length).toBeGreaterThanOrEqual(2);
-      expect(before.slice(0, 2).every(isHelper)).toBe(true);
+      const beforeHelper = before.find(isHelper);
+      const beforeProduct = before.findIndex((r) => r.node.filePath.includes('apps/desktop'));
+      const beforeHelperRank = before.findIndex(isHelper);
+      expect(beforeHelper).toBeDefined();
+      expect(beforeProduct).toBeGreaterThanOrEqual(0);
+      expect(beforeProduct).toBeLessThan(beforeHelperRank);
 
       fs.writeFileSync(
         path.join(late, 'afyx-graph.json'),
@@ -230,8 +246,11 @@ describe('#982 minimal repro — ranking with and without deprioritize', () => {
       const after = cg.searchNodes(QUERY, { limit: 20 });
       const firstHelper = after.findIndex(isHelper);
       const firstProduct = after.findIndex((r) => r.node.filePath.includes('apps/desktop'));
+      const afterHelper = after.find(isHelper);
       expect(firstProduct).toBeGreaterThanOrEqual(0);
       expect(firstHelper === -1 || firstProduct < firstHelper).toBe(true);
+      expect(afterHelper).toBeDefined();
+      expect(afterHelper!.score).toBeLessThan(beforeHelper!.score);
     } finally {
       cg.destroy();
       fs.rmSync(late, { recursive: true, force: true });

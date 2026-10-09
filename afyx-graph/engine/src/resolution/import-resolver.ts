@@ -2436,14 +2436,19 @@ function findExportedSymbolWalk(
   }
 
   // 2. Re-export hit: the file forwards the symbol to another module.
-  const reExports = context.getReExports?.(filePath, language) ?? [];
+  // Re-export paths are interpreted by the forwarding file, not by the
+  // original consumer. A TypeScript file may import an ArkTS package entry
+  // whose `.ets` barrel forwards `./CartRepository`; resolving that relative
+  // path with TypeScript extensions silently misses the `.ets` target.
+  const reExportLanguage = filePath.toLowerCase().endsWith('.ets') ? 'arkts' : language;
+  const reExports = context.getReExports?.(filePath, reExportLanguage) ?? [];
   if (reExports.length === 0) return undefined;
 
   // Look for explicit `export { want } from './other'` (with optional rename).
   const targetName = want.isDefault ? 'default' : want.exportedName;
   for (const rex of reExports) {
     if (rex.kind === 'named' && rex.exportedName === targetName) {
-      const next = resolveImportPath(rex.source, filePath, language, context);
+      const next = resolveImportPath(rex.source, filePath, reExportLanguage, context);
       if (!next) continue;
       // After rename: `export { foo as bar } from './x'` — to chase
       // `bar`, we look for `foo` in `./x`.
@@ -2455,7 +2460,7 @@ function findExportedSymbolWalk(
           exportedName: rex.originalName,
           memberName: null,
         },
-        language,
+        reExportLanguage,
         context,
         visited,
         depth + 1
@@ -2468,9 +2473,9 @@ function findExportedSymbolWalk(
   //    forwarding source. This is the barrel-of-barrels case.
   for (const rex of reExports) {
     if (rex.kind === 'wildcard') {
-      const next = resolveImportPath(rex.source, filePath, language, context);
+      const next = resolveImportPath(rex.source, filePath, reExportLanguage, context);
       if (!next) continue;
-      const chained = findExportedSymbol(next, want, language, context, visited, depth + 1);
+      const chained = findExportedSymbol(next, want, reExportLanguage, context, visited, depth + 1);
       if (chained) return chained;
     }
   }

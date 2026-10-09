@@ -253,7 +253,12 @@ export async function buildScreens(cg: AfyxGraph, projectRoot: string): Promise<
   // transitions out of an unrelated page.
   const routesPerFile = new Map<string, number>();
   for (const r of routes) routesPerFile.set(r.filePath, (routesPerFile.get(r.filePath) ?? 0) + 1);
-  const routeByFile = new Map(routes.filter((r) => routesPerFile.get(r.filePath) === 1).map((r) => [r.filePath, r.id]));
+  // Expo's file-system route owns the whole file. Other routers can also have
+  // one route per file, but their component/helper call chain is meaningful
+  // attribution (for example TanStack's submit action) and must stay visible.
+  const routeByFile = new Map(routes
+    .filter((r) => routesPerFile.get(r.filePath) === 1 && r.id === `route:${r.filePath}:${r.name}`)
+    .map((r) => [r.filePath, r.id]));
   const roots = routeRoots(cg, routes);
   const componentOf = new Map<string, Node>();
   // Component → EVERY route it serves, not one of them. proshop renders
@@ -444,6 +449,13 @@ async function attribute(
   // on each of them, when one component is rendered at several addresses.
   const own = screenOfComponent.get(holder.id);
   if (own) return own.map((screenId) => ({ screenId, path: [{ node: holder, edge: null }] }));
+
+  // A navigation physically held by a single-screen route file belongs to
+  // that screen directly. Native call edges can now see wrapper/component
+  // chains inside the same file, but exposing those as `via` would turn a
+  // source-location attribution into an incidental implementation chain.
+  const localScreen = routeByFile.get(holder.filePath);
+  if (localScreen) return [{ screenId: localScreen, path: [{ node: holder, edge: null }] }];
 
   const parent = new Map<string, { prev: string | null; edge: Edge | null }>();
   parent.set(holder.id, { prev: null, edge: null });

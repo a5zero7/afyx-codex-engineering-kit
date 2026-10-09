@@ -37,6 +37,41 @@ describe('Afyx-native JS/TS fact extraction', () => {
       expect.objectContaining({ code: 'native_incomplete_source' }),
     ]));
   });
+
+  it('keeps object return types outside the executable body and records parameter types', () => {
+    const result = extractNativeFacts(
+      'report.ts',
+      'export function report(cart: CartRepository): { ok(): boolean } { return { ok: () => !!cart }; }',
+      'typescript',
+    );
+    const report = result.nodes.find((node) => node.kind === 'function' && node.name === 'report');
+    expect(report).toBeDefined();
+    expect(result.unresolvedReferences).toContainEqual(expect.objectContaining({
+      fromNodeId: report!.id,
+      referenceKind: 'references',
+      referenceName: 'CartRepository',
+    }));
+    expect(result.unresolvedReferences).not.toContainEqual(expect.objectContaining({
+      fromNodeId: report!.id,
+      referenceKind: 'calls',
+      referenceName: 'ok',
+    }));
+  });
+
+  it('extracts constructors and RTK Query generated surface', () => {
+    const result = extractNativeFacts('api.ts', [
+      'class Service { constructor(config: Config) { new Cache(config); } }',
+      'export const api = createApi({ endpoints: build => ({',
+      '  getUser: build.query({ query: () => "/user" }),',
+      '}) });',
+      'export const { useGetUserQuery } = api;',
+    ].join('\n'), 'typescript');
+    expect(result.nodes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'method', name: 'constructor' }),
+      expect.objectContaining({ kind: 'function', name: 'getUser' }),
+      expect.objectContaining({ kind: 'function', name: 'useGetUserQuery', signature: '= RTK Query generated hook' }),
+    ]));
+  });
 });
 
 describe('Afyx-native Python fact extraction', () => {

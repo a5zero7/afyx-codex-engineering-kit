@@ -322,8 +322,19 @@ export function extractNativeCFamilyFacts(filePath: string, source: string, lang
       }
     }
     const receiver = tokens[cursor];
-    return receiver?.kind === 'identifier' ? { name: receiver.text, start: cursor } : undefined;
+    if (receiver?.kind !== 'identifier') return undefined;
+    const parts = [receiver.text];
+    let start = cursor;
+    while (start >= 2 && tokens[start - 1]?.text === '::' && tokens[start - 2]?.kind === 'identifier') {
+      start -= 2;
+      parts.unshift(tokens[start]!.text);
+    }
+    return { name: parts.join('::'), start };
   };
+  const declarationQualifiedName = (declaration: Declaration): string =>
+    declaration.parent
+      ? `${declarationQualifiedName(declaration.parent)}::${declaration.name}`
+      : declaration.name;
   for (let i = 0; i < tokens.length - 1; i += 1) {
     const name = tokens[i]!;
     if (name.kind !== 'identifier' || tokens[i + 1]?.text !== '(' || CONTROL.has(name.text)) continue;
@@ -356,7 +367,10 @@ export function extractNativeCFamilyFacts(filePath: string, source: string, lang
     let methodName = macroName ?? name.text;
     const cppReceiver = language === 'cpp' ? cppReceiverAt(i) : undefined;
     if (cppReceiver) {
-      owner = declarations.find((item) => item.name === cppReceiver.name && ['class', 'struct', 'union'].includes(item.kind)) ?? owner;
+      owner = declarations.find((item) =>
+        ['class', 'struct', 'union'].includes(item.kind) &&
+        (item.name === cppReceiver.name || declarationQualifiedName(item) === cppReceiver.name)
+      ) ?? owner;
     }
     if (language === 'cpp' && tokens[i - 1]?.text === '~') methodName = `~${name.text}`;
     const kind: NodeKind = owner && ['class', 'struct', 'union', 'interface'].includes(owner.kind) || cppReceiver ? 'method' : 'function';

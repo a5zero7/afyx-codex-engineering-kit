@@ -815,7 +815,8 @@ export async function buildSteps(cg: AfyxGraph, projectRoot: string, query: URLS
     ref: { referenceName: string; referenceKind: 'calls' | 'instantiates'; line: number; column?: number },
     trigger: WireStepTrigger | null,
     fallbackArgs: string | null = null,
-    requireReceiver = false
+    requireReceiver = false,
+    inheritedStatus: number | null = null
   ): Promise<boolean> => {
     const at = { line: ref.line, column: ref.column };
     const site = await callAt(fold.node, { ...at, callee: ref.referenceName });
@@ -847,7 +848,7 @@ export async function buildSteps(cg: AfyxGraph, projectRoot: string, query: URLS
     // its own beside the 401's.
     const status =
       effect.category === 'response'
-        ? (responseStatus(text, args, ref.referenceKind) ?? (usable && typeof site.status === 'number' ? site.status : null) ?? implicitResponseStatus(text))
+        ? (responseStatus(text, args, ref.referenceKind) ?? inheritedStatus ?? (usable && typeof site.status === 'number' ? site.status : null) ?? implicitResponseStatus(text))
         : null;
     // What fires this call, read before its box is made: a call bound inside
     // ANOTHER effect's arguments — the axios.delete in a confirm dialog's
@@ -1086,10 +1087,29 @@ export async function buildSteps(cg: AfyxGraph, projectRoot: string, query: URLS
           } catch {
             refs = [];
           }
-          for (const ref of [...refs].sort((a, b) => a.line - b.line || a.column - b.column)) {
+          const orderedRefs = [...refs].sort((a, b) => a.line - b.line || a.column - b.column);
+          let pendingStatus: { code: number; line: number; receiver: string } | null = null;
+          for (const ref of orderedRefs) {
             if (ref.referenceKind !== 'calls' && ref.referenceKind !== 'instantiates') continue;
             if (channelLines.has(ref.line)) continue;
-            await effectLink(step, fold, { referenceName: ref.referenceName, referenceKind: ref.referenceKind, line: ref.line, column: ref.column }, null);
+            const bareRef = ref.referenceName.replace(/\([^()]*\)/g, '');
+            // Native extraction records both the inner setter and the complete
+            // chain. The complete chain is the observable response site.
+            if (orderedRefs.some((other) => other !== ref && other.line === ref.line &&
+                other.referenceKind === 'calls' && other.referenceName.startsWith(`${ref.referenceName}().`))) continue;
+            const lastRef = bareRef.split('.').at(-1) ?? bareRef;
+            const receiver = bareRef.split('.')[0] ?? '';
+            let inherited: number | null = null;
+            if (/^(?:status|code|Status|StatusCode)$/.test(lastRef)) {
+              const written = await callAt(fold.node, { line: ref.line, column: ref.column, callee: ref.referenceName });
+              const code = written ? responseStatus(written.callee, written.args) : null;
+              if (code !== null) pendingStatus = { code, line: ref.line, receiver };
+            } else if (pendingStatus && pendingStatus.receiver === receiver && ref.line - pendingStatus.line <= 2 &&
+                /^(?:json|send|body|end|build)$/.test(lastRef)) {
+              inherited = pendingStatus.code;
+              pendingStatus = null;
+            }
+            await effectLink(step, fold, { referenceName: ref.referenceName, referenceKind: ref.referenceKind, line: ref.line, column: ref.column }, null, null, false, inherited);
           }
         }
 

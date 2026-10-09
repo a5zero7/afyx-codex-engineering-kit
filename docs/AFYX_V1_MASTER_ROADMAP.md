@@ -974,6 +974,30 @@ environmental noise or normalized away. Windows and macOS reached the semantic
 gate and failed only on the now-corrected raw-score portability issue, but a
 final-head cross-platform run is still required after the audit commit.
 
+Corrective continuation on 2026-10-10 grouped the 24 assertions by cause rather
+than weakening them individually. The failure ledger closed as follows:
+
+- native fact gaps: Go package variables/composite literals/conversions, Rust
+  struct literals, TypeScript constructor and typed-return ownership, Java
+  decorator stacks, C++ qualified receivers, and RTK Query endpoints/hooks;
+- resolution/UI gaps: ArkTS `.ts` consumer through an `.ets` re-export barrel,
+  response-chain status propagation, and Expo same-file screen attribution;
+- invalid configuration acceptance: misspelled extension languages now fail the
+  supported-language membership check;
+- stale tests: native zero-config ranking, healthy C++ raw strings, and
+  platform-normalized scan paths now assert the current independently verified
+  contract instead of historical failure behavior.
+
+The original 12-file regression group now has `1,070 PASS`, one declared skip,
+and zero assertion failures. Windows-only temporary-directory cleanup can still
+surface as `EPERM` after successful assertions and is not hidden as a product
+pass. Additional regression isolation restored the TanStack `submit` attribution
+while keeping Expo `via=[]`; TanStack `29/29` and Expo `69/69` pass. Clean
+production/UI build, semantic `6/6`, CLI/MCP `21/21`, distribution verification,
+identity/metadata validation, legacy-identity audit, and component contract pass.
+The final decision below remains blocked until the corrective HEAD completes the
+Linux, Windows, and macOS Graph Build jobs.
+
 ```text
 historical runtime dependency                   = 0
 historical build dependency                     = 0

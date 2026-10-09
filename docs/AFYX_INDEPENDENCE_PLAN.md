@@ -1,5 +1,18 @@
 # Afyx Graph Independence Audit and Closure Plan
 
+> **Phase 5I corrective continuation (2026-10-10):** The 24 Linux assertions
+> recorded below have been closed on branch `afyx/native-phase5f-parser-grammar`.
+> Production corrections cover native Go/Rust/TypeScript/Java/C++ facts, ArkTS
+> cross-language barrels, response-chain status propagation, RTK Query facts,
+> Expo screen attribution, and extension validation. Three obsolete expectations
+> now freeze the current native ranking, C++ raw-string, and normalized-path
+> contracts instead of historical failure behavior. The original 12-suite group
+> has zero assertion failures (`1,070 PASS`, one declared skip); local Windows
+> cleanup reports are the already-known temporary-directory `EPERM` condition.
+> Clean build, semantic `6/6`, CLI/MCP `21/21`, distribution, identity, legacy
+> identity, and component-contract gates pass. Final classification remains
+> pending until Linux, Windows, and macOS complete at the same corrective HEAD.
+
 > **Phase 5I final-audit notice (2026-10-09):** Starting from
 > `14c138024fef26cd303d9c0bcb16340830776652`, current production dependencies,
 > retained historical implementation, unexplained substantive upstream overlap,

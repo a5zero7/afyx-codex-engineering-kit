@@ -40,19 +40,14 @@ describe('CLI parse warnings (#1522)', () => {
     return { status: result.status, out: (result.stdout ?? '') + (result.stderr ?? '') };
   }
 
-  it('shows a collapsed parse without failing, then stays quiet after a healthy re-index', () => {
+  it('indexes a valid C++ raw string without the obsolete collapse warning', () => {
     const sourcePath = path.join(root, 'min.cpp');
     fs.writeFileSync(sourcePath, SOURCE);
 
-    const collapsed = run(['init', '--yes']);
-    expect(collapsed.status, collapsed.out).toBe(0);
-    expect(collapsed.out).toContain('Indexed 1 files');
-    expect(collapsed.out).toContain(`min.cpp: ${COLLAPSE_WARNING}`);
-
-    fs.writeFileSync(sourcePath, SOURCE.replaceAll('FILE_TEMPLATE_V1', 'FILE_TEMPLATE_V'));
-    const healthy = run(['index']);
-    expect(healthy.status, healthy.out).toBe(0);
-    expect(healthy.out).not.toContain(COLLAPSE_WARNING);
+    const indexed = run(['init', '--yes']);
+    expect(indexed.status, indexed.out).toBe(0);
+    expect(indexed.out).toContain('Indexed 1 files');
+    expect(indexed.out).not.toContain(COLLAPSE_WARNING);
 
     const query = run(['query', 'after_the_raw_string']);
     expect(query.status, query.out).toBe(0);

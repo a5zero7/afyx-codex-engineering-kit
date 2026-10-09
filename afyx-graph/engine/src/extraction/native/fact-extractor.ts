@@ -410,6 +410,62 @@ export function extractNativeFacts(filePath: string, source: string, language: L
       });
     }
 
+    // RTK Query's endpoint functions and generated hooks are runtime-generated
+    // API surface, but their names are statically declared by createApi.
+    for (let create = 0; create < tokens.length - 2; create += 1) {
+      if (tokens[create]?.text !== 'createApi' || tokens[create + 1]?.text !== '(') continue;
+      const callEnd = scan.pairs.get(create + 1);
+      if (callEnd === undefined) continue;
+      const configOpen = findNext(tokens, create + 2, '{', callEnd);
+      const configEnd = configOpen < 0 ? undefined : scan.pairs.get(configOpen);
+      if (configOpen < 0 || configEnd === undefined) continue;
+      for (let endpointKey = configOpen + 1; endpointKey < configEnd; endpointKey += 1) {
+        if (!directlyInside(endpointKey, configOpen, configEnd) || tokens[endpointKey]?.text !== 'endpoints') continue;
+        let endpointObject = -1;
+        if (tokens[endpointKey + 1]?.text === ':') {
+          const arrow = findNext(tokens, endpointKey + 2, '=>', configEnd);
+          endpointObject = arrow < 0 ? -1 : findNext(tokens, arrow + 1, '{', configEnd);
+        } else if (tokens[endpointKey + 1]?.text === '(') {
+          const paramsEnd = scan.pairs.get(endpointKey + 1);
+          const methodBody = paramsEnd === undefined ? -1 : findNext(tokens, paramsEnd + 1, '{', configEnd);
+          const methodEnd = methodBody < 0 ? undefined : scan.pairs.get(methodBody);
+          const returned = methodBody < 0 || methodEnd === undefined ? -1 : findNext(tokens, methodBody + 1, 'return', methodEnd);
+          endpointObject = returned < 0 ? -1 : findNext(tokens, returned + 1, '{', methodEnd);
+        }
+        const endpointEnd = endpointObject < 0 ? undefined : scan.pairs.get(endpointObject);
+        if (endpointObject < 0 || endpointEnd === undefined) continue;
+        for (let key = endpointObject + 1; key < endpointEnd; key += 1) {
+          if (!directlyInside(key, endpointObject, endpointEnd) || tokens[key]?.kind !== 'identifier' ||
+              tokens[key + 1]?.text !== ':') continue;
+          const builder = tokens[key + 2];
+          if (builder?.kind !== 'identifier' || tokens[key + 3]?.text !== '.' ||
+              !['query', 'mutation'].includes(tokens[key + 4]?.text ?? '') || tokens[key + 5]?.text !== '(') continue;
+          const definitionEnd = scan.pairs.get(key + 5) ?? key;
+          const bodyStart = findNext(tokens, key + 6, '{', definitionEnd);
+          declarations.push({
+            kind: 'function', name: tokens[key]!.text, start: key, end: definitionEnd,
+            bodyStart: bodyStart < 0 ? undefined : bodyStart,
+            bodyEnd: bodyStart < 0 ? undefined : scan.pairs.get(bodyStart),
+          });
+        }
+      }
+      create = callEnd;
+    }
+
+    for (let index = 0; index < tokens.length - 2; index += 1) {
+      if (tokens[index]?.text !== 'const' || tokens[index + 1]?.text !== '{') continue;
+      const close = scan.pairs.get(index + 1);
+      if (close === undefined || tokens[close + 1]?.text !== '=') continue;
+      for (let binding = index + 2; binding < close; binding += 1) {
+        const name = tokens[binding];
+        if (name?.kind !== 'identifier' || !/^use(?:Lazy)?[A-Z][A-Za-z0-9]*(?:Query|Mutation)$/.test(name.text)) continue;
+        declarations.push({
+          kind: 'function', name: name.text, start: binding, end: binding,
+          signature: '= RTK Query generated hook', exported: tokens[index - 1]?.text === 'export',
+        });
+      }
+    }
+
     // CommonJS property exports bind their anonymous callable value to the
     // exported property name. Other member assignments deliberately remain
     // ordinary expressions rather than declarations.
@@ -577,6 +633,28 @@ export function extractNativeFacts(filePath: string, source: string, language: L
         parent: receiverOwner,
         qualifiedOwner,
         returnType,
+      });
+    }
+
+    // Package-level values own references made by their initializer. Go does
+    // not require a trailing semicolon, so bound the initializer by its paired
+    // literal when present (the common registry/Cobra-command shape).
+    for (let i = 0; i < tokens.length - 2; i += 1) {
+      if (tokens[i]!.text !== 'var' || tokens[i + 1]?.kind !== 'identifier') continue;
+      if (declarations.some((item) => item.bodyStart !== undefined && item.bodyStart < i && item.end >= i)) continue;
+      const equals = findNext(tokens, i + 2, '=');
+      if (equals < 0) continue;
+      const nextDeclaration = tokens.findIndex((token, index) => index > equals &&
+        token.start.column === 0 && ['var', 'const', 'type', 'func'].includes(token.text));
+      const limit = nextDeclaration < 0 ? tokens.length : nextDeclaration;
+      const open = tokens.slice(equals + 1, limit).findIndex((token) => ['{', '(', '['].includes(token.text));
+      const bodyOpen = open < 0 ? -1 : equals + 1 + open;
+      const bodyEnd = bodyOpen < 0 ? undefined : scan.pairs.get(bodyOpen);
+      const end = bodyEnd ?? Math.max(equals + 1, limit - 1);
+      declarations.push({
+        kind: 'variable', name: tokens[i + 1]!.text, start: i + 1, end,
+        bodyStart: equals, bodyEnd: end,
+        exported: /^[A-Z]/.test(tokens[i + 1]!.text),
       });
     }
   }
@@ -1009,7 +1087,17 @@ export function extractNativeFacts(filePath: string, source: string, language: L
       paramsEnd = params < 0 ? undefined : scan.pairs.get(params);
       if (paramsEnd !== undefined) searchFrom = paramsEnd + 1;
     }
-    const open = findNext(tokens, searchFrom, '{');
+    let open = findNext(tokens, searchFrom, '{');
+    // A typed function can place an object type between its parameters and its
+    // implementation (`(): { m(): number } { ... }`). The first brace is the
+    // return type, not the executable body.
+    if (kind === 'function') {
+      while (open >= 0) {
+        const paired = scan.pairs.get(open);
+        if (paired === undefined || tokens[paired + 1]?.text !== '{') break;
+        open = paired + 1;
+      }
+    }
     if (open < 0) return undefined;
     const close = scan.pairs.get(open);
     const modifierStart = declarationStart(tokens, keyword);
@@ -1183,7 +1271,7 @@ export function extractNativeFacts(filePath: string, source: string, language: L
       const end = parent.bodyEnd ?? tokens.length;
       for (let member = begin + 1; member < end - 1; member += 1) {
         if (!directlyInside(member, begin, end) || tokens[member]?.kind !== 'identifier' ||
-            tokens[member + 1]?.text !== '(' || tokens[member]?.text === 'constructor') continue;
+            tokens[member + 1]?.text !== '(') continue;
         const paramsEnd = scan.pairs.get(member + 1);
         const bodyStart = paramsEnd === undefined ? -1 : findNext(tokens, paramsEnd + 1, '{', end);
         const bodyEnd = bodyStart < 0 ? undefined : scan.pairs.get(bodyStart);
@@ -1648,6 +1736,46 @@ export function extractNativeFacts(filePath: string, source: string, language: L
       });
     return (owners[0] && nodeByDeclaration.get(owners[0])) ?? fileNode;
   };
+
+  if (language === 'go') {
+    for (let i = 0; i < tokens.length; i += 1) {
+      // Qualified and local composite literals (`pkg.Type{}` / `Type{}`).
+      const qualified = tokens[i]?.kind === 'identifier' && tokens[i + 1]?.text === '.' &&
+        tokens[i + 2]?.kind === 'identifier' && tokens[i + 3]?.text === '{';
+      const local = tokens[i]?.kind === 'identifier' && /^[A-Z]/.test(tokens[i]!.text) &&
+        tokens[i + 1]?.text === '{';
+      if (qualified || local) {
+        const type = qualified ? tokens[i + 2]! : tokens[i]!;
+        const name = qualified ? `${tokens[i]!.text}.${type.text}` : type.text;
+        refs.push({
+          fromNodeId: ownerAt(i).id, referenceName: name, referenceKind: 'instantiates',
+          line: type.start.line, column: tokens[i]!.start.column,
+        });
+      }
+      // Parenthesized pointer conversions are type uses, not ordinary calls.
+      if (tokens[i]?.text === '(' && tokens[i + 1]?.text === '*' &&
+          tokens[i + 2]?.kind === 'identifier' && tokens[i + 3]?.text === ')' &&
+          tokens[i + 4]?.text === '(') {
+        const type = tokens[i + 2]!;
+        refs.push({
+          fromNodeId: ownerAt(i).id, referenceName: type.text, referenceKind: 'references',
+          line: type.start.line, column: type.start.column,
+        });
+      }
+    }
+  }
+
+  if (language === 'rust') {
+    for (let i = 0; i < tokens.length - 1; i += 1) {
+      // A PascalCase path immediately followed by `{` is a struct literal.
+      if (tokens[i]?.kind === 'identifier' && /^[A-Z]/.test(tokens[i]!.text) && tokens[i + 1]?.text === '{') {
+        refs.push({
+          fromNodeId: ownerAt(i).id, referenceName: tokens[i]!.text, referenceKind: 'instantiates',
+          line: tokens[i]!.start.line, column: tokens[i]!.start.column,
+        });
+      }
+    }
+  }
 
   if ([...TS_FAMILY_LANGUAGES, 'python', 'go', 'java', 'rust', 'kotlin', 'scala'].includes(language)) {
     const definedHere = new Set(declarations
