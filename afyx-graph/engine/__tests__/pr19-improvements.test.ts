@@ -579,23 +579,23 @@ describe('CLI uninit', () => {
 });
 
 // =============================================================================
-// Tree-sitter Version Pinning
+// Parser Runtime Isolation
 // =============================================================================
 
-describe('Tree-sitter WASM Setup', () => {
-  it('retains parser packages until the dedicated runtime-isolation boundary', () => {
+describe('Parser runtime isolation', () => {
+  it('does not retain historical parser runtime packages', () => {
     const pkgPath = path.join(__dirname, '..', 'package.json');
     const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
 
-    expect(pkg.dependencies['web-tree-sitter']).toBeDefined();
-    expect(pkg.dependencies['tree-sitter-wasms']).toBeDefined();
+    expect(pkg.dependencies?.['web-tree-sitter']).toBeUndefined();
+    expect(pkg.dependencies?.['tree-sitter-wasms']).toBeUndefined();
   });
 
   it('should not have native tree-sitter in dependencies', () => {
     const pkgPath = path.join(__dirname, '..', 'package.json');
     const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
 
-    expect(pkg.dependencies['tree-sitter']).toBeUndefined();
+    expect(pkg.dependencies?.['tree-sitter']).toBeUndefined();
     expect(pkg.overrides).toBeUndefined();
   });
 });

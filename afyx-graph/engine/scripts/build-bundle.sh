@@ -57,9 +57,6 @@ stage_application() {
   done < <(node "$CONTRACT" legal-files)
   echo "[bundle] installing production dependencies"
   (cd "$STAGE/lib" && npm ci --omit=dev --ignore-scripts >/dev/null 2>&1)
-  # The dependency declaration remains until Runtime & Dev/Test Isolation, but
-  # native production does not ship the package's unused grammar binaries.
-  rm -rf "$STAGE/lib/node_modules/tree-sitter-wasms"
   rm -f "$STAGE/lib/package-lock.json"
 }
 
@@ -79,7 +76,7 @@ stage_optional_kernel() {
 write_launcher() {
   if [ "$FAMILY" = "win32" ]; then
     cp "$RUNTIME_SOURCE" "$STAGE/node.exe"
-    printf '@echo off\r\n@"%%~dp0..\\node.exe" --liftoff-only --disable-warning=ExperimentalWarning "%%~dp0..\\lib\\dist\\bin\\afyx-graph.js" %%*\r\n' > "$STAGE/bin/afyx-graph.cmd"
+    printf '@echo off\r\n@"%%~dp0..\\node.exe" --disable-warning=ExperimentalWarning "%%~dp0..\\lib\\dist\\bin\\afyx-graph.js" %%*\r\n' > "$STAGE/bin/afyx-graph.cmd"
     return
   fi
   cp "$RUNTIME_SOURCE" "$STAGE/node"
@@ -94,7 +91,7 @@ done
 BUNDLE_DIR="$(cd "$(dirname "$SELF")/.." && pwd)"
 AFYX_GRAPH_HOST_PPID="${AFYX_GRAPH_HOST_PPID:-$PPID}"
 export AFYX_GRAPH_HOST_PPID
-exec "$BUNDLE_DIR/node" --liftoff-only --disable-warning=ExperimentalWarning "$BUNDLE_DIR/lib/dist/bin/afyx-graph.js" "$@"
+exec "$BUNDLE_DIR/node" --disable-warning=ExperimentalWarning "$BUNDLE_DIR/lib/dist/bin/afyx-graph.js" "$@"
 LAUNCHER
   chmod +x "$STAGE/bin/afyx-graph"
 }

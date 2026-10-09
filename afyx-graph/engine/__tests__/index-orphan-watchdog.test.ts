@@ -1,17 +1,10 @@
 /**
- * `index` / `init` command supervision regression test (#999, secondary issues).
+ * End-to-end regression for command supervision: a long-running index child
+ * must self-terminate after its launcher disappears. The command-level PPID
+ * watchdog closes the same orphaning gap as the MCP server watchdog.
  *
- * `afyx-graph index` runs in a child re-exec'd with `--liftoff-only` whose parent
- * blocks in `spawnSync` and so cannot forward a signal — when the parent shim is
- * killed the indexer used to keep running, orphaned, pinning a CPU core. The
- * `#850` liveness watchdog and `#277` ppid watchdog were also wired only into
- * `serve`, never `index`/`init`. `installCommandSupervision` (src/bin/
- * command-supervision.ts) closes both gaps; this proves the orphan half end to
- * end: a process running it self-terminates once its parent dies.
- *
- * Windows is excluded — `process.kill(pid, 'SIGKILL')` doesn't deliver SIGKILL
- * there and the reparenting semantics the ppid watchdog relies on are POSIX-only
- * (same exclusion as mcp-ppid-watchdog.test.ts).
+ * Windows is excluded because process.kill(pid, 'SIGKILL') and reparenting
+ * semantics used by this harness are POSIX-only.
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
@@ -77,7 +70,7 @@ describe.skipIf(process.platform === 'win32')('index/init orphan supervision (#9
       const errFd = fs.openSync(${JSON.stringify(stderrLog)}, 'a');
       const child = spawn(process.execPath, ['-e', ${JSON.stringify(childSrc)}], {
         stdio: ['ignore', 'pipe', errFd],
-        env: { ...process.env, AFYX_GRAPH_NO_WATCHDOG: '1', AFYX_GRAPH_PPID_POLL_MS: '200', AFYX_GRAPH_WASM_RELAUNCHED: '1' },
+        env: { ...process.env, AFYX_GRAPH_NO_WATCHDOG: '1', AFYX_GRAPH_PPID_POLL_MS: '200' },
         detached: true,
       });
       child.unref();

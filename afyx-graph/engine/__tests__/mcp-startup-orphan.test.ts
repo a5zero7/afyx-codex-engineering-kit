@@ -36,9 +36,6 @@ function spawnServer(cwd: string, handshakeTimeoutMs: number): ChildProcessWitho
       // Direct mode: hermetic (no detached daemon to leak from the suite).
       // The backstop is armed identically on the proxy path.
       AFYX_GRAPH_NO_DAEMON: '1',
-      // Single process (skip the --liftoff-only re-exec) so exit-code and
-      // liveness assertions observe the server itself.
-      AFYX_GRAPH_WASM_RELAUNCHED: '1',
       // One less helper child; the liveness watchdog is not under test.
       AFYX_GRAPH_NO_WATCHDOG: '1',
       DO_NOT_TRACK: '1',

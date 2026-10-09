@@ -9230,10 +9230,8 @@ require("side.effect")
       expect(ref).toBeDefined();
     });
 
-    // Regression: the tree-sitter-wasms Lua grammar (ABI 13) corrupts the shared
-    // WASM heap under web-tree-sitter 0.25, dropping nested calls/imports on every
-    // parse after the first. We vendor the ABI-15 grammar instead — this guards it
-    // by extracting several sources in sequence and asserting the LAST still works.
+    // Regression guard: repeated extraction must not leak state or drop nested
+    // calls/imports. Exercise a sequence and assert the LAST result still works.
     it('should keep extracting require across many sequential parses', () => {
       let last;
       for (let i = 0; i < 8; i++) {

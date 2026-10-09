@@ -143,7 +143,7 @@ export interface SyncResult {
 
 /**
  * Skip files larger than this (bytes). Generated bundles, minified JS, and
- * vendored blobs blow the WASM heap and the worker-recycle budget for no useful
+ * vendored blobs exhaust worker memory and the recycle budget for no useful
  * symbols. 1 MB covers essentially all hand-written source.
  */
 const MAX_FILE_SIZE = 1024 * 1024;
@@ -1705,7 +1705,7 @@ export class ExtractionOrchestrator {
   /**
    * Names of frameworks detected for this project, populated by indexAll().
    * Passed to extractFromSource so framework-specific extractors (route nodes,
-   * middleware, etc.) run after the tree-sitter pass. Cleared if detection
+   * middleware, etc.) run after the native extraction pass. Cleared if detection
    * hasn't run yet so single-file re-index paths can detect on the spot.
    */
   private detectedFrameworkNames: string[] | null = null;
@@ -1907,7 +1907,7 @@ export class ExtractionOrchestrator {
 
     // Detect frameworks once per indexAll run using the scanned file list.
     // Names are passed to each parse call so framework-specific extractors
-    // (route nodes, middleware, etc.) run after the tree-sitter pass.
+    // (route nodes, middleware, etc.) run after the native extraction pass.
     // Framework detection is reset each run so adding e.g. requirements.txt
     // between runs is picked up without restarting the process.
     this.detectedFrameworkNames = null;
@@ -1954,7 +1954,7 @@ export class ExtractionOrchestrator {
       // AFYX_GRAPH_PARSE_WORKERS: explicit worker count; 1 = the old single-worker
       // behaviour (the conservative rollback). Unset → clamp(cores-1, 1, 8),
       // with cores from availableParallelism — cpuset/affinity-honest, where
-      // os.cpus() enumerates the host's CPUs and spawned 8 wasm workers (and
+      // os.cpus() enumerates the host's CPUs and spawned 8 parse workers (and
       // their isolates) inside a 2-CPU container for zero extra
       // throughput (§7a.1). Floored so a 2-core box still gets 2 workers:
       // extraction is worker-side CPU, and 1 worker measured 34% slower than the
@@ -2219,7 +2219,7 @@ export class ExtractionOrchestrator {
 
         // Honour MAX_FILE_SIZE. Without this check, vendored generated
         // headers, minified bundles, and other multi-MB files get indexed,
-        // wasting WASM heap and the worker recycle budget on inputs with no
+        // wasting worker memory and the recycle budget on inputs with no
         // useful symbols. The single-file extractFile path already enforces
         // this; the bulk path used to silently skip the check.
         if (stats.size > MAX_FILE_SIZE) {
@@ -2298,9 +2298,9 @@ export class ExtractionOrchestrator {
     // so synchronous work here blocks the animation from rendering.
     await new Promise(resolve => setImmediate(resolve));
 
-    // Retry pass: files that failed due to WASM memory corruption may succeed
+    // Retry pass: files that failed due to worker memory corruption may succeed
     // on a fresh worker with a clean heap. Recycle before each attempt so
-    // every file gets the absolute cleanest WASM state possible. Timeouts are
+    // every file gets the absolute cleanest worker state possible. Timeouts are
     // retried too (#1231): most are main-thread-stall artifacts, not slow
     // parses, and this pass parses one file at a time with the store strictly
     // after each parse resolves, so the stall window can't recur here.
@@ -2312,9 +2312,9 @@ export class ExtractionOrchestrator {
     );
 
     if (retryableErrors.length > 0 && pool) {
-      log(`Retrying ${retryableErrors.length} files that failed due to WASM memory errors or timeouts...`);
+      log(`Retrying ${retryableErrors.length} files that failed due to worker memory errors or timeouts...`);
 
-      // Fresh WASM heaps for the retry phase. A retry that still crashes its
+      // Fresh worker heaps for the retry phase. A retry that still crashes its
       // worker makes the pool respawn it, so later retries keep landing on clean
       // workers too.
       pool.recycleAll();
@@ -2366,7 +2366,7 @@ export class ExtractionOrchestrator {
       }
 
       // Last resort: for files that still crash on a clean worker, strip
-      // comment-only lines to reduce WASM memory pressure. Many compiler
+      // comment-only lines to reduce worker memory pressure. Many compiler
       // test files are 90%+ comments (CHECK directives) that don't contribute
       // code nodes but consume parser memory.
       if (stillFailing.length > 0) {

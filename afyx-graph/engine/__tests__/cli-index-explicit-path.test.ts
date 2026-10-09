@@ -20,7 +20,7 @@ function run(cwd: string, args: string[]) {
   const r = spawnSync(process.execPath, [BIN, ...args], {
     cwd,
     encoding: 'utf-8',
-    env: { ...process.env, AFYX_GRAPH_NO_DAEMON: '1', AFYX_GRAPH_WASM_RELAUNCHED: '1', NO_COLOR: '1' },
+    env: { ...process.env, AFYX_GRAPH_NO_DAEMON: '1', NO_COLOR: '1' },
   });
   return { status: r.status, out: (r.stdout ?? '') + (r.stderr ?? '') };
 }

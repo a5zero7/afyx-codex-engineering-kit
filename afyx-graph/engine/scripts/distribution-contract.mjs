@@ -104,11 +104,14 @@ export function verifyBundle(root, target) {
   if (!launcherText.includes('lib') || !launcherText.includes('dist') || !launcherText.includes('afyx-graph.js')) {
     throw new DistributionError('launcher does not target lib/dist/bin/afyx-graph.js');
   }
-  if (!existsSync(join(lib, 'node_modules'))) throw new DistributionError('production node_modules is missing');
-  const dependencyGrammars = walkFiles(join(lib, 'node_modules', 'tree-sitter-wasms'))
-    .filter((file) => file.endsWith('.wasm'));
-  if (dependencyGrammars.length > 0) {
-    throw new DistributionError('bundle must not contain tree-sitter grammar WASM');
+  const parserRuntimeFiles = walkFiles(lib).filter((file) => {
+    const shippedPath = relative(lib, file).split(sep).join('/').toLowerCase();
+    return shippedPath.includes('web-tree-sitter') ||
+      shippedPath.includes('tree-sitter-wasms') ||
+      shippedPath.endsWith('/tree-sitter.wasm');
+  });
+  if (parserRuntimeFiles.length > 0) {
+    throw new DistributionError('bundle must not contain a third-party parser runtime');
   }
   for (const forbidden of ['src', '__tests__', 'ui']) {
     if (existsSync(join(lib, forbidden))) throw new DistributionError(`development-only lib/${forbidden} is packaged`);

@@ -20,10 +20,9 @@
 
 import * as fs from 'fs';
 import * as net from 'net';
-import { HOST_PPID_ENV } from '../extraction/wasm-runtime-flags';
 import { DaemonClientHello, DaemonHello, MAX_HELLO_LINE_BYTES } from './daemon';
 import { EARLY_PPID } from './early-ppid';
-import { installPpidWatchdog, parseHostPpid } from './ppid-watchdog';
+import { HOST_PPID_ENV, installPpidWatchdog, parseHostPpid } from './ppid-watchdog';
 import { isProcessAlive } from './process-liveness';
 import { armStartupHandshakeTimeout } from './startup-handshake';
 import { treatStdinFailureAsShutdown } from './stdin-teardown';

@@ -70,11 +70,10 @@ import {
   probeDaemonIdentity,
 } from './daemon-paths';
 import { EARLY_PPID } from './early-ppid';
-import { installPpidWatchdog, parseHostPpid } from './ppid-watchdog';
+import { HOST_PPID_ENV, installPpidWatchdog, parseHostPpid } from './ppid-watchdog';
 import { installMainThreadWatchdog, WatchdogHandle } from './liveness-watchdog';
 import { armStartupHandshakeTimeout } from './startup-handshake';
 import { treatStdinFailureAsShutdown } from './stdin-teardown';
-import { HOST_PPID_ENV } from '../extraction/wasm-runtime-flags';
 
 /**
  * Env var {@link spawnDetachedDaemon} sets when it re-invokes the CLI to mark
@@ -234,9 +233,8 @@ function resolveDaemonRoot(explicitPath: string | null): string | null {
  * terminal can't reach it), stdio decoupled from the launcher and instead
  * appended to `.afyx-graph/daemon.log`. Re-invokes the SAME CLI faithfully
  * across both dev and bundled launches, by reusing `process.argv[0]` (the
- * right node binary), the current `process.execArgv` (carries
- * `--liftoff-only`, so the daemon never re-execs itself) and
- * `process.argv[1]` (this very script). The spawned process arbitrates its
+ * right node binary), the current `process.execArgv`, and `process.argv[1]`
+ * (this very script). The spawned process arbitrates its
  * own O_EXCL lock, so racing launchers may each spawn one — every loser just
  * exits, and every launcher ends up proxying through the single winner.
  */

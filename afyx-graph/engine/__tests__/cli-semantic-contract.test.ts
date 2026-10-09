@@ -5,7 +5,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AfyxGraph } from '../src';
-import { buildNode25BlockBanner, buildNodeTooOldBanner, MIN_NODE_MAJOR } from '../src/bin/node-version-check';
+import { buildNodeTooOldBanner, MIN_NODE_MAJOR } from '../src/bin/node-version-check';
 import { CLI_COMMANDS, prepareCliInvocation } from '../src/bin/cli-registry';
 
 const BIN = path.resolve(__dirname, '../dist/bin/afyx-graph.js');
@@ -26,7 +26,6 @@ interface CliRun {
 function nodePrerequisiteBanner(): string {
   const version = process.versions.node;
   const major = Number.parseInt(version.split('.')[0] ?? '0', 10);
-  if (major >= 25) return `${buildNode25BlockBanner(version)}\n`;
   if (major < MIN_NODE_MAJOR) return `${buildNodeTooOldBanner(version)}\n`;
   return '';
 }
@@ -45,7 +44,6 @@ function runCli(
       ...process.env,
       AFYX_GRAPH_ALLOW_UNSAFE_NODE: '1',
       AFYX_GRAPH_NO_DAEMON: '1',
-      AFYX_GRAPH_WASM_RELAUNCHED: '1',
       NO_COLOR: '1',
       FORCE_COLOR: '0',
       ...options.env,

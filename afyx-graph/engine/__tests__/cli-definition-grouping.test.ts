@@ -18,7 +18,7 @@ let handler: ToolHandler;
 function runCli(command: Command, symbol = 'handle', args: string[] = []) {
   return spawnSync(process.execPath, [BIN, command, '-p', projectRoot, ...args, '--', symbol], {
     encoding: 'utf-8',
-    env: { ...process.env, AFYX_GRAPH_NO_DAEMON: '1', AFYX_GRAPH_WASM_RELAUNCHED: '1', NO_COLOR: '1' },
+    env: { ...process.env, AFYX_GRAPH_NO_DAEMON: '1', NO_COLOR: '1' },
     timeout: 30_000,
   });
 }

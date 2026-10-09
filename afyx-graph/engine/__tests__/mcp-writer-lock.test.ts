@@ -64,9 +64,6 @@ describe('issue #1740 — direct-mode writer lock', () => {
       AFYX_GRAPH_MCP_DEBUG: '1',
       AFYX_GRAPH_NO_WATCHDOG: '1',
       AFYX_GRAPH_STARTUP_HANDSHAKE_TIMEOUT_MS: '0',
-      // Avoid wasm --liftoff-only re-exec so lock.pid matches the spawned pid.
-      AFYX_GRAPH_NO_RELAUNCH: '1',
-      AFYX_GRAPH_WASM_RELAUNCHED: '1',
     };
     const first = spawnMcp(realRoot, env);
     children.push(first.child);
@@ -103,8 +100,6 @@ describe('issue #1740 — direct-mode writer lock', () => {
       AFYX_GRAPH_MCP_LOG_ATTACH: '1',
       AFYX_GRAPH_NO_WATCHDOG: '1',
       AFYX_GRAPH_STARTUP_HANDSHAKE_TIMEOUT_MS: '0',
-      AFYX_GRAPH_NO_RELAUNCH: '1',
-      AFYX_GRAPH_WASM_RELAUNCHED: '1',
     };
     const a = spawnMcp(realRoot, env);
     const b = spawnMcp(realRoot, env);

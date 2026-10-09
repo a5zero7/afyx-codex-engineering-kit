@@ -22,7 +22,7 @@ const BIN = path.resolve(__dirname, '../dist/bin/afyx-graph.js');
 function query(cwd: string, extraArgs: string[]): string {
   return execFileSync(process.execPath, [BIN, 'query', 'parseToken', ...extraArgs, '-p', cwd], {
     encoding: 'utf-8',
-    env: { ...process.env, AFYX_GRAPH_NO_DAEMON: '1', AFYX_GRAPH_WASM_RELAUNCHED: '1' },
+    env: { ...process.env, AFYX_GRAPH_NO_DAEMON: '1' },
     stdio: ['ignore', 'pipe', 'ignore'], // drop stderr (SQLite experimental warning)
   });
 }

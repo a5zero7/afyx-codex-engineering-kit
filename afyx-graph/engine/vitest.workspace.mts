@@ -12,9 +12,9 @@ import { defineWorkspace } from 'vitest/config';
  *
  * That last one is why this is a workspace rather than one config with a
  * couple of extra fields. `browser` is a package-resolution condition, not a
- * test setting: applied globally it would also hand the engine's suites the
- * browser builds of `web-tree-sitter` and friends, and the failures that
- * causes look nothing like their cause.
+ * test setting: applied globally it would hand every engine suite
+ * browser-specific dependency exports, and the resulting failures would look
+ * nothing like their cause.
  *
  * The engine project `extends` the shared base, so the env vars and Node guard
  * in `vitest.config.mts` still apply to every engine test. The ui project does

@@ -200,8 +200,8 @@ export class ParseWorkerPool {
       // only moves the cliff a deeply nested file falls off (#1581 — the
       // 8 MiB main thread still dies at 100k levels). The native kernel
       // guards its own recursion against THIS thread's real stack bounds
-      // (afyx-graph-kernel/src/stack.rs) and defers such a file to the wasm
-      // path, which catches its JS RangeError per file.
+      // (afyx-graph-kernel/src/stack.rs) and defers such a file to the
+      // TypeScript-native path, which catches its JS RangeError per file.
       this.createWorker = () => new Worker(scriptPath);
     } else {
       throw new Error('ParseWorkerPool requires workerScriptPath or createWorker');
@@ -324,7 +324,7 @@ export class ParseWorkerPool {
   private recycle(w: ParsePoolWorker): void {
     this.log(`Recycling worker after ${this.parseCounts.get(w)} parses (heap: ${Math.round(process.memoryUsage().rss / 1024 / 1024)}MB RSS)`);
     this.removeWorker(w);
-    // Fire-and-forget: worker.terminate() can hang if WASM is wedged.
+    // Fire-and-forget: worker.terminate() can hang if the worker is wedged.
     try { void w.terminate(); } catch { /* already gone */ }
     if (this.healthy && !this.destroyed) this.spawnOne();
   }
@@ -376,7 +376,7 @@ export class ParseWorkerPool {
   private onHardTimeout(w: ParsePoolWorker, job: ParseJob, totalMs: number): void {
     if (job.settled || !this.workers.has(w)) return;
     this.log(`TIMEOUT: ${job.task.filePath} got no result after ${totalMs}ms — killing worker`);
-    // Kill the (WASM-wedged) worker and reject this parse. A timeout isn't a
+    // Kill the wedged worker and reject this parse. A timeout isn't a
     // crash — don't charge the budget — but the worker is gone, so spawn a
     // replacement to keep capacity. The rejection message contains "timed out"
     // so the orchestrator's retry pass re-attempts the file.

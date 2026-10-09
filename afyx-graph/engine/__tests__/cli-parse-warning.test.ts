@@ -34,7 +34,6 @@ describe('CLI parse warnings (#1522)', () => {
       env: {
         ...process.env,
         AFYX_GRAPH_NO_DAEMON: '1',
-        AFYX_GRAPH_WASM_RELAUNCHED: '1',
         NO_COLOR: '1',
       },
     });

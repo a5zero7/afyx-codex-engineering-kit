@@ -252,7 +252,6 @@ describe.skipIf(!kernelBuilt)('kernel deep-nesting guard (#1581)', () => {
         env: {
           ...process.env,
           AFYX_GRAPH_NO_DAEMON: '1',
-          AFYX_GRAPH_WASM_RELAUNCHED: '1',
           DO_NOT_TRACK: '1',
           AFYX_GRAPH_NO_PROMPT_HOOK: '1',
         },

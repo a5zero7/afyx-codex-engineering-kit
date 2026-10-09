@@ -30,7 +30,6 @@ function bundle(): string {
   file(root, 'lib/dist/index.js.map');
   file(root, 'lib/dist/ui/shimmer-progress.js');
   file(root, 'lib/package.json', JSON.stringify({ name: '@a5zero7/afyx-graph', bin: { 'afyx-graph': './dist/bin/afyx-graph.js' } }));
-  mkdirSync(join(root, 'lib', 'node_modules'), { recursive: true });
   file(root, 'metadata.json', JSON.stringify({ product_name: 'Afyx Graph', cli: 'afyx-graph' }));
   file(root, 'licenses/THIRD_PARTY_NOTICES.md');
   file(root, 'licenses/THIRD_PARTY_ENGINE_MIT.txt');
@@ -97,10 +96,10 @@ describe('Afyx distribution contract', () => {
     expect(() => verifyBundle(root, 'win32-x64')).toThrow(/development-only/);
   });
 
-  it('rejects grammar WASM from a staged dependency', () => {
+  it('rejects a staged third-party parser runtime', () => {
     const root = bundle();
-    file(root, 'lib/node_modules/tree-sitter-wasms/out/tree-sitter-python.wasm');
-    expect(() => verifyBundle(root, 'win32-x64')).toThrow(/grammar WASM/);
+    file(root, 'lib/node_modules/web-tree-sitter/tree-sitter.wasm');
+    expect(() => verifyBundle(root, 'win32-x64')).toThrow(/parser runtime/);
   });
 
   it('rejects wrong CLI metadata', () => {

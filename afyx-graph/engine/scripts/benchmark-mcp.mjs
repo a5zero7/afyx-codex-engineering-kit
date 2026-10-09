@@ -48,7 +48,7 @@ function waitForExit(child, timeoutMs = 5_000) {
 async function runRound(round) {
   const started = performance.now();
   const child = spawn(process.execPath, [
-    '--liftoff-only', bin, 'serve', '--mcp', '--path', project,
+    bin, 'serve', '--mcp', '--path', project,
   ], {
     cwd: project,
     stdio: ['pipe', 'pipe', 'pipe'],

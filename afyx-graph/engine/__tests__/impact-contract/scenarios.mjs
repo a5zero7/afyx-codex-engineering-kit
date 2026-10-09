@@ -7,7 +7,7 @@ import crypto from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 
 const [cli, project, out] = process.argv.slice(2);
-const env = { ...process.env, AFYX_GRAPH_NO_DAEMON: '1', AFYX_GRAPH_NO_WATCH: '1', AFYX_GRAPH_ALLOW_UNSAFE_NODE: '1', AFYX_GRAPH_WASM_RELAUNCHED: '1', NO_COLOR: '1' };
+const env = { ...process.env, AFYX_GRAPH_NO_DAEMON: '1', AFYX_GRAPH_NO_WATCH: '1', AFYX_GRAPH_ALLOW_UNSAFE_NODE: '1', NO_COLOR: '1' };
 const sha = (value) => {
   const text = typeof value === 'string' ? value : JSON.stringify(value);
   return `${text.length}:${crypto.createHash('sha256').update(text).digest('hex').slice(0, 16)}`;

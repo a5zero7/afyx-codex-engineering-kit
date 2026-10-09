@@ -2,9 +2,8 @@
  * MCP `initialize` handshake regression tests.
  *
  * Issue #172: on slow filesystems (Docker Desktop VirtioFS on macOS, WSL2),
- * the MCP server was blocking the initialize response on AfyxGraph.open() and
- * Parser.init() (web-tree-sitter WASM bootstrap), which could take longer than
- * Claude Code's ~30s handshake timeout. The child process stayed alive and
+ * MCP server was blocking the initialize response on heavy graph startup,
+ * which could exceed Claude Code's ~30s handshake timeout. The child process stayed alive and
  * had received the request, but never sent a response, so tools never
  * appeared in the client. The fix sends the initialize response before
  * kicking off the heavy init in the background. These tests guard the

@@ -28,7 +28,7 @@ function spawnServer(cwd: string): ChildProcessWithoutNullStreams {
   return spawn(process.execPath, [BIN, 'serve', '--mcp', '--no-watch'], {
     cwd,
     stdio: ['pipe', 'pipe', 'pipe'],
-    env: { ...process.env, AFYX_GRAPH_NO_DAEMON: '1', AFYX_GRAPH_WASM_RELAUNCHED: '1' },
+    env: { ...process.env, AFYX_GRAPH_NO_DAEMON: '1' },
   }) as ChildProcessWithoutNullStreams;
 }
 

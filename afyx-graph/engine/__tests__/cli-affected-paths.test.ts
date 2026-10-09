@@ -21,7 +21,7 @@ const BIN = path.resolve(__dirname, '../dist/bin/afyx-graph.js');
 function affected(cwd: string, arg: string): string[] {
   const out = execFileSync(process.execPath, [BIN, 'affected', arg, '--quiet', '-p', cwd], {
     encoding: 'utf-8',
-    env: { ...process.env, AFYX_GRAPH_NO_DAEMON: '1', AFYX_GRAPH_WASM_RELAUNCHED: '1' },
+    env: { ...process.env, AFYX_GRAPH_NO_DAEMON: '1' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   return out.split('\n').map((s) => s.trim()).filter(Boolean);

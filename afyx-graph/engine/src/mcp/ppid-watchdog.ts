@@ -16,6 +16,9 @@ export function supervisionLostReason(state: SupervisionState): string | null {
 
 export const DEFAULT_PPID_POLL_MS = 5000;
 
+/** Optional launcher-provided PID for supervising the original host process. */
+export const HOST_PPID_ENV = 'AFYX_GRAPH_HOST_PPID';
+
 export function parsePpidPollMs(raw: string | undefined): number {
   return parsePollingInterval(raw, DEFAULT_PPID_POLL_MS);
 }

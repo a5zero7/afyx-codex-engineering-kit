@@ -85,7 +85,7 @@ function coldIndex(dir) {
       graph.close();
       process.stdout.write(JSON.stringify({ ms, maxRssKb: process.resourceUsage().maxRSS, nodes: stats.nodeCount, edges: stats.edgeCount, files: stats.fileCount }));
     })();`;
-  const result = spawnSync(process.execPath, ['--liftoff-only', '-e', script], { encoding: 'utf8', timeout: 600_000 });
+  const result = spawnSync(process.execPath, ['-e', script], { encoding: 'utf8', timeout: 600_000 });
   if (result.status !== 0) throw new Error(`cold index failed: ${result.stderr}`);
   return JSON.parse(result.stdout);
 }

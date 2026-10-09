@@ -24,9 +24,9 @@ const PKG_VERSION = JSON.parse(
 function run(args: string[]): string {
   return execFileSync(process.execPath, [BIN, ...args], {
     encoding: 'utf-8',
-    // Skip the daemon and the wasm-flag re-exec so the command resolves in a
-    // single fast process (no graph work happens for a version print anyway).
-    env: { ...process.env, AFYX_GRAPH_NO_DAEMON: '1', AFYX_GRAPH_WASM_RELAUNCHED: '1' },
+    // Skip the daemon so the command resolves in a single fast process (no
+    // graph work happens for a version print anyway).
+    env: { ...process.env, AFYX_GRAPH_NO_DAEMON: '1' },
     stdio: ['ignore', 'pipe', 'pipe'],
   }).trim();
 }
@@ -65,7 +65,7 @@ describe('afyx-graph version affordances', () => {
     try {
       combined = execFileSync(process.execPath, [BIN, 'index', '-v', tempDir], {
         encoding: 'utf-8',
-        env: { ...process.env, AFYX_GRAPH_NO_DAEMON: '1', AFYX_GRAPH_WASM_RELAUNCHED: '1' },
+        env: { ...process.env, AFYX_GRAPH_NO_DAEMON: '1' },
         stdio: ['ignore', 'pipe', 'pipe'],
       });
     } catch (err: unknown) {

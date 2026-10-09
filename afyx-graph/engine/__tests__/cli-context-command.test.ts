@@ -22,7 +22,7 @@ import { AfyxGraph } from '../src';
 
 const BIN = path.resolve(__dirname, '../dist/bin/afyx-graph.js');
 
-const ENV = { ...process.env, AFYX_GRAPH_NO_DAEMON: '1', AFYX_GRAPH_WASM_RELAUNCHED: '1' };
+const ENV = { ...process.env, AFYX_GRAPH_NO_DAEMON: '1' };
 
 function runContext(cwd: string, extraArgs: string[], taskParts: string[] = ['parseToken', 'expiry', 'handling']): string {
   return execFileSync(process.execPath, [BIN, 'context', ...extraArgs, '-p', cwd, ...taskParts], {

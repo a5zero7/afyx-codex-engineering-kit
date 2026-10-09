@@ -41,7 +41,7 @@ describe('Impact / affected-tests contract', () => {
     const outFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-graph-impact-out-')), 'result.json');
     execFileSync(process.execPath, [SCENARIOS, CLI, dir, outFile], {
       encoding: 'utf-8',
-      env: { ...process.env, AFYX_GRAPH_NO_DAEMON: '1', AFYX_GRAPH_WASM_RELAUNCHED: '1' },
+      env: { ...process.env, AFYX_GRAPH_NO_DAEMON: '1' },
       stdio: ['ignore', 'pipe', 'pipe'],
       timeout: 480_000, // this test alone runs 250+ real CLI/MCP subprocess spawns
     });

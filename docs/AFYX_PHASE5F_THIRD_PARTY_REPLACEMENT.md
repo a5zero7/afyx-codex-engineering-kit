@@ -3042,3 +3042,101 @@ GRAMMAR_AND_PACKAGING            CLOSED
 ```
 
 The exact next boundary is **Runtime & Dev/Test Isolation**.
+
+## Runtime & Dev/Test Isolation
+
+This boundary starts from `b8cf14f49a97e9ef01da9d07e5b6a08d93e06fc6`.
+The production parser path, parser worker protocol, adapter/tree-walk source,
+grammar assets, and grammar packaging were already closed. The remaining
+runtime packages and parser-specific launch/test scaffolding had no production
+caller and were obsolete.
+
+### Dependency and tooling closure
+
+| Reference | Previous scope | Final classification | Final state |
+| --- | --- | --- | --- |
+| `web-tree-sitter` | direct production dependency; unused runtime binaries entered the Windows bundle | dead runtime dependency | removed from manifest, lockfile, install tree, and artifacts |
+| `tree-sitter-wasms` | direct production dependency; bundle script removed it after install | dead packaging dependency | removed from manifest, lockfile, install tree, and artifacts |
+| `wasm-runtime-flags.ts` and `--liftoff-only` relaunch | parser-WASM OOM workaround | dead parser bootstrap | removed; CLI starts directly |
+| Node 25 parser-WASM block | parser-WASM OOM guard | dead runtime restriction | removed; package engine contract is now Node `>=20.0.0` |
+| parser package pin/runtime-flag tests | transition-only test scaffolding | dead test tooling | retired or rewritten as absence/distribution contracts |
+| `AFYX_GRAPH_HOST_PPID` | process supervision contract | product lifecycle behavior | retained under `mcp/ppid-watchdog.ts` |
+| historical kernel/legal references | provenance and attribution evidence | legal/historical evidence | retained unchanged |
+
+Direct, transitive, dev-only, and test-only dependency state is now absent for
+both parser packages. `npm ls web-tree-sitter` and
+`npm ls tree-sitter-wasms` both report an empty tree. The old bundle-time
+`tree-sitter-wasms` deletion is gone. The distribution contract now rejects
+either historical package or `tree-sitter.wasm` anywhere in the staged product
+while correctly accepting a zero-production-dependency bundle with no
+`node_modules` directory.
+
+Worker crash/timeout recovery and PPID/liveness supervision remain product
+behavior. Their parser-specific comments and test environment switches were
+removed, but their native worker and lifecycle semantics were not weakened.
+
+### Artifact composition and footprint
+
+```text
+                                      before         after
+dist bytes                          9,099,061     9,081,461
+npm pack compressed                2,263,794     2,257,459
+npm pack unpacked                  9,270,237     9,251,556
+win32-x64 archive                 39,054,071    37,307,059
+installed parser dependency footprint 54.88 MB          0
+
+dist parser runtime files                  0             0
+npm pack parser runtime files              0             0
+archive parser runtime files               3             0
+grammar WASM                               0             0
+```
+
+The footprint values are cheap artifact sanity evidence, not a replacement for
+the frozen Benchmark A/B methodology. The frozen semantic contract and native
+performance baseline were reused; no full semantic or performance campaign was
+repeated for dependency-only closure.
+
+### Validation and final state
+
+```text
+TypeScript typecheck                                      PASS
+focused dependency/distribution/lifecycle tests     72 PASS / 1 SKIP
+native extraction/syntax/branch guards                   86/86 PASS
+targeted CLI/MCP lifecycle            28 PASS / 4 SKIP / 3 CLEANUP_ONLY_EPERM
+clean production and UI build                                PASS
+CLI/MCP smoke                                             21/21 PASS
+distribution contract                                      9/9 PASS
+npm pack parser runtime / WASM                              0 / 0
+win32-x64 archive parser runtime / WASM                     0 / 0
+Bash bundle/installer syntax                                  PASS
+Bash + PowerShell installer validate-only                     PASS
+Afyx Graph repository validation                              PASS
+npm dependency-tree audit                                    EMPTY
+git diff --check                                               PASS
+```
+
+The three targeted lifecycle failures occurred only in Windows temporary
+directory cleanup after the MCP sub-project scenarios completed; isolated
+rerun reproduced the same `rmSync` `EPERM` cleanup location. They are
+`ENVIRONMENT_OR_TOOLING_NOISE`, not product or V1-required failures.
+
+```text
+V1_REQUIRED failure                         0
+UNKNOWN product failure                     0
+
+production parser fallback                  0
+production parser bootstrap                 0
+parser worker protocol                      0
+parser adapter/source                       0
+production SyntaxNode coupling              0
+grammar WASM                                0
+web-tree-sitter                             0
+tree-sitter-wasms                           0
+third-party parser runtime                  0
+
+PARSER_RUNTIME_AND_DEV_TEST_ISOLATION  CLOSED
+WEB_TREE_SITTER                            0
+TREE_SITTER_WASMS                          0
+```
+
+The exact next boundary is **Native Kernel Closure**.

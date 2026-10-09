@@ -16,7 +16,7 @@ Latest verified Phase 5F performance-baseline checkpoint: `1f671dabc8af5bf8f8088
 Latest verified Phase 5F fallback-closure checkpoint: `16c8e84ce7dc036141a680dbabbdd73e31f70f6c`  
 Latest verified Phase 5F bootstrap/protocol checkpoint: `81695bb7659bd05a06f00e9fe0e36d5e6e933191`  
 Latest verified Phase 5F grammar/packaging checkpoint: `a21d7b710f9c4e0c02f461096e9f39a47171a664`  
-Current Phase 5F boundary: **Runtime & Dev/Test Isolation**
+Current Phase 5F boundary: **Native Kernel Closure**
 Last merged Phase 5F major checkpoint: **PR #57 — Utility Runtime + UI Runtime**  
 Phase 5E merge baseline: `48b6078ed37349e405213258819fa5225bcdb3fb`
 
@@ -467,8 +467,8 @@ shipped grammar WASM:              0
 grammar staging/copy:              0
 package-resolved grammar use:      0
 SyntaxNode/parser coupling:        0
-web-tree-sitter:                   PRESENT
-tree-sitter-wasms:                 PRESENT
+web-tree-sitter:                   0
+tree-sitter-wasms:                 0
 ```
 
 V1 contract decision gate:
@@ -572,7 +572,7 @@ tokens and a large real-repository agent campaign remain explicitly unmeasured.
 
 The exact next boundary is:
 
-> **Runtime & Dev/Test Isolation**
+> **Native Kernel Closure**
 
 The remaining parser/runtime closure sequence is:
 
@@ -598,7 +598,7 @@ E. Grammar & Packaging Closure [COMPLETE]
    Remove tracked/shipped grammar WASM, grammar staging/copy requirements, and
    package-resolved grammar use.
 
-F. Runtime & Dev/Test Isolation [NEXT]
+F. Runtime & Dev/Test Isolation [COMPLETE]
    Remove production web-tree-sitter/tree-sitter-wasms requirements and delete
    or strictly isolate any remaining parser-only tooling/oracles.
 ```
@@ -611,8 +611,11 @@ PARSER_BOOTSTRAP = CLOSED
 PARSER_WORKER_PROTOCOL = CLOSED
 PARSER_ADAPTER_AND_TREE_WALK_SOURCE = CLOSED
 GRAMMAR_AND_PACKAGING = CLOSED
+PARSER_RUNTIME_AND_DEV_TEST_ISOLATION = CLOSED
 TRACKED_GRAMMAR_WASM = 0
 SHIPPED_GRAMMAR_WASM = 0
+WEB_TREE_SITTER = 0
+TREE_SITTER_WASMS = 0
 ```
 
 Performance/token principle:

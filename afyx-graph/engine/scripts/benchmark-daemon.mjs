@@ -28,11 +28,6 @@ import { createHash } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { pathToFileURL } from 'node:url';
 
-// Same override every other benchmark/smoke script sets: this benchmark spawns
-// real `afyx-graph serve --mcp` subprocesses, which refuse to run at all on an
-// unsupported Node major (the WASM JIT OOM guard) unless explicitly overridden.
-process.env.AFYX_GRAPH_ALLOW_UNSAFE_NODE = '1';
-
 const arg = (name, fallback) => {
   const index = process.argv.indexOf(`--${name}`);
   return index > -1 ? process.argv[index + 1] : fallback;
@@ -79,12 +74,7 @@ function firstSocketCandidate(root) {
 function spawnDaemon(root) {
   return new Promise((resolve, reject) => {
     let stderrBuf = '';
-    // `--liftoff-only` pre-empts the CLI's own self-relaunch (see
-    // wasm-runtime-flags.ts): without it, this spawn would itself be a
-    // synchronous wrapper around a SEPARATE relaunched daemon process, and
-    // `child.pid` below would name the (soon-exited) wrapper rather than the
-    // real daemon — silently orphaning it on every kill in this script.
-    const child = spawn(process.execPath, ['--liftoff-only', BIN, 'serve', '--mcp', '--path', root], {
+    const child = spawn(process.execPath, [BIN, 'serve', '--mcp', '--path', root], {
       stdio: ['ignore', 'ignore', 'pipe'],
       env: { ...process.env, AFYX_GRAPH_DAEMON_INTERNAL: '1' },
     });

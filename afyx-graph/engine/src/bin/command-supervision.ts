@@ -4,11 +4,9 @@
  * Indexing a large repo can run for a while on the main thread, and #999
  * surfaced two ways that goes wrong when nothing is watching it:
  *
- *   1. **Orphaned worker.** `index` runs in a child re-exec'd with
- *      `--liftoff-only` (the WASM-flag relaunch). Its parent blocks in
- *      `spawnSync`, so when the parent shim is killed it cannot forward the
- *      signal — the child keeps running, now orphaned, pinning a core. The PPID
- *      watchdog (#277) notices the parent/host went away and exits the child.
+ *   1. **Orphaned worker.** A launcher or host can disappear while a long
+ *      index command is still running. The PPID watchdog (#277) notices the
+ *      parent/host went away and exits the child.
  *   2. **Wedged indexer.** The `#850` main-thread liveness watchdog — which
  *      SIGKILLs a process whose event loop stops turning — was wired only into
  *      the MCP `serve` path, so a wedged `index`/`init` was never auto-killed.
@@ -29,10 +27,9 @@
  * reaches its next yield, so it still trips the timeout.
  */
 import { installMainThreadWatchdog, WatchdogOptions } from '../mcp/liveness-watchdog';
-import { supervisionLostReason, parsePpidPollMs, parseHostPpid } from '../mcp/ppid-watchdog';
+import { HOST_PPID_ENV, supervisionLostReason, parsePpidPollMs, parseHostPpid } from '../mcp/ppid-watchdog';
 import { isProcessAlive } from '../mcp/daemon-registry';
 import { EARLY_PPID } from '../mcp/early-ppid';
-import { HOST_PPID_ENV } from '../extraction/wasm-runtime-flags';
 
 export interface CommandSupervision {
   /** Tear down both watchdogs. Idempotent; call when the command finishes. */
@@ -57,8 +54,8 @@ export function installCommandSupervision(label: string, watchdog: WatchdogOptio
   // AFYX_GRAPH_NO_WATCHDOG.
   const liveness = installMainThreadWatchdog(watchdog);
 
-  // PPID watchdog: detect that the parent (or the host threaded past the
-  // relaunch shim) died and we've been orphaned, then exit instead of leaking.
+  // PPID watchdog: detect that the parent (or launcher-provided host) died and
+  // we've been orphaned, then exit instead of leaking.
   // Baseline from the CLI entry's earliest-possible capture — reading
   // process.ppid here would miss a launcher killed during startup (#1185).
   const originalPpid = EARLY_PPID;
