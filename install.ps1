@@ -51,8 +51,8 @@ foreach ($component in (Get-AfyxComponentContract | Where-Object { $_.type -eq '
 }
 $componentActions = @{}
 foreach ($specification in $ComponentAction) {
-    if ($specification -notmatch '^([a-z0-9-]+)=(skip|install|update|repair)$') {
-        throw "Invalid -ComponentAction '$specification'. Use component-id=skip|install|update|repair."
+    if ($specification -notmatch '^([a-z0-9-]+)=(skip|install|update|repair|adopt)$') {
+        throw "Invalid -ComponentAction '$specification'. Use component-id=skip|install|update|repair|adopt."
     }
     $componentActions[$Matches[1]] = $Matches[2]
 }
@@ -98,13 +98,16 @@ function Get-ComponentAction([string]$Id, [string]$Label) {
         } elseif ($state.State -in @('INCOMPLETE', 'INVALID')) {
             do { $answer = (Read-Host "$Label is $($state.State): $($state.Detail) [R] Repair / [S] Skip [S]").Trim() } until ($answer -match '(?i)^(|r|repair|s|skip)$')
             $action = if ($answer -match '(?i)^(r|repair)$') { 'repair' } else { 'skip' }
-        } else { Write-Warning "$Label ownership/health is unknown; it will not be overwritten."; $action = 'skip' }
+        } else {
+            do { $answer = (Read-Host "$Label ownership/health is unknown. [A] Adopt verified legacy install / [S] Skip [S]").Trim() } until ($answer -match '(?i)^(|a|adopt|s|skip)$')
+            $action = if ($answer -match '(?i)^(a|adopt)$') { 'adopt' } else { 'skip' }
+        }
     }
     $allowed = switch ($state.State) {
         'NOT INSTALLED' { @('install', 'skip') }
-        'HEALTHY' { @('update', 'skip') }
+        'HEALTHY' { @('update', 'adopt', 'skip') }
         { $_ -in @('INCOMPLETE', 'INVALID') } { @('repair', 'skip') }
-        'UNKNOWN' { @('repair', 'skip') }
+        'UNKNOWN' { @('adopt', 'repair', 'skip') }
         default { @('skip') }
     }
     if ($action -notin $allowed) { throw "$Label state $($state.State) does not permit '$action' (allowed: $($allowed -join ', '))." }
@@ -147,6 +150,23 @@ function Install-ManagedSkillSafely([string]$Component, [string]$Name, [string]$
         if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue }
     }
     return $(if ($ReplaceExisting) { 'replaced' } else { 'installed' })
+}
+
+function Adopt-LegacySkillSafely([string]$Component, [string]$Name, [string]$Target) {
+    $contract = @(Get-AfyxComponentContract | Where-Object { $_.id -eq $Component })[0]
+    $legacyVersion = if ($contract.PSObject.Properties['legacy_version']) { [string]$contract.legacy_version } else { '' }
+    $legacyDigest = if ($contract.PSObject.Properties['legacy_content_digest']) { [string]$contract.legacy_content_digest } else { '' }
+    $repository = if ($contract.PSObject.Properties['source']) { [string]$contract.source } else { '' }
+    $revision = if ($contract.PSObject.Properties['source_revision']) { [string]$contract.source_revision } else { '' }
+    $current = Get-AfyxSkillOwnership -Target $Target -Component $Component -ExpectedOwner ([string]$contract.ownership)
+    if ($current -in @('AFYX_OWNED_UNMODIFIED', 'EXTERNAL_UPSTREAM')) { return 'already adopted' }
+    $provenance = Get-AfyxLegacySkillProvenance -Target $Target -Component $Component -Owner ([string]$contract.ownership) `
+        -LegacyVersion $legacyVersion -LegacyContentSha256 $legacyDigest -SourceRepository $repository -SourceRevision $revision
+    if ($provenance -ne 'MATCH') { throw "Refusing to adopt $Name because legacy provenance is $provenance." }
+    if ($WhatIfPreference) { Write-Host "WhatIf: would adopt verified legacy $Name at $Target after durable backup"; return 'planned adoption' }
+    return Adopt-AfyxLegacySkill -SkillsRoot $SkillsRoot -Target $Target -Component $Component -Owner ([string]$contract.ownership) `
+        -Version $legacyVersion -LegacyVersion $legacyVersion -LegacyContentSha256 $legacyDigest `
+        -SourceRepository $repository -SourceRevision $revision
 }
 
 function New-PromptMasterStage([string]$Parent) {
@@ -254,15 +274,19 @@ foreach ($component in @(
 )) {
     $action = Get-ComponentAction $component.Id $component.Name
     if ($action -eq 'skip') { $summary[$component.Name] = 'skipped'; continue }
-    $summary[$component.Name] = Install-ManagedSkillSafely $component.Id $component.Name $component.Source $component.Target ($action -in @('update', 'repair'))
+    if ($action -eq 'adopt') { $summary[$component.Name] = Adopt-LegacySkillSafely $component.Id $component.Name $component.Target }
+    else { $summary[$component.Name] = Install-ManagedSkillSafely $component.Id $component.Name $component.Source $component.Target ($action -in @('update', 'repair')) }
 }
 
 $promptAction = Get-ComponentAction 'prompt-master' 'Prompt Master'
-if ($Offline -and $promptAction -ne 'skip') {
+if ($Offline -and $promptAction -notin @('skip', 'adopt')) {
     throw 'Offline mode cannot install or update upstream-owned Prompt Master. Choose prompt-master=skip or retry with network access.'
 }
 $promptPinnedResult = $null
-if ($promptAction -ne 'skip') {
+if ($promptAction -eq 'adopt') {
+    $promptPinnedResult = Adopt-LegacySkillSafely 'prompt-master' 'Prompt Master' $promptTarget
+    $promptAction = 'skip'
+} elseif ($promptAction -ne 'skip') {
     $promptPinnedResult = Install-PromptMasterPinned (Test-Path -LiteralPath $promptTarget)
     $promptAction = 'skip'
 }

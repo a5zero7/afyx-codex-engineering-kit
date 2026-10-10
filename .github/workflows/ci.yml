@@ -93,6 +93,7 @@ jobs:
           python scripts/tests/test_components.py
           python scripts/tests/test_lifecycle.py
           python scripts/tests/test_skill_lifecycle_security.py
+          python scripts/tests/test_skill_legacy_adoption.py
           python scripts/tests/test_artifact_identity.py
           python scripts/tests/test_project_detect.py
           python scripts/tests/test_doctor.py
@@ -137,6 +138,7 @@ jobs:
           python3 scripts/tests/test_components.py
           python3 scripts/tests/test_lifecycle.py
           python3 scripts/tests/test_skill_lifecycle_security.py
+          python3 scripts/tests/test_skill_legacy_adoption.py
           python3 scripts/tests/test_artifact_identity.py
           python3 scripts/tests/test_project_detect.py
       - name: Verify repository remains clean

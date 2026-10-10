@@ -21,7 +21,11 @@
       "install_path": "efficient-coding",
       "version_source": "SKILL.md#metadata.version",
       "version_required": "true",
-      "required_files": "SKILL.md;references/investigation.md;references/tool-routing.md;references/token-efficiency.md"
+      "required_files": "SKILL.md;references/investigation.md;references/tool-routing.md;references/token-efficiency.md",
+      "legacy_version": "1.1.0",
+      "legacy_content_digest": "552421fe133fbd408f2b5532202c33e932b71f16184e43993b9c50785929e987",
+      "legacy_content_digest_bash": "f67207805a23f80157109f87fa76c8ed3d44a2aa5884672e60de8b7eaaea178f",
+      "legacy_distribution_revision": "b0b4d88eb7c42627598de71d6b0bf26317b9a694"
     },
     {
       "id": "odoo-engineering",
@@ -34,7 +38,11 @@
       "install_path": "odoo-engineering",
       "version_source": "SKILL.md#metadata.version",
       "version_required": "true",
-      "required_files": "SKILL.md;references/common.md;references/version-detection.md;references/reference-schema.md;references/odoo-10.md;references/odoo-11.md;references/odoo-12.md;references/odoo-13.md;references/odoo-14.md;references/odoo-15.md;references/odoo-16.md;references/odoo-17.md;references/odoo-18.md;references/odoo-19.md;references/odoo-20.md"
+      "required_files": "SKILL.md;references/common.md;references/version-detection.md;references/reference-schema.md;references/odoo-10.md;references/odoo-11.md;references/odoo-12.md;references/odoo-13.md;references/odoo-14.md;references/odoo-15.md;references/odoo-16.md;references/odoo-17.md;references/odoo-18.md;references/odoo-19.md;references/odoo-20.md",
+      "legacy_version": "1.1.0",
+      "legacy_content_digest": "546d823d53d3b3f3e6461f59c52d0e47b25205c23a526eb52bf3bce2df4424a6",
+      "legacy_content_digest_bash": "6f02332ecdce4e248507ecdcd481ade7183813b6507654f5d949ffe39e700408",
+      "legacy_distribution_revision": "b0b4d88eb7c42627598de71d6b0bf26317b9a694"
     },
     {
       "id": "prompt-master",
@@ -48,6 +56,7 @@
       "version_source": "SKILL.md#metadata.version",
       "version_required": "false",
       "required_files": "SKILL.md",
+      "legacy_version": "1.8.0",
       "source": "https://github.com/nidhinjs/prompt-master.git",
       "source_revision": "2bd92518e26bf659e21e3d9ab90573fcf3ddeccb"
     },

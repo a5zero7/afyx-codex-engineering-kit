@@ -111,6 +111,97 @@ function Get-AfyxSkillOwnership {
     } catch { return 'FOREIGN_UNPROVEN' }
 }
 
+function Get-AfyxLegacySkillProvenance {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Target,
+        [Parameter(Mandatory)][string]$Component,
+        [Parameter(Mandatory)][ValidateSet('afyx', 'upstream')][string]$Owner,
+        [string]$LegacyVersion = '', [string]$LegacyContentSha256 = '',
+        [string]$SourceRepository = '', [string]$SourceRevision = ''
+    )
+    if (-not (Test-Path -LiteralPath $Target -PathType Container)) { return 'UNKNOWN' }
+    if (Test-Path -LiteralPath (Join-Path $Target $script:MarkerName)) { return 'UNKNOWN' }
+    try {
+        $item = Get-Item -LiteralPath $Target -Force
+        if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { return 'UNKNOWN' }
+        if ($Owner -eq 'afyx') {
+            if ($LegacyContentSha256 -notmatch '^[0-9a-f]{64}$') { return 'UNKNOWN' }
+            if ((Get-AfyxSkillDigest -Directory $Target) -eq $LegacyContentSha256) { return 'MATCH' }
+            $manifest = Join-Path $Target 'SKILL.md'
+            if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) { return 'UNKNOWN' }
+            $content = Get-Content -Raw -LiteralPath $manifest -Encoding utf8
+            $nameMatch = [regex]::Match($content, '(?m)^name:\s*["'']?([^"''\r\n]+?)["'']?\s*$')
+            $versionMatch = [regex]::Match($content, '(?m)^\s*version:\s*["'']?([^"''\s]+)["'']?\s*$')
+            if (-not $nameMatch.Success) { return 'UNKNOWN' }
+            if ($nameMatch.Groups[1].Value.Trim() -ne $Component) { return 'FOREIGN' }
+            if ($versionMatch.Success -and $versionMatch.Groups[1].Value -eq $LegacyVersion) { return 'MODIFIED' }
+            return 'UNKNOWN'
+        }
+        if (-not (Test-Path -LiteralPath (Join-Path $Target '.git'))) { return 'UNKNOWN' }
+        $remote = ((& git -C $Target remote get-url origin 2>$null) -join '').Trim()
+        if ($LASTEXITCODE -ne 0) { return 'UNKNOWN' }
+        if ($remote -ne $SourceRepository) { return 'FOREIGN' }
+        $dirty = ((& git -C $Target status --porcelain 2>$null) -join '').Trim()
+        if ($LASTEXITCODE -ne 0) { return 'UNKNOWN' }
+        if ($dirty) { return 'MODIFIED' }
+        $head = ((& git -C $Target rev-parse HEAD 2>$null) -join '').Trim()
+        if ($LASTEXITCODE -ne 0 -or $head -ne $SourceRevision) { return 'UNKNOWN' }
+        return 'MATCH'
+    } catch { return 'UNKNOWN' }
+}
+
+function Adopt-AfyxLegacySkill {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$SkillsRoot,
+        [Parameter(Mandatory)][string]$Target,
+        [Parameter(Mandatory)][string]$Component,
+        [Parameter(Mandatory)][ValidateSet('afyx', 'upstream')][string]$Owner,
+        [string]$Version = '', [string]$LegacyVersion = '', [string]$LegacyContentSha256 = '',
+        [string]$SourceRepository = '', [string]$SourceRevision = ''
+    )
+    Assert-AfyxSkillTarget -SkillsRoot $SkillsRoot -Target $Target
+    Restore-AfyxInterruptedSkillTransaction -Target $Target
+    $current = Get-AfyxSkillOwnership -Target $Target -Component $Component -ExpectedOwner $Owner
+    if ($current -in @('AFYX_OWNED_UNMODIFIED', 'EXTERNAL_UPSTREAM')) { return 'ALREADY_ADOPTED' }
+    if (Test-Path -LiteralPath (Join-Path $Target $script:MarkerName)) {
+        throw "Refusing to adopt $Component because ownership metadata already exists but is not valid."
+    }
+    $provenance = Get-AfyxLegacySkillProvenance -Target $Target -Component $Component -Owner $Owner `
+        -LegacyVersion $LegacyVersion -LegacyContentSha256 $LegacyContentSha256 `
+        -SourceRepository $SourceRepository -SourceRevision $SourceRevision
+    if ($provenance -ne 'MATCH') { throw "Refusing to adopt $Component because legacy provenance is $provenance." }
+    $backup = Backup-AfyxSkill -Component $Component -Target $Target
+    if ((Get-AfyxSkillDigest -Directory $backup) -ne (Get-AfyxSkillDigest -Directory $Target)) {
+        throw "$Component adoption backup verification failed."
+    }
+    if ($Owner -eq 'upstream' -and (Get-AfyxLegacySkillProvenance -Target $backup -Component $Component -Owner $Owner `
+        -LegacyVersion $LegacyVersion -LegacyContentSha256 $LegacyContentSha256 `
+        -SourceRepository $SourceRepository -SourceRevision $SourceRevision) -ne 'MATCH') {
+        throw "$Component adoption backup provenance verification failed."
+    }
+    $exclude = Join-Path $Target '.git\info\exclude'
+    $excludeEntry = "/$script:MarkerName"
+    $excludeAlreadyPresent = (Test-Path -LiteralPath $exclude) -and ($excludeEntry -in @(Get-Content -LiteralPath $exclude))
+    try {
+        Write-AfyxSkillMarker -Target $Target -Component $Component -Owner $Owner -Version $Version `
+            -SourceRepository $SourceRepository -SourceRevision $SourceRevision
+        $expected = if ($Owner -eq 'afyx') { 'AFYX_OWNED_UNMODIFIED' } else { 'EXTERNAL_UPSTREAM' }
+        if ((Get-AfyxSkillOwnership -Target $Target -Component $Component -ExpectedOwner $Owner) -ne $expected) {
+            throw "$Component post-adoption ownership verification failed."
+        }
+    } catch {
+        Remove-Item -LiteralPath (Join-Path $Target $script:MarkerName) -Force -ErrorAction SilentlyContinue
+        if ($Owner -eq 'upstream' -and -not $excludeAlreadyPresent -and (Test-Path -LiteralPath $exclude)) {
+            $remaining = @(Get-Content -LiteralPath $exclude | Where-Object { $_ -ne $excludeEntry })
+            [IO.File]::WriteAllLines($exclude, $remaining, (New-Object Text.UTF8Encoding($false)))
+        }
+        throw
+    }
+    return "ADOPTED backup=$backup"
+}
+
 function Backup-AfyxSkill {
     [CmdletBinding()]
     param([Parameter(Mandatory)][string]$Component, [Parameter(Mandatory)][string]$Target)
@@ -174,4 +265,4 @@ function Remove-AfyxSkillSafely {
     }
 }
 
-Export-ModuleMember -Function Assert-AfyxSkillTarget, Restore-AfyxInterruptedSkillTransaction, Get-AfyxSkillDigest, Write-AfyxSkillMarker, Get-AfyxSkillOwnership, Backup-AfyxSkill, Install-AfyxSkillTransaction, Remove-AfyxSkillSafely
+Export-ModuleMember -Function Assert-AfyxSkillTarget, Restore-AfyxInterruptedSkillTransaction, Get-AfyxSkillDigest, Write-AfyxSkillMarker, Get-AfyxSkillOwnership, Get-AfyxLegacySkillProvenance, Adopt-AfyxLegacySkill, Backup-AfyxSkill, Install-AfyxSkillTransaction, Remove-AfyxSkillSafely

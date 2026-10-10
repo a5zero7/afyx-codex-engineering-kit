@@ -6,8 +6,8 @@ Contract revision: **2026-10-11**
 v1 scope policy: **FROZEN — Phase 1 through Phase 11**  
 Post-v1 policy: **PLANNED EXPANSION — not a v1 release blocker**
 
-Current work: **Technical Alpha Batch 4A acceptance gates passed; AFYX-248 remains in progress**
-Task: `AFYX-263`; `AFYX-248` remains in progress
+Current work: **AFYX-264 legacy skill adoption validation; AFYX-248 remains in progress**
+Task: `AFYX-264`; `AFYX-248` remains in progress
 Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`  
 Active implementation branch: `afyx/native-phase5f-parser-grammar`  
 Latest verified Phase 5F implementation checkpoint: `62621a0639f42db0eaac69ef087436d851cdba88`  
@@ -1222,6 +1222,16 @@ AFYX-263 menutup residual lifecycle dan supply-chain yang terverifikasi setelah 
 Prompt Master tetap upstream-owned pada tier yang sama dan kini diambil reproducibly dari commit `2bd92518e26bf659e21e3d9ab90573fcf3ddeccb`; staged `HEAD`, remote, manifest skill, dan clean state diverifikasi sebelum promosi. Release trust kini membedakan checksum integrity, commit-bound release manifest, publisher authenticity, dan build provenance. GitHub release workflow menghasilkan `RELEASE-MANIFEST.json`, menargetkan commit workflow eksplisit, dan menerbitkan GitHub artifact attestations; installer tidak lagi menyebut checksum sebagai authentication.
 
 Final implementation checkpoint `ed40278e80c6bc644de70ae2ed10b3eb30e2d18e`: lifecycle baseline 8/8 PASS; ownership/fault-injection 6/6 PASS; artifact identity/provenance 4/4 PASS; component contract 8/8 PASS (1 host-only skip); MCP integration 4/4 PASS; project detection 14/14 PASS; doctor 10/10 PASS; component/identity/legacy validators PASS; Index Health 3/3 PASS; semantic baseline 6/6 PASS; CLI/MCP smoke 21/21 PASS; clean production/UI build PASS. [CI run 38083699363](https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/38083699363) dan [Afyx Graph Build run 38083702037](https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/38083702037) keduanya PASS pada Windows, Linux, dan macOS. macOS menjalankan lifecycle Bash pada system Bash 3.2; Windows menjalankan jalur PowerShell yang didukung workflow. AFYX-263 memenuhi acceptance Batch 4A; ini tidak mengaktifkan Technical Alpha dan tidak menutup AFYX-248.
+
+### Technical Alpha Batch 4B — AFYX-264
+
+Status: **IMPLEMENTED; FINAL-HEAD CI PENDING; AFYX-248 remains IN PROGRESS**
+
+AFYX-264 menambahkan adoption opt-in untuk instalasi Efficient Coding 1.1.0, Odoo Engineering 1.1.0, dan Prompt Master 1.8.0 yang berasal dari era sebelum `.afyx-install.json`. Dua skill Afyx harus cocok dengan digest distribusi historis pada baseline `b0b4d88eb7c42627598de71d6b0bf26317b9a694`. Prompt Master tidak dipercaya berdasarkan version saja: adoption memerlukan origin resmi, checkout bersih, dan HEAD tepat `2bd92518e26bf659e21e3d9ab90573fcf3ddeccb`. Classification `MODIFIED`, `FOREIGN`, atau `UNKNOWN` ditolak.
+
+Action `component=adopt` memverifikasi provenance, containment, path safety, membuat dan memverifikasi backup durable, lalu hanya menambahkan ownership marker; isi skill tidak diganti atau di-upgrade. Dry-run tidak bermutasi dan repeated adoption idempotent. Implementasi migration tersedia, tetapi tidak ada adoption yang dijalankan terhadap instalasi user selama development.
+
+Evidence lokal: focused adoption 4/4 PASS; lifecycle security 6/6 PASS; lifecycle contract 8/8 PASS; component contract 8/8 PASS dengan satu cross-shell host-only skip; PowerShell/Bash syntax PASS; component, identity/legal, dan legacy-independence validators PASS. Final-head cross-platform CI tetap diperlukan sebelum AFYX-264 dipindah ke Done.
 
 Required audits:
 

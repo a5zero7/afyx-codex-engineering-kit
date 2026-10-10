@@ -34,6 +34,8 @@ Skill yang dipasang oleh Afyx memiliki `.afyx-install.json` berisi identitas kom
 
 Backup skill disimpan di `${AFYX_BACKUP_ROOT}` bila diatur, atau secara default di `~/.afyx/backups/<component>/`, bukan di checkout kit. Batas default adalah 20 backup per komponen (`AFYX_BACKUP_LIMIT`); saat batas tercapai operasi berhenti tanpa menghapus backup lama. Pemulihan manual dilakukan dengan menyalin direktori backup pilihan kembali ke skill root ketika target tidak ada. Jika proses terputus setelah target lama dipindah, retry memulihkan `.<component>.afyx-old` secara otomatis; keadaan ambigu dengan target baru dan recovery path sekaligus dihentikan untuk inspeksi manual.
 
+Instalasi legacy sebelum marker dapat diadopsi secara eksplisit per komponen dengan `-ComponentAction efficient-coding=adopt` / `--component efficient-coding=adopt` (gunakan ID `odoo-engineering` atau `prompt-master` untuk komponen lain). Jalankan `-WhatIf` / `--dry-run` lebih dahulu untuk preview read-only. Adoption hanya menambahkan metadata setelah provenance cocok dan backup diverifikasi; isi skill tidak diganti, di-upgrade, atau dihapus. Efficient Coding/Odoo Engineering harus cocok byte-for-byte dengan digest distribusi historis 1.1.0. Prompt Master 1.8.0 harus berupa checkout Git bersih pada origin resmi dan revision allowlist tepat—nama/version saja tidak cukup. State `MODIFIED`, `FOREIGN`, `UNKNOWN`, path tidak aman, atau backup gagal selalu ditolak; `-Force` / `--force` bukan pengganti verifikasi adoption.
+
 Prompt Master tetap dimiliki upstream dan tidak dibundel. Default acquisition dipin ke commit yang tercatat di `scripts/components.json`; installer fetch commit tersebut, memverifikasi `HEAD`, struktur skill, remote, dan clean state sebelum promosi. Perubahan revision harus berupa perubahan contract yang direview. Mode offline tidak mengklaim dapat memasang/update komponen ini.
 
 ## Integritas dan trust artifact
@@ -60,6 +62,7 @@ Kedua skill memakai frontmatter Agent Skills dengan `name`, `description`, dan `
 |---|---|---|
 | Komponen Afyx sehat/current | Skip | Pilih Update hanya bila diperlukan |
 | Komponen Afyx incomplete/invalid | Skip + warning | Pilih Repair untuk staged replacement dengan backup |
+| Skill legacy tanpa marker | Skip + status UNKNOWN | Preview lalu pilih Adopt; hanya provenance `MATCH` yang diterima |
 | Prompt Master memiliki perubahan lokal | Skip dan laporkan dirty state | Pilih Replace secara eksplisit; backup lokal dipertahankan |
 | Afyx Graph belum terpasang | Skip | Pilih Install; runtime dipasang ke `~/.afyx/graph/` |
 

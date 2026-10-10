@@ -89,8 +89,14 @@ for cid in ("efficient-coding", "odoo-engineering"):
         fail(f"{cid}: SKILL.md name does not match the component id")
     if component["version_required"] == "true" and not re.search(r'(?ms)^metadata:\s*\n\s+version:\s*["\'][^"\']+["\']', manifest):
         fail(f"{cid}: SKILL.md metadata.version is required by the contract")
+    if component.get("legacy_version") != "1.1.0" or component.get("legacy_distribution_revision") != "b0b4d88eb7c42627598de71d6b0bf26317b9a694":
+        fail(f"{cid}: legacy adoption evidence must identify the verified 1.1.0 baseline")
+    if not re.fullmatch(r"[0-9a-f]{64}", component.get("legacy_content_digest", "")) or not re.fullmatch(r"[0-9a-f]{64}", component.get("legacy_content_digest_bash", "")):
+        fail(f"{cid}: legacy adoption digests must be exact SHA-256 values")
 if by_id["prompt-master"]["ownership"] != "upstream" or not by_id["prompt-master"].get("source", "").endswith(".git"):
     fail("prompt-master must be upstream-owned with a git source")
+if by_id["prompt-master"].get("legacy_version") != "1.8.0" or not re.fullmatch(r"[0-9a-f]{40}", by_id["prompt-master"].get("source_revision", "")):
+    fail("prompt-master legacy adoption requires exact version and pinned Git revision evidence")
 
 # The graph component must agree with the operational metadata.
 graph = by_id["afyx-graph"]

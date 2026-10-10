@@ -93,6 +93,35 @@ afyx_classify_skill() {
   fi
 }
 
+# Sets AFYX_LEGACY_PROVENANCE to MATCH, MODIFIED, FOREIGN, or UNKNOWN.
+afyx_legacy_skill_provenance() {
+  local target="$1" component="$2" owner="$3" legacy_digest="${4:-}" legacy_version="${5:-}" repository="${6:-}" revision="${7:-}"
+  local actual manifest name version remote dirty head
+  AFYX_LEGACY_PROVENANCE=UNKNOWN
+  [[ -d "$target" && ! -L "$target" && ! -e "$target/$AFYX_SKILL_MARKER" ]] || return 0
+  if [[ "$owner" == afyx ]]; then
+    [[ ${#legacy_digest} -eq 64 && "$legacy_digest" != *[!0-9a-fA-F]* ]] || return 0
+    actual="$(afyx_skill_digest "$target")" || return 0
+    if [[ "$actual" == "$legacy_digest" ]]; then AFYX_LEGACY_PROVENANCE=MATCH; return 0; fi
+    manifest="$target/SKILL.md"
+    [[ -f "$manifest" && ! -L "$manifest" ]] || return 0
+    name="$(sed -n 's/^name:[[:space:]]*["'"']\{0,1\}\([^"'"']*\)["'"']\{0,1\}[[:space:]]*$/\1/p' "$manifest" | head -n 1)"
+    version="$(sed -n 's/^[[:space:]]*version:[[:space:]]*["'"']\{0,1\}\([^"'"'[:space:]]*\)["'"']\{0,1\}[[:space:]]*$/\1/p' "$manifest" | head -n 1)"
+    if [[ -z "$name" ]]; then return 0
+    elif [[ "$name" != "$component" ]]; then AFYX_LEGACY_PROVENANCE=FOREIGN
+    elif [[ -n "$version" && "$version" == "$legacy_version" ]]; then AFYX_LEGACY_PROVENANCE=MODIFIED
+    fi
+    return 0
+  fi
+  [[ -d "$target/.git" ]] || return 0
+  remote="$(git -C "$target" remote get-url origin 2>/dev/null)" || return 0
+  [[ "$remote" == "$repository" ]] || { AFYX_LEGACY_PROVENANCE=FOREIGN; return 0; }
+  dirty="$(git -C "$target" status --porcelain 2>/dev/null)" || return 0
+  [[ -z "$dirty" ]] || { AFYX_LEGACY_PROVENANCE=MODIFIED; return 0; }
+  head="$(git -C "$target" rev-parse HEAD 2>/dev/null)" || return 0
+  [[ "$head" == "$revision" ]] && AFYX_LEGACY_PROVENANCE=MATCH
+}
+
 afyx_write_skill_marker() {
   local target="$1" component="$2" owner="$3" version="$4" repository="${5:-}" revision="${6:-}" digest
   digest=''
@@ -126,6 +155,49 @@ afyx_backup_skill() {
   destination="$afyx_backup_root/$component/$(date +%Y%m%d-%H%M%S)-$$"
   cp -a "$target" "$destination" || return 1
   printf '%s' "$destination"
+}
+
+afyx_adopt_legacy_skill() {
+  local component="$1" target="$2" owner="$3" version="${4:-}" legacy_digest="${5:-}" legacy_version="${6:-}" repository="${7:-}" revision="${8:-}"
+  local state backup before after exclude exclude_entry exclude_had=false exclude_tmp
+  afyx_assert_skill_target "$skills_root" "$target" || return 1
+  afyx_recover_skill_transaction "$target" || return 1
+  afyx_classify_skill "$target" "$component" "$owner"; state="$AFYX_OWNERSHIP_STATE"
+  if [[ "$state" == AFYX_OWNED_UNMODIFIED || "$state" == EXTERNAL_UPSTREAM ]]; then printf 'ALREADY_ADOPTED'; return 0; fi
+  [[ ! -e "$target/$AFYX_SKILL_MARKER" ]] || {
+    printf 'Refusing to adopt %s because ownership metadata already exists but is not valid.\n' "$component" >&2; return 1;
+  }
+  afyx_legacy_skill_provenance "$target" "$component" "$owner" "$legacy_digest" "$legacy_version" "$repository" "$revision"
+  [[ "$AFYX_LEGACY_PROVENANCE" == MATCH ]] || {
+    printf 'Refusing to adopt %s because legacy provenance is %s.\n' "$component" "$AFYX_LEGACY_PROVENANCE" >&2; return 1;
+  }
+  backup="$(afyx_backup_skill "$component" "$target")" || return 1
+  before="$(afyx_skill_digest "$target")" || return 1
+  after="$(afyx_skill_digest "$backup")" || return 1
+  [[ "$before" == "$after" ]] || { printf '%s adoption backup verification failed.\n' "$component" >&2; return 1; }
+  if [[ "$owner" == upstream ]]; then
+    afyx_legacy_skill_provenance "$backup" "$component" "$owner" "$legacy_digest" "$legacy_version" "$repository" "$revision"
+    [[ "$AFYX_LEGACY_PROVENANCE" == MATCH ]] || {
+      printf '%s adoption backup provenance verification failed.\n' "$component" >&2; return 1;
+    }
+  fi
+  exclude="$target/.git/info/exclude"; exclude_entry="/$AFYX_SKILL_MARKER"
+  [[ -f "$exclude" ]] && grep -qxF "$exclude_entry" "$exclude" && exclude_had=true
+  if ! afyx_write_skill_marker "$target" "$component" "$owner" "$version" "$repository" "$revision"; then
+    rm -f -- "$target/$AFYX_SKILL_MARKER"; return 1
+  fi
+  afyx_classify_skill "$target" "$component" "$owner"; state="$AFYX_OWNERSHIP_STATE"
+  if [[ "$state" != AFYX_OWNED_UNMODIFIED && "$state" != EXTERNAL_UPSTREAM ]]; then
+    rm -f -- "$target/$AFYX_SKILL_MARKER"
+    if [[ "$owner" == upstream && "$exclude_had" == false && -f "$exclude" ]]; then
+      exclude_tmp="$exclude.afyx-tmp-$$"
+      grep -vxF "$exclude_entry" "$exclude" >"$exclude_tmp" || true
+      mv "$exclude_tmp" "$exclude"
+    fi
+    printf '%s post-adoption ownership verification failed.\n' "$component" >&2
+    return 1
+  fi
+  printf 'ADOPTED backup=%s' "$backup"
 }
 
 afyx_promote_skill() {

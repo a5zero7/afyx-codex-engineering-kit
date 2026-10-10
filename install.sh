@@ -18,7 +18,7 @@ allow_dirty_source=false
 skip_graph_mcp=false
 
 usage() {
-  printf '%s\n' 'Usage: ./install.sh [--skills-root PATH] [--component ID=skip|install|update|repair] [--update-installed] [--force] [--validate-only] [--dry-run]'
+  printf '%s\n' 'Usage: ./install.sh [--skills-root PATH] [--component ID=skip|install|update|repair|adopt] [--update-installed] [--force] [--validate-only] [--dry-run]'
 }
 
 while (($#)); do
@@ -88,7 +88,7 @@ explicit_action() {
   for specification in "${component_actions[@]}"; do
     case "$specification" in *=*) id="${specification%%=*}"; action="${specification#*=}" ;; *) printf 'Invalid --component value: %s\n' "$specification" >&2; return 2 ;; esac
     case "$id" in efficient-coding|odoo-engineering|prompt-master|afyx-graph|codex-usage-tracking) ;; *) printf 'Unknown selectable component: %s\n' "$id" >&2; return 2 ;; esac
-    case "$action" in skip|install|update|repair) ;; *) printf 'Invalid action for %s: %s\n' "$id" "$action" >&2; return 2 ;; esac
+    case "$action" in skip|install|update|repair|adopt) ;; *) printf 'Invalid action for %s: %s\n' "$id" "$action" >&2; return 2 ;; esac
     [[ "$id" == "$wanted" ]] && { printf '%s' "$action"; return 0; }
   done
   return 1
@@ -116,11 +116,11 @@ component_action() {
     read -r -p "$label is $state [R] Repair / [S] Skip [S]: " answer || answer=
     case "$answer" in [rR]|[rR][eE][pP][aA][iI][rR]) action=repair ;; *) action=skip ;; esac
   else
-    printf '%s ownership/health is unknown; it will not be overwritten.\n' "$label" >&2
-    action=skip
+    read -r -p "$label ownership/health is unknown. [A] Adopt verified legacy install / [S] Skip [S]: " answer || answer=
+    case "$answer" in [aA]|[aA][dD][oO][pP][tT]) action=adopt ;; *) action=skip ;; esac
   fi
   case "$state:$action" in
-    'NOT INSTALLED':install|'NOT INSTALLED':skip|HEALTHY:update|HEALTHY:skip|INCOMPLETE:repair|INCOMPLETE:skip|INVALID:repair|INVALID:skip|UNKNOWN:repair|UNKNOWN:skip) ;;
+    'NOT INSTALLED':install|'NOT INSTALLED':skip|HEALTHY:update|HEALTHY:adopt|HEALTHY:skip|INCOMPLETE:repair|INCOMPLETE:skip|INVALID:repair|INVALID:skip|UNKNOWN:adopt|UNKNOWN:repair|UNKNOWN:skip) ;;
     *) printf '%s state %s does not permit action %s.\n' "$label" "$state" "$action" >&2; return 2 ;;
   esac
   printf '%s' "$action"
@@ -168,6 +168,24 @@ safe_skill_install() {
     return 1
   fi
   if [[ "$replace" == true ]]; then printf replaced; else printf installed; fi
+}
+
+adopt_legacy_skill() {
+  local component="$1" label="$2" target="$3" owner legacy_version legacy_digest repository revision provenance
+  owner="$(afyx_component_field "$component" ownership)"
+  legacy_version="$(afyx_component_field "$component" legacy_version)"
+  legacy_digest="$(afyx_component_field "$component" legacy_content_digest_bash)"
+  repository="$(afyx_component_field "$component" source)"
+  revision="$(afyx_component_field "$component" source_revision)"
+  afyx_classify_skill "$target" "$component" "$owner"
+  if [[ "$AFYX_OWNERSHIP_STATE" == AFYX_OWNED_UNMODIFIED || "$AFYX_OWNERSHIP_STATE" == EXTERNAL_UPSTREAM ]]; then
+    printf 'already adopted'; return 0
+  fi
+  afyx_legacy_skill_provenance "$target" "$component" "$owner" "$legacy_digest" "$legacy_version" "$repository" "$revision"
+  provenance="$AFYX_LEGACY_PROVENANCE"
+  [[ "$provenance" == MATCH ]] || { printf 'Refusing to adopt %s because legacy provenance is %s.\n' "$label" "$provenance" >&2; return 1; }
+  if "$dry_run"; then printf 'planned adoption'; return 0; fi
+  afyx_adopt_legacy_skill "$component" "$target" "$owner" "$legacy_version" "$legacy_digest" "$legacy_version" "$repository" "$revision"
 }
 
 stage_prompt_master() {
@@ -236,16 +254,20 @@ efficient_action="$(component_action efficient-coding 'Efficient Coding' "$effic
 odoo_action="$(component_action odoo-engineering 'Odoo Engineering' "$odoo_state" "$(component_version odoo-engineering)")"
 efficient_result=skipped
 odoo_result=skipped
-if [[ "$efficient_action" != skip ]]; then efficient_result="$(safe_skill_install efficient-coding 'Efficient Coding' "$BUNDLED_EFFICIENT" "$efficient_target" "$([[ "$efficient_action" == install ]] && printf false || printf true)")"; fi
-if [[ "$odoo_action" != skip ]]; then odoo_result="$(safe_skill_install odoo-engineering 'Odoo Engineering' "$BUNDLED_ODOO" "$odoo_target" "$([[ "$odoo_action" == install ]] && printf false || printf true)")"; fi
+if [[ "$efficient_action" == adopt ]]; then efficient_result="$(adopt_legacy_skill efficient-coding 'Efficient Coding' "$efficient_target")"
+elif [[ "$efficient_action" != skip ]]; then efficient_result="$(safe_skill_install efficient-coding 'Efficient Coding' "$BUNDLED_EFFICIENT" "$efficient_target" "$([[ "$efficient_action" == install ]] && printf false || printf true)")"; fi
+if [[ "$odoo_action" == adopt ]]; then odoo_result="$(adopt_legacy_skill odoo-engineering 'Odoo Engineering' "$odoo_target")"
+elif [[ "$odoo_action" != skip ]]; then odoo_result="$(safe_skill_install odoo-engineering 'Odoo Engineering' "$BUNDLED_ODOO" "$odoo_target" "$([[ "$odoo_action" == install ]] && printf false || printf true)")"; fi
 
 prompt_result=skipped
 prompt_action="$(component_action prompt-master 'Prompt Master' "$prompt_state" "$(component_version prompt-master)")"
-if [[ "$offline" == true && "$prompt_action" != skip ]]; then
+if [[ "$offline" == true && "$prompt_action" != skip && "$prompt_action" != adopt ]]; then
   printf 'Offline mode cannot install or update upstream-owned Prompt Master. Choose prompt-master=skip or retry with network access.\n' >&2
   exit 1
 fi
 if [[ "$prompt_action" == skip ]]; then :
+elif [[ "$prompt_action" == adopt ]]; then
+  prompt_result="$(adopt_legacy_skill prompt-master 'Prompt Master' "$prompt_target")"
 elif [[ "$prompt_state" == 'NOT INSTALLED' ]]; then
   if "$dry_run"; then prompt_result=planned
   else
