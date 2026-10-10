@@ -28,6 +28,18 @@ Identitas artifact juga mencatat source revision/build identity dan extraction v
 
 Gunakan `-Offline` / `--offline` untuk mencegah self-update/lookup jaringan dan memakai cache/fallback Graph lokal. Karena Prompt Master dimiliki upstream dan tidak dibundel, action install/update Prompt Master ditolak dalam mode offline. Gunakan `-NoBuildFallback` / `--no-build-fallback` untuk gagal tegas bila artifact tidak tersedia. Source dirty ditolak untuk fallback; `-AllowDirtySource` / `--allow-dirty-source` adalah opt-in eksplisit yang harus dipakai hanya saat provenance perubahan lokal telah dipahami.
 
+## Ownership, backup, dan pemulihan
+
+Skill yang dipasang oleh Afyx memiliki `.afyx-install.json` berisi identitas komponen dan digest konten. Update, repair, dan uninstall memverifikasi containment canonical, menolak symlink/reparse point, lalu membedakan target Afyx yang tidak berubah, target Afyx yang telah dimodifikasi, integrasi upstream tervalidasi, dan target asing/tidak terbukti. Target modified/foreign dipertahankan secara default; replacement memerlukan action komponen eksplisit atau `-Force`/`--force`. Uninstall selalu menolak target yang ownership-nya tidak dapat dibuktikan.
+
+Backup skill disimpan di `${AFYX_BACKUP_ROOT}` bila diatur, atau secara default di `~/.afyx/backups/<component>/`, bukan di checkout kit. Batas default adalah 20 backup per komponen (`AFYX_BACKUP_LIMIT`); saat batas tercapai operasi berhenti tanpa menghapus backup lama. Pemulihan manual dilakukan dengan menyalin direktori backup pilihan kembali ke skill root ketika target tidak ada. Jika proses terputus setelah target lama dipindah, retry memulihkan `.<component>.afyx-old` secara otomatis; keadaan ambigu dengan target baru dan recovery path sekaligus dihentikan untuk inspeksi manual.
+
+Prompt Master tetap dimiliki upstream dan tidak dibundel. Default acquisition dipin ke commit yang tercatat di `scripts/components.json`; installer fetch commit tersebut, memverifikasi `HEAD`, struktur skill, remote, dan clean state sebelum promosi. Perubahan revision harus berupa perubahan contract yang direview. Mode offline tidak mengklaim dapat memasang/update komponen ini.
+
+## Integritas dan trust artifact
+
+`SHA256SUMS` membuktikan integritas byte, bukan identitas publisher. `RELEASE-MANIFEST.json` mengikat digest platform ke target, versi, dan source commit; release workflow juga menerbitkan GitHub build-provenance attestations. Jika GitHub CLI tersedia saat instalasi release, attestation diverifikasi dan metadata melaporkan `GITHUB_ATTESTED`. Tanpa verifikasi independen, instalasi tetap melaporkan `PublisherAuthenticity: UNVERIFIED`; archive eksternal tanpa manifest dilaporkan `MISSING`/`UNVERIFIED`, bukan authenticated. `-ValidateOnly`/`--validate-only` menampilkan status manifest, publisher authenticity, dan build provenance terpasang.
+
 ## Verifikasi
 
 Jalankan `./verify.ps1` pada Windows atau `./verify.sh` pada Linux/macOS. Core environment valid jika tersedia Codex CLI, ekstensi ChatGPT/Codex VS Code, atau keduanya. Verifier juga memeriksa tiga skill core serta melaporkan Headroom CLI, proxy/provider routing, dan MCP sebagai capability optional yang terpisah. Semua pemeriksaan bersifat read-only; absennya capability optional tidak menyebabkan core readiness gagal.

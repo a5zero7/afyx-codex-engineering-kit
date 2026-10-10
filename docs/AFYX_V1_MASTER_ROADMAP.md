@@ -1213,6 +1213,16 @@ both passed on Windows, Linux, and macOS. This closes the Batch 3 acceptance
 evidence for AFYX-259, AFYX-256, and AFYX-258; it does not close AFYX-248 or
 activate Technical Alpha.
 
+### Technical Alpha Batch 4A — AFYX-263
+
+Status: **IMPLEMENTED LOCALLY; FINAL-HEAD CI PENDING; AFYX-248 remains IN PROGRESS**
+
+AFYX-263 menutup residual lifecycle dan supply-chain yang terverifikasi setelah Batch 3. Skill lifecycle sekarang memakai marker ownership dan content digest, canonical containment/reparse guard, transaksi stage/backup/swap/verify/rollback, recovery path untuk swap yang terputus, serta backup di `~/.afyx/backups` dengan batas yang gagal aman tanpa menghapus riwayat. Modified, foreign, malformed, dan unsafe targets dipertahankan secara default dan uninstaller menolaknya.
+
+Prompt Master tetap upstream-owned pada tier yang sama dan kini diambil reproducibly dari commit `2bd92518e26bf659e21e3d9ab90573fcf3ddeccb`; staged `HEAD`, remote, manifest skill, dan clean state diverifikasi sebelum promosi. Release trust kini membedakan checksum integrity, commit-bound release manifest, publisher authenticity, dan build provenance. GitHub release workflow menghasilkan `RELEASE-MANIFEST.json`, menargetkan commit workflow eksplisit, dan menerbitkan GitHub artifact attestations; installer tidak lagi menyebut checksum sebagai authentication.
+
+Evidence lokal sementara: lifecycle baseline 8/8 PASS; ownership/fault-injection 6/6 PASS; artifact identity/provenance 4/4 PASS; component contract 8/8 PASS (1 host-only skip); MCP integration 4/4 PASS; component/identity/legacy validators PASS. Bash 3.2 runtime, PowerShell 5.1, final-head CI, dan Afyx Graph Build tetap acceptance gates sebelum AFYX-263 dapat dipindah ke Done.
+
 Required audits:
 
 - native implementation audit.

@@ -25,7 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check Bash syntax
-        run: bash -n install.sh update.sh uninstall.sh verify.sh scripts/install-afyx-graph.sh scripts/afyx-doctor.sh scripts/afyx-project.sh scripts/lib/afyx-components.sh
+        run: bash -n install.sh update.sh uninstall.sh verify.sh scripts/install-afyx-graph.sh scripts/afyx-doctor.sh scripts/afyx-project.sh scripts/lib/afyx-components.sh scripts/lib/afyx-skill-lifecycle.sh
       - name: Validate Afyx Graph identity and metadata
         run: python scripts/validate-afyx-graph.py
       - name: Validate the component contract
@@ -92,6 +92,8 @@ jobs:
         run: |
           python scripts/tests/test_components.py
           python scripts/tests/test_lifecycle.py
+          python scripts/tests/test_skill_lifecycle_security.py
+          python scripts/tests/test_artifact_identity.py
           python scripts/tests/test_project_detect.py
           python scripts/tests/test_doctor.py
       - name: Verify repository remains clean
@@ -110,7 +112,7 @@ jobs:
       - name: Bash 3.2 syntax and portability (system /bin/bash)
         run: |
           /bin/bash --version | head -n 1
-          for f in install.sh update.sh uninstall.sh verify.sh scripts/install-afyx-graph.sh scripts/afyx-doctor.sh scripts/afyx-project.sh scripts/lib/afyx-components.sh; do
+          for f in install.sh update.sh uninstall.sh verify.sh scripts/install-afyx-graph.sh scripts/afyx-doctor.sh scripts/afyx-project.sh scripts/lib/afyx-components.sh scripts/lib/afyx-skill-lifecycle.sh; do
             /bin/bash -n "$f"
           done
       - name: Installer ValidateOnly (system /bin/bash)
@@ -134,6 +136,8 @@ jobs:
           python3 scripts/validate-components.py
           python3 scripts/tests/test_components.py
           python3 scripts/tests/test_lifecycle.py
+          python3 scripts/tests/test_skill_lifecycle_security.py
+          python3 scripts/tests/test_artifact_identity.py
           python3 scripts/tests/test_project_detect.py
       - name: Verify repository remains clean
         run: |
