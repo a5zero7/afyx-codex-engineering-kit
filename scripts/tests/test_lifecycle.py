@@ -89,13 +89,16 @@ class LifecycleContractTests(unittest.TestCase):
     def test_dry_run_does_not_create_component_roots(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             base = Path(raw)
-            skills, graph, codex = base / "skills", base / "graph", base / "codex"
+            skills, graph, codex, fake_bin = base / "skills", base / "graph", base / "codex", base / "bin"
+            fake_bin.mkdir()
             env = os.environ.copy()
             env.update({"HOME": raw, "USERPROFILE": raw, "CODEX_HOME": str(codex), "AFYX_GRAPH_RUNTIME_ROOT": str(graph)})
+            env["PATH"] = str(fake_bin) + os.pathsep + env.get("PATH", "")
             if WINDOWS:
                 shell = pwsh_path()
                 if not shell:
                     self.skipTest("PowerShell is unavailable")
+                write(fake_bin / "codex.cmd", "@echo codex-test\r\n")
                 command = [
                     shell, "-NoProfile", "-NonInteractive", "-File", str(ROOT / "install.ps1"),
                     "-SkillsRoot", str(skills), "-WhatIf", "-ComponentAction", "afyx-graph=install",
@@ -104,6 +107,7 @@ class LifecycleContractTests(unittest.TestCase):
                 shell = shell_path()
                 if not shell:
                     self.skipTest("Bash is unavailable")
+                write(fake_bin / "codex", "#!/bin/sh\necho codex-test\n", executable=True)
                 command = [
                     shell, str(ROOT / "install.sh"), "--skills-root", str(skills), "--dry-run",
                     "--component", "afyx-graph=install",

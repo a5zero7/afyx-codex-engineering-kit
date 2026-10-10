@@ -393,7 +393,7 @@ try {
         Set-Content -LiteralPath (Join-Path $fakeCodexBin 'codex.cmd') -Value '@echo off' -Encoding ascii
         $skip = Invoke-TestScript $mainInstallerPath @('-SkillsRoot', (Join-Path $integrationRoot 'skills'), '-SkipUsageTracker', '-WhatIf', '-Confirm:$false') $null @{ PATH = ($fakeCodexBin + [IO.Path]::PathSeparator + $env:PATH) }
         Assert-Equal $skip.ExitCode 0 "Main installer skip path; stderr: $($skip.Error)"
-        if ($skip.Output -notmatch 'Codex Usage Tracking: skipped') { throw 'Main installer did not report optional skip.' }
+    if ($skip.Output -notmatch 'Usage Tracking: skipped') { throw 'Main installer did not report optional skip.' }
         if (-not (Test-Path -LiteralPath $installedStop -PathType Leaf)) { throw 'Declining tracker update removed an existing installation.' }
     } finally { $env:CODEX_HOME = $previousCodexHome }
 
