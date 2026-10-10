@@ -169,10 +169,16 @@ graph_owned() {
 
 state="$(graph_state)"
 if [[ "$mode" == validate ]]; then
-  installed_revision="$(sed -n 's/.*"source_revision"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$RUNTIME_ROOT/metadata.json" 2>/dev/null | head -n 1)"
-  installed_extraction="$(sed -n 's/.*"extraction_version"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$RUNTIME_ROOT/metadata.json" 2>/dev/null | head -n 1)"
-  installed_provenance="$(sed -n 's/.*"artifact_provenance"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$RUNTIME_ROOT/metadata.json" 2>/dev/null | head -n 1)"
-  installed_revision_status="$(sed -n 's/.*"revision_status"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$RUNTIME_ROOT/metadata.json" 2>/dev/null | head -n 1)"
+  installed_revision=
+  installed_extraction=
+  installed_provenance=
+  installed_revision_status=
+  if [[ -f "$RUNTIME_ROOT/metadata.json" ]]; then
+    installed_revision="$(sed -n 's/.*"source_revision"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$RUNTIME_ROOT/metadata.json" | head -n 1)"
+    installed_extraction="$(sed -n 's/.*"extraction_version"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$RUNTIME_ROOT/metadata.json" | head -n 1)"
+    installed_provenance="$(sed -n 's/.*"artifact_provenance"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$RUNTIME_ROOT/metadata.json" | head -n 1)"
+    installed_revision_status="$(sed -n 's/.*"revision_status"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$RUNTIME_ROOT/metadata.json" | head -n 1)"
+  fi
   if [[ -n "$installed_revision" && "$requested_revision" != UNKNOWN ]]; then
     if [[ "$installed_revision" == "$requested_revision" ]]; then installed_revision_status=MATCH; else installed_revision_status=REVISION_MISMATCH; fi
   else installed_revision_status=UNKNOWN; fi

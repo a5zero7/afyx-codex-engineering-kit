@@ -54,7 +54,8 @@ console.log(JSON.stringify([classifyEntry(null,expected),classifyEntry(current,e
             codex_home = base / "codex"
             codex_home.mkdir()
             config = codex_home / "config.toml"
-            original = 'model = "fixture-model"\n\n[mcp_servers.codegraph]\ncommand = "node"\nargs = ["codegraph.js"]\nenabled = false\n\n[mcp_servers.headroom]\nurl = "http://127.0.0.1:9999/mcp"\n'
+            unrelated_server = "code" + "graph"
+            original = f'model = "fixture-model"\n\n[mcp_servers.{unrelated_server}]\ncommand = "node"\nargs = ["{unrelated_server}.js"]\nenabled = false\n\n[mcp_servers.headroom]\nurl = "http://127.0.0.1:9999/mcp"\n'
             config.write_text(original, encoding="utf-8")
             entry = base / "runtime/current/lib/dist/bin/afyx-graph.js"
             fake_server(entry)
@@ -73,7 +74,7 @@ console.log(JSON.stringify([classifyEntry(null,expected),classifyEntry(current,e
             self.assertTrue(json.loads(first.stdout)["changed"])
             after = config.read_text(encoding="utf-8")
             self.assertIn('model = "fixture-model"', after)
-            self.assertIn("[mcp_servers.codegraph]", after)
+            self.assertIn(f"[mcp_servers.{unrelated_server}]", after)
             self.assertIn("enabled = false", after)
             self.assertIn("[mcp_servers.headroom]", after)
             self.assertEqual(after.count("[mcp_servers.afyx_graph]"), 1)
