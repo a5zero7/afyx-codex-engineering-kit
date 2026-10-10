@@ -36,6 +36,8 @@ if ($InstallUsageTracker -and $SkipUsageTracker) { throw '-InstallUsageTracker a
 Import-Module (Join-Path $packageRoot 'scripts\lib\AfyxComponents.psm1') -Force
 Import-Module (Join-Path $packageRoot 'scripts\lib\AfyxSkillLifecycle.psm1') -Force
 $componentContext = New-AfyxComponentContext -SkillsRoot $SkillsRoot -GraphRoot $graphRuntimeRoot -CodexHome $codexHome
+$promptComponent = @(Get-AfyxComponentContract | Where-Object { $_.id -eq 'prompt-master' })[0]
+$promptMasterRevision = [string]$promptComponent.source_revision
 $componentStates = @{}
 foreach ($componentState in (Get-AfyxComponentStates -Context $componentContext)) { $componentStates[$componentState.Id] = $componentState }
 foreach ($component in (Get-AfyxComponentContract | Where-Object { $_.type -eq 'skill' })) {
@@ -252,12 +254,17 @@ foreach ($component in @(
 )) {
     $action = Get-ComponentAction $component.Id $component.Name
     if ($action -eq 'skip') { $summary[$component.Name] = 'skipped'; continue }
-        $summary[$component.Name] = Install-ManagedSkillSafely $component.Id $component.Name $component.Source $component.Target ($action -in @('update', 'repair'))
+    $summary[$component.Name] = Install-ManagedSkillSafely $component.Id $component.Name $component.Source $component.Target ($action -in @('update', 'repair'))
 }
 
 $promptAction = Get-ComponentAction 'prompt-master' 'Prompt Master'
 if ($Offline -and $promptAction -ne 'skip') {
     throw 'Offline mode cannot install or update upstream-owned Prompt Master. Choose prompt-master=skip or retry with network access.'
+}
+$promptPinnedResult = $null
+if ($promptAction -ne 'skip') {
+    $promptPinnedResult = Install-PromptMasterPinned (Test-Path -LiteralPath $promptTarget)
+    $promptAction = 'skip'
 }
 if (Test-Path -LiteralPath $promptTarget) {
     if ($promptAction -eq 'skip') { $summary['Prompt Master'] = 'skipped' }
@@ -269,11 +276,8 @@ if (Test-Path -LiteralPath $promptTarget) {
         }
         $parent = Split-Path -Parent $promptTarget
         $stage = Join-Path $parent ".prompt-master-stage-$([guid]::NewGuid().ToString('N'))"
-        & git clone --depth 1 $PromptMasterRepository $stage
+        throw 'Legacy floating Prompt Master acquisition path is disabled.'
         if ($LASTEXITCODE -ne 0 -or -not (Test-SkillManifest $stage)) { throw 'Prompt Master staging failed.' }
-        New-Item -ItemType Directory -Force -Path $backupRoot | Out-Null
-        $backup = Join-Path $backupRoot "prompt-master-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
-        Copy-Item -LiteralPath $promptTarget -Destination $backup -Recurse -Force
         $old = "$promptTarget.old-$([guid]::NewGuid().ToString('N'))"
         Move-Item $promptTarget $old
         try { Move-Item $stage $promptTarget; Remove-Item $old -Recurse -Force }
@@ -283,10 +287,12 @@ if (Test-Path -LiteralPath $promptTarget) {
 } elseif ($promptAction -eq 'skip') { $summary['Prompt Master'] = 'skipped' }
 elseif ($WhatIfPreference) { Write-Host 'WhatIf: would clone Prompt Master'; $summary['Prompt Master'] = 'planned' }
 else {
-    & git clone --depth 1 $PromptMasterRepository $promptTarget
+    throw 'Legacy floating Prompt Master acquisition path is disabled.'
     if ($LASTEXITCODE -ne 0 -or -not (Test-SkillManifest $promptTarget)) { throw 'Prompt Master installation failed.' }
     $summary['Prompt Master'] = 'installed'
 }
+
+if ($promptPinnedResult) { $summary['Prompt Master'] = $promptPinnedResult }
 
 $graphState = $states['Afyx Graph']
 $graphAction = Get-ComponentAction 'afyx-graph' 'Afyx Graph'

@@ -4,7 +4,7 @@ set -euo pipefail
 PACKAGE_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 BUNDLED_EFFICIENT="$PACKAGE_ROOT/skills/efficient-coding"
 BUNDLED_ODOO="$PACKAGE_ROOT/skills/odoo-engineering"
-PROMPT_MASTER_REPOSITORY="https://github.com/nidhinjs/prompt-master.git"
+PROMPT_MASTER_REPOSITORY="${AFYX_PROMPT_MASTER_REPOSITORY:-https://github.com/nidhinjs/prompt-master.git}"
 skills_root="${CODEX_SKILLS_ROOT:-$HOME/.agents/skills}"
 graph_root="${AFYX_GRAPH_RUNTIME_ROOT:-$HOME/.afyx/graph}"
 force=false
@@ -170,6 +170,17 @@ safe_skill_install() {
   if [[ "$replace" == true ]]; then printf replaced; else printf installed; fi
 }
 
+stage_prompt_master() {
+  local stage="$1" head
+  git init -q "$stage" || return 1
+  git -C "$stage" remote add origin "$PROMPT_MASTER_REPOSITORY" || return 1
+  git -C "$stage" fetch -q --depth 1 origin "$PROMPT_MASTER_REVISION" || return 1
+  git -C "$stage" checkout -q --detach FETCH_HEAD || return 1
+  head="$(git -C "$stage" rev-parse HEAD)" || return 1
+  [[ "$head" == "$PROMPT_MASTER_REVISION" ]] || { printf 'Prompt Master revision verification failed.\n' >&2; return 1; }
+  afyx_skill_manifest_check "$stage" false
+}
+
 valid_manifest "$BUNDLED_EFFICIENT" || { printf 'Bundled Efficient Coding is invalid.\n' >&2; exit 1; }
 valid_manifest "$BUNDLED_ODOO" || { printf 'Bundled Odoo Engineering is invalid.\n' >&2; exit 1; }
 [[ -s "$PACKAGE_ROOT/afyx-graph/afyx-graph.json" ]] || { printf 'Bundled Afyx Graph metadata is missing.\n' >&2; exit 1; }
@@ -236,16 +247,26 @@ if [[ "$offline" == true && "$prompt_action" != skip ]]; then
 fi
 if [[ "$prompt_action" == skip ]]; then :
 elif [[ "$prompt_state" == 'NOT INSTALLED' ]]; then
-  if "$dry_run"; then prompt_result=planned; else git clone --depth 1 "$PROMPT_MASTER_REPOSITORY" "$prompt_target"; valid_manifest "$prompt_target"; prompt_result=installed; fi
+  if "$dry_run"; then prompt_result=planned
+  else
+    afyx_assert_skill_target "$skills_root" "$prompt_target"
+    prompt_stage="$(mktemp -d "$(dirname "$prompt_target")/.prompt-stage.XXXXXX")"
+    if ! stage_prompt_master "$prompt_stage" || ! afyx_promote_skill prompt-master 'Prompt Master' "$prompt_stage" "$prompt_target" upstream '' "$PROMPT_MASTER_REPOSITORY" "$PROMPT_MASTER_REVISION" false; then
+      [[ -e "$prompt_stage" ]] && rm -rf -- "$prompt_stage"
+      exit 1
+    fi
+    prompt_result=installed
+  fi
 else
   if "$dry_run"; then prompt_result=planned
   else
-    if [[ -d "$prompt_target/.git" && -n "$(git -C "$prompt_target" status --porcelain)" ]]; then printf 'Prompt Master has local changes; backup will be preserved.\n'; fi
-    prompt_stage="$(mktemp -d "$(dirname "$prompt_target")/.prompt-stage.XXXXXX")"; rm -rf -- "$prompt_stage"
-    git clone --depth 1 "$PROMPT_MASTER_REPOSITORY" "$prompt_stage"; valid_manifest "$prompt_stage"
-    mkdir -p "$PACKAGE_ROOT/backups"; cp -a "$prompt_target" "$PACKAGE_ROOT/backups/prompt-master-$(date +%Y%m%d-%H%M%S)"
-    prompt_old="${prompt_target}.old.$$"; mv "$prompt_target" "$prompt_old"
-    if mv "$prompt_stage" "$prompt_target"; then rm -rf -- "$prompt_old"; else mv "$prompt_old" "$prompt_target"; exit 1; fi
+    afyx_assert_skill_target "$skills_root" "$prompt_target"
+    prompt_stage="$(mktemp -d "$(dirname "$prompt_target")/.prompt-stage.XXXXXX")"
+    authorize=false; replacement_authorized prompt-master && authorize=true
+    if ! stage_prompt_master "$prompt_stage" || ! afyx_promote_skill prompt-master 'Prompt Master' "$prompt_stage" "$prompt_target" upstream '' "$PROMPT_MASTER_REPOSITORY" "$PROMPT_MASTER_REVISION" "$authorize"; then
+      [[ -e "$prompt_stage" ]] && rm -rf -- "$prompt_stage"
+      exit 1
+    fi
     prompt_result=replaced
   fi
 fi
