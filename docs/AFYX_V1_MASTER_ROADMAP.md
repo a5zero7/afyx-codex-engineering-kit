@@ -6,8 +6,8 @@ Contract revision: **2026-10-10**
 v1 scope policy: **FROZEN — Phase 1 through Phase 11**  
 Post-v1 policy: **PLANNED EXPANSION — not a v1 release blocker**
 
-Current work: **Technical Alpha Batch 2 — Exact-File Explore & Retrieval Correctness (validation in progress)**
-Task: `AFYX-260`; `AFYX-248` remains in progress
+Current work: **Technical Alpha Batch 2 — AFYX-260 complete; AFYX-248 remains in progress**
+Task: `AFYX-260` validated; `AFYX-248` remains in progress
 Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`  
 Active implementation branch: `afyx/native-phase5f-parser-grammar`  
 Latest verified Phase 5F implementation checkpoint: `62621a0639f42db0eaac69ef087436d851cdba88`  
@@ -1106,7 +1106,7 @@ open for its explicitly deferred freshness/watcher UX scope.
 
 ### AFYX-260 — Exact-file Explore and retrieval correctness
 
-Status: **IMPLEMENTED; final-head cross-platform CI pending**
+Status: **DONE — IMPLEMENTED AND VALIDATED**
 
 Baseline `386199301855091f6114eb5512386111ae4331a1`; implementation commit
 `5b6fc45326474d59cada52be55054f315f349029`. The reproduced defect was limited
@@ -1132,6 +1132,8 @@ and had identical normalized 43-line result text. Focused path-pinning passed
 retrieval/MCP tests passed 43; UI/browser tests passed 53 with three
 platform skips; semantic baseline passed six fixtures; CLI/MCP smoke passed
 21 checks; TypeScript typecheck and clean production/UI build passed.
+Implementation/evidence-head CI `38075108668` and Afyx Graph Build
+`38075110506` passed on Windows, Linux, and macOS.
 
 Bounded Windows diagnosis found direct Node MCP startup already uses hidden
 child processes and does not traverse the `.cmd` launcher. `ui --no-open`
