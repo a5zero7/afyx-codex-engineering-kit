@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import shutil
+import stat
 import subprocess
 import tempfile
 import unittest
@@ -29,6 +30,8 @@ class SkillLifecycleSecurityTests(unittest.TestCase):
         self.base = Path(self.temporary.name)
         self.skills = self.base / "skills"
         self.backups = self.base / "backups"
+        self.fake_bin = self.base / "fake-bin"
+        self.fake_bin.mkdir()
         self.shell = lifecycle_shell()
         if not self.shell:
             self.skipTest("host lifecycle shell unavailable")
@@ -44,6 +47,13 @@ class SkillLifecycleSecurityTests(unittest.TestCase):
                 "CI": "1",
             }
         )
+        if WINDOWS:
+            (self.fake_bin / "codex.cmd").write_text("@echo codex-test\r\n", encoding="utf-8")
+        else:
+            codex = self.fake_bin / "codex"
+            codex.write_text("#!/bin/sh\necho codex-test\n", encoding="utf-8")
+            codex.chmod(codex.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        self.env["PATH"] = str(self.fake_bin) + os.pathsep + self.env.get("PATH", "")
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
