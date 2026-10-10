@@ -56,6 +56,8 @@ Skill Odoo dipasang bersama Efficient Coding. Referensi Odoo 10–20 berstatus s
 
 Kedua skill memakai frontmatter Agent Skills dengan `name`, `description`, dan `metadata.version`. Entrypoint tetap ringkas; detail kondisional dimuat dari `references/` hanya saat routing task membutuhkannya.
 
+Efficient Coding 1.2.0 memakai loop `GROUND → LOCATE → REPRODUCE → CHANGE → VALIDATE → REPORT`, validasi berbasis risiko, dan routing tool selektif. Afyx Graph dipakai hanya untuk relasi struktural yang material; fallback selalu inspeksi source langsung dan tidak pernah dependency graph eksternal yang sudah deprecated. Versi ini tidak mengubah provenance adoption historis 1.1.0.
+
 ## Saat skill sudah ada
 
 | Kondisi | Perilaku default | Opsi aman |

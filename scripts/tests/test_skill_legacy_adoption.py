@@ -88,7 +88,12 @@ class LegacySkillAdoptionTests(unittest.TestCase):
     def copy_legacy(self, component: str) -> Path:
         target = self.skills / component
         target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(ROOT / "skills" / component, target)
+        source = (
+            ROOT / "scripts" / "tests" / "fixtures" / "legacy-efficient-coding-1.1.0"
+            if component == "efficient-coding"
+            else ROOT / "skills" / component
+        )
+        shutil.copytree(source, target)
         return target
 
     def test_matching_afyx_skills_dry_run_adopt_and_repeat(self) -> None:

@@ -15,3 +15,9 @@ Use Afyx Graph when resolving relationships is the efficient way to answer a str
 Use Headroom for genuinely large logs, test output, search results, JSON, API responses, database output, or generated tool output when compression preserves the needed meaning. Do not compress small results by default. Retrieve the original output before relying on an exact line, value, order, or detail that compression could omit.
 
 Efficiency applies to wasted context only: retain every piece of evidence needed to make and validate a correct change.
+
+## Validation and reporting
+
+Start with the narrowest check that can disprove the change, then expand according to shared behavior and material regression risk. Do not repeat unchanged checks.
+
+Report concisely by default: outcome or root cause, changed scope, validation, and remaining uncertainty. Increase detail when task complexity, risk, or evidence requires it; do not force a fixed report length. Record token, time, or tool savings only when actually measured.

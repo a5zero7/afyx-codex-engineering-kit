@@ -6,8 +6,8 @@ Contract revision: **2026-10-11**
 v1 scope policy: **FROZEN — Phase 1 through Phase 11**  
 Post-v1 policy: **PLANNED EXPANSION — not a v1 release blocker**
 
-Current work: **AFYX-264 legacy skill adoption validation; AFYX-248 remains in progress**
-Task: `AFYX-264`; `AFYX-248` remains in progress
+Current work: **AFYX-261 Efficient Coding v2 refinement; AFYX-248 remains in progress**
+Task: `AFYX-261`; `AFYX-248` remains in progress
 Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`  
 Active implementation branch: `afyx/native-phase5f-parser-grammar`  
 Latest verified Phase 5F implementation checkpoint: `62621a0639f42db0eaac69ef087436d851cdba88`  
@@ -1232,6 +1232,18 @@ AFYX-264 menambahkan adoption opt-in untuk instalasi Efficient Coding 1.1.0, Odo
 Action `component=adopt` memverifikasi provenance, containment, path safety, membuat dan memverifikasi backup durable, lalu hanya menambahkan ownership marker; isi skill tidak diganti atau di-upgrade. Dry-run tidak bermutasi dan repeated adoption idempotent. Implementasi migration tersedia, tetapi tidak ada adoption yang dijalankan terhadap instalasi user selama development.
 
 Evidence lokal: focused adoption 4/4 PASS; lifecycle security 6/6 PASS; lifecycle contract 8/8 PASS; component contract 8/8 PASS dengan satu cross-shell host-only skip; PowerShell/Bash syntax PASS; component, identity/legal, dan legacy-independence validators PASS. Final-head cross-platform CI tetap diperlukan sebelum AFYX-264 dipindah ke Done.
+
+### Technical Alpha Batch 4B.1 — AFYX-261
+
+Status: **IMPLEMENTED; ACCEPTANCE REQUIRES FINAL-HEAD CI; AFYX-248 remains IN PROGRESS**
+
+Efficient Coding 1.2.0 mempertahankan correctness-first dan progressive disclosure sambil menambahkan loop `GROUND → LOCATE → REPRODUCE → CHANGE → VALIDATE → REPORT`, reliable bug baseline, cost lens kondisional, approval boundary eksplisit, serta pelaporan proporsional. Direct inspection tetap default untuk target sederhana; Afyx Graph hanya untuk relasi struktural yang material; saat Graph tidak tersedia fallback adalah direct-source search dan CodeGraph dilarang. Headroom tetap selektif dan exact original evidence harus tersedia.
+
+Matriks sintetis enam skenario yang sama memberi baseline 1.1.0 `2/6 FULL` dan kandidat 1.2.0 `6/6 FULL`: known-file grounding, unknown-defect reproduction/stopping, cross-module Graph routing, unavailable-Graph fallback, authorization boundary, dan proportional reporting/noisy evidence. Ini bukti kontrak deterministik, bukan model-quality atau token-savings benchmark; tidak ada klaim penghematan token tanpa pengukuran. Usulan rigid three-search limit, mandatory six-line report, dan major-version 2.0.0 ditolak.
+
+Adoption provenance 1.1.0 tetap dibekukan pada digest historis AFYX-264 dan kini diuji memakai fixture historis terpisah; instalasi pengguna tidak dimutasi. Acceptance memerlukan focused matrix, routing/component/doctor/adoption regressions, validators, dan final-head CI lintas platform.
+
+Evidence lokal: refinement matrix 3/3 PASS (`2/6 → 6/6 FULL`); routing intent 20/20 PASS; routing mutation guard 11/11 PASS; component 8/8 PASS dengan satu host-only cross-shell skip; doctor 10/10 PASS; legacy adoption 4/4 PASS; component, graph identity, dan independence validators PASS; Python syntax dan `git diff --check` PASS. Corpus empat dokumen bertambah dari 751 menjadi 956 kata untuk kontrak baru; provider token usage dan outcome model tidak diukur, sehingga tidak ada klaim penghematan token atau superioritas model.
 
 Required audits:
 

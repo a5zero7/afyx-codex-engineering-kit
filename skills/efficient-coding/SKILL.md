@@ -2,25 +2,26 @@
 name: efficient-coding
 description: Quality-first workflow for software implementation, debugging, refactoring, and code investigation. Applies to coding work, not general conversation, prompt writing, or document-only tasks.
 metadata:
-  version: "1.1.0"
+  version: "1.2.0"
 ---
 
 # Efficient Coding
 
-Prioritize **correctness → evidence → scoped change → validation → efficiency**. The target repository is authoritative; establish material framework, runtime, dependency, and behavior facts before editing.
+Prioritize **correctness → evidence → scoped change → validation → efficiency**. The target repository is authoritative.
 
-## Route the task
+## Core loop
 
-- Known target: open the named symbol/file/failure path, inspect only material relationships, edit, then validate narrowly.
-- Unknown target: identify the failure signal, search and narrow candidates, inspect the implementation and relevant relationships, then edit and validate.
-- Cross-cutting or architectural: identify the source of truth, trace dependency/inheritance/caller impact, define the boundary, then implement with expanded validation.
+- **GROUND:** establish the requested target, observable problem or outcome, material impact, and validation signal.
+- **LOCATE:** route known targets directly, narrow unknown defects from evidence, and trace cross-cutting relationships only as far as correctness requires.
+- **REPRODUCE:** for bugs, establish a reliable failure signal or behavioral baseline before changing code when feasible.
+- **CHANGE:** make the smallest safe, authorized change that resolves the evidenced problem.
+- **VALIDATE:** run focused checks first, expanding only for material regression risk.
+- **REPORT:** be concise by default; include the evidence and detail warranted by task complexity.
 
-Read `references/investigation.md` when the target or impact boundary is not already clear. Read `references/tool-routing.md` when tool choice or stopping criteria materially affect the investigation. For genuinely large/noisy context, read `references/token-efficiency.md`.
+Read `references/investigation.md` when the target, reproduction, impact, or change boundary is unclear. Read `references/tool-routing.md` when tool choice matters. For genuinely large or noisy evidence, read `references/token-efficiency.md`.
 
 ## Change contract
 
-Make the smallest change that resolves the evidenced problem while preserving relevant architecture, compatibility, conventions, and public behavior. Do not add dependencies, perform destructive actions, change schema, or expand scope without authorization.
+Preserve relevant architecture, compatibility, conventions, and public behavior. Existing explicit user authorization is sufficient within its stated scope; request approval before unapproved destructive operations, dependencies, public API/schema changes, or scope expansion.
 
-Stop exploring once material uncertainty is resolved. Start with targeted validation and expand only for shared behavior, dependencies, inheritance, configuration, failures, or material regression risk.
-
-Report the root cause or key reasoning, changed files, executed validation, and remaining uncertainty.
+Stop exploring once material uncertainty is resolved. Never trade away evidence required for a correct result merely to reduce tool calls or tokens.
