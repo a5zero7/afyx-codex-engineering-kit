@@ -30,7 +30,7 @@ function bundle(): string {
   file(root, 'lib/dist/index.js.map');
   file(root, 'lib/dist/ui/shimmer-progress.js');
   file(root, 'lib/package.json', JSON.stringify({ name: '@a5zero7/afyx-graph', bin: { 'afyx-graph': './dist/bin/afyx-graph.js' } }));
-  file(root, 'metadata.json', JSON.stringify({ product_name: 'Afyx Graph', cli: 'afyx-graph' }));
+  file(root, 'metadata.json', JSON.stringify({ product_name: 'Afyx Graph', cli: 'afyx-graph', release_channel: 'technical-alpha' }));
   file(root, 'LICENSE', 'MIT License\n\nCopyright (c) 2026 Afyx\n');
   file(root, 'bin/afyx-graph.cmd', 'where node\nNode.js was not found on PATH\nnode --disable-warning lib\\dist\\bin\\afyx-graph.js');
   return root;
@@ -48,6 +48,7 @@ describe('Afyx distribution contract', () => {
     ]);
     expect(DISTRIBUTION_PRODUCT).toMatchObject({
       productName: 'Afyx Graph',
+      releaseChannel: 'technical-alpha',
       packageName: '@a5zero7/afyx-graph',
       cli: 'afyx-graph',
       runtime: {
