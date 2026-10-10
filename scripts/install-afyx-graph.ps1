@@ -222,6 +222,7 @@ function Resolve-Archive {
             $url = "https://github.com/a5zero7/afyx-codex-engineering-kit/releases/download/$tag/$assetName"
             Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $download
             Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/a5zero7/afyx-codex-engineering-kit/releases/download/$tag/SHA256SUMS" -OutFile (Join-Path $downloadRoot 'SHA256SUMS')
+            Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/a5zero7/afyx-codex-engineering-kit/releases/download/$tag/RELEASE-MANIFEST.json" -OutFile (Join-Path $downloadRoot 'RELEASE-MANIFEST.json')
             Test-ArchiveChecksum -Path $download
             Test-ArchiveBundle -Path $download
             $identity = Get-ArchiveIdentity -Path $download -RequestedRevision $requestedRevision
@@ -320,6 +321,9 @@ if ($ValidateOnly) {
         SourceRevision = if ($installedMetadata -and $installedMetadata.source_revision) { $installedMetadata.source_revision } else { 'UNKNOWN' }
         ExtractionVersion = if ($installedMetadata) { $installedMetadata.extraction_version } else { $null }
         Provenance = if ($installedMetadata -and $installedMetadata.artifact_provenance) { $installedMetadata.artifact_provenance } else { 'UNKNOWN' }
+        ReleaseManifestStatus = if ($installedMetadata -and $installedMetadata.release_manifest_status) { $installedMetadata.release_manifest_status } else { 'MISSING' }
+        PublisherAuthenticity = if ($installedMetadata -and $installedMetadata.publisher_authenticity) { $installedMetadata.publisher_authenticity } else { 'UNVERIFIED' }
+        BuildProvenance = if ($installedMetadata -and $installedMetadata.build_provenance) { $installedMetadata.build_provenance } else { 'UNVERIFIED' }
         CurrentCheckoutRevision = if ($currentCheckoutRevision) { $currentCheckoutRevision } else { 'UNKNOWN' }
         RevisionStatus = $revisionStatus
         UpdateAvailable = $revisionStatus -eq 'REVISION_MISMATCH'
@@ -372,7 +376,26 @@ try {
     Test-StagedBundle -Path $bundle.FullName
     Test-StagedRuntimeIdentity -Path $bundle.FullName
     $requestedRevision = Get-RequestedRevision
-    & (Get-Command node).Source $artifactIdentityTool record-install --metadata (Join-Path $bundle.FullName 'metadata.json') --archive $archive --provenance $resolvedArchive.Source --requested-revision $(if ($requestedRevision) { $requestedRevision } else { 'UNKNOWN' }) *> $null
+    $releaseManifest = Join-Path (Split-Path -Parent $archive) 'RELEASE-MANIFEST.json'
+    $manifestStatus = 'MISSING'
+    $publisherAuthenticity = 'UNVERIFIED'
+    $buildProvenance = 'UNVERIFIED'
+    if (Test-Path -LiteralPath $releaseManifest -PathType Leaf) {
+        & (Get-Command node).Source $artifactIdentityTool verify-release-manifest --manifest $releaseManifest --archive $archive --metadata (Join-Path $bundle.FullName 'metadata.json') *> $null
+        if ($LASTEXITCODE -ne 0) { throw 'Release manifest verification failed.' }
+        $manifestStatus = 'VERIFIED'
+        $buildProvenance = 'COMMIT_BOUND_MANIFEST'
+    } elseif ($resolvedArchive.Source -eq 'github-release') {
+        throw 'GitHub release is missing RELEASE-MANIFEST.json.'
+    }
+    $gh = Get-Command gh -ErrorAction SilentlyContinue
+    if ($resolvedArchive.Source -eq 'github-release' -and $gh) {
+        & $gh.Source attestation verify $archive --repo a5zero7/afyx-codex-engineering-kit *> $null
+        if ($LASTEXITCODE -ne 0) { throw 'GitHub publisher/build attestation verification failed.' }
+        $publisherAuthenticity = 'GITHUB_ATTESTED'
+        $buildProvenance = 'GITHUB_ATTESTED'
+    }
+    & (Get-Command node).Source $artifactIdentityTool record-install --metadata (Join-Path $bundle.FullName 'metadata.json') --archive $archive --provenance $resolvedArchive.Source --requested-revision $(if ($requestedRevision) { $requestedRevision } else { 'UNKNOWN' }) --release-manifest-status $manifestStatus --publisher-authenticity $publisherAuthenticity --build-provenance $buildProvenance *> $null
     if ($LASTEXITCODE -ne 0) { throw 'Failed to record installed artifact provenance.' }
     Move-Item -LiteralPath $bundle.FullName -Destination (Join-Path $prepared 'current')
     Copy-Item -LiteralPath (Join-Path $prepared 'current\metadata.json') -Destination (Join-Path $prepared 'metadata.json')

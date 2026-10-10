@@ -119,6 +119,35 @@ class ArtifactIdentityTests(unittest.TestCase):
             unknown = self.run_tool("require-revision", "--metadata", str(metadata), "--requested-revision", revision_b, expected=4)
             self.assertEqual(json.loads(unknown.stdout)["revisionStatus"], "UNKNOWN")
 
+    def test_release_manifest_binds_digest_target_revision_and_version(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            release = Path(raw)
+            revision = "c" * 40
+            archive = create_bundle(release, revision)
+            family, target = host_target()
+            metadata = release / "metadata.json"
+            write(metadata, json.dumps({
+                "product_name": "Afyx Graph", "product_version": "1.0.0",
+                "release_channel": "technical-alpha", "artifact_identity_schema": 1,
+                "artifact_target": target, "source_revision": revision,
+                "build_identity": f"git:{revision}", "extraction_version": 27,
+            }))
+            manifest = release / "RELEASE-MANIFEST.json"
+            self.run_tool(
+                "create-release-manifest", "--directory", str(release), "--output", str(manifest),
+                "--revision", revision, "--version", "1.0.0", "--tag", "afyx-graph-v1.0.0",
+            )
+            verified = self.run_tool(
+                "verify-release-manifest", "--manifest", str(manifest), "--archive", str(archive), "--metadata", str(metadata)
+            )
+            self.assertEqual(json.loads(verified.stdout)["status"], "VERIFIED")
+
+            archive.write_bytes(archive.read_bytes() + b"tampered")
+            failed = self.run_tool(
+                "verify-release-manifest", "--manifest", str(manifest), "--archive", str(archive), "--metadata", str(metadata), expected=1
+            )
+            self.assertIn("digest mismatch", failed.stderr)
+
     def test_matching_cache_installs_and_stale_cache_preserves_existing_runtime(self) -> None:
         current = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
         installer = ROOT / "scripts" / ("install-afyx-graph.ps1" if os.name == "nt" else "install-afyx-graph.sh")
@@ -130,6 +159,10 @@ class ArtifactIdentityTests(unittest.TestCase):
             release, runtime, public_bin = base / "release", base / "runtime", base / "bin"
             release.mkdir()
             create_bundle(release, current)
+            self.run_tool(
+                "create-release-manifest", "--directory", str(release), "--output", str(release / "RELEASE-MANIFEST.json"),
+                "--revision", current, "--version", "1.0.0", "--tag", "afyx-graph-v1.0.0",
+            )
             env = os.environ.copy()
             env.update({
                 "AFYX_GRAPH_RELEASE_ROOT": str(release),
@@ -145,6 +178,9 @@ class ArtifactIdentityTests(unittest.TestCase):
             self.assertEqual(metadata["extraction_version"], 27)
             self.assertEqual(metadata["artifact_provenance"], "local-release-cache")
             self.assertEqual(metadata["revision_status"], "MATCH")
+            self.assertEqual(metadata["release_manifest_status"], "VERIFIED")
+            self.assertEqual(metadata["publisher_authenticity"], "UNVERIFIED")
+            self.assertEqual(metadata["build_provenance"], "COMMIT_BOUND_MANIFEST")
             self.assertEqual(len(metadata["archive_sha256"]), 64)
 
             metadata["source_revision"] = "b" * 40
@@ -186,6 +222,9 @@ class ArtifactIdentityTests(unittest.TestCase):
             self.assertEqual(installed["source_revision"], "UNKNOWN")
             self.assertEqual(installed["revision_status"], "UNKNOWN")
             self.assertEqual(installed["artifact_provenance"], "explicit-archive")
+            self.assertEqual(installed["release_manifest_status"], "MISSING")
+            self.assertEqual(installed["publisher_authenticity"], "UNVERIFIED")
+            self.assertEqual(installed["build_provenance"], "UNVERIFIED")
 
 
 if __name__ == "__main__":

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /** Canonical Afyx Graph artifact identity shared by Windows and POSIX lifecycle scripts. */
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
+import { basename, join } from 'node:path';
 
 const UNKNOWN = 'UNKNOWN';
 
@@ -42,6 +43,9 @@ export function artifactIdentity(metadata) {
       ? String(metadata.archive_sha256).toLowerCase()
       : UNKNOWN,
     requestedCheckoutRevision: revision(metadata.requested_checkout_revision),
+    releaseManifestStatus: String(metadata.release_manifest_status || 'MISSING'),
+    publisherAuthenticity: String(metadata.publisher_authenticity || 'UNVERIFIED'),
+    buildProvenance: String(metadata.build_provenance || 'UNVERIFIED'),
   };
 }
 
@@ -72,10 +76,63 @@ function requireValue(value, name) {
   return value;
 }
 
+function releaseManifest(directory, fields) {
+  const sourceRevision = revision(fields.revision);
+  if (sourceRevision === UNKNOWN) throw new Error('--revision must be a Git commit');
+  const artifacts = readdirSync(directory)
+    .filter((name) => /^afyx-graph-(?:win32|linux|darwin)-(?:x64|arm64)\.(?:zip|tar\.gz)$/.test(name))
+    .sort()
+    .map((name) => ({
+      file: name,
+      target: name.match(/^afyx-graph-(.+?)\.(?:zip|tar\.gz)$/)[1],
+      sha256: sha256(join(directory, name)),
+    }));
+  if (artifacts.length === 0) throw new Error('release directory has no Afyx Graph archives');
+  return {
+    schema: 1,
+    product: 'Afyx Graph',
+    product_version: requireValue(fields.version, '--version'),
+    release_tag: requireValue(fields.tag, '--tag'),
+    source_revision: sourceRevision,
+    integrity_claim: 'sha256',
+    publisher_authenticity: 'requires-independent-attestation',
+    artifacts,
+  };
+}
+
+function verifyReleaseManifest(manifestFile, archiveFile, metadataFile) {
+  const manifest = readMetadata(manifestFile);
+  const metadata = readMetadata(metadataFile);
+  const identity = artifactIdentity(metadata);
+  if (manifest.schema !== 1 || manifest.product !== 'Afyx Graph') throw new Error('release manifest schema or product mismatch');
+  const name = basename(archiveFile);
+  const entry = Array.isArray(manifest.artifacts) ? manifest.artifacts.find((item) => item.file === name) : null;
+  if (!entry || !/^[0-9a-f]{64}$/i.test(String(entry.sha256 || ''))) throw new Error(`release manifest has no valid entry for ${name}`);
+  if (sha256(archiveFile) !== String(entry.sha256).toLowerCase()) throw new Error('release manifest archive digest mismatch');
+  if (entry.target !== identity.target) throw new Error('release manifest target does not match artifact metadata');
+  if (revision(manifest.source_revision) === UNKNOWN || revision(manifest.source_revision) !== identity.sourceRevision) throw new Error('release manifest revision does not match artifact metadata');
+  if (String(manifest.product_version || '') !== identity.productVersion) throw new Error('release manifest version does not match artifact metadata');
+  return { status: 'VERIFIED', sourceRevision: identity.sourceRevision, target: identity.target, archiveSha256: entry.sha256 };
+}
+
 try {
   const command = process.argv[2];
-  const file = requireValue(argument('--metadata'), '--metadata');
-  if (command === 'stamp') {
+  const file = argument('--metadata');
+  if (command === 'create-release-manifest') {
+    const directory = requireValue(argument('--directory'), '--directory');
+    const output = requireValue(argument('--output'), '--output');
+    const manifest = releaseManifest(directory, {
+      revision: argument('--revision'), version: argument('--version'), tag: argument('--tag'),
+    });
+    writeMetadata(output, manifest);
+    console.log(JSON.stringify(manifest));
+  } else if (command === 'verify-release-manifest') {
+    console.log(JSON.stringify(verifyReleaseManifest(
+      requireValue(argument('--manifest'), '--manifest'),
+      requireValue(argument('--archive'), '--archive'),
+      requireValue(file, '--metadata'),
+    )));
+  } else if (command === 'stamp') {
     const stamped = stampArtifact(readMetadata(file), {
       target: requireValue(argument('--target'), '--target'),
       revision: argument('--revision', UNKNOWN),
@@ -103,11 +160,14 @@ try {
       archive_sha256: sha256(archive),
       requested_checkout_revision: revision(requested),
       revision_status: revisionStatus(artifactIdentity(metadata), requested),
+      release_manifest_status: argument('--release-manifest-status', 'MISSING'),
+      publisher_authenticity: argument('--publisher-authenticity', 'UNVERIFIED'),
+      build_provenance: argument('--build-provenance', 'UNVERIFIED'),
     };
     writeMetadata(file, updated);
     console.log(JSON.stringify(artifactIdentity(updated)));
   } else {
-    throw new Error('usage: afyx-graph-artifact.mjs stamp|inspect|require-revision|record-install [options]');
+    throw new Error('usage: afyx-graph-artifact.mjs create-release-manifest|verify-release-manifest|stamp|inspect|require-revision|record-install [options]');
   }
 } catch (error) {
   console.error(`[artifact] ${error instanceof Error ? error.message : String(error)}`);

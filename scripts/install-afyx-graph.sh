@@ -172,17 +172,23 @@ if [[ "$mode" == validate ]]; then
   installed_revision=
   installed_extraction=
   installed_provenance=
+  installed_manifest_status=
+  installed_publisher_authenticity=
+  installed_build_provenance=
   installed_revision_status=
   if [[ -f "$RUNTIME_ROOT/metadata.json" ]]; then
     installed_revision="$(sed -n 's/.*"source_revision"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$RUNTIME_ROOT/metadata.json" | head -n 1)"
     installed_extraction="$(sed -n 's/.*"extraction_version"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$RUNTIME_ROOT/metadata.json" | head -n 1)"
     installed_provenance="$(sed -n 's/.*"artifact_provenance"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$RUNTIME_ROOT/metadata.json" | head -n 1)"
+    installed_manifest_status="$(sed -n 's/.*"release_manifest_status"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$RUNTIME_ROOT/metadata.json" | head -n 1)"
+    installed_publisher_authenticity="$(sed -n 's/.*"publisher_authenticity"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$RUNTIME_ROOT/metadata.json" | head -n 1)"
+    installed_build_provenance="$(sed -n 's/.*"build_provenance"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$RUNTIME_ROOT/metadata.json" | head -n 1)"
     installed_revision_status="$(sed -n 's/.*"revision_status"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$RUNTIME_ROOT/metadata.json" | head -n 1)"
   fi
   if [[ -n "$installed_revision" && "$requested_revision" != UNKNOWN ]]; then
     if [[ "$installed_revision" == "$requested_revision" ]]; then installed_revision_status=MATCH; else installed_revision_status=REVISION_MISMATCH; fi
   else installed_revision_status=UNKNOWN; fi
-  printf 'Product: Afyx Graph\nState: %s\nRuntimeRoot: %s\nVersion: %s\nSourceRevision: %s\nExtractionVersion: %s\nProvenance: %s\nCurrentCheckoutRevision: %s\nRevisionStatus: %s\nUpdateAvailable: %s\n' "$state" "$RUNTIME_ROOT" "$VERSION" "${installed_revision:-UNKNOWN}" "${installed_extraction:-UNKNOWN}" "${installed_provenance:-UNKNOWN}" "$requested_revision" "$installed_revision_status" "$([[ "$installed_revision_status" == REVISION_MISMATCH ]] && printf true || printf false)"
+  printf 'Product: Afyx Graph\nState: %s\nRuntimeRoot: %s\nVersion: %s\nSourceRevision: %s\nExtractionVersion: %s\nProvenance: %s\nReleaseManifestStatus: %s\nPublisherAuthenticity: %s\nBuildProvenance: %s\nCurrentCheckoutRevision: %s\nRevisionStatus: %s\nUpdateAvailable: %s\n' "$state" "$RUNTIME_ROOT" "$VERSION" "${installed_revision:-UNKNOWN}" "${installed_extraction:-UNKNOWN}" "${installed_provenance:-UNKNOWN}" "${installed_manifest_status:-MISSING}" "${installed_publisher_authenticity:-UNVERIFIED}" "${installed_build_provenance:-UNVERIFIED}" "$requested_revision" "$installed_revision_status" "$([[ "$installed_revision_status" == REVISION_MISMATCH ]] && printf true || printf false)"
   if [[ "$installed_revision_status" == REVISION_MISMATCH ]]; then printf 'UPDATE AVAILABLE — REVISION MISMATCH\n'; fi
   [[ "$state" != INCOMPLETE && "$state" != INVALID ]]
   exit $?
@@ -252,22 +258,23 @@ if [[ -z "$archive_path" ]]; then
       archive_path="$transaction/$asset"
       url="https://github.com/a5zero7/afyx-codex-engineering-kit/releases/download/afyx-graph-v$VERSION/$asset"
       if curl -fsSL "$url" -o "$archive_path" &&
-         curl -fsSL "https://github.com/a5zero7/afyx-codex-engineering-kit/releases/download/afyx-graph-v$VERSION/SHA256SUMS" -o "$transaction/SHA256SUMS"; then
+         curl -fsSL "https://github.com/a5zero7/afyx-codex-engineering-kit/releases/download/afyx-graph-v$VERSION/SHA256SUMS" -o "$transaction/SHA256SUMS" &&
+         curl -fsSL "https://github.com/a5zero7/afyx-codex-engineering-kit/releases/download/afyx-graph-v$VERSION/RELEASE-MANIFEST.json" -o "$transaction/RELEASE-MANIFEST.json"; then
         artifact_source=github-release
         if ! archive_checksum_valid "$archive_path" || ! archive_bundle_identity_valid "$archive_path" || ! read_archive_identity "$archive_path"; then
           printf 'Downloaded release artifact failed integrity or identity validation; trying bounded local build fallback.\n' >&2
-          rm -f -- "$archive_path" "$transaction/SHA256SUMS"
+          rm -f -- "$archive_path" "$transaction/SHA256SUMS" "$transaction/RELEASE-MANIFEST.json"
           build_local_archive
         elif [[ "$requested_revision" != UNKNOWN && "$artifact_revision_status" != MATCH ]]; then
           printf 'Downloaded release revision %s does not match requested checkout %s; trying bounded local build fallback.\n' "$artifact_revision" "$requested_revision" >&2
-          rm -f -- "$archive_path" "$transaction/SHA256SUMS"
+          rm -f -- "$archive_path" "$transaction/SHA256SUMS" "$transaction/RELEASE-MANIFEST.json"
           build_local_archive
         else
           source_revision="$artifact_revision"
         fi
       else
         printf 'Verified GitHub release unavailable; trying bounded local build fallback.\n' >&2
-        rm -f -- "$archive_path" "$transaction/SHA256SUMS"
+        rm -f -- "$archive_path" "$transaction/SHA256SUMS" "$transaction/RELEASE-MANIFEST.json"
         archive_path=
         build_local_archive
       fi
@@ -312,7 +319,28 @@ if [[ -n "$identity_extraction" ]]; then
   compiled_extraction="$(node -e 'process.stdout.write(String(require(process.argv[1]).EXTRACTION_VERSION))' "$bundle/lib/dist/extraction/extraction-version.js")"
   [[ "$compiled_extraction" == "$identity_extraction" ]] || { printf 'Installed artifact extraction identity mismatch: metadata %s, compiled runtime %s.\n' "$identity_extraction" "$compiled_extraction" >&2; exit 1; }
 fi
-node "$ARTIFACT_IDENTITY" record-install --metadata "$bundle/metadata.json" --archive "$archive_path" --provenance "$artifact_source" --requested-revision "$requested_revision" >/dev/null
+release_manifest="$(dirname "$archive_path")/RELEASE-MANIFEST.json"
+manifest_status=MISSING
+publisher_authenticity=UNVERIFIED
+build_provenance=UNVERIFIED
+if [[ -f "$release_manifest" ]]; then
+  node "$ARTIFACT_IDENTITY" verify-release-manifest --manifest "$release_manifest" --archive "$archive_path" --metadata "$bundle/metadata.json" >/dev/null || {
+    printf 'Release manifest verification failed.\n' >&2; exit 1;
+  }
+  manifest_status=VERIFIED
+  build_provenance=COMMIT_BOUND_MANIFEST
+elif [[ "$artifact_source" == github-release ]]; then
+  printf 'GitHub release is missing RELEASE-MANIFEST.json.\n' >&2
+  exit 1
+fi
+if [[ "$artifact_source" == github-release ]] && command -v gh >/dev/null 2>&1; then
+  gh attestation verify "$archive_path" --repo a5zero7/afyx-codex-engineering-kit >/dev/null 2>&1 || {
+    printf 'GitHub publisher/build attestation verification failed.\n' >&2; exit 1;
+  }
+  publisher_authenticity=GITHUB_ATTESTED
+  build_provenance=GITHUB_ATTESTED
+fi
+node "$ARTIFACT_IDENTITY" record-install --metadata "$bundle/metadata.json" --archive "$archive_path" --provenance "$artifact_source" --requested-revision "$requested_revision" --release-manifest-status "$manifest_status" --publisher-authenticity "$publisher_authenticity" --build-provenance "$build_provenance" >/dev/null
 mv "$bundle" "$transaction/prepared/current"
 cp "$transaction/prepared/current/metadata.json" "$transaction/prepared/metadata.json"
 

@@ -5,6 +5,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   release:
@@ -23,9 +25,17 @@ jobs:
             bash scripts/build-bundle.sh "$target"
           done
           (cd release && sha256sum afyx-graph-* > SHA256SUMS)
+          version=$(node -p "require('../afyx-graph.json').product_version")
+          node ../../scripts/afyx-graph-artifact.mjs create-release-manifest \
+            --directory release --output release/RELEASE-MANIFEST.json \
+            --revision "$GITHUB_SHA" --version "$version" --tag "afyx-graph-v$version"
+      - name: Attest release archives
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: afyx-graph/engine/release/afyx-graph-*
       - name: Publish GitHub release assets
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           version=$(python -c "import json; print(json.load(open('afyx-graph/afyx-graph.json'))['product_version'])")
-          gh release create "afyx-graph-v$version" afyx-graph/engine/release/afyx-graph-* afyx-graph/engine/release/SHA256SUMS --title "Afyx Graph v$version" --notes "Afyx Graph is licensed under MIT and requires external Node.js 22.5.0 or newer."
+          gh release create "afyx-graph-v$version" afyx-graph/engine/release/afyx-graph-* afyx-graph/engine/release/SHA256SUMS afyx-graph/engine/release/RELEASE-MANIFEST.json --target "$GITHUB_SHA" --title "Afyx Graph v$version" --notes "Integrity is recorded in SHA256SUMS and RELEASE-MANIFEST.json; publisher/build provenance is available through GitHub artifact attestations. Afyx Graph is licensed under MIT and requires external Node.js 22.5.0 or newer."
