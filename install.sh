@@ -23,9 +23,9 @@ usage() {
 
 while (($#)); do
   case "$1" in
-    --skills-root) skills_root="$2"; shift 2 ;;
+    --skills-root) (($# >= 2)) || { printf '%s\n' '--skills-root requires a value.' >&2; exit 2; }; skills_root="$2"; shift 2 ;;
     --force) force=true; shift ;;
-    --component) component_actions+=("$2"); shift 2 ;;
+    --component) (($# >= 2)) || { printf '%s\n' '--component requires a value.' >&2; exit 2; }; component_actions+=("$2"); shift 2 ;;
     --update-installed) update_installed=true; shift ;;
     --offline) offline=true; shift ;;
     --no-build-fallback) no_build_fallback=true; shift ;;
@@ -44,7 +44,23 @@ valid_manifest() { [[ -s "$1/SKILL.md" ]] && [[ "$(head -n 1 "$1/SKILL.md")" == 
 # One component truth: scripts/components.json, read through the shared library.
 # shellcheck source=scripts/lib/afyx-components.sh
 . "$PACKAGE_ROOT/scripts/lib/afyx-components.sh"
-component_state() { afyx_component_evaluate "$1"; printf '%s' "$AFYX_STATE"; }
+# shellcheck source=scripts/lib/afyx-skill-lifecycle.sh
+. "$PACKAGE_ROOT/scripts/lib/afyx-skill-lifecycle.sh"
+PROMPT_MASTER_REVISION="$(afyx_component_field prompt-master source_revision)"
+component_state() {
+  local id="$1" owner target
+  afyx_component_evaluate "$id"
+  if [[ "$(afyx_component_field "$id" type)" == skill && "$AFYX_STATE" != 'NOT INSTALLED' ]]; then
+    owner="$(afyx_component_field "$id" ownership)"; target="$(afyx_component_root "$id")"
+    afyx_classify_skill "$target" "$id" "$owner"
+    case "$AFYX_OWNERSHIP_STATE" in
+      AFYX_OWNED_UNMODIFIED|EXTERNAL_UPSTREAM) ;;
+      AFYX_OWNED_MODIFIED) AFYX_STATE=UNKNOWN; AFYX_DETAIL='Afyx ownership verified but installed content was modified' ;;
+      *) AFYX_STATE=UNKNOWN; AFYX_DETAIL="installed ownership is $AFYX_OWNERSHIP_STATE" ;;
+    esac
+  fi
+  printf '%s' "$AFYX_STATE"
+}
 component_version() { afyx_component_evaluate "$1"; printf '%s' "$AFYX_VERSION"; }
 run() { if "$dry_run"; then printf '+ '; printf '%q ' "$@"; printf '\n'; else "$@"; fi; }
 interactive=false
@@ -83,7 +99,7 @@ component_action() {
   available="$(available_version "$id")"
   if action="$(explicit_action "$id")"; then :
   elif "$force"; then
-    if [[ "$state" == 'NOT INSTALLED' ]]; then action=install; elif [[ "$state" == INCOMPLETE || "$state" == INVALID ]]; then action=repair; else action=update; fi
+    if [[ "$state" == 'NOT INSTALLED' ]]; then action=install; elif [[ "$state" == INCOMPLETE || "$state" == INVALID || "$state" == UNKNOWN ]]; then action=repair; else action=update; fi
   elif "$update_installed"; then
     if [[ "$state" == INCOMPLETE || "$state" == INVALID ]]; then action=repair
     elif [[ "$state" == HEALTHY && -n "$available" && -n "$installed" ]] && version_lt "$installed" "$available"; then action=update
@@ -104,7 +120,7 @@ component_action() {
     action=skip
   fi
   case "$state:$action" in
-    'NOT INSTALLED':install|'NOT INSTALLED':skip|HEALTHY:update|HEALTHY:skip|INCOMPLETE:repair|INCOMPLETE:skip|INVALID:repair|INVALID:skip|UNKNOWN:skip) ;;
+    'NOT INSTALLED':install|'NOT INSTALLED':skip|HEALTHY:update|HEALTHY:skip|INCOMPLETE:repair|INCOMPLETE:skip|INVALID:repair|INVALID:skip|UNKNOWN:repair|UNKNOWN:skip) ;;
     *) printf '%s state %s does not permit action %s.\n' "$label" "$state" "$action" >&2; return 2 ;;
   esac
   printf '%s' "$action"
@@ -129,23 +145,28 @@ install_choice() {
   done
 }
 
+replacement_authorized() {
+  local id="$1" specification
+  "$force" && return 0
+  for specification in "${component_actions[@]}"; do
+    [[ "$specification" == "$id="* && "$specification" != "$id=skip" ]] && return 0
+  done
+  return 1
+}
+
 safe_skill_install() {
-  local label="$1" source="$2" target="$3" replace="$4" parent stage old backup
+  local component="$1" label="$2" source="$3" target="$4" replace="$5" parent stage version authorize=false
   if [[ -e "$target" && "$replace" != true ]]; then printf skipped; return; fi
   if "$dry_run"; then printf 'planned'; return; fi
-  parent="$(dirname "$target")"; mkdir -p "$parent"
-  stage="$(mktemp -d "$parent/.skill-stage.XXXXXX")"; old="$parent/.skill-old.$$"
-  cp -a "$source/." "$stage/"
-  valid_manifest "$stage" || { rm -rf -- "$stage"; printf '%s staged manifest is invalid.\n' "$label" >&2; return 1; }
-  if [[ -e "$target" ]]; then
-    mkdir -p "$PACKAGE_ROOT/backups"
-    backup="$PACKAGE_ROOT/backups/$(basename "$target")-$(date +%Y%m%d-%H%M%S)"
-    cp -a "$target" "$backup"
-    mv "$target" "$old"
+  parent="$(dirname "$target")"; afyx_assert_skill_target "$skills_root" "$target"
+  stage="$(mktemp -d "$parent/.skill-stage.XXXXXX")"
+  if ! cp -a "$source/." "$stage/"; then rm -rf -- "$stage"; return 1; fi
+  version="$(afyx_skill_version "$source")"
+  replacement_authorized "$component" && authorize=true
+  if ! afyx_promote_skill "$component" "$label" "$stage" "$target" afyx "$version" '' '' "$authorize"; then
+    [[ -e "$stage" ]] && rm -rf -- "$stage"
+    return 1
   fi
-  if ! mv "$stage" "$target"; then [[ -e "$old" ]] && mv "$old" "$target"; return 1; fi
-  if ! valid_manifest "$target"; then rm -rf -- "$target"; [[ -e "$old" ]] && mv "$old" "$target"; return 1; fi
-  [[ -e "$old" ]] && rm -rf -- "$old"
   if [[ "$replace" == true ]]; then printf replaced; else printf installed; fi
 }
 
@@ -204,8 +225,8 @@ efficient_action="$(component_action efficient-coding 'Efficient Coding' "$effic
 odoo_action="$(component_action odoo-engineering 'Odoo Engineering' "$odoo_state" "$(component_version odoo-engineering)")"
 efficient_result=skipped
 odoo_result=skipped
-if [[ "$efficient_action" != skip ]]; then efficient_result="$(safe_skill_install 'Efficient Coding' "$BUNDLED_EFFICIENT" "$efficient_target" "$([[ "$efficient_action" == install ]] && printf false || printf true)")"; fi
-if [[ "$odoo_action" != skip ]]; then odoo_result="$(safe_skill_install 'Odoo Engineering' "$BUNDLED_ODOO" "$odoo_target" "$([[ "$odoo_action" == install ]] && printf false || printf true)")"; fi
+if [[ "$efficient_action" != skip ]]; then efficient_result="$(safe_skill_install efficient-coding 'Efficient Coding' "$BUNDLED_EFFICIENT" "$efficient_target" "$([[ "$efficient_action" == install ]] && printf false || printf true)")"; fi
+if [[ "$odoo_action" != skip ]]; then odoo_result="$(safe_skill_install odoo-engineering 'Odoo Engineering' "$BUNDLED_ODOO" "$odoo_target" "$([[ "$odoo_action" == install ]] && printf false || printf true)")"; fi
 
 prompt_result=skipped
 prompt_action="$(component_action prompt-master 'Prompt Master' "$prompt_state" "$(component_version prompt-master)")"

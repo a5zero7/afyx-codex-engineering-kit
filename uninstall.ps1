@@ -14,20 +14,22 @@ Write-Host 'Afyx Codex Engineering Kit — Windows uninstaller (PowerShell)'
 # One component truth: scripts/components.json. Afyx-owned skills are always removed;
 # the upstream-owned skill (Prompt Master) only on explicit request.
 Import-Module (Join-Path $PSScriptRoot 'scripts\lib\AfyxComponents.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'scripts\lib\AfyxSkillLifecycle.psm1') -Force
 $componentContext = New-AfyxComponentContext -SkillsRoot $SkillsRoot
 $targets = @()
 foreach ($component in (Get-AfyxComponentContract)) {
     if ($component.type -ne 'skill') { continue }
     if ($component.ownership -eq 'afyx' -or ($component.ownership -eq 'upstream' -and $RemovePromptMaster)) {
-        $targets += Get-AfyxComponentRoot -Component $component -Context $componentContext
+        $targets += [pscustomobject]@{
+            Component = [string]$component.id
+            Owner = [string]$component.ownership
+            Target = Get-AfyxComponentRoot -Component $component -Context $componentContext
+        }
     }
 }
 
-foreach ($target in $targets) {
-    if ((Test-Path -LiteralPath $target) -and $PSCmdlet.ShouldProcess($target, 'Delete installed skill')) {
-        Remove-Item -LiteralPath $target -Recurse -Force
-        Write-Host "Removed: $target"
-    }
+foreach ($entry in $targets) {
+    Remove-AfyxSkillSafely -SkillsRoot $SkillsRoot -Component $entry.Component -Target $entry.Target -ExpectedOwner $entry.Owner -Confirm:$false -WhatIf:$WhatIfPreference
 }
 
 if ($RemoveUsageTracker) {

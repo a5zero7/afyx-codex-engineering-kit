@@ -24,7 +24,6 @@ $bundledOdooEngineering = Join-Path $packageRoot 'skills\odoo-engineering'
 $efficientTarget = Join-Path $SkillsRoot 'efficient-coding'
 $odooTarget = Join-Path $SkillsRoot 'odoo-engineering'
 $promptTarget = Join-Path $SkillsRoot 'prompt-master'
-$backupRoot = Join-Path $packageRoot 'backups'
 $usageTrackerInstaller = Join-Path $packageRoot 'scripts\install-codex-usage-tracker.ps1'
 $graphInstaller = Join-Path $packageRoot 'scripts\install-afyx-graph.ps1'
 $graphMetadataPath = Join-Path $packageRoot 'afyx-graph\afyx-graph.json'
@@ -35,9 +34,19 @@ if ($InstallUsageTracker -and $SkipUsageTracker) { throw '-InstallUsageTracker a
 
 # One component truth: scripts/components.json, read through the shared module.
 Import-Module (Join-Path $packageRoot 'scripts\lib\AfyxComponents.psm1') -Force
+Import-Module (Join-Path $packageRoot 'scripts\lib\AfyxSkillLifecycle.psm1') -Force
 $componentContext = New-AfyxComponentContext -SkillsRoot $SkillsRoot -GraphRoot $graphRuntimeRoot -CodexHome $codexHome
 $componentStates = @{}
 foreach ($componentState in (Get-AfyxComponentStates -Context $componentContext)) { $componentStates[$componentState.Id] = $componentState }
+foreach ($component in (Get-AfyxComponentContract | Where-Object { $_.type -eq 'skill' })) {
+    $state = $componentStates[[string]$component.id]
+    if ($state.State -eq 'NOT INSTALLED') { continue }
+    $installedOwnership = Get-AfyxSkillOwnership -Target $state.Path -Component ([string]$component.id) -ExpectedOwner ([string]$component.ownership)
+    if ($installedOwnership -notin @('AFYX_OWNED_UNMODIFIED', 'EXTERNAL_UPSTREAM')) {
+        $state.State = 'UNKNOWN'
+        $state.Detail = if ($installedOwnership -eq 'AFYX_OWNED_MODIFIED') { 'Afyx ownership verified but installed content was modified' } else { "installed ownership is $installedOwnership" }
+    }
+}
 $componentActions = @{}
 foreach ($specification in $ComponentAction) {
     if ($specification -notmatch '^([a-z0-9-]+)=(skip|install|update|repair)$') {
@@ -67,7 +76,7 @@ function Get-ComponentAction([string]$Id, [string]$Label) {
     $state = $componentStates[$Id]
     if ($componentActions.ContainsKey($Id)) { $action = $componentActions[$Id] }
     elseif ($Force) {
-        $action = if ($state.State -eq 'NOT INSTALLED') { 'install' } elseif ($state.State -in @('INCOMPLETE', 'INVALID')) { 'repair' } else { 'update' }
+        $action = if ($state.State -eq 'NOT INSTALLED') { 'install' } elseif ($state.State -in @('INCOMPLETE', 'INVALID', 'UNKNOWN')) { 'repair' } else { 'update' }
     } elseif ($UpdateInstalled) {
         $available = Get-AvailableVersion $Id
         if ($state.State -in @('INCOMPLETE', 'INVALID')) { $action = 'repair' }
@@ -93,6 +102,7 @@ function Get-ComponentAction([string]$Id, [string]$Label) {
         'NOT INSTALLED' { @('install', 'skip') }
         'HEALTHY' { @('update', 'skip') }
         { $_ -in @('INCOMPLETE', 'INVALID') } { @('repair', 'skip') }
+        'UNKNOWN' { @('repair', 'skip') }
         default { @('skip') }
     }
     if ($action -notin $allowed) { throw "$Label state $($state.State) does not permit '$action' (allowed: $($allowed -join ', '))." }
@@ -119,32 +129,50 @@ function Read-InstallChoice([string]$Label) {
     return $answer -match '(?i)^(y|yes)$'
 }
 
-function Install-SkillSafely([string]$Name, [string]$Source, [string]$Target, [bool]$ReplaceExisting) {
+function Install-ManagedSkillSafely([string]$Component, [string]$Name, [string]$Source, [string]$Target, [bool]$ReplaceExisting) {
     if ((Test-Path -LiteralPath $Target) -and -not $ReplaceExisting) { return 'skipped' }
     if ($WhatIfPreference) { Write-Host "WhatIf: would stage and install $Name at $Target"; return 'planned' }
+    Assert-AfyxSkillTarget -SkillsRoot $SkillsRoot -Target $Target
     $parent = Split-Path -Parent $Target
     New-Item -ItemType Directory -Force -Path $parent | Out-Null
     $stage = Join-Path $parent ".$((Split-Path -Leaf $Target))-stage-$([guid]::NewGuid().ToString('N'))"
-    $old = Join-Path $parent ".$((Split-Path -Leaf $Target))-old-$([guid]::NewGuid().ToString('N'))"
     try {
-        Copy-Item -LiteralPath $Source -Destination $stage -Recurse -Force
+        Copy-Item -LiteralPath $Source -Destination $stage -Recurse -Force -ErrorAction Stop
         if (-not (Test-SkillManifest $stage)) { throw "$Name staged manifest is invalid." }
-        if (Test-Path -LiteralPath $Target) {
-            New-Item -ItemType Directory -Force -Path $backupRoot | Out-Null
-            $backup = Join-Path $backupRoot "$(Split-Path -Leaf $Target)-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
-            Copy-Item -LiteralPath $Target -Destination $backup -Recurse -Force
-            Move-Item -LiteralPath $Target -Destination $old
-        }
-        try { Move-Item -LiteralPath $stage -Destination $Target }
-        catch {
-            if (Test-Path -LiteralPath $old) { Move-Item -LiteralPath $old -Destination $Target }
-            throw
-        }
-        if (-not (Test-SkillManifest $Target)) { throw "$Name installed manifest is invalid." }
-        if (Test-Path -LiteralPath $old) { Remove-Item -LiteralPath $old -Recurse -Force }
+        $authorized = $Force -or $componentActions.ContainsKey($Component)
+        Install-AfyxSkillTransaction -SkillsRoot $SkillsRoot -Component $Component -Name $Name -Stage $stage -Target $Target -Owner afyx -Version (Get-AfyxSkillVersion -Directory $Source) -AuthorizeUnproven:$authorized
     } finally {
-        if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
-        if ((Test-Path -LiteralPath $old) -and -not (Test-Path -LiteralPath $Target)) { Move-Item -LiteralPath $old -Destination $Target }
+        if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue }
+    }
+    return $(if ($ReplaceExisting) { 'replaced' } else { 'installed' })
+}
+
+function New-PromptMasterStage([string]$Parent) {
+    $stage = Join-Path $Parent ".prompt-master-stage-$([guid]::NewGuid().ToString('N'))"
+    New-Item -ItemType Directory -Force -Path $stage | Out-Null
+    & git -C $stage init -q
+    if ($LASTEXITCODE -ne 0) { throw 'Prompt Master staging initialization failed.' }
+    & git -C $stage remote add origin $PromptMasterRepository
+    if ($LASTEXITCODE -ne 0) { throw 'Prompt Master staging remote failed.' }
+    & git -C $stage fetch -q --depth 1 origin $promptMasterRevision
+    if ($LASTEXITCODE -ne 0) { throw "Prompt Master pinned revision $promptMasterRevision is unavailable." }
+    & git -C $stage checkout -q --detach FETCH_HEAD
+    $head = (& git -C $stage rev-parse HEAD) -join ''
+    if ($LASTEXITCODE -ne 0 -or $head -ne $promptMasterRevision -or -not (Test-SkillManifest $stage)) { throw 'Prompt Master staging or revision verification failed.' }
+    return $stage
+}
+
+function Install-PromptMasterPinned([bool]$ReplaceExisting) {
+    if ($WhatIfPreference) { Write-Host 'WhatIf: would acquire pinned Prompt Master revision'; return 'planned' }
+    Assert-AfyxSkillTarget -SkillsRoot $SkillsRoot -Target $promptTarget
+    $parent = Split-Path -Parent $promptTarget
+    New-Item -ItemType Directory -Force -Path $parent | Out-Null
+    $stage = New-PromptMasterStage -Parent $parent
+    try {
+        $authorized = $Force -or $componentActions.ContainsKey('prompt-master')
+        Install-AfyxSkillTransaction -SkillsRoot $SkillsRoot -Component 'prompt-master' -Name 'Prompt Master' -Stage $stage -Target $promptTarget -Owner upstream -SourceRepository $PromptMasterRepository -SourceRevision $promptMasterRevision -AuthorizeUnproven:$authorized
+    } finally {
+        if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue }
     }
     return $(if ($ReplaceExisting) { 'replaced' } else { 'installed' })
 }
@@ -224,7 +252,7 @@ foreach ($component in @(
 )) {
     $action = Get-ComponentAction $component.Id $component.Name
     if ($action -eq 'skip') { $summary[$component.Name] = 'skipped'; continue }
-    $summary[$component.Name] = Install-SkillSafely $component.Name $component.Source $component.Target ($action -in @('update', 'repair'))
+        $summary[$component.Name] = Install-ManagedSkillSafely $component.Id $component.Name $component.Source $component.Target ($action -in @('update', 'repair'))
 }
 
 $promptAction = Get-ComponentAction 'prompt-master' 'Prompt Master'
