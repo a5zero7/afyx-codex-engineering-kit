@@ -5,6 +5,7 @@ name: CI
 # all six release bundles are built only by graph-release.yml.
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
