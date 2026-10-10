@@ -1,5 +1,6 @@
 {
   "productName": "Afyx Graph",
+  "releaseChannel": "technical-alpha",
   "packageName": "@a5zero7/afyx-graph",
   "cli": "afyx-graph",
   "bundlePrefix": "afyx-graph",

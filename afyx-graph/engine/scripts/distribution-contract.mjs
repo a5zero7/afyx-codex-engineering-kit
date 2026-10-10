@@ -90,6 +90,9 @@ export function verifyBundle(root, target) {
   if (metadata.product_name !== DISTRIBUTION_PRODUCT.productName || metadata.cli !== DISTRIBUTION_PRODUCT.cli) {
     throw new DistributionError('metadata.json has the wrong operational identity');
   }
+  if (metadata.release_channel !== DISTRIBUTION_PRODUCT.releaseChannel) {
+    throw new DistributionError('metadata.json has the wrong release channel');
+  }
   for (const legal of plan.legalFiles) {
     const file = requireFile(join(bundle, ...legal.bundlePath.split('/')), legal.bundlePath);
     if (statSync(file).size === 0) throw new DistributionError(`${legal.bundlePath} is empty`);

@@ -1039,6 +1039,32 @@ The next boundary is the separately authorized Technical Alpha activation
 decision. This audit establishes readiness only; it does not activate Technical
 Alpha and does not start Phase 6.
 
+### AFYX-255 — Unified Technical Alpha lifecycle
+
+Status: **IMPLEMENTED; Technical Alpha remains inactive**
+
+AFYX-255 closes the installer/updater/verifier work package without changing
+the Phase 5I independence result. The Windows and Linux/macOS entrypoints now
+share a five-component state model and the prerequisite classes `REQUIRED`,
+`COMPONENT_REQUIRED`, `BUILD_ONLY`, and `OPTIONAL`. Automatic update no longer
+passes blanket force: Install/Update/Repair/Skip is selected from measured
+state/version or an explicit deterministic component action.
+
+Afyx Graph acquisition is release-first and validates checksum, product,
+version, Technical Alpha channel, OS, and architecture. A missing or invalid
+matching artifact falls back to a bounded clean build from a validated checkout;
+Windows packages natively in PowerShell and does not require Bash. Staging,
+ownership checks, backup/swap/rollback, and real CLI `--version`/`help`
+verification protect an existing healthy runtime. Offline, no-fallback, dirty
+source opt-in, validate-only, and dry-run behavior are explicit.
+
+Local deterministic AFYX-255 evidence includes the focused lifecycle matrix,
+component/metadata/legal validators, parser/shell syntax gates, no-mutation
+dry-run, incompatible-Node refusal, unknown-owner refusal, and checksum-failure
+preservation. Final-head Windows/Linux/macOS workflow results remain the
+delivery evidence for AFYX-255 and the independent-install verification record
+for AFYX-251; no public release or Technical Alpha activation is implied.
+
 Required audits:
 
 - native implementation audit.

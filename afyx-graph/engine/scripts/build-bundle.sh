@@ -25,6 +25,7 @@ stage_application() {
   cp -R "$ENGINE_ROOT/dist" "$STAGE/lib/dist"
   cp "$ENGINE_ROOT/package.json" "$STAGE/lib/"
   cp "$ENGINE_ROOT/../afyx-graph.json" "$STAGE/metadata.json"
+  node -e 'const fs=require("node:fs"); const metadata=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); const product=JSON.parse(fs.readFileSync(process.argv[2],"utf8")); metadata.release_channel=product.releaseChannel; fs.writeFileSync(process.argv[1], JSON.stringify(metadata,null,2)+"\n");' "$STAGE/metadata.json" "$ENGINE_ROOT/scripts/distribution-product.json"
   # Required attribution contract is owned by the artifact plan.
   while IFS='|' read -r source destination; do
     mkdir -p "$STAGE/$(dirname "$destination")"

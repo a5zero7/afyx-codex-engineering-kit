@@ -90,6 +90,7 @@ jobs:
       - name: Component contract, project detector and doctor tests (PowerShell and Git Bash)
         run: |
           python scripts/tests/test_components.py
+          python scripts/tests/test_lifecycle.py
           python scripts/tests/test_project_detect.py
           python scripts/tests/test_doctor.py
       - name: Verify repository remains clean
@@ -131,6 +132,7 @@ jobs:
           export PATH="/bin:$PATH"
           python3 scripts/validate-components.py
           python3 scripts/tests/test_components.py
+          python3 scripts/tests/test_lifecycle.py
           python3 scripts/tests/test_project_detect.py
       - name: Verify repository remains clean
         run: |

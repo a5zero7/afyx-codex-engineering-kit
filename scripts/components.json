@@ -1,5 +1,14 @@
 {
   "schema_version": 1,
+  "prerequisites": [
+    { "key": "platform-shell", "class": "REQUIRED", "reason": "Runs the documented lifecycle entrypoint for the host OS." },
+    { "key": "git", "class": "REQUIRED", "reason": "Validates and safely fast-forwards the kit source; also acquires Prompt Master when selected." },
+    { "key": "codex-or-vscode", "class": "REQUIRED", "reason": "Provides the supported Codex host." },
+    { "key": "node", "class": "COMPONENT_REQUIRED", "component": "afyx-graph", "minimum_version": "22.5.0", "reason": "Runs Afyx Graph." },
+    { "key": "npm", "class": "BUILD_ONLY", "component": "afyx-graph", "reason": "Used only when a verified release artifact is unavailable." },
+    { "key": "archive-checksum", "class": "COMPONENT_REQUIRED", "component": "afyx-graph", "reason": "Extracts and verifies the selected Afyx Graph artifact." },
+    { "key": "headroom", "class": "OPTIONAL", "reason": "Externally managed integration; never installed or modified by this kit." }
+  ],
   "components": [
     {
       "id": "efficient-coding",
@@ -61,7 +70,7 @@
     },
     {
       "id": "codex-usage-tracking",
-      "name": "Codex Usage Tracking",
+      "name": "Usage Tracking",
       "type": "toolset",
       "tier": "optional",
       "ownership": "afyx",

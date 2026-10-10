@@ -6,9 +6,9 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $coreFailure = $false
-$configPath = Join-Path $env:USERPROFILE '.codex\config.toml'
 $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' }
-$graphRoot = Join-Path $env:USERPROFILE '.afyx\graph'
+$configPath = Join-Path $codexHome 'config.toml'
+$graphRoot = if ($env:AFYX_GRAPH_RUNTIME_ROOT) { $env:AFYX_GRAPH_RUNTIME_ROOT } else { Join-Path $env:USERPROFILE '.afyx\graph' }
 
 function Write-Result([string]$State, [string]$Name, [string]$Detail = '') {
     $suffix = if ($Detail) { " — $Detail" } else { '' }
@@ -27,6 +27,20 @@ function Test-McpEntry([string]$Name) {
 }
 
 Write-Host 'Afyx Codex Engineering Kit — readiness verification (Windows PowerShell)'
+$git = Get-Command git -ErrorAction SilentlyContinue
+$node = Get-Command node -ErrorAction SilentlyContinue
+$npm = Get-Command npm -ErrorAction SilentlyContinue
+Write-Result 'OK' 'OS/architecture [REQUIRED]' "$([System.Runtime.InteropServices.RuntimeInformation]::OSDescription) / $([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)"
+Write-Result 'OK' 'Platform shell [REQUIRED]' "PowerShell $($PSVersionTable.PSVersion)"
+if ($git) { Write-Result 'OK' 'Git [REQUIRED]' ((& git --version 2>$null) -join ' ') } else { Write-Result 'FAIL' 'Git [REQUIRED]' 'missing; install Git for Windows from https://git-scm.com/'; $coreFailure = $true }
+if ($node) {
+    $nodeText = (& node --version 2>$null) -join ' '
+    $match = [regex]::Match($nodeText, '(\d+)\.(\d+)\.(\d+)')
+    if ($match.Success -and [version]$match.Value -ge [version]'22.5.0') { Write-Result 'OK' 'Node.js [COMPONENT_REQUIRED:Afyx Graph]' $nodeText }
+    else { Write-Result 'WARN' 'Node.js [COMPONENT_REQUIRED:Afyx Graph]' "$nodeText; requires >=22.5.0" }
+} else { Write-Result 'INFO' 'Node.js [COMPONENT_REQUIRED:Afyx Graph]' 'missing; install from https://nodejs.org/ before selecting Afyx Graph' }
+if ($npm) { Write-Result 'OK' 'npm [BUILD_ONLY:Afyx Graph]' ((& npm --version 2>$null) -join ' ') } else { Write-Result 'INFO' 'npm [BUILD_ONLY:Afyx Graph]' 'missing; required only for local artifact fallback' }
+Write-Result 'OK' 'Archive/checksum [COMPONENT_REQUIRED:Afyx Graph]' 'Expand-Archive and Get-FileHash available'
 $codex = Get-Command codex -ErrorAction SilentlyContinue
 $extension = [bool](Get-ChildItem -Path (Join-Path $env:USERPROFILE '.vscode\extensions\openai.chatgpt-*') -Directory -ErrorAction SilentlyContinue | Select-Object -First 1)
 if ($codex) {
@@ -48,7 +62,16 @@ foreach ($component in ($componentStates.Values | Where-Object { $_.Tier -eq 'co
 $graph = $componentStates['afyx-graph']
 switch ($graph.State) {
     'NOT INSTALLED' { Write-Result 'INFO' 'Afyx Graph' 'not installed (optional)' }
-    'HEALTHY' { Write-Result 'OK' 'Afyx Graph' $graph.Version }
+    'HEALTHY' {
+        $graphCli = Join-Path $graph.Path 'bin\afyx-graph.cmd'
+        try {
+            $reported = (& $graphCli --version 2>$null) -join ' '
+            if ($LASTEXITCODE -ne 0 -or $reported -notmatch [regex]::Escape([string]$graph.Version)) { throw 'version mismatch' }
+            & $graphCli help *> $null
+            if ($LASTEXITCODE -ne 0) { throw 'help command failed' }
+            Write-Result 'OK' 'Afyx Graph' "$reported; executable verification passed"
+        } catch { Write-Result 'FAIL' 'Afyx Graph' "metadata is healthy but executable verification failed: $($_.Exception.Message)"; $coreFailure = $true }
+    }
     'INCOMPLETE' { Write-Result 'WARN' 'Afyx Graph' 'incomplete Afyx-owned runtime (optional)' }
     'INVALID' { Write-Result 'WARN' 'Afyx Graph' 'invalid metadata (optional)' }
     default { Write-Result 'WARN' 'Afyx Graph' "state $($graph.State): $($graph.Detail) (optional)" }

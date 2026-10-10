@@ -5,16 +5,20 @@ root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 printf 'Afyx Codex Engineering Kit — Linux/macOS updater (Bash)\n'
 skip_self_update=false
 dry_run=false
+offline=false
 args=()
 while (($#)); do
   case "$1" in
     --skip-self-update) skip_self_update=true; shift ;;
     --dry-run) dry_run=true; args+=("--dry-run"); shift ;;
+    --offline) offline=true; args+=("--offline"); shift ;;
     *) args+=("$1"); shift ;;
   esac
 done
 
-if "$skip_self_update"; then
+if "$offline"; then
+  printf 'Offline mode: self-update skipped; using the current local source intentionally.\n'
+elif "$skip_self_update"; then
   printf 'Self-update skipped by --skip-self-update; using current local source intentionally.\n'
 else
   if ! command -v git >/dev/null 2>&1; then
@@ -44,7 +48,7 @@ else
 fi
 
 set +e
-"$root/install.sh" --force "${args[@]}"
+"$root/install.sh" --update-installed "${args[@]}"
 installer_exit_code=$?
 set -e
 if ((installer_exit_code != 0)); then exit "$installer_exit_code"; fi

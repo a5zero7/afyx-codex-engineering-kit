@@ -13,9 +13,9 @@ Paket ini memasang `efficient-coding` dan `odoo-engineering`, serta mengambil `p
 | Prompt Master | [nidhinjs/prompt-master](https://github.com/nidhinjs/prompt-master) | Dipasang atau diganti melalui staging, validasi, backup, dan swap aman |
 | Afyx Graph | Komponen Afyx, dibundel di `afyx-graph/` | Komponen opsional untuk structural intelligence lokal; memerlukan Node.js eksternal 22.5.0 atau lebih baru |
 | Headroom | [headroomlabs-ai/headroom](https://github.com/headroomlabs-ai/headroom) | Enhancement eksternal opsional; hanya dideteksi |
-| Codex Usage Tracking | Dibundel di `tools/codex-usage/` | Optional; ringkasan token/cost otomatis melalui global Stop hook |
+| Usage Tracking | Dibundel di `tools/codex-usage/` | Opsional, Windows; ringkasan token/cost otomatis melalui global Stop hook |
 
-**Core:** Efficient Coding, Odoo Engineering, dan Prompt Master. **Komponen opsional Afyx:** Afyx Graph dan Codex Usage Tracking. **Enhancement eksternal:** Headroom. Core skill tetap berfungsi tanpa komponen opsional atau eksternal.
+**Core:** Efficient Coding, Odoo Engineering, dan Prompt Master. **Komponen opsional Afyx:** Afyx Graph dan Usage Tracking. **Enhancement eksternal:** Headroom. Core skill tetap berfungsi tanpa komponen opsional atau eksternal. Distribusi saat ini adalah **Technical Alpha prerelease**, bukan Stable v1 atau public release yang sudah dijamin tersedia.
 
 ## Pilih installer sesuai sistem operasi
 
@@ -60,7 +60,7 @@ Installer tidak pernah menulis atau mengganti:
 - `%USERPROFILE%\.codex\auth.json`
 - provider model, Headroom proxy, server MCP, atau plugin Codex
 
-Installer melakukan inventory sebelum mutasi. Pada sesi interaktif, komponen Afyx yang sudah ada menawarkan **Skip** (default) atau **Replace**; komponen opsional yang belum ada menawarkan **Install?** dengan default **No**. Mode non-interaktif selalu memilih Skip kecuali dedicated component installer dipanggil secara eksplisit. Replace menggunakan staging, validasi, backup, swap, dan rollback bila pemasangan gagal.
+Installer melakukan inventory sebelum mutasi untuk lima komponen selectable: Efficient Coding, Odoo Engineering, Prompt Master, Afyx Graph, dan Usage Tracking. Pilihan mengikuti state: belum terpasang = Install/Skip, sehat = Update/Skip, incomplete/invalid = Repair/Skip, sedangkan ownership tidak dikenal selalu ditolak. Mode non-interaktif selalu memilih Skip kecuali action disebut eksplisit. Update/repair memakai staging, validasi, backup, swap, dan rollback bila pemasangan gagal.
 
 ### Afyx Graph
 
@@ -68,7 +68,7 @@ Afyx Graph dipasang sebagai runtime opsional di `~/.afyx/graph/`; ia tidak ditem
 
 Afyx Graph hanya mengenali `.afyx-graph/` sebagai state project; direktori state lain tidak dibaca, dimigrasikan, atau diubah. Tidak ada alias CLI, environment, maupun tool MCP selain identitas di atas.
 
-Instalasi normal tidak mengubah konfigurasi MCP. Afyx Graph dikelola sebagai komponen Afyx yang mandiri; instalasi lain di mesin yang sama tidak dideteksi dan tidak dikelola. Bukti historis implementasi dan atribusi tetap tersedia di dokumen Phase 5 dan riwayat Git, terpisah dari payload release saat ini.
+Instalasi normal tidak mengubah konfigurasi MCP. Installer mencari artifact Technical Alpha yang cocok dengan versi, OS, dan arsitektur, memverifikasi SHA-256 serta metadata, lalu otomatis melakukan clean local build dari checkout Git tervalidasi bila release belum tersedia. Windows memakai packaging PowerShell native dan tidak memerlukan Bash/WSL. Build fallback memerlukan npm; runtime artifact tetap memakai Node.js eksternal >=22.5. Checkout dirty ditolak kecuali pengguna secara eksplisit memilih `-AllowDirtySource` / `--allow-dirty-source`. Afyx Graph dikelola sebagai komponen Afyx yang mandiri; instalasi lain di mesin yang sama tidak dideteksi dan tidak dikelola.
 
 ## Perintah
 
@@ -76,10 +76,11 @@ Instalasi normal tidak mengubah konfigurasi MCP. Afyx Graph dikelola sebagai kom
 .\install.ps1 -ValidateOnly
 .\install.ps1 -WhatIf
 .\install.ps1 -SkillsRoot "$env:USERPROFILE\.agents\skills"
-.\install.ps1 -Force
+.\install.ps1 -ComponentAction efficient-coding=install -ComponentAction afyx-graph=install -Confirm:$false
+.\install.ps1 -Offline -ComponentAction afyx-graph=install
 .\install.ps1 -InstallUsageTracker
 .\install.ps1 -SkipUsageTracker
-.\update.ps1
+.\update.ps1 -ComponentAction afyx-graph=update
 .\uninstall.ps1
 .\uninstall.ps1 -RemoveUsageTracker
 .\uninstall.ps1 -RemovePromptMaster
@@ -92,13 +93,14 @@ Linux/macOS memakai opsi yang setara:
 ./install.sh --validate-only
 ./install.sh --dry-run
 ./install.sh --skills-root "$HOME/.agents/skills"
-./install.sh --force
-./update.sh
+./install.sh --component efficient-coding=install --component afyx-graph=install
+./install.sh --offline --component afyx-graph=install
+./update.sh --component afyx-graph=update
 ./uninstall.sh --remove-prompt-master
 ./verify.sh
 ```
 
-Updater melakukan self-update kit dengan `git pull --ff-only` hanya pada checkout bersih. Jika worktree memiliki perubahan lokal, updater berhenti sebelum installer dijalankan; gunakan `git status` untuk menanganinya atau `-SkipSelfUpdate` (PowerShell) / `--skip-self-update` (Bash) sebagai opt-in untuk memasang current checkout. Git yang tidak tersedia adalah error terpisah; source non-Git dengan Git tersedia dilaporkan sebagai self-update unavailable dan dapat melanjutkan dengan source saat ini.
+Updater melakukan self-update kit dengan `git pull --ff-only` hanya pada checkout bersih, lalu memilih update berdasarkan state/version; ia tidak lagi memaksa replacement seluruh komponen. Pilihan per komponen dapat diberikan dengan `-ComponentAction id=skip|install|update|repair` atau `--component id=skip|install|update|repair`. Jika worktree memiliki perubahan lokal, updater berhenti sebelum installer dijalankan; gunakan `git status` untuk menanganinya atau `-SkipSelfUpdate` / `--skip-self-update` untuk secara sengaja memakai current checkout.
 
 Backup dibuat di folder `backups\` di clone lokal dan tidak diunggah ke Git.
 

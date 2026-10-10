@@ -1,10 +1,11 @@
 # Panduan instalasi
 
-## Prasyarat
+## Prasyarat dan klasifikasi
 
-- Windows PowerShell 5.1 atau PowerShell 7, atau Bash di Linux/macOS.
-- Git tersedia pada `PATH`.
-- Codex telah terpasang.
+- **REQUIRED:** Windows PowerShell 5.1/7 atau Bash di Linux/macOS; Git; Codex CLI atau ekstensi ChatGPT/Codex VS Code.
+- **COMPONENT_REQUIRED (Afyx Graph):** Node.js >=22.5 dan kemampuan archive/SHA-256 platform.
+- **BUILD_ONLY (Afyx Graph):** npm, hanya ketika artifact release terverifikasi tidak tersedia dan fallback lokal dibutuhkan.
+- **OPTIONAL:** Headroom, dikelola eksternal dan tidak pernah dipasang/diubah oleh kit.
 
 Installer mendeteksi salah satu dari Codex CLI atau ekstensi ChatGPT/Codex VS Code. Jika keduanya ada, skill dipasang sekali pada skill root personal bersama (`~/.agents/skills`), bukan ke home internal/sandbox. Ini mencegah duplikasi maupun bentrok konfigurasi.
 
@@ -17,7 +18,13 @@ Headroom tidak diperlukan untuk memasang skill. Jika digunakan, pasang terlebih 
 3. Jalankan installer platform Anda untuk memasang jika target belum ada.
 4. Mulai sesi Codex baru.
 
-Installer melakukan inventory read-only lebih dahulu. Dalam sesi interaktif, komponen Afyx yang sudah ada menawarkan Skip (default) atau Replace; komponen opsional yang belum ada menawarkan Install dengan default No. Mode non-interaktif selalu Skip. Replace memakai staging, validasi, backup, swap, dan rollback bila pemasangan gagal.
+Installer melakukan inventory read-only lebih dahulu untuk Efficient Coding, Odoo Engineering, Prompt Master, Afyx Graph, dan Usage Tracking. State menentukan action yang sah: `NOT INSTALLED` = Install/Skip, `HEALTHY` = Update/Skip, `INCOMPLETE`/`INVALID` = Repair/Skip, dan `UNKNOWN` = Skip saja. Mode non-interaktif selalu Skip kecuali action diberikan melalui `-ComponentAction id=...` atau `--component id=...`. `-ValidateOnly`, `-WhatIf`, dan `--dry-run` tidak membuat mutasi.
+
+## Afyx Graph Technical Alpha
+
+Afyx Graph saat ini merupakan Technical Alpha prerelease, bukan Stable v1. Installer memilih artifact berdasarkan versi, channel, OS, dan arsitektur; memverifikasi SHA-256 dan staged identity; lalu memasang secara transaksional. Jika release yang cocok tidak tersedia atau cache/release gagal verifikasi, installer dapat menjalankan `npm ci`, clean build, packaging, dan checksum otomatis dari checkout Git tervalidasi. Windows menggunakan packaging PowerShell native—Bash/WSL tidak diperlukan.
+
+Gunakan `-Offline` / `--offline` untuk mencegah self-update/lookup jaringan dan memakai cache/fallback Graph lokal. Karena Prompt Master dimiliki upstream dan tidak dibundel, action install/update Prompt Master ditolak dalam mode offline. Gunakan `-NoBuildFallback` / `--no-build-fallback` untuk gagal tegas bila artifact tidak tersedia. Source dirty ditolak untuk fallback; `-AllowDirtySource` / `--allow-dirty-source` adalah opt-in eksplisit yang harus dipakai hanya saat provenance perubahan lokal telah dipahami.
 
 ## Verifikasi
 
@@ -33,7 +40,8 @@ Kedua skill memakai frontmatter Agent Skills dengan `name`, `description`, dan `
 
 | Kondisi | Perilaku default | Opsi aman |
 |---|---|---|
-| Komponen Afyx sudah ada | Skip | Pilih Replace untuk staged replacement dengan backup |
+| Komponen Afyx sehat/current | Skip | Pilih Update hanya bila diperlukan |
+| Komponen Afyx incomplete/invalid | Skip + warning | Pilih Repair untuk staged replacement dengan backup |
 | Prompt Master memiliki perubahan lokal | Skip dan laporkan dirty state | Pilih Replace secara eksplisit; backup lokal dipertahankan |
 | Afyx Graph belum terpasang | Skip | Pilih Install; runtime dipasang ke `~/.afyx/graph/` |
 
@@ -43,7 +51,7 @@ Installer tidak pernah memodifikasi `config.toml`, `auth.json`, konfigurasi MCP,
 
 ## Pembaruan
 
-`./update.ps1` atau `./update.sh` terlebih dahulu mencoba memperbarui checkout kit sendiri dengan `git pull --ff-only`, lalu menjalankan installer untuk memperbarui Prompt Master dan skill. Worktree dirty menghentikan updater sebelum installer dijalankan; gunakan `git status` untuk menangani perubahan atau `-SkipSelfUpdate` / `--skip-self-update` untuk secara sengaja memasang current checkout. Git yang tidak tersedia menghasilkan error tersendiri. Bila Git tersedia tetapi source bukan checkout Git, self-update dilaporkan unavailable dan installer tetap berjalan dari source saat ini.
+`./update.ps1` atau `./update.sh` terlebih dahulu mencoba memperbarui checkout kit sendiri dengan `git pull --ff-only`, lalu menggunakan state/version untuk memilih update; tidak ada blanket force replacement. Action eksplisit tetap dapat diberikan per komponen. Worktree dirty menghentikan updater sebelum installer dijalankan; gunakan `git status` untuk menangani perubahan atau `-SkipSelfUpdate` / `--skip-self-update` untuk secara sengaja memasang current checkout.
 
 ## Penghapusan
 
@@ -51,4 +59,4 @@ Installer tidak pernah memodifikasi `config.toml`, `auth.json`, konfigurasi MCP,
 
 ## Pemulihan
 
-Jika memakai `-Force`, salinan skill sebelumnya tersedia di `backups\`. Salin folder backup yang diperlukan kembali ke skill root setelah menutup sesi Codex aktif.
+Skill/runtime yang di-update atau di-repair dibuat melalui staging dan backup. Checksum, extraction, staged metadata, CLI `--version`, atau `help` yang gagal menyebabkan runtime sebelumnya dipulihkan. Installer tidak mengubah konfigurasi Codex/MCP maupun index project `.afyx-graph/`. Backup skill yang berhasil diganti tersedia di `backups\` bila pemulihan manual diperlukan.

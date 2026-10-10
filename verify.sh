@@ -2,7 +2,8 @@
 set -euo pipefail
 
 skills_root="${CODEX_SKILLS_ROOT:-$HOME/.agents/skills}"
-config="$HOME/.codex/config.toml"
+codex_home="${CODEX_HOME:-$HOME/.codex}"
+config="$codex_home/config.toml"
 graph_root="${AFYX_GRAPH_RUNTIME_ROOT:-$HOME/.afyx/graph}"
 core_failure=false
 
@@ -32,6 +33,17 @@ mcp_configured() {
 }
 
 printf 'Afyx Codex Engineering Kit — readiness verification (Linux/macOS Bash)\n'
+case "$(uname -s)" in Darwin) verify_os=macOS ;; Linux) verify_os=Linux ;; *) verify_os="$(uname -s)"; core_failure=true ;; esac
+result OK 'OS/architecture [REQUIRED]' "$verify_os / $(uname -m)"
+result OK 'Platform shell [REQUIRED]' "Bash ${BASH_VERSION}"
+if command -v git >/dev/null 2>&1; then result OK 'Git [REQUIRED]' "$(git --version)"; else result FAIL 'Git [REQUIRED]' 'missing; install Git with the documented OS package manager'; core_failure=true; fi
+if command -v node >/dev/null 2>&1; then
+  node_text="$(node --version 2>/dev/null || true)"; node_number="${node_text#v}"; node_major="${node_number%%.*}"; node_tail="${node_number#*.}"; node_minor="${node_tail%%.*}"
+  if [[ "$node_major" =~ ^[0-9]+$ && "$node_minor" =~ ^[0-9]+$ ]] && ((node_major > 22 || (node_major == 22 && node_minor >= 5))); then result OK 'Node.js [COMPONENT_REQUIRED:Afyx Graph]' "$node_text"
+  else result WARN 'Node.js [COMPONENT_REQUIRED:Afyx Graph]' "$node_text; requires >=22.5.0"; fi
+else result INFO 'Node.js [COMPONENT_REQUIRED:Afyx Graph]' 'missing; install from https://nodejs.org/ before selecting Afyx Graph'; fi
+if command -v npm >/dev/null 2>&1; then result OK 'npm [BUILD_ONLY:Afyx Graph]' "$(npm --version)"; else result INFO 'npm [BUILD_ONLY:Afyx Graph]' 'missing; required only for local artifact fallback'; fi
+if command -v tar >/dev/null 2>&1 && { command -v shasum >/dev/null 2>&1 || command -v sha256sum >/dev/null 2>&1; }; then result OK 'Archive/checksum [COMPONENT_REQUIRED:Afyx Graph]' 'tar and SHA-256 tool available'; else result WARN 'Archive/checksum [COMPONENT_REQUIRED:Afyx Graph]' 'tar or SHA-256 tool missing'; fi
 codex_detected=false
 if command -v codex >/dev/null 2>&1; then
   codex_detected=true
@@ -52,12 +64,18 @@ done
 afyx_component_evaluate afyx-graph
 case "$AFYX_STATE" in
   'NOT INSTALLED') result INFO 'Afyx Graph' 'not installed (optional)' ;;
-  HEALTHY) result OK 'Afyx Graph' "$AFYX_VERSION" ;;
+  HEALTHY)
+    graph_cli="$AFYX_PATH/current/bin/afyx-graph"
+    if graph_reported="$($graph_cli --version 2>/dev/null)" && [[ "$graph_reported" == *"$AFYX_VERSION"* ]] && "$graph_cli" help >/dev/null 2>&1; then
+      result OK 'Afyx Graph' "$graph_reported; executable verification passed"
+    else result FAIL 'Afyx Graph' 'metadata is healthy but executable verification failed'; core_failure=true; fi
+    ;;
   INCOMPLETE) result WARN 'Afyx Graph' 'incomplete Afyx-owned runtime (optional)' ;;
   INVALID) result WARN 'Afyx Graph' 'invalid metadata (optional)' ;;
   *) result WARN 'Afyx Graph' "state $AFYX_STATE: $AFYX_DETAIL (optional)" ;;
 esac
 if mcp_configured afyx_graph; then result OK 'Afyx Graph MCP' 'configured explicitly'; else result INFO 'Afyx Graph MCP' 'not configured; installation does not mutate MCP config'; fi
+result INFO 'Usage Tracking' 'not installed; Windows-only runtime'
 headroom_cli=false; command -v headroom >/dev/null 2>&1 && headroom_cli=true
 headroom_provider=false; headroom_proxy=false
 if [[ -f "$config" ]] && grep -Eiq "^[[:space:]]*model_provider[[:space:]]*=[[:space:]]*['\"]headroom['\"][[:space:]]*$|^[[:space:]]*\[model_providers\.headroom\][[:space:]]*$" "$config"; then headroom_provider=true; fi

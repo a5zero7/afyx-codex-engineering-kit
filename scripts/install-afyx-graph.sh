@@ -3,13 +3,19 @@ set -euo pipefail
 
 PACKAGE_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 METADATA="$PACKAGE_ROOT/afyx-graph/afyx-graph.json"
+DISTRIBUTION_PRODUCT="$PACKAGE_ROOT/afyx-graph/engine/scripts/distribution-product.json"
 RUNTIME_ROOT="${AFYX_GRAPH_RUNTIME_ROOT:-$HOME/.afyx/graph}"
 BIN_DIR="${AFYX_GRAPH_BIN_DIR:-$HOME/.local/bin}"
 mode=install
 archive_path=
+offline=false
+no_build_fallback=false
+allow_dirty_source=false
+artifact_source=
+source_revision=
 
 usage() {
-  printf '%s\n' 'Usage: scripts/install-afyx-graph.sh [--replace|--update|--validate-only|--uninstall] [--archive PATH]'
+  printf '%s\n' 'Usage: scripts/install-afyx-graph.sh [--replace|--update|--validate-only|--uninstall] [--archive PATH] [--offline] [--no-build-fallback] [--allow-dirty-source]'
 }
 
 while (($#)); do
@@ -19,6 +25,9 @@ while (($#)); do
     --validate-only) mode=validate; shift ;;
     --uninstall) mode=uninstall; shift ;;
     --archive) archive_path="$2"; shift 2 ;;
+    --offline) offline=true; shift ;;
+    --no-build-fallback) no_build_fallback=true; shift ;;
+    --allow-dirty-source) allow_dirty_source=true; shift ;;
     -h|--help) usage; exit 0 ;;
     *) printf 'Unknown option: %s\n' "$1" >&2; usage >&2; exit 2 ;;
   esac
@@ -29,6 +38,93 @@ json_value() {
 }
 
 VERSION="$(json_value product_version)"
+CHANNEL="$(sed -n 's/^[[:space:]]*"releaseChannel"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$DISTRIBUTION_PRODUCT" | head -n 1)"
+
+node_version() {
+  command -v node >/dev/null 2>&1 || return 1
+  node --version 2>/dev/null | sed -n 's/^v\{0,1\}\([0-9][0-9.]*\).*/\1/p'
+}
+
+node_compatible() {
+  local version major minor
+  version="$(node_version)" || return 1
+  major="${version%%.*}"; version="${version#*.}"; minor="${version%%.*}"
+  [[ "$major" -gt 22 || ("$major" -eq 22 && "$minor" -ge 5) ]]
+}
+
+require_host_runtime() {
+  local version
+  version="$(node_version 2>/dev/null || true)"
+  if [[ -z "$version" ]]; then
+    printf 'REQUIRED: Node.js was not found on PATH. Afyx Graph requires Node.js 22.5.0 or newer. Install it from https://nodejs.org/ and retry.\n' >&2
+    return 1
+  fi
+  if ! node_compatible; then
+    printf 'REQUIRED: Node.js %s is incompatible. Afyx Graph requires Node.js 22.5.0 or newer.\n' "$version" >&2
+    return 1
+  fi
+}
+
+build_local_archive() {
+  "$no_build_fallback" && { printf 'COMPONENT_REQUIRED: no matching verified release artifact is available and local build fallback was disabled.\n' >&2; return 1; }
+  require_host_runtime
+  command -v npm >/dev/null 2>&1 || { printf 'BUILD_ONLY: npm was not found on PATH. It is required only because no verified release artifact was available.\n' >&2; return 1; }
+  command -v git >/dev/null 2>&1 || { printf 'BUILD_ONLY: Git is required to validate the local source revision.\n' >&2; return 1; }
+  git -C "$PACKAGE_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1 || { printf 'BUILD_ONLY: local fallback requires a validated Git checkout.\n' >&2; return 1; }
+  source_revision="$(git -C "$PACKAGE_ROOT" rev-parse HEAD)"
+  local branch dirty engine release
+  branch="$(git -C "$PACKAGE_ROOT" branch --show-current)"
+  dirty="$(git -C "$PACKAGE_ROOT" status --porcelain)"
+  if [[ -n "$dirty" && "$allow_dirty_source" != true ]]; then
+    printf 'BUILD_ONLY: local source has uncommitted changes. Refusing to build an unverifiable Technical Alpha artifact; commit the changes or explicitly use --allow-dirty-source.\n' >&2
+    return 1
+  fi
+  engine="$PACKAGE_ROOT/afyx-graph/engine"
+  [[ -f "$engine/package-lock.json" ]] || { printf 'BUILD_ONLY: afyx-graph/engine/package-lock.json is missing; local source is incomplete.\n' >&2; return 1; }
+  printf 'Verified release unavailable; building Afyx Graph locally from %s on %s.\n' "$source_revision" "$branch"
+  (cd "$engine" && npm ci && npm run build:clean && bash scripts/build-bundle.sh "$target") || {
+    printf 'BUILD_ONLY: Afyx Graph local build failed; the existing installation was not changed.\n' >&2
+    return 1
+  }
+  release="$engine/release"
+  archive_path="$release/$asset"
+  [[ -f "$archive_path" ]] || { printf 'BUILD_ONLY: local build did not produce %s.\n' "$asset" >&2; return 1; }
+  if command -v shasum >/dev/null 2>&1; then
+    (cd "$release" && shasum -a 256 "$asset" > SHA256SUMS)
+  else
+    (cd "$release" && sha256sum "$asset" > SHA256SUMS)
+  fi
+  artifact_source=local-build
+}
+
+archive_checksum_valid() {
+  local path="$1" sums expected actual
+  sums="$(dirname "$path")/SHA256SUMS"
+  [[ -f "$path" && -f "$sums" ]] || return 1
+  expected="$(awk -v asset="$asset" '$2 == asset || $2 == "*" asset { print $1; exit }' "$sums")"
+  [[ ${#expected} -eq 64 && "$expected" != *[!0-9a-fA-F]* ]] || return 1
+  if command -v shasum >/dev/null 2>&1; then
+    actual="$(shasum -a 256 "$path" | awk '{print $1}')"
+  else
+    actual="$(sha256sum "$path" | awk '{print $1}')"
+  fi
+  [[ "$(printf '%s' "$actual" | tr '[:upper:]' '[:lower:]')" == "$(printf '%s' "$expected" | tr '[:upper:]' '[:lower:]')" ]]
+}
+
+archive_bundle_identity_valid() {
+  local path="$1" probe bundle
+  probe="$(mktemp -d "${TMPDIR:-/tmp}/afyx-graph-probe.XXXXXX")" || return 1
+  if ! tar -xzf "$path" -C "$probe" >/dev/null 2>&1; then rm -rf -- "$probe"; return 1; fi
+  bundle="$probe/afyx-graph-$target"
+  [[ -f "$bundle/bin/afyx-graph" && -f "$bundle/metadata.json" && -f "$bundle/LICENSE" ]] &&
+    grep -q '"product_name"[[:space:]]*:[[:space:]]*"Afyx Graph"' "$bundle/metadata.json" &&
+    grep -q '"product_version"[[:space:]]*:[[:space:]]*"'"$VERSION"'"' "$bundle/metadata.json" &&
+    grep -q '"release_channel"[[:space:]]*:[[:space:]]*"'"$CHANNEL"'"' "$bundle/metadata.json" &&
+    grep -q '"'"$target"'"' "$bundle/metadata.json"
+  local valid=$?
+  rm -rf -- "$probe"
+  return "$valid"
+}
 
 graph_state() {
   if [[ ! -e "$RUNTIME_ROOT" ]]; then printf '%s' 'NOT INSTALLED'; return; fi
@@ -87,6 +183,8 @@ esac
 target="$os-$arch"
 asset="afyx-graph-$target.tar.gz"
 
+require_host_runtime
+
 parent="$(dirname "$RUNTIME_ROOT")"
 mkdir -p "$parent"
 transaction="$(mktemp -d "$parent/.graph-stage.XXXXXX")"
@@ -97,13 +195,39 @@ trap cleanup EXIT
 if [[ -z "$archive_path" ]]; then
   local_archive="$PACKAGE_ROOT/afyx-graph/engine/release/$asset"
   if [[ -f "$local_archive" ]]; then
-    archive_path="$local_archive"
+    if archive_checksum_valid "$local_archive" && archive_bundle_identity_valid "$local_archive"; then
+      archive_path="$local_archive"
+      artifact_source=local-release-cache
+    else
+      printf 'Ignoring invalid local release cache; rebuilding from validated source.\n' >&2
+      build_local_archive
+    fi
   else
-    archive_path="$transaction/$asset"
-    url="https://github.com/a5zero7/afyx-codex-engineering-kit/releases/download/afyx-graph-v$VERSION/$asset"
-    curl -fsSL "$url" -o "$archive_path"
-    curl -fsSL "https://github.com/a5zero7/afyx-codex-engineering-kit/releases/download/afyx-graph-v$VERSION/SHA256SUMS" -o "$transaction/SHA256SUMS"
+    if [[ "$offline" != true ]] && command -v curl >/dev/null 2>&1; then
+      archive_path="$transaction/$asset"
+      url="https://github.com/a5zero7/afyx-codex-engineering-kit/releases/download/afyx-graph-v$VERSION/$asset"
+      if curl -fsSL "$url" -o "$archive_path" &&
+         curl -fsSL "https://github.com/a5zero7/afyx-codex-engineering-kit/releases/download/afyx-graph-v$VERSION/SHA256SUMS" -o "$transaction/SHA256SUMS"; then
+        artifact_source=github-release
+        if ! archive_checksum_valid "$archive_path" || ! archive_bundle_identity_valid "$archive_path"; then
+          printf 'Downloaded release artifact failed integrity or identity validation; trying bounded local build fallback.\n' >&2
+          rm -f -- "$archive_path" "$transaction/SHA256SUMS"
+          build_local_archive
+        fi
+      else
+        printf 'Verified GitHub release unavailable; trying bounded local build fallback.\n' >&2
+        rm -f -- "$archive_path" "$transaction/SHA256SUMS"
+        archive_path=
+        build_local_archive
+      fi
+    else
+      [[ "$offline" == true ]] && printf 'Offline mode: skipping GitHub release lookup.\n'
+      [[ "$offline" != true ]] && printf 'COMPONENT_REQUIRED: curl is unavailable; trying bounded local build fallback.\n' >&2
+      build_local_archive
+    fi
   fi
+else
+  artifact_source=explicit-archive
 fi
 [[ -f "$archive_path" ]] || { printf 'Archive not found: %s\n' "$archive_path" >&2; exit 1; }
 sums="$(dirname "$archive_path")/SHA256SUMS"
@@ -124,6 +248,13 @@ done
 grep -q '"product_version"[[:space:]]*:[[:space:]]*"'"$VERSION"'"' "$bundle/metadata.json" || {
   printf 'Staged Afyx Graph version does not match metadata.\n' >&2; exit 1;
 }
+grep -q '"product_name"[[:space:]]*:[[:space:]]*"Afyx Graph"' "$bundle/metadata.json" || { printf 'Staged Afyx Graph identity is invalid.\n' >&2; exit 1; }
+grep -q '"release_channel"[[:space:]]*:[[:space:]]*"'"$CHANNEL"'"' "$bundle/metadata.json" || { printf 'Staged Afyx Graph release channel is invalid.\n' >&2; exit 1; }
+grep -q '"'"$target"'"' "$bundle/metadata.json" || { printf 'Staged Afyx Graph does not support %s.\n' "$target" >&2; exit 1; }
+node "$PACKAGE_ROOT/afyx-graph/engine/scripts/distribution-contract.mjs" verify-bundle --root "$bundle" --target "$target" >/dev/null || {
+  printf 'Afyx Graph staged bundle failed the distribution contract.\n' >&2
+  exit 1
+}
 mv "$bundle" "$transaction/prepared/current"
 cp "$transaction/prepared/current/metadata.json" "$transaction/prepared/metadata.json"
 
@@ -137,6 +268,18 @@ if [[ "$(graph_state)" != HEALTHY ]]; then
   rm -rf -- "$RUNTIME_ROOT"
   "$had_existing" && mv "$backup" "$RUNTIME_ROOT"
   printf 'Installed Afyx Graph failed post-swap validation; previous runtime restored.\n' >&2
+  exit 1
+fi
+if ! version_output="$($RUNTIME_ROOT/current/bin/afyx-graph --version 2>&1)" || [[ "$version_output" != *"$VERSION"* ]]; then
+  rm -rf -- "$RUNTIME_ROOT"
+  "$had_existing" && mv "$backup" "$RUNTIME_ROOT"
+  printf 'Installed Afyx Graph CLI verification failed: %s\n' "$version_output" >&2
+  exit 1
+fi
+if ! "$RUNTIME_ROOT/current/bin/afyx-graph" help >/dev/null 2>&1; then
+  rm -rf -- "$RUNTIME_ROOT"
+  "$had_existing" && mv "$backup" "$RUNTIME_ROOT"
+  printf 'Installed Afyx Graph help command failed; previous runtime restored.\n' >&2
   exit 1
 fi
 "$had_existing" && rm -rf -- "$backup"
@@ -155,4 +298,4 @@ else
   ln -s "$RUNTIME_ROOT/current/bin/afyx-graph" "$destination"
 fi
 
-printf 'Afyx Graph %s: installed at %s\nCLI: %s/afyx-graph\nMCP configuration was not changed.\n' "$VERSION" "$RUNTIME_ROOT" "$BIN_DIR"
+printf 'Afyx Graph %s [%s]: installed at %s\nArtifact source: %s; source revision: %s\nCLI: %s/afyx-graph\nMCP configuration was not changed.\n' "$VERSION" "$CHANNEL" "$RUNTIME_ROOT" "$artifact_source" "${source_revision:-release/explicit archive}" "$BIN_DIR"

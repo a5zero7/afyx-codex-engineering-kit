@@ -32,6 +32,10 @@ bundle_script_path = ENGINE / "scripts" / "build-bundle.sh"
 distribution_product_path = ENGINE / "scripts" / "distribution-product.json"
 release_dir = ENGINE / "release"
 installer_paths = (ROOT / "scripts" / "install-afyx-graph.ps1", ROOT / "scripts" / "install-afyx-graph.sh")
+installer_legal_requirements = {
+    "install-afyx-graph.ps1": "@('bin\\afyx-graph.cmd', 'metadata.json', 'LICENSE')",
+    "install-afyx-graph.sh": "bin/afyx-graph metadata.json LICENSE",
+}
 
 # The product ships the current Afyx license only. Historical third-party
 # attribution remains available in Git history and the Phase 5 evidence docs.
@@ -134,6 +138,8 @@ for obsolete_path in obsolete_legal_paths:
 # the source of truth and the shell must consume its legal-file staging command.
 bundle_script = bundle_script_path.read_text(encoding="utf-8")
 distribution_product = json.loads(distribution_product_path.read_text(encoding="utf-8"))
+if distribution_product.get("releaseChannel") != "technical-alpha":
+    fail("distribution-product.json must identify the Technical Alpha release channel")
 runtime = distribution_product.get("runtime", {})
 if runtime != {
     "name": "Node.js",
@@ -151,7 +157,7 @@ if distribution_product.get("legalFiles") != EXPECTED_LEGAL_FILES:
     fail("distribution-product.json must ship exactly root LICENSE as the current product license")
 for installer in installer_paths:
     installer_text = installer.read_text(encoding="utf-8")
-    if "LICENSE" not in installer_text:
+    if installer_legal_requirements[installer.name] not in installer_text:
         fail(f"{installer.name} does not require LICENSE in a staged bundle")
     for obsolete_name in OBSOLETE_LEGAL_NAMES:
         if obsolete_name in installer_text:

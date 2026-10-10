@@ -6,7 +6,10 @@ param(
     [Parameter(ParameterSetName = 'Uninstall')][switch]$Uninstall,
     [string]$ArchivePath,
     [string]$RuntimeRoot = (Join-Path $env:USERPROFILE '.afyx\graph'),
-    [switch]$SkipPathUpdate
+    [switch]$SkipPathUpdate,
+    [switch]$Offline,
+    [switch]$NoBuildFallback,
+    [switch]$AllowDirtySource
 )
 
 Set-StrictMode -Version Latest
@@ -15,6 +18,8 @@ $ErrorActionPreference = 'Stop'
 $kitRoot = Split-Path -Parent $PSScriptRoot
 $metadataPath = Join-Path $kitRoot 'afyx-graph\afyx-graph.json'
 $metadata = Get-Content -Raw -LiteralPath $metadataPath -Encoding utf8 | ConvertFrom-Json
+$distributionProductPath = Join-Path $kitRoot 'afyx-graph\engine\scripts\distribution-product.json'
+$releaseChannel = (Get-Content -Raw -LiteralPath $distributionProductPath -Encoding utf8 | ConvertFrom-Json).releaseChannel
 $architecture = switch ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()) {
     'Arm64' { 'arm64' }
     'X64' { 'x64' }
@@ -27,6 +32,114 @@ $rootMetadata = Join-Path $RuntimeRoot 'metadata.json'
 $launcher = Join-Path $current 'bin\afyx-graph.cmd'
 $publicBin = Join-Path $RuntimeRoot 'bin'
 $publicLauncher = Join-Path $publicBin 'afyx-graph.cmd'
+$engineRoot = Join-Path $kitRoot 'afyx-graph\engine'
+$contractPath = Join-Path $engineRoot 'scripts\distribution-contract.mjs'
+
+function Get-CommandVersion([string]$Name, [string[]]$Arguments = @('--version')) {
+    $command = Get-Command $Name -ErrorAction SilentlyContinue
+    if (-not $command) { return $null }
+    try {
+        $output = (& $command.Source @Arguments 2>$null) -join ' '
+        if ($LASTEXITCODE -ne 0) { return $null }
+        return $output.Trim()
+    } catch { return $null }
+}
+
+function Get-NodeVersion {
+    $raw = Get-CommandVersion 'node' @('--version')
+    if (-not $raw) { return $null }
+    $match = [regex]::Match($raw, '(\d+)\.(\d+)\.(\d+)')
+    if (-not $match.Success) { return $null }
+    return [version]::new([int]$match.Groups[1].Value, [int]$match.Groups[2].Value, [int]$match.Groups[3].Value)
+}
+
+function Assert-HostRuntime {
+    $nodeVersion = Get-NodeVersion
+    if (-not $nodeVersion) {
+        throw 'REQUIRED: Node.js was not found on PATH. Afyx Graph requires Node.js 22.5.0 or newer. Install it from https://nodejs.org/ and retry.'
+    }
+    if ($nodeVersion -lt [version]'22.5.0') {
+        throw "REQUIRED: Node.js $nodeVersion is incompatible. Afyx Graph requires Node.js 22.5.0 or newer."
+    }
+    return $nodeVersion
+}
+
+function Get-SourceRevision {
+    $git = Get-Command git -ErrorAction SilentlyContinue
+    if (-not $git) { return $null }
+    & $git.Source -C $kitRoot rev-parse --is-inside-work-tree *> $null
+    if ($LASTEXITCODE -ne 0) { return $null }
+    $commit = (& $git.Source -C $kitRoot rev-parse HEAD 2>$null).Trim()
+    $branch = (& $git.Source -C $kitRoot branch --show-current 2>$null).Trim()
+    $dirty = [bool]((& $git.Source -C $kitRoot status --porcelain 2>$null) -join '')
+    return [pscustomobject]@{ Commit = $commit; Branch = $branch; Dirty = $dirty }
+}
+
+function Build-LocalArchive {
+    if ($NoBuildFallback) { throw 'COMPONENT_REQUIRED: no matching verified release artifact is available and local build fallback was disabled.' }
+    $nodeVersion = Assert-HostRuntime
+    $npm = Get-Command npm -ErrorAction SilentlyContinue
+    if (-not $npm) {
+        throw 'BUILD_ONLY: npm was not found on PATH. It is required only because no verified release artifact was available.'
+    }
+    $source = Get-SourceRevision
+    if (-not $source) {
+        throw 'BUILD_ONLY: local fallback requires a validated Git checkout. Install Git or provide -ArchivePath with SHA256SUMS.'
+    }
+    if ($source.Dirty -and -not $AllowDirtySource) {
+        throw 'BUILD_ONLY: local source has uncommitted changes. Refusing to build an unverifiable Technical Alpha artifact; commit the changes or explicitly use -AllowDirtySource.'
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $engineRoot 'package-lock.json') -PathType Leaf)) {
+        throw 'BUILD_ONLY: afyx-graph/engine/package-lock.json is missing; local source is incomplete.'
+    }
+
+    Write-Host "Verified release unavailable; building Afyx Graph locally from $($source.Commit) on $($source.Branch)."
+    Push-Location $engineRoot
+    try {
+        & $npm.Source ci | Out-Host
+        if ($LASTEXITCODE -ne 0) { throw 'BUILD_ONLY: npm ci failed; the existing installation was not changed.' }
+        & $npm.Source run build:clean | Out-Host
+        if ($LASTEXITCODE -ne 0) { throw 'BUILD_ONLY: Afyx Graph clean build failed; the existing installation was not changed.' }
+    } finally { Pop-Location }
+
+    $releaseRoot = Join-Path $engineRoot 'release'
+    $buildRoot = Join-Path ([System.IO.Path]::GetTempPath()) "afyx-graph-build-$([guid]::NewGuid().ToString('N'))"
+    $bundleName = "afyx-graph-$target"
+    $bundleRoot = Join-Path $buildRoot $bundleName
+    try {
+        New-Item -ItemType Directory -Force -Path (Join-Path $bundleRoot 'lib'), (Join-Path $bundleRoot 'bin') | Out-Null
+        Copy-Item -LiteralPath (Join-Path $engineRoot 'dist') -Destination (Join-Path $bundleRoot 'lib\dist') -Recurse
+        Copy-Item -LiteralPath (Join-Path $engineRoot 'package.json') -Destination (Join-Path $bundleRoot 'lib\package.json')
+        Copy-Item -LiteralPath $metadataPath -Destination (Join-Path $bundleRoot 'metadata.json')
+        $bundleMetadataPath = Join-Path $bundleRoot 'metadata.json'
+        $bundleMetadata = Get-Content -Raw -LiteralPath $bundleMetadataPath -Encoding utf8 | ConvertFrom-Json
+        $bundleMetadata | Add-Member -NotePropertyName release_channel -NotePropertyValue $releaseChannel
+        $bundleMetadata | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $bundleMetadataPath -Encoding utf8
+        Copy-Item -LiteralPath (Join-Path $engineRoot 'LICENSE') -Destination (Join-Path $bundleRoot 'LICENSE')
+        @'
+@echo off
+where node >nul 2>&1
+if errorlevel 1 (
+  echo [Afyx Graph] Node.js was not found on PATH. Install Node.js 22.5.0 or newer: https://nodejs.org/ 1>&2
+  exit /b 1
+)
+node --disable-warning=ExperimentalWarning "%~dp0..\lib\dist\bin\afyx-graph.js" %*
+'@ | Set-Content -LiteralPath (Join-Path $bundleRoot 'bin\afyx-graph.cmd') -Encoding ascii
+
+        & (Get-Command node).Source $contractPath verify-bundle --root $bundleRoot --target $target | Out-Host
+        if ($LASTEXITCODE -ne 0) { throw 'BUILD_ONLY: locally staged bundle failed the distribution contract.' }
+        New-Item -ItemType Directory -Force -Path $releaseRoot | Out-Null
+        $archive = Join-Path $releaseRoot $assetName
+        if (Test-Path -LiteralPath $archive) { Remove-Item -LiteralPath $archive -Force }
+        Compress-Archive -LiteralPath $bundleRoot -DestinationPath $archive -CompressionLevel Optimal
+        $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $archive).Hash.ToLowerInvariant()
+        "$hash  $assetName" | Set-Content -LiteralPath (Join-Path $releaseRoot 'SHA256SUMS') -Encoding ascii
+        Write-Host "Local artifact verified: $assetName (Node.js $nodeVersion, commit $($source.Commit))."
+        return [pscustomobject]@{ Path = $archive; Source = 'local-build'; Commit = $source.Commit }
+    } finally {
+        if (Test-Path -LiteralPath $buildRoot) { Remove-Item -LiteralPath $buildRoot -Recurse -Force }
+    }
+}
 
 function Update-UserPath([switch]$Remove) {
     if ($SkipPathUpdate) { return }
@@ -65,18 +178,36 @@ function Test-AfyxOwnership {
 function Resolve-Archive {
     if ($ArchivePath) {
         $resolved = Resolve-Path -LiteralPath $ArchivePath -ErrorAction Stop
-        return $resolved.Path
+        return [pscustomobject]@{ Path = $resolved.Path; Source = 'explicit-archive'; Commit = $null }
     }
     $local = Join-Path $kitRoot "afyx-graph\engine\release\$assetName"
-    if (Test-Path -LiteralPath $local -PathType Leaf) { return $local }
-    $downloadRoot = Join-Path ([System.IO.Path]::GetTempPath()) "afyx-graph-$([guid]::NewGuid().ToString('N'))"
-    New-Item -ItemType Directory -Path $downloadRoot | Out-Null
-    $download = Join-Path $downloadRoot $assetName
-    $tag = "afyx-graph-v$($metadata.product_version)"
-    $url = "https://github.com/a5zero7/afyx-codex-engineering-kit/releases/download/$tag/$assetName"
-    Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $download
-    Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/a5zero7/afyx-codex-engineering-kit/releases/download/$tag/SHA256SUMS" -OutFile (Join-Path $downloadRoot 'SHA256SUMS')
-    return $download
+    if (Test-Path -LiteralPath $local -PathType Leaf) {
+        try {
+            Test-ArchiveChecksum -Path $local
+            Test-ArchiveBundle -Path $local
+            return [pscustomobject]@{ Path = $local; Source = 'local-release-cache'; Commit = $null }
+        } catch {
+            Write-Warning "Ignoring invalid local release cache ($($_.Exception.Message)); rebuilding from validated source."
+            return Build-LocalArchive
+        }
+    }
+    if (-not $Offline) {
+        $downloadRoot = Join-Path ([System.IO.Path]::GetTempPath()) "afyx-graph-download-$([guid]::NewGuid().ToString('N'))"
+        try {
+            New-Item -ItemType Directory -Path $downloadRoot | Out-Null
+            $download = Join-Path $downloadRoot $assetName
+            $tag = "afyx-graph-v$($metadata.product_version)"
+            $url = "https://github.com/a5zero7/afyx-codex-engineering-kit/releases/download/$tag/$assetName"
+            Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $download
+            Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/a5zero7/afyx-codex-engineering-kit/releases/download/$tag/SHA256SUMS" -OutFile (Join-Path $downloadRoot 'SHA256SUMS')
+            Test-ArchiveChecksum -Path $download
+            Test-ArchiveBundle -Path $download
+            return [pscustomobject]@{ Path = $download; Source = 'github-release'; Commit = $null }
+        } catch {
+            Write-Warning "Verified GitHub release unavailable ($($_.Exception.Message)); trying bounded local build fallback."
+        }
+    } else { Write-Host 'Offline mode: skipping GitHub release lookup.' }
+    return Build-LocalArchive
 }
 
 function Test-ArchiveChecksum([string]$Path) {
@@ -89,6 +220,16 @@ function Test-ArchiveChecksum([string]$Path) {
     if ($actual -ne $expected) { throw "Checksum mismatch for $(Split-Path -Leaf $Path)." }
 }
 
+function Test-ArchiveBundle([string]$Path) {
+    $probe = Join-Path ([System.IO.Path]::GetTempPath()) "afyx-graph-probe-$([guid]::NewGuid().ToString('N'))"
+    try {
+        Expand-Archive -LiteralPath $Path -DestinationPath $probe
+        Test-StagedBundle -Path (Join-Path $probe "afyx-graph-$target")
+    } finally {
+        if (Test-Path -LiteralPath $probe) { Remove-Item -LiteralPath $probe -Recurse -Force }
+    }
+}
+
 function Test-StagedBundle([string]$Path) {
     $required = @('bin\afyx-graph.cmd', 'metadata.json', 'LICENSE')
     foreach ($relative in $required) {
@@ -97,9 +238,15 @@ function Test-StagedBundle([string]$Path) {
         }
     }
     $stagedMetadata = Get-Content -Raw -LiteralPath (Join-Path $Path 'metadata.json') -Encoding utf8 | ConvertFrom-Json
+    if ($stagedMetadata.product_name -ne 'Afyx Graph' -or $stagedMetadata.release_channel -ne $releaseChannel) {
+        throw 'Afyx Graph staged bundle identity or release channel is invalid.'
+    }
     if ($stagedMetadata.product_version -ne $metadata.product_version) {
         throw "Afyx Graph version mismatch: expected $($metadata.product_version), got $($stagedMetadata.product_version)."
     }
+    if ($target -notin @($stagedMetadata.supported_platforms)) { throw "Afyx Graph bundle does not support $target." }
+    & (Get-Command node).Source $contractPath verify-bundle --root $Path --target $target | Out-Host
+    if ($LASTEXITCODE -ne 0) { throw 'Afyx Graph staged bundle failed the distribution contract.' }
 }
 
 $state = Get-State
@@ -132,11 +279,15 @@ if ($state -ne 'NOT INSTALLED' -and -not (Test-AfyxOwnership)) {
     throw "Refusing to replace $RuntimeRoot because Afyx Graph ownership cannot be verified."
 }
 if ($WhatIfPreference) {
-    Write-Host "WhatIf: would stage, validate, and install $assetName to $RuntimeRoot"
+    $nodeVersion = Get-NodeVersion
+    Write-Host "WhatIf: would resolve, verify, stage, and install $assetName to $RuntimeRoot"
+    Write-Host "Release channel: $releaseChannel; Node.js: $(if ($nodeVersion) { $nodeVersion } else { 'missing/incompatible' })"
     exit 0
 }
 
-$archive = Resolve-Archive
+$nodeVersion = Assert-HostRuntime
+$resolvedArchive = Resolve-Archive
+$archive = $resolvedArchive.Path
 Test-ArchiveChecksum -Path $archive
 $parent = Split-Path -Parent $RuntimeRoot
 New-Item -ItemType Directory -Force -Path $parent | Out-Null
@@ -164,6 +315,12 @@ try {
         Move-Item -LiteralPath $prepared -Destination $RuntimeRoot
         $swapped = $true
         if ((Get-State) -ne 'HEALTHY') { throw 'Installed Afyx Graph failed post-swap validation.' }
+        $versionOutput = (& $publicLauncher --version 2>&1) -join ' '
+        if ($LASTEXITCODE -ne 0 -or $versionOutput -notmatch [regex]::Escape([string]$metadata.product_version)) {
+            throw "Installed Afyx Graph CLI verification failed: $versionOutput"
+        }
+        & $publicLauncher help *> $null
+        if ($LASTEXITCODE -ne 0) { throw 'Installed Afyx Graph help command failed.' }
     } catch {
         if (Test-Path -LiteralPath $RuntimeRoot) { Remove-Item -LiteralPath $RuntimeRoot -Recurse -Force }
         if (Test-Path -LiteralPath $backup) { Move-Item -LiteralPath $backup -Destination $RuntimeRoot }
@@ -179,6 +336,7 @@ try {
 
 Update-UserPath
 
-Write-Host "Afyx Graph $($metadata.product_version): installed at $RuntimeRoot"
+Write-Host "Afyx Graph $($metadata.product_version) [$releaseChannel]: installed at $RuntimeRoot"
+Write-Host "Artifact source: $($resolvedArchive.Source); source revision: $(if ($resolvedArchive.Commit) { $resolvedArchive.Commit } else { 'release/explicit archive' })"
 Write-Host "CLI: $publicLauncher"
 Write-Host 'MCP configuration was not changed.'

@@ -2,6 +2,14 @@
 param(
     [string]$SkillsRoot = (Join-Path $env:USERPROFILE '.agents\skills'),
     [switch]$SkipSelfUpdate,
+
+    [string[]]$ComponentAction = @(),
+
+    [switch]$Offline,
+
+    [switch]$NoBuildFallback,
+
+    [switch]$AllowDirtySource,
     [switch]$InstallUsageTracker,
     [switch]$SkipUsageTracker
 )
@@ -18,7 +26,9 @@ if ($InstallUsageTracker -and $SkipUsageTracker) {
 
 Write-Host 'Afyx Codex Engineering Kit — Windows updater (PowerShell)'
 
-if (-not $SkipSelfUpdate) {
+if ($Offline -and -not $SkipSelfUpdate) {
+    Write-Host 'Offline mode: self-update skipped; using the current local source intentionally.'
+} elseif (-not $SkipSelfUpdate) {
     $git = Get-Command git -ErrorAction SilentlyContinue
     if (-not $git) {
         Write-Error 'Git executable not found. Self-update cannot be performed. Re-run with -SkipSelfUpdate only if using the current checkout intentionally.'
@@ -46,17 +56,8 @@ if (-not $SkipSelfUpdate) {
 $usageArguments = @{}
 if ($InstallUsageTracker) { $usageArguments.InstallUsageTracker = $true }
 elseif ($SkipUsageTracker) { $usageArguments.SkipUsageTracker = $true }
-else {
-    $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' }
-    if ((Test-Path -LiteralPath (Join-Path $codexHome 'tools\CodexUsage.psm1') -PathType Leaf) -or
-        (Test-Path -LiteralPath (Join-Path $codexHome 'tools\codex-usage-stop.ps1') -PathType Leaf)) {
-        $usageArguments.InstallUsageTracker = $true
-    } else {
-        $usageArguments.SkipUsageTracker = $true
-    }
-}
 
-& $installer -SkillsRoot $SkillsRoot -Force -Confirm:$false -WhatIf:$WhatIfPreference @usageArguments
+& $installer -SkillsRoot $SkillsRoot -UpdateInstalled -ComponentAction $ComponentAction -Offline:$Offline -NoBuildFallback:$NoBuildFallback -AllowDirtySource:$AllowDirtySource -Confirm:$false -WhatIf:$WhatIfPreference @usageArguments
 $installerSucceeded = $?
 $installerExitCode = 0
 if (Test-Path -LiteralPath variable:LASTEXITCODE) { $installerExitCode = [int]$LASTEXITCODE }

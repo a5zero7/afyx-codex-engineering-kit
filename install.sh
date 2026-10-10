@@ -10,15 +10,25 @@ graph_root="${AFYX_GRAPH_RUNTIME_ROOT:-$HOME/.afyx/graph}"
 force=false
 validate_only=false
 dry_run=false
+update_installed=false
+component_actions=()
+offline=false
+no_build_fallback=false
+allow_dirty_source=false
 
 usage() {
-  printf '%s\n' 'Usage: ./install.sh [--skills-root PATH] [--force] [--validate-only] [--dry-run]'
+  printf '%s\n' 'Usage: ./install.sh [--skills-root PATH] [--component ID=skip|install|update|repair] [--update-installed] [--force] [--validate-only] [--dry-run]'
 }
 
 while (($#)); do
   case "$1" in
     --skills-root) skills_root="$2"; shift 2 ;;
     --force) force=true; shift ;;
+    --component) component_actions+=("$2"); shift 2 ;;
+    --update-installed) update_installed=true; shift ;;
+    --offline) offline=true; shift ;;
+    --no-build-fallback) no_build_fallback=true; shift ;;
+    --allow-dirty-source) allow_dirty_source=true; shift ;;
     --validate-only) validate_only=true; shift ;;
     --dry-run) dry_run=true; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -37,6 +47,66 @@ component_version() { afyx_component_evaluate "$1"; printf '%s' "$AFYX_VERSION";
 run() { if "$dry_run"; then printf '+ '; printf '%q ' "$@"; printf '\n'; else "$@"; fi; }
 interactive=false
 if [[ -t 0 && -z "${CI:-}" ]] && ! "$dry_run"; then interactive=true; fi
+
+available_version() {
+  case "$1" in
+    efficient-coding) afyx_skill_version "$BUNDLED_EFFICIENT" ;;
+    odoo-engineering) afyx_skill_version "$BUNDLED_ODOO" ;;
+    afyx-graph) sed -n 's/.*"product_version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$PACKAGE_ROOT/afyx-graph/afyx-graph.json" ;;
+    *) printf '' ;;
+  esac
+}
+
+version_lt() {
+  awk -v left="$1" -v right="$2" 'BEGIN {
+    split(left, l, "."); split(right, r, ".");
+    for (i=1; i<=4; i++) { if ((l[i]+0) < (r[i]+0)) exit 0; if ((l[i]+0) > (r[i]+0)) exit 1 }
+    exit 1
+  }'
+}
+
+explicit_action() {
+  local wanted="$1" specification id action
+  for specification in "${component_actions[@]}"; do
+    case "$specification" in *=*) id="${specification%%=*}"; action="${specification#*=}" ;; *) printf 'Invalid --component value: %s\n' "$specification" >&2; return 2 ;; esac
+    case "$id" in efficient-coding|odoo-engineering|prompt-master|afyx-graph|codex-usage-tracking) ;; *) printf 'Unknown selectable component: %s\n' "$id" >&2; return 2 ;; esac
+    case "$action" in skip|install|update|repair) ;; *) printf 'Invalid action for %s: %s\n' "$id" "$action" >&2; return 2 ;; esac
+    [[ "$id" == "$wanted" ]] && { printf '%s' "$action"; return 0; }
+  done
+  return 1
+}
+
+component_action() {
+  local id="$1" label="$2" state="$3" installed="$4" available action= answer default
+  available="$(available_version "$id")"
+  if action="$(explicit_action "$id")"; then :
+  elif "$force"; then
+    if [[ "$state" == 'NOT INSTALLED' ]]; then action=install; elif [[ "$state" == INCOMPLETE || "$state" == INVALID ]]; then action=repair; else action=update; fi
+  elif "$update_installed"; then
+    if [[ "$state" == INCOMPLETE || "$state" == INVALID ]]; then action=repair
+    elif [[ "$state" == HEALTHY && -n "$available" && -n "$installed" ]] && version_lt "$installed" "$available"; then action=update
+    else action=skip; fi
+  elif ! "$interactive" || "$dry_run"; then action=skip
+  elif [[ "$state" == 'NOT INSTALLED' ]]; then
+    read -r -p "$label is not installed. installed=$installed available=$available [I] Install / [S] Skip [S]: " answer || answer=
+    case "$answer" in [iI]|[iI][nN][sS][tT][aA][lL][lL]) action=install ;; *) action=skip ;; esac
+  elif [[ "$state" == HEALTHY ]]; then
+    default=S; [[ -n "$available" && -n "$installed" ]] && version_lt "$installed" "$available" && default=U
+    read -r -p "$label is healthy. installed=$installed available=$available [U] Update / [S] Skip [$default]: " answer || answer=
+    case "$answer" in [uU]|[uU][pP][dD][aA][tT][eE]) action=update ;; '') [[ "$default" == U ]] && action=update || action=skip ;; *) action=skip ;; esac
+  elif [[ "$state" == INCOMPLETE || "$state" == INVALID ]]; then
+    read -r -p "$label is $state [R] Repair / [S] Skip [S]: " answer || answer=
+    case "$answer" in [rR]|[rR][eE][pP][aA][iI][rR]) action=repair ;; *) action=skip ;; esac
+  else
+    printf '%s ownership/health is unknown; it will not be overwritten.\n' "$label" >&2
+    action=skip
+  fi
+  case "$state:$action" in
+    'NOT INSTALLED':install|'NOT INSTALLED':skip|HEALTHY:update|HEALTHY:skip|INCOMPLETE:repair|INCOMPLETE:skip|INVALID:repair|INVALID:skip|UNKNOWN:skip) ;;
+    *) printf '%s state %s does not permit action %s.\n' "$label" "$state" "$action" >&2; return 2 ;;
+  esac
+  printf '%s' "$action"
+}
 
 replace_choice() {
   local label="$1" answer
@@ -90,13 +160,29 @@ prompt_state="$(component_state prompt-master)"
 afyx_graph_state="$(component_state afyx-graph)"
 
 printf '\nComponent Inventory\n'
-printf 'Efficient Coding: %s\nOdoo Engineering: %s\nPrompt Master: %s\nAfyx Graph: %s\n' "$efficient_state" "$odoo_state" "$prompt_state" "$afyx_graph_state"
-printf 'Codex Usage Tracking: NOT INSTALLED (Windows-only runtime)\n'
+printf 'Efficient Coding: %s; installed=%s; available=%s; ownership=afyx\n' "$efficient_state" "$(component_version efficient-coding)" "$(available_version efficient-coding)"
+printf 'Odoo Engineering: %s; installed=%s; available=%s; ownership=afyx\n' "$odoo_state" "$(component_version odoo-engineering)" "$(available_version odoo-engineering)"
+printf 'Prompt Master: %s; installed=%s; available=external; ownership=upstream\n' "$prompt_state" "$(component_version prompt-master)"
+printf 'Afyx Graph: %s; installed=%s; available=%s; ownership=afyx\n' "$afyx_graph_state" "$(component_version afyx-graph)" "$(available_version afyx-graph)"
+printf 'Usage Tracking: NOT INSTALLED (Windows-only runtime)\n'
 if command -v headroom >/dev/null 2>&1; then printf 'Headroom: externally managed; detected\n'; else printf 'Headroom: externally managed; not detected\n'; fi
 
 codex_cli_detected=false; command -v codex >/dev/null 2>&1 && codex_cli_detected=true
 vscode_extension_detected=false
 for extension in "$HOME"/.vscode/extensions/openai.chatgpt-*; do [[ -d "$extension" ]] && { vscode_extension_detected=true; break; }; done
+
+printf '\nPrerequisite Inventory\n'
+printf '[REQUIRED] OS/architecture: %s / %s\n' "$(uname -s)" "$(uname -m)"
+printf '[REQUIRED] Platform shell: Bash %s\n' "$BASH_VERSION"
+if command -v git >/dev/null 2>&1; then printf '[REQUIRED] Git: %s\n' "$(git --version)"; else printf '[REQUIRED] Git: MISSING — install Git with the documented OS package manager\n'; fi
+if "$codex_cli_detected" || "$vscode_extension_detected"; then printf '[REQUIRED] Codex host: detected\n'; else printf '[REQUIRED] Codex host: MISSING — install Codex CLI or the supported VS Code extension\n'; fi
+if command -v node >/dev/null 2>&1; then printf '[COMPONENT_REQUIRED:Afyx Graph] Node.js >=22.5.0: %s\n' "$(node --version)"; else printf '[COMPONENT_REQUIRED:Afyx Graph] Node.js >=22.5.0: MISSING — install from https://nodejs.org/\n'; fi
+if command -v npm >/dev/null 2>&1; then printf '[BUILD_ONLY:Afyx Graph] npm: %s\n' "$(npm --version)"; else printf '[BUILD_ONLY:Afyx Graph] npm: MISSING — needed only for automatic local fallback\n'; fi
+printf '[COMPONENT_REQUIRED:Afyx Graph] Archive/checksum: tar + SHA-256 tool required\n'
+if command -v git >/dev/null 2>&1 && git -C "$PACKAGE_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  graph_channel="$(sed -n 's/^[[:space:]]*"releaseChannel"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$PACKAGE_ROOT/afyx-graph/engine/scripts/distribution-product.json" | head -n 1)"
+  printf 'Source: branch=%s; commit=%s; channel=%s\n' "$(git -C "$PACKAGE_ROOT" branch --show-current)" "$(git -C "$PACKAGE_ROOT" rev-parse HEAD)" "$graph_channel"
+fi
 
 if "$validate_only"; then
   graph_version="$(sed -n 's/.*"product_version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$PACKAGE_ROOT/afyx-graph/afyx-graph.json")"
@@ -112,15 +198,23 @@ if ! "$codex_cli_detected" && ! "$vscode_extension_detected"; then printf 'Neith
 command -v git >/dev/null 2>&1 || { printf 'Git is required for Prompt Master.\n' >&2; exit 1; }
 run mkdir -p "$skills_root"
 
-efficient_replace=false; [[ "$efficient_state" != 'NOT INSTALLED' && "$(replace_choice 'Efficient Coding')" == Replace ]] && efficient_replace=true
-odoo_replace=false; [[ "$odoo_state" != 'NOT INSTALLED' && "$(replace_choice 'Odoo Engineering')" == Replace ]] && odoo_replace=true
-efficient_result="$(safe_skill_install 'Efficient Coding' "$BUNDLED_EFFICIENT" "$efficient_target" "$efficient_replace")"
-odoo_result="$(safe_skill_install 'Odoo Engineering' "$BUNDLED_ODOO" "$odoo_target" "$odoo_replace")"
+efficient_action="$(component_action efficient-coding 'Efficient Coding' "$efficient_state" "$(component_version efficient-coding)")"
+odoo_action="$(component_action odoo-engineering 'Odoo Engineering' "$odoo_state" "$(component_version odoo-engineering)")"
+efficient_result=skipped
+odoo_result=skipped
+if [[ "$efficient_action" != skip ]]; then efficient_result="$(safe_skill_install 'Efficient Coding' "$BUNDLED_EFFICIENT" "$efficient_target" "$([[ "$efficient_action" == install ]] && printf false || printf true)")"; fi
+if [[ "$odoo_action" != skip ]]; then odoo_result="$(safe_skill_install 'Odoo Engineering' "$BUNDLED_ODOO" "$odoo_target" "$([[ "$odoo_action" == install ]] && printf false || printf true)")"; fi
 
 prompt_result=skipped
-if [[ "$prompt_state" == 'NOT INSTALLED' ]]; then
+prompt_action="$(component_action prompt-master 'Prompt Master' "$prompt_state" "$(component_version prompt-master)")"
+if [[ "$offline" == true && "$prompt_action" != skip ]]; then
+  printf 'Offline mode cannot install or update upstream-owned Prompt Master. Choose prompt-master=skip or retry with network access.\n' >&2
+  exit 1
+fi
+if [[ "$prompt_action" == skip ]]; then :
+elif [[ "$prompt_state" == 'NOT INSTALLED' ]]; then
   if "$dry_run"; then prompt_result=planned; else git clone --depth 1 "$PROMPT_MASTER_REPOSITORY" "$prompt_target"; valid_manifest "$prompt_target"; prompt_result=installed; fi
-elif [[ "$(replace_choice 'Prompt Master')" == Replace ]]; then
+else
   if "$dry_run"; then prompt_result=planned
   else
     if [[ -d "$prompt_target/.git" && -n "$(git -C "$prompt_target" status --porcelain)" ]]; then printf 'Prompt Master has local changes; backup will be preserved.\n'; fi
@@ -134,15 +228,19 @@ elif [[ "$(replace_choice 'Prompt Master')" == Replace ]]; then
 fi
 
 graph_result=skipped
-install_graph=false
-if [[ "$afyx_graph_state" == 'NOT INSTALLED' ]]; then install_choice 'Install Afyx Graph?' && install_graph=true
-elif [[ "$(replace_choice 'Afyx Graph')" == Replace ]]; then install_graph=true; fi
-if "$install_graph"; then
-  graph_args=(); [[ "$afyx_graph_state" != 'NOT INSTALLED' ]] && graph_args+=(--replace); "$dry_run" && graph_args+=(--validate-only)
+graph_action="$(component_action afyx-graph 'Afyx Graph' "$afyx_graph_state" "$(component_version afyx-graph)")"
+if [[ "$graph_action" != skip ]]; then
+  graph_args=()
+  [[ "$graph_action" == update ]] && graph_args+=(--update)
+  [[ "$graph_action" == repair ]] && graph_args+=(--replace)
+  "$offline" && graph_args+=(--offline)
+  "$no_build_fallback" && graph_args+=(--no-build-fallback)
+  "$allow_dirty_source" && graph_args+=(--allow-dirty-source)
+  "$dry_run" && graph_args+=(--validate-only)
   "$PACKAGE_ROOT/scripts/install-afyx-graph.sh" "${graph_args[@]}"
-  if [[ "$afyx_graph_state" == 'NOT INSTALLED' ]]; then graph_result=installed; else graph_result=replaced; fi
+  graph_result="$graph_action"
 fi
 
-printf '\nInstallation Summary\n[%s] Efficient Coding\n[%s] Odoo Engineering\n[%s] Prompt Master\n[%s] Afyx Graph\n[SKIPPED] Codex Usage Tracking\n' "$efficient_result" "$odoo_result" "$prompt_result" "$graph_result"
+printf '\nInstallation Summary\n[%s] Efficient Coding\n[%s] Odoo Engineering\n[%s] Prompt Master\n[%s] Afyx Graph\n[SKIPPED] Usage Tracking (Windows-only)\n' "$efficient_result" "$odoo_result" "$prompt_result" "$graph_result"
 printf '[INFO] Headroom — externally managed; unchanged\n'
 "$dry_run" && printf 'Dry-run completed; no files or configuration were changed.\n' || printf 'Start a new Codex session to load installed components.\n'
