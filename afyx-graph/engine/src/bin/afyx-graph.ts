@@ -224,6 +224,11 @@ type IndexResult = {
   durationMs: number;
   filesSkippedUnsupported?: number;
   topUnsupportedExtensions?: { ext: string; count: number }[];
+  filesSeen?: number;
+  filesEligible?: number;
+  filesRetried?: number;
+  filesRecovered?: number;
+  filesFailedAfterRetry?: number;
 };
 
 /**
@@ -257,6 +262,14 @@ function printIndexResult(clack: AfyxTerminal, result: IndexResult, projectPath?
       clack.log.success(`Indexed ${formatNumber(result.filesIndexed)} files`);
     }
     clack.log.info(`${formatNumber(result.nodesCreated)} nodes, ${formatNumber(result.edgesCreated)} edges in ${formatDuration(result.durationMs)}`);
+    if (result.filesSeen !== undefined && result.filesEligible !== undefined) {
+      clack.log.info(
+        `Extraction accounting: ${formatNumber(result.filesSeen)} discovered, ` +
+        `${formatNumber(result.filesEligible)} eligible, ${formatNumber(result.filesIndexed)} indexed, ` +
+        `${formatNumber(result.filesSkipped)} skipped, ${formatNumber(result.filesSkippedUnsupported ?? 0)} unsupported, ` +
+        `${formatNumber(result.filesErrored)} failed; retries ${formatNumber(result.filesRecovered ?? 0)}/${formatNumber(result.filesRetried ?? 0)} recovered`
+      );
+    }
     // Warning-only parse failures keep indexing successful, but must be visible.
     for (const warning of parseWarnings) {
       clack.log.warn(warning.message);
@@ -852,6 +865,7 @@ program
       // Zero on a healthy index; non-zero at rest means a resolution pass was
       // interrupted, so some files' call edges are missing (#1187).
       const pendingRefs = cg.getPendingReferenceCount();
+      const accounting = cg.getIndexAccounting();
 
       // JSON output mode
       if (options.json) {
@@ -889,6 +903,7 @@ program
             // (a run was killed mid-index — the index is truncated) |
             // 'failed' | null (predates the marker).
             state: indexState,
+            accounting,
             // References awaiting resolution. Non-zero at rest means an
             // interrupted resolution pass left edges missing; the next
             // sync sweeps them (#1187).
@@ -916,6 +931,16 @@ program
       }
       if (pendingRefs > 0) {
         warn(`${formatNumber(pendingRefs)} references from an interrupted run are awaiting resolution — some callers/impact edges are missing. Run "afyx-graph sync" to resolve them.`);
+      }
+      if (accounting) {
+        console.log(
+          `Last extraction: ${formatNumber(accounting.discovered)} discovered, ` +
+          `${formatNumber(accounting.eligible)} eligible, ${formatNumber(accounting.indexed)} indexed, ` +
+          `${formatNumber(accounting.skipped)} skipped, ${formatNumber(accounting.unsupported)} unsupported, ` +
+          `${formatNumber(accounting.failed)} failed; retries ` +
+          `${formatNumber(accounting.retry.recoveredFiles)}/${formatNumber(accounting.retry.attemptedFiles)} recovered`
+        );
+        console.log('  Ignored paths are not enumerated (ignored count: unknown).');
       }
       console.log();
 

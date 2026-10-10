@@ -21,4 +21,7 @@
  * turns the re-index hint into noise — keep it honest (see CLAUDE.md, "Honesty
  * in the product is load-bearing").
  */
-export const EXTRACTION_VERSION = 26;
+// v27: long single-line JavaScript bundles that previously exhausted the parse
+// budget now contribute their nodes/edges, so existing indexes may be missing
+// material extracted content and should be rebuilt.
+export const EXTRACTION_VERSION = 27;

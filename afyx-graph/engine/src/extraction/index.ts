@@ -95,6 +95,11 @@ export interface IndexResult {
    * counts. Only set by full-index runs (indexAll), not indexFiles/sync.
    */
   filesDiscovered?: number;
+  /** All visible files encountered: eligible plus unsupported. Ignored paths
+   * are intentionally not walked and therefore are not included. */
+  filesSeen?: number;
+  /** Supported files admitted to the parse pipeline. */
+  filesEligible?: number;
   /**
    * Files the scan saw but has no grammar for, tallied by extension. Only the
    * degenerate case needs it: a project of unsupported files otherwise looks
@@ -105,6 +110,12 @@ export interface IndexResult {
   filesSkippedUnsupported?: number;
   /** The most common unsupported extensions, biggest first. */
   topUnsupportedExtensions?: { ext: string; count: number }[];
+  /** Distinct files given at least one fresh-worker retry. */
+  filesRetried?: number;
+  /** Retried files recovered by either the normal or stripped-source pass. */
+  filesRecovered?: number;
+  /** Retried files that still failed after every bounded retry. */
+  filesFailedAfterRetry?: number;
   nodesCreated: number;
   edgesCreated: number;
   errors: ExtractionError[];
@@ -1853,6 +1864,8 @@ export class ExtractionOrchestrator {
     let filesIndexed = 0;
     let filesSkipped = 0;
     let filesErrored = 0;
+    let filesRetried = 0;
+    let filesRecovered = 0;
     let totalNodes = 0;
     let totalEdges = 0;
 
@@ -1896,6 +1909,11 @@ export class ExtractionOrchestrator {
         .sort((a, b) => b.count - a.count || a.ext.localeCompare(b.ext))
         .slice(0, 5);
       return { filesSkippedUnsupported: total, topUnsupportedExtensions: top };
+    };
+    const unsupportedCount = (): number => {
+      let total = 0;
+      for (const count of skipStats.unsupportedByExtension.values()) total += count;
+      return total;
     };
 
 
@@ -2262,6 +2280,11 @@ export class ExtractionOrchestrator {
         filesSkipped,
         filesErrored,
         filesDiscovered: total,
+        filesSeen: total + unsupportedCount(),
+        filesEligible: total,
+        filesRetried,
+        filesRecovered,
+        filesFailedAfterRetry: Math.max(0, filesRetried - filesRecovered),
         ...skipSummary(),
         nodesCreated: totalNodes,
         edgesCreated: totalEdges,
@@ -2294,6 +2317,7 @@ export class ExtractionOrchestrator {
          e.message.includes('memory access out of bounds') ||
          e.message.includes('timed out'))
     );
+    filesRetried = retryableErrors.length;
 
     if (retryableErrors.length > 0 && pool) {
       log(`Retrying ${retryableErrors.length} files that failed due to worker memory errors or timeouts...`);
@@ -2336,6 +2360,7 @@ export class ExtractionOrchestrator {
           if (idx >= 0) errors.splice(idx, 1);
           filesErrored--;
           filesIndexed++;
+          filesRecovered++;
           totalNodes += result.nodes.length;
           totalEdges += result.edges.length;
           log(`Retry OK: ${filePath} (${result.nodes.length} nodes)`);
@@ -2393,6 +2418,7 @@ export class ExtractionOrchestrator {
             errEntry.message = `Indexed from comment-stripped source after repeated parse failures (symbols may be incomplete until the file is re-indexed): ${errEntry.message}`;
             filesErrored--;
             filesIndexed++;
+            filesRecovered++;
             totalNodes += result.nodes.length;
             totalEdges += result.edges.length;
             log(`Retry (stripped) OK: ${filePath} (${result.nodes.length} nodes)`);
@@ -2410,6 +2436,11 @@ export class ExtractionOrchestrator {
       filesSkipped,
       filesErrored,
       filesDiscovered: total,
+      filesSeen: total + unsupportedCount(),
+      filesEligible: total,
+      filesRetried,
+      filesRecovered,
+      filesFailedAfterRetry: Math.max(0, filesRetried - filesRecovered),
       ...skipSummary(),
       nodesCreated: totalNodes,
       edgesCreated: totalEdges,

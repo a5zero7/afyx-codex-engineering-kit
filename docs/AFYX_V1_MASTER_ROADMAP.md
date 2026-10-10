@@ -6,8 +6,8 @@ Contract revision: **2026-10-10**
 v1 scope policy: **FROZEN — Phase 1 through Phase 11**  
 Post-v1 policy: **PLANNED EXPANSION — not a v1 release blocker**
 
-Current work: **Phase 5I — Final Independence Audit (COMPLETE)**
-Task: `AFYX-91852`  
+Current work: **Technical Alpha Batch 1 — Native Parser Reliability (validation in progress)**
+Task: `AFYX-257`; related partial diagnostics scope: `AFYX-258`
 Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`  
 Active implementation branch: `afyx/native-phase5f-parser-grammar`  
 Latest verified Phase 5F implementation checkpoint: `62621a0639f42db0eaac69ef087436d851cdba88`  
@@ -1064,6 +1064,48 @@ dry-run, incompatible-Node refusal, unknown-owner refusal, and checksum-failure
 preservation. Final-head Windows/Linux/macOS workflow results remain the
 delivery evidence for AFYX-255 and the independent-install verification record
 for AFYX-251; no public release or Technical Alpha activation is implied.
+
+### AFYX-257 — Native parser reliability
+
+Status: **IMPLEMENTED AND LOCALLY VALIDATED; final-head CI pending**
+
+The reproduced JavaScript case is a 457,840-byte, single-line vendor bundle
+with 181,296 native scanner tokens and 45,002 matched delimiter pairs. The
+scanner itself completed in about 180 ms; V8 profiles isolated repeated
+quadratic work in native fact extraction: delimiter-pair scans per semicolon
+and member, whole-token export scans per declaration, typed-assertion pair
+scans per call, and growing same-line prefix scans.
+
+The bounded Afyx-native correction builds reusable nesting/semicolon indexes,
+precomputes export and typed-assertion lookup data, and records same-line import
+prefix state. ArkTS retains its established DSL-specific membership predicate.
+No parser runtime, grammar, timeout, dependency, fallback, or private source was
+added. A generated one-line regression fixture covers nested initializers,
+large class bodies, and invalid/incomplete input classification. Extraction
+version 27 prompts existing projects to rebuild indexes that may have omitted
+these files.
+
+Read-only execution against the exact private SHA-256 case changed from no
+result after 60 seconds to 1.86 seconds direct and 1.96 seconds through the real
+parse worker, with identical direct/worker output counts: 1,686 nodes, 1,685
+edges, 18,518 unresolved references, zero extraction errors. Private content and
+paths are not stored in this repository.
+
+### AFYX-258 — Extraction diagnostics partial scope
+
+Status: **PARTIAL; issue remains open**
+
+The last full-index accounting now persists and is exposed by human and JSON
+status output: visible files discovered, eligible/supported files, indexed,
+symbol-empty skipped, unsupported, failed, and per-file retry outcomes. Index
+completion state, pending references, and pending file changes remain separate
+signals. Ignored paths are deliberately not enumerated and are reported as an
+unknown count rather than silently conflated with skipped files.
+
+Remaining AFYX-258 work includes broader Git `FRESH/STALE/UNKNOWN` UX, watcher
+presentation, and any future opt-in ignored-path inventory. AFYX-251 and
+AFYX-255 remain complete; AFYX-248 remains in progress. This batch does not
+activate Technical Alpha, Phase 6, formal Alpha, or unrelated post-v1 work.
 
 Required audits:
 

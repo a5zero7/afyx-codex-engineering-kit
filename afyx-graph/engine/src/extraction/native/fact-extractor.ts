@@ -220,6 +220,24 @@ export function extractNativeFacts(filePath: string, source: string, language: L
   const pythonInheritanceTokenIndexes = new Set<number>();
   const pairStart = new Map<number, number>();
   for (const [open, close] of scan.pairs) pairStart.set(close, open);
+  let semicolonsByDepth: number[][] | undefined;
+  let depthAtToken: Int32Array | undefined;
+  let typedAssertionMask: Uint8Array | undefined;
+
+  const ensureSemicolonIndex = (): void => {
+    if (semicolonsByDepth && depthAtToken) return;
+    semicolonsByDepth = [];
+    depthAtToken = new Int32Array(tokens.length);
+    let depth = 0;
+    for (let index = 0; index < tokens.length; index += 1) {
+      if (pairStart.has(index)) depth = Math.max(0, depth - 1);
+      depthAtToken[index] = depth;
+      if (tokens[index]!.text === ';') {
+        (semicolonsByDepth[depth] ??= []).push(index);
+      }
+      if (scan.pairs.has(index)) depth += 1;
+    }
+  };
   const tokenLineEnd = (from: number): number => {
     const line = tokens[from]?.start.line;
     let end = from;
@@ -236,13 +254,46 @@ export function extractNativeFacts(filePath: string, source: string, language: L
     return end;
   };
   const topLevelSemicolon = (from: number): number => {
-    for (let candidate = from; candidate < tokens.length; candidate += 1) {
-      if (tokens[candidate]!.text !== ';') continue;
-      const nested = [...scan.pairs.entries()].some(([open, close]) =>
-        open >= from && open < candidate && close > candidate);
-      if (!nested) return candidate;
+    ensureSemicolonIndex();
+    const baseDepth = depthAtToken![from] ?? 0;
+    let nearest = -1;
+    // The original rule accepts the first semicolon not nested in a pair that
+    // opened at/after `from`: equivalently, one at this token's depth or lower.
+    // Lists are ordered, so one binary search per reachable depth avoids
+    // repeatedly walking a whole minified statement for every declaration.
+    for (let depth = 0; depth <= baseDepth; depth += 1) {
+      const candidates = semicolonsByDepth![depth];
+      if (!candidates) continue;
+      let low = 0;
+      let high = candidates.length;
+      while (low < high) {
+        const middle = (low + high) >>> 1;
+        if (candidates[middle]! < from) low = middle + 1;
+        else high = middle;
+      }
+      const candidate = candidates[low];
+      if (candidate !== undefined && (nearest < 0 || candidate < nearest)) nearest = candidate;
     }
-    return -1;
+    return nearest;
+  };
+
+  const insideTypedAssertion = (index: number): boolean => {
+    if (!TYPED_TS_FAMILY_LANGUAGES.has(language)) return false;
+    if (!typedAssertionMask) {
+      const changes = new Int32Array(tokens.length + 1);
+      for (const [open, close] of scan.pairs) {
+        if (tokens[open]?.text !== '{' || !['as', 'satisfies'].includes(tokens[open - 1]?.text ?? '')) continue;
+        changes[open + 1] = (changes[open + 1] ?? 0) + 1;
+        changes[close] = (changes[close] ?? 0) - 1;
+      }
+      typedAssertionMask = new Uint8Array(tokens.length);
+      let active = 0;
+      for (let cursor = 0; cursor < tokens.length; cursor += 1) {
+        active += changes[cursor] ?? 0;
+        typedAssertionMask[cursor] = active > 0 ? 1 : 0;
+      }
+    }
+    return typedAssertionMask[index] === 1;
   };
   const pairedBody = (from: number): { start: number; end: number } | undefined => {
     const open = findNext(tokens, from, '{');
@@ -317,10 +368,20 @@ export function extractNativeFacts(filePath: string, source: string, language: L
   };
   const directlyInside = (index: number, open: number, close: number): boolean => {
     if (index <= open || index >= close) return false;
-    for (const [nestedOpen, nestedClose] of scan.pairs) {
-      if (nestedOpen > open && nestedClose < close && nestedOpen < index && index < nestedClose) return false;
+    // ArkTS UI DSL blocks carry scanner pair shapes whose declaration
+    // boundaries are not always the owning delimiter itself. Preserve its
+    // established predicate; the pathological vendor case is JavaScript.
+    if (language === 'arkts') {
+      for (const [nestedOpen, nestedClose] of scan.pairs) {
+        if (nestedOpen > open && nestedClose < close && nestedOpen < index && index < nestedClose) return false;
+      }
+      return true;
     }
-    return true;
+    ensureSemicolonIndex();
+    // A direct child is exactly one delimiter level below its owner. The old
+    // implementation searched every pair for every candidate member, which
+    // made large minified object/class bodies quadratic.
+    return depthAtToken![index] === (depthAtToken![open] ?? -1) + 1;
   };
   const importedNames = new Set<string>();
   for (let i = 0; i < tokens.length; i += 1) {
@@ -1185,15 +1246,41 @@ export function extractNativeFacts(filePath: string, source: string, language: L
   }
 
   if (TS_FAMILY_LANGUAGES.has(language)) {
+    const exportPositions = new Map<string, number[]>();
+    const recordExport = (name: string, position: number): void => {
+      const positions = exportPositions.get(name) ?? [];
+      positions.push(position);
+      exportPositions.set(name, positions);
+    };
+    for (let cursor = 0; cursor < tokens.length; cursor += 1) {
+      if (tokens[cursor]!.text !== 'export') continue;
+      if (tokens[cursor + 1]?.text === 'default' && tokens[cursor + 2]?.kind === 'identifier') {
+        recordExport(tokens[cursor + 2]!.text, cursor);
+      } else if (tokens[cursor + 1]?.text === '{') {
+        const close = scan.pairs.get(cursor + 1) ?? cursor + 2;
+        for (let member = cursor + 2; member < close; member += 1) {
+          recordExport(tokens[member]!.text, cursor);
+        }
+      }
+    }
+    const exportedAfter = (name: string, start: number): boolean => {
+      const positions = exportPositions.get(name);
+      if (!positions) return false;
+      let low = 0;
+      let high = positions.length;
+      while (low < high) {
+        const middle = (low + high) >>> 1;
+        if (positions[middle]! <= start) low = middle + 1;
+        else high = middle;
+      }
+      return low < positions.length;
+    };
     for (let index = 0; index < declarations.length; index += 1) {
       const declaration = declarations[index]!;
       if (declaration.exported || (declaration.kind !== 'constant' && declaration.kind !== 'variable')) continue;
-      const exportedLater = tokens.some((token, cursor) => token.text === 'export' && cursor > declaration.start && (
-        (tokens[cursor + 1]?.text === 'default' && tokens[cursor + 2]?.text === declaration.name) ||
-        (tokens[cursor + 1]?.text === '{' && tokens.slice(cursor + 2, scan.pairs.get(cursor + 1) ?? cursor + 2)
-          .some((candidate) => candidate.text === declaration.name))
-      ));
-      if (exportedLater) declarations[index] = { ...declaration, exported: true };
+      if (exportedAfter(declaration.name, declaration.start)) {
+        declarations[index] = { ...declaration, exported: true };
+      }
     }
   }
 
@@ -1786,6 +1873,20 @@ export function extractNativeFacts(filePath: string, source: string, language: L
         (language === 'python' && declaration.kind === 'class'))
       .map((declaration) => declaration.name));
     const seen = new Set<string>();
+    const importBeforeOnLine = new Uint8Array(tokens.length);
+    let prefixLine = -1;
+    let prefixHasImport = false;
+    for (let cursor = 0; cursor < tokens.length; cursor += 1) {
+      const line = tokens[cursor]!.start.line;
+      if (line !== prefixLine) {
+        prefixLine = line;
+        prefixHasImport = false;
+      }
+      importBeforeOnLine[cursor] = prefixHasImport ? 1 : 0;
+      if (tokens[cursor]!.text === 'import' || (language === 'rust' && tokens[cursor]!.text === 'use')) {
+        prefixHasImport = true;
+      }
+    }
     const emitFunctionRef = (from: Node, name: string, token: NativeToken): void => {
       const key = `${from.id}\0${name}`;
       if (seen.has(key)) return;
@@ -1827,8 +1928,7 @@ export function extractNativeFacts(filePath: string, source: string, language: L
           continue;
         }
         if (!definedHere.has(token.text) && !importedNames.has(token.text)) continue;
-        if (tokens.slice(0, i).some((item) => item.start.line === token.start.line &&
-            (item.text === 'import' || (language === 'rust' && item.text === 'use')))) continue;
+        if (importBeforeOnLine[i] === 1) continue;
         if (tokens[i + 1]?.text === '(' || tokens[i - 1]?.text === '.' || tokens[i - 1]?.text === 'function' ||
             tokens[i - 1]?.text === 'def' || tokens[i - 1]?.text === 'class') continue;
         const previous = tokens[i - 1]?.text;
@@ -2144,9 +2244,7 @@ export function extractNativeFacts(filePath: string, source: string, language: L
       const callee = tokens[i]!;
       if (callee.kind !== 'identifier' || tokens[i + 1]?.text !== '(' ||
           (CALL_EXCLUSIONS.has(callee.text) && !(language === 'rust' && callee.text === 'new' && tokens[i - 1]?.text === '::'))) continue;
-      if (TYPED_TS_FAMILY_LANGUAGES.has(language) && [...scan.pairs].some(([open, close]) =>
-        tokens[open]?.text === '{' && open < i && i < close &&
-        ['as', 'satisfies'].includes(tokens[open - 1]?.text ?? ''))) continue;
+      if (insideTypedAssertion(i)) continue;
       if (declarations.some((item) => item !== declaration && item.start === i)) continue;
       if (declarations.some((item) => item.parent === declaration && item.start <= i && item.end >= i)) continue;
       if (declarations.some((item) => item !== declaration && item.start > declaration.start &&

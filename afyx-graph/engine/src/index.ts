@@ -731,6 +731,29 @@ export class AfyxGraph {
           }
         } catch { /* metadata is advisory — never fail an index over it */ }
 
+        // Persist the last full extraction run's accounting independently of
+        // aggregate graph rows. Status can then say that an index completed
+        // while still retaining per-file failures or retry outcomes, instead
+        // of presenting every completed database as a clean extraction.
+        try {
+          if (result.filesEligible !== undefined) {
+            const accounting: Record<string, number> = {
+              index_files_seen: result.filesSeen ?? result.filesEligible,
+              index_files_eligible: result.filesEligible,
+              index_files_indexed: result.filesIndexed,
+              index_files_skipped: result.filesSkipped,
+              index_files_unsupported: result.filesSkippedUnsupported ?? 0,
+              index_files_errored: result.filesErrored,
+              index_files_retried: result.filesRetried ?? 0,
+              index_files_recovered: result.filesRecovered ?? 0,
+              index_files_failed_after_retry: result.filesFailedAfterRetry ?? 0,
+            };
+            for (const [key, value] of Object.entries(accounting)) {
+              this.queries.setMetadata(key, String(value));
+            }
+          }
+        } catch { /* metadata is advisory — never fail an index over it */ }
+
         if (result.success) writeFreshness(this.projectRoot);
         return result;
       } finally {
@@ -1224,6 +1247,42 @@ export class AfyxGraph {
     return raw === 'indexing' || raw === 'complete' || raw === 'partial' || raw === 'failed'
       ? raw
       : null;
+  }
+
+  /** File-level outcome accounting from the last full index run. `ignored` is
+   * null because ignored paths are deliberately not enumerated by the scan. */
+  getIndexAccounting(): {
+    discovered: number;
+    eligible: number;
+    indexed: number;
+    skipped: number;
+    unsupported: number;
+    failed: number;
+    ignored: null;
+    retry: { attemptedFiles: number; recoveredFiles: number; failedFiles: number };
+  } | null {
+    const read = (key: string): number | null => {
+      const value = this.queries.getMetadata(key);
+      if (value === null) return null;
+      const parsed = Number(value);
+      return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+    };
+    const eligible = read('index_files_eligible');
+    if (eligible === null) return null;
+    return {
+      discovered: read('index_files_seen') ?? eligible,
+      eligible,
+      indexed: read('index_files_indexed') ?? 0,
+      skipped: read('index_files_skipped') ?? 0,
+      unsupported: read('index_files_unsupported') ?? 0,
+      failed: read('index_files_errored') ?? 0,
+      ignored: null,
+      retry: {
+        attemptedFiles: read('index_files_retried') ?? 0,
+        recoveredFiles: read('index_files_recovered') ?? 0,
+        failedFiles: read('index_files_failed_after_retry') ?? 0,
+      },
+    };
   }
 
   /**

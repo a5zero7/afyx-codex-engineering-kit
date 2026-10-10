@@ -102,6 +102,7 @@ describe('index completeness marker (index_state)', () => {
   it('a clean full index stamps state=complete with reconciled counts', async () => {
     fs.writeFileSync(path.join(tempDir, 'a.ts'), 'export function f(): number { return 1; }\n');
     fs.writeFileSync(path.join(tempDir, 'b.ts'), 'import { f } from "./a";\nexport const y = f();\n');
+    fs.writeFileSync(path.join(tempDir, 'notes.unsupported'), 'not source\n');
     const cg = AfyxGraph.initSync(tempDir);
     const result = await cg.indexAll();
 
@@ -116,6 +117,16 @@ describe('index completeness marker (index_state)', () => {
 
     const out = runStatusJson(tempDir);
     expect((out.index as Record<string, unknown>).state).toBe('complete');
+    expect((out.index as any).accounting).toEqual({
+      discovered: 3,
+      eligible: 2,
+      indexed: 2,
+      skipped: 0,
+      unsupported: 1,
+      failed: 0,
+      ignored: null,
+      retry: { attemptedFiles: 0, recoveredFiles: 0, failedFiles: 0 },
+    });
   });
 
   it('a run killed mid-index leaves state=indexing, and status --json surfaces it', async () => {
