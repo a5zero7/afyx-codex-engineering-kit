@@ -62,6 +62,7 @@ import { AfyxGraphPackageVersion } from './mcp/version';
 import { extractSegmentSearchWords, segmentLookupVariants, splitIdentifierSegments } from './search/identifier-segments';
 import { createYielder } from './resolution/cooperative-yield';
 import { minRefsForPool } from './resolution/resolver-pool';
+import type { IndexAccounting, IndexPhaseTimings } from './index-health';
 
 // Re-export types for consumers
 export * from './types';
@@ -470,6 +471,7 @@ export class AfyxGraph {
    */
   async indexAll(options: IndexOptions = {}): Promise<IndexResult> {
     return this.indexMutex.withLock(async () => {
+      const fullIndexStartedAt = Date.now();
       try {
         this.fileLock.acquire();
       } catch {
@@ -583,6 +585,7 @@ export class AfyxGraph {
         }
 
         // Resolve references to create call/import/extends edges
+        let resolutionLinkMs = 0;
         if (result.success && result.filesIndexed > 0) {
           // Get count without loading all refs into memory
           const unresolvedCount = this.queries.getUnresolvedReferencesCount();
@@ -656,12 +659,14 @@ export class AfyxGraph {
           const tDeferred = Date.now();
           await this.resolver.resolveDeferredThisMemberRefs();
           if (process.env.AFYX_GRAPH_SYNTH_TIMINGS) console.error(`[synth-timing] deferredThisMember: ${Date.now() - tDeferred}ms`);
+          resolutionLinkMs = Date.now() - tResolve;
         }
 
         // Refresh planner stats + checkpoint the WAL after bulk writes.
         // Off-thread (worker connection): on a multi-GB index this is minutes
         // of IO, and inline it starved the #850 watchdog AFTER a fully
         // successful index. Never load-bearing for correctness.
+        let maintenanceMs = 0;
         if (result.success && result.filesIndexed > 0) {
           const tMaint = Date.now();
           // Quiesce the valve first so its in-flight checkpoint and the
@@ -669,7 +674,8 @@ export class AfyxGraph {
           // (the loser would silently no-op and leave the WAL unfolded).
           if (walValve) { walValve.stop(); await walValve.drain(); }
           await this.db.runMaintenance();
-          if (process.env.AFYX_GRAPH_SYNTH_TIMINGS) console.error(`[phase-timing] maintenance: ${Date.now() - tMaint}ms`);
+          maintenanceMs = Date.now() - tMaint;
+          if (process.env.AFYX_GRAPH_SYNTH_TIMINGS) console.error(`[phase-timing] maintenance: ${maintenanceMs}ms`);
         }
 
         // The orchestrator only sees extraction-phase counts; resolution and
@@ -751,6 +757,29 @@ export class AfyxGraph {
             for (const [key, value] of Object.entries(accounting)) {
               this.queries.setMetadata(key, String(value));
             }
+            const skippedReasons: Record<string, number> = {};
+            for (const error of result.errors) {
+              // Only reasons that actually increment filesSkipped belong here.
+              // Parse/salvage warnings may describe an indexed file and must
+              // not be mislabeled as an intentional skip.
+              if (error.code === 'size_exceeded') {
+                skippedReasons[error.code] = (skippedReasons[error.code] ?? 0) + 1;
+              }
+            }
+            this.queries.setMetadata('index_skipped_reasons', JSON.stringify(skippedReasons));
+            this.queries.setMetadata(
+              'index_unsupported_extensions',
+              JSON.stringify((result.topUnsupportedExtensions ?? []).slice(0, 5)),
+            );
+            const timings: IndexPhaseTimings = {
+              scanMs: result.phaseTimings?.scanMs ?? 0,
+              parseStoreMs: result.phaseTimings?.parseStoreMs ?? result.durationMs,
+              resolutionLinkMs,
+              maintenanceMs,
+              totalMs: Date.now() - fullIndexStartedAt,
+            };
+            this.queries.setMetadata('index_phase_timings', JSON.stringify(timings));
+            this.queries.setMetadata('index_completed_at', result.success ? String(Date.now()) : 'unavailable');
           }
         } catch { /* metadata is advisory — never fail an index over it */ }
 
@@ -1251,16 +1280,7 @@ export class AfyxGraph {
 
   /** File-level outcome accounting from the last full index run. `ignored` is
    * null because ignored paths are deliberately not enumerated by the scan. */
-  getIndexAccounting(): {
-    discovered: number;
-    eligible: number;
-    indexed: number;
-    skipped: number;
-    unsupported: number;
-    failed: number;
-    ignored: null;
-    retry: { attemptedFiles: number; recoveredFiles: number; failedFiles: number };
-  } | null {
+  getIndexAccounting(): IndexAccounting | null {
     const read = (key: string): number | null => {
       const value = this.queries.getMetadata(key);
       if (value === null) return null;
@@ -1269,6 +1289,11 @@ export class AfyxGraph {
     };
     const eligible = read('index_files_eligible');
     if (eligible === null) return null;
+    const parseObject = <T>(key: string): T | null => {
+      const raw = this.queries.getMetadata(key);
+      if (raw === null) return null;
+      try { return JSON.parse(raw) as T; } catch { return null; }
+    };
     return {
       discovered: read('index_files_seen') ?? eligible,
       eligible,
@@ -1282,6 +1307,10 @@ export class AfyxGraph {
         recoveredFiles: read('index_files_recovered') ?? 0,
         failedFiles: read('index_files_failed_after_retry') ?? 0,
       },
+      skippedReasons: parseObject<Record<string, number>>('index_skipped_reasons'),
+      unsupportedExtensions: parseObject<Array<{ ext: string; count: number }>>('index_unsupported_extensions'),
+      completedAt: read('index_completed_at'),
+      timings: parseObject<IndexPhaseTimings>('index_phase_timings'),
     };
   }
 

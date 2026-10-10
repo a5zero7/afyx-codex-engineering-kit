@@ -24,11 +24,17 @@ Installer melakukan inventory read-only lebih dahulu untuk Efficient Coding, Odo
 
 Afyx Graph saat ini merupakan Technical Alpha prerelease, bukan Stable v1. Installer memilih artifact berdasarkan versi, channel, OS, dan arsitektur; memverifikasi SHA-256 dan staged identity; lalu memasang secara transaksional. Jika release yang cocok tidak tersedia atau cache/release gagal verifikasi, installer dapat menjalankan `npm ci`, clean build, packaging, dan checksum otomatis dari checkout Git tervalidasi. Windows menggunakan packaging PowerShell native—Bash/WSL tidak diperlukan.
 
+Identitas artifact juga mencatat source revision/build identity dan extraction version. Cache lokal dengan semver yang sama tetapi revision berbeda diklasifikasikan sebagai valid-but-stale dan tidak dipasang diam-diam. Archive eksternal tanpa revision terverifikasi tetap dilaporkan `UNKNOWN`. `-ValidateOnly` / `--validate-only` membandingkan runtime terpasang dengan checkout tanpa mengubah keduanya; revision drift dilaporkan sebagai `UPDATE AVAILABLE — REVISION MISMATCH`.
+
 Gunakan `-Offline` / `--offline` untuk mencegah self-update/lookup jaringan dan memakai cache/fallback Graph lokal. Karena Prompt Master dimiliki upstream dan tidak dibundel, action install/update Prompt Master ditolak dalam mode offline. Gunakan `-NoBuildFallback` / `--no-build-fallback` untuk gagal tegas bila artifact tidak tersedia. Source dirty ditolak untuk fallback; `-AllowDirtySource` / `--allow-dirty-source` adalah opt-in eksplisit yang harus dipakai hanya saat provenance perubahan lokal telah dipahami.
 
 ## Verifikasi
 
 Jalankan `./verify.ps1` pada Windows atau `./verify.sh` pada Linux/macOS. Core environment valid jika tersedia Codex CLI, ekstensi ChatGPT/Codex VS Code, atau keduanya. Verifier juga memeriksa tiga skill core serta melaporkan Headroom CLI, proxy/provider routing, dan MCP sebagai capability optional yang terpisah. Semua pemeriksaan bersifat read-only; absennya capability optional tidak menyebabkan core readiness gagal.
+
+Jika Afyx Graph dipilih, installer dapat mendaftarkan MCP melalui antarmuka native `codex mcp` dengan entry point Node absolut dari runtime terpasang. Registrasi ini consented, idempotent, dan tidak menulis TOML sendiri. Entry Afyx-owned yang stale dapat diperbarui secara terkendali; entry yang conflicting atau tidak terbukti Afyx-owned dipertahankan dan dilaporkan. Gunakan `-SkipGraphMcp` / `--skip-graph-mcp` untuk melewati integrasi. Verifier membedakan `GRAPH_INSTALLED`, `CLI_REACHABLE`, `MCP_NOT_CONFIGURED`, `MCP_CONFIGURED`, `MCP_REACHABLE`, `MCP_BLOCKED`, dan `MCP_HANDSHAKE_FAILED` melalui initialize + tools/list nyata.
+
+Untuk diagnosis project, `afyx-graph status` dan `afyx-graph status --json` menampilkan dimensi terpisah: Git freshness, pending filesystem/content changes, extraction completeness, extraction-version compatibility, pending references, watcher state, dan accounting full-index terakhir. Viewer menampilkan kontrak Index Health yang sama. `ignored: null` berarti path ignored tidak dienumerasi—bukan hitungan nol. Alasan skip seperti `size_exceeded` dan timing fase hanya muncul bila telah direkam oleh full index; nilai lama/tidak tersedia tidak direka sebagai nol.
 
 ## Odoo Engineering 10–20 stable
 
@@ -47,7 +53,7 @@ Kedua skill memakai frontmatter Agent Skills dengan `name`, `description`, dan `
 
 ## Konfigurasi Codex yang sengaja tidak diubah
 
-Installer tidak pernah memodifikasi `config.toml`, `auth.json`, konfigurasi MCP, Headroom, plugin, sandbox, model, atau provider. Afyx Graph adalah komponen opsional Afyx yang memasang runtime mandiri dan CLI `afyx-graph` di `~/.afyx/graph/`; Headroom tetap eksternal dan hanya dideteksi. Project state memakai `.afyx-graph/` (database `afyx-graph.db`); direktori state lain tidak dibaca atau diubah.
+Installer tidak memodifikasi `auth.json`, Headroom, plugin, sandbox, model, provider, atau MCP server lain. Hanya ketika integrasi Graph dipilih, installer meminta Codex CLI mengelola entry MCP Afyx-owned; entry conflicting/unproven tidak ditimpa. Afyx Graph memasang runtime mandiri dan CLI `afyx-graph` di `~/.afyx/graph/`; Headroom tetap eksternal dan hanya dideteksi. Project state memakai `.afyx-graph/` (database `afyx-graph.db`); direktori state lain tidak dibaca atau diubah.
 
 ## Pembaruan
 
@@ -59,4 +65,4 @@ Installer tidak pernah memodifikasi `config.toml`, `auth.json`, konfigurasi MCP,
 
 ## Pemulihan
 
-Skill/runtime yang di-update atau di-repair dibuat melalui staging dan backup. Checksum, extraction, staged metadata, CLI `--version`, atau `help` yang gagal menyebabkan runtime sebelumnya dipulihkan. Installer tidak mengubah konfigurasi Codex/MCP maupun index project `.afyx-graph/`. Backup skill yang berhasil diganti tersedia di `backups\` bila pemulihan manual diperlukan.
+Skill/runtime yang di-update atau di-repair dibuat melalui staging dan backup. Checksum, extraction, staged metadata, CLI `--version`, atau `help` yang gagal menyebabkan runtime sebelumnya dipulihkan. Perubahan entry MCP Afyx-owned menggunakan backup/restore native CLI; index project `.afyx-graph/` tidak diubah. Backup skill yang berhasil diganti tersedia di `backups\` bila pemulihan manual diperlukan.

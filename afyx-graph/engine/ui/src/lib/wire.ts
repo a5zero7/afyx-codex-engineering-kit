@@ -464,6 +464,40 @@ export interface WireStats {
     watching: boolean;
     watcherDegraded: boolean;
   };
+  health: {
+    gitFreshness: { state: 'MISSING' | 'FRESH' | 'STALE' | 'INVALID' | 'UNKNOWN'; detail: string };
+    pendingChanges: {
+      state: 'CURRENT' | 'PENDING' | 'UNKNOWN';
+      count: number | null;
+      source: 'filesystem-scan' | 'watcher' | 'unavailable';
+      added: number | null;
+      modified: number | null;
+      removed: number | null;
+    };
+    extraction: {
+      state: 'indexing' | 'complete' | 'partial' | 'failed' | 'unknown';
+      accounting: {
+        discovered: number; eligible: number; indexed: number; skipped: number;
+        unsupported: number; failed: number; ignored: null;
+        retry: { attemptedFiles: number; recoveredFiles: number; failedFiles: number };
+        skippedReasons: Record<string, number> | null;
+        unsupportedExtensions: Array<{ ext: string; count: number }> | null;
+        completedAt: number | null;
+        timings: {
+          scanMs: number; parseStoreMs: number; resolutionLinkMs: number;
+          maintenanceMs: number; totalMs: number;
+        } | null;
+      } | null;
+    };
+    compatibility: {
+      builtWithVersion: string | null;
+      builtWithExtractionVersion: number | null;
+      currentExtractionVersion: number;
+      reindexRecommended: boolean;
+    };
+    pendingReferences: number;
+    watcher: { state: 'ENABLED' | 'DEGRADED' | 'DISABLED'; reason: string | null };
+  };
   graph: {
     nodes: number;
     edges: number;

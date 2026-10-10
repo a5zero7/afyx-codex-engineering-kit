@@ -120,6 +120,8 @@ export interface IndexResult {
   edgesCreated: number;
   errors: ExtractionError[];
   durationMs: number;
+  /** Measured full-index phases. Parse and ordered persistence are interleaved. */
+  phaseTimings?: { scanMs: number; parseStoreMs: number };
 }
 
 /**
@@ -1898,7 +1900,8 @@ export class ExtractionOrchestrator {
         currentFile: file,
       });
     }, skipStats);
-    if (process.env.AFYX_GRAPH_SYNTH_TIMINGS) console.error(`[phase-timing] scan: ${Date.now() - tScan}ms (${files.length} files)`);
+    const scanMs = Date.now() - tScan;
+    if (process.env.AFYX_GRAPH_SYNTH_TIMINGS) console.error(`[phase-timing] scan: ${scanMs}ms (${files.length} files)`);
     /** Only meaningful when nothing was indexable — see IndexResult (#1502). */
     const skipSummary = (): Pick<IndexResult, 'filesSkippedUnsupported' | 'topUnsupportedExtensions'> => {
       let total = 0;
@@ -2269,7 +2272,8 @@ export class ExtractionOrchestrator {
         }
       }
     }
-    if (process.env.AFYX_GRAPH_SYNTH_TIMINGS) console.error(`[phase-timing] parse-loop: ${Date.now() - tParseLoop}ms`);
+    const parseStoreMs = Date.now() - tParseLoop;
+    if (process.env.AFYX_GRAPH_SYNTH_TIMINGS) console.error(`[phase-timing] parse-loop: ${parseStoreMs}ms`);
 
     if (signal?.aborted || aborted) {
       if (storeWriter) await storeWriter.close();
@@ -2446,6 +2450,7 @@ export class ExtractionOrchestrator {
       edgesCreated: totalEdges,
       errors,
       durationMs: Date.now() - startTime,
+      phaseTimings: { scanMs, parseStoreMs },
     };
   }
 

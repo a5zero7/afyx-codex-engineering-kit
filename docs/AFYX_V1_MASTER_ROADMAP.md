@@ -2,12 +2,12 @@
 
 Status: **Phase 5 complete**
 Canonical since: **2026-10-03**  
-Contract revision: **2026-10-10**
+Contract revision: **2026-10-11**
 v1 scope policy: **FROZEN — Phase 1 through Phase 11**  
 Post-v1 policy: **PLANNED EXPANSION — not a v1 release blocker**
 
-Current work: **Technical Alpha Batch 2 — AFYX-260 complete; AFYX-248 remains in progress**
-Task: `AFYX-260` validated; `AFYX-248` remains in progress
+Current work: **Technical Alpha Batch 3 — AFYX-259/256 implemented; AFYX-258 validation and final-head CI pending; AFYX-248 remains in progress**
+Task: `AFYX-259`, `AFYX-256`, and `AFYX-258`; `AFYX-248` remains in progress
 Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`  
 Active implementation branch: `afyx/native-phase5f-parser-grammar`  
 Latest verified Phase 5F implementation checkpoint: `62621a0639f42db0eaac69ef087436d851cdba88`  
@@ -1147,9 +1147,9 @@ AFYX-260 does not add PowerShell parsing, change extraction version 27, alter
 MCP registration, or complete AFYX-205/AFYX-241. AFYX-248 remains in progress;
 AFYX-258 and the remaining lifecycle/observability work remain separate.
 
-### AFYX-258 — Extraction diagnostics partial scope
+### AFYX-258 — Prior extraction-diagnostics checkpoint
 
-Status: **PARTIAL; issue remains open**
+Status: **HISTORICAL PARTIAL CHECKPOINT — superseded by Batch 3 below**
 
 The last full-index accounting now persists and is exposed by human and JSON
 status output: visible files discovered, eligible/supported files, indexed,
@@ -1162,6 +1162,43 @@ Remaining AFYX-258 work includes broader Git `FRESH/STALE/UNKNOWN` UX, watcher
 presentation, and any future opt-in ignored-path inventory. AFYX-251 and
 AFYX-255 remain complete; AFYX-248 remains in progress. This batch does not
 activate Technical Alpha, Phase 6, formal Alpha, or unrelated post-v1 work.
+
+### Technical Alpha Batch 3 — AFYX-259 / AFYX-256 / AFYX-258
+
+Status: **IMPLEMENTED LOCALLY; integrated validation and final-head CI pending**
+
+AFYX-259 adds one revision-aware artifact identity across packaging and
+installation. Product version, channel, target, source/build revision, checksum,
+installed provenance, requested checkout revision, and extraction version are
+kept distinct. Matching cache, stale same-semver cache, explicit unknown-revision
+archive, fallback, rollback, and compiled extraction-version checks pass in
+isolated lifecycle fixtures. Implementation commit:
+`8e74ccdb526ddbe1a055ae3377e343e62ea3ab92`.
+
+AFYX-256 integrates the installed runtime with Codex through native `codex mcp`
+commands. It uses absolute Node plus installed JS entry point, preserves
+unrelated configuration, skips conflicting/unproven ownership, supports an
+explicit no-MCP path, backs up controlled changes, and verifies a real
+initialize/tools-list handshake. Missing Codex remains nonfatal to a healthy
+Graph runtime. Implementation commit:
+`1701688d9872e195c12c2c80f75f385859f106b1`.
+
+AFYX-258 now uses one read-only Index Health contract in CLI JSON/text, MCP, and
+the viewer. Git freshness, filesystem/content pending state, extraction
+completeness, extraction-version compatibility, pending references, watcher
+state, and full-index accounting remain independent. A non-Git project reports
+Git freshness `UNKNOWN` without implying extraction failure. Full indexing
+persists bounded aggregate skip reasons (including `size_exceeded`), bounded
+unsupported-extension evidence, completion timestamp, and measured scan,
+parse/store, resolution/link, maintenance, and end-to-end durations. No status
+surface rescans solely to obtain skip detail; `ignored` remains `null` / NOT
+ENUMERATED. The six previously observed >1 MiB JavaScript skips remain accepted
+guard behavior, not extraction failures.
+
+Batch 3 does not enumerate ignored paths, increase the 1 MiB guard, modify
+ranking/search semantics, or reactivate formal Odoo/IJP indexing. AFYX-248
+remains in progress and Technical Alpha is not activated until mandatory
+integrated and cross-platform gates pass.
 
 Required audits:
 

@@ -12,6 +12,7 @@
 import * as path from 'path';
 import type { AfyxGraph } from '../../index';
 import { BLAST_DEPTH, HUB_THRESHOLD, UNCERTAIN_BELOW } from './wire';
+import { buildIndexHealth } from '../../index-health';
 
 /**
  * How many of the index's most-depended-on symbols the blast scale measures.
@@ -95,6 +96,7 @@ export function resetBlastScaleCache(): void {
 export function buildStats(cg: AfyxGraph, projectRoot: string): unknown {
   const stats = cg.getStats();
   const build = cg.getIndexBuildInfo();
+  const health = buildIndexHealth(cg, projectRoot);
 
   return {
     project: {
@@ -121,6 +123,7 @@ export function buildStats(cg: AfyxGraph, projectRoot: string): unknown {
       watching: cg.isWatching(),
       watcherDegraded: cg.isWatcherDegraded(),
     },
+    health,
     graph: {
       nodes: stats.nodeCount,
       edges: stats.edgeCount,

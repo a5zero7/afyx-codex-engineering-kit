@@ -1,11 +1,18 @@
 import type AfyxGraph from '../index';
 import { textToolResult, type ToolResult } from './tool-results';
+import { buildIndexHealth } from '../index-health';
 
 export type StatusToolSource = Pick<
   AfyxGraph,
   | 'getStats'
+  | 'getProjectRoot'
   | 'getJournalMode'
+  | 'getIndexState'
+  | 'getIndexAccounting'
+  | 'getIndexBuildInfo'
+  | 'isIndexStale'
   | 'getPendingReferenceCount'
+  | 'isWatching'
   | 'isWatcherDegraded'
   | 'getWatcherDegradedReason'
   | 'getPendingFiles'
@@ -22,6 +29,8 @@ export function executeStatusTool(
   context: StatusToolContext,
 ): ToolResult {
   const stats = source.getStats();
+  const pendingFiles = source.getPendingFiles();
+  const health = buildIndexHealth(source, source.getProjectRoot(), { pendingFiles });
   const lines: string[] = ['**Afyx Graph Status**', ''];
 
   if (context.worktreeWarning) {
@@ -36,6 +45,31 @@ export function executeStatusTool(
     '**Backend:** node:sqlite (Node built-in) — full WAL + FTS5',
   );
 
+  const accounting = health.extraction.accounting;
+  lines.push(
+    '',
+    '**Index Health:**',
+    `- Git freshness: ${health.gitFreshness.state} — ${health.gitFreshness.detail}`,
+    `- Filesystem/content: ${health.pendingChanges.state}` +
+      (health.pendingChanges.count === null ? ' (no live watcher or filesystem scan)' : ` (${health.pendingChanges.count} pending)`),
+    `- Extraction: ${health.extraction.state.toUpperCase()}`,
+    `- Extraction version: ${health.compatibility.builtWithExtractionVersion ?? 'unknown'}/${health.compatibility.currentExtractionVersion}` +
+      (health.compatibility.reindexRecommended ? ' — re-index recommended' : ''),
+    `- Pending references: ${health.pendingReferences}`,
+    `- Watcher: ${health.watcher.state}` + (health.watcher.reason ? ` — ${health.watcher.reason}` : ''),
+  );
+  if (accounting) {
+    lines.push(
+      `- Last full index: ${accounting.indexed} indexed, ${accounting.skipped} skipped, ` +
+        `${accounting.unsupported} unsupported, ${accounting.failed} failed; ignored NOT ENUMERATED`,
+    );
+    if (accounting.skippedReasons && Object.keys(accounting.skippedReasons).length > 0) {
+      lines.push(`- Skipped reasons: ${Object.entries(accounting.skippedReasons).map(([reason, count]) => `${reason}=${count}`).join(', ')}`);
+    }
+  } else {
+    lines.push('- Last full index accounting: unavailable');
+  }
+
   const journalMode = source.getJournalMode();
   if (journalMode === 'wal') {
     lines.push('**Journal mode:** wal (concurrent reads safe)');
@@ -46,7 +80,7 @@ export function executeStatusTool(
     );
   }
 
-  const pendingReferences = source.getPendingReferenceCount();
+  const pendingReferences = health.pendingReferences;
   if (pendingReferences > 0) {
     lines.push(
       `**Pending resolution:** ⚠ ${pendingReferences} references from an interrupted ` +
@@ -65,16 +99,15 @@ export function executeStatusTool(
     if (count > 0) lines.push(`- ${language}: ${count}`);
   }
 
-  if (source.isWatcherDegraded()) {
+  if (health.watcher.state === 'DEGRADED') {
     lines.push(
       '',
       '**Auto-sync disabled:**',
-      `- ${source.getWatcherDegradedReason() ?? 'live file watching stopped'}`,
+      `- ${health.watcher.reason ?? 'live file watching stopped'}`,
       '- The index is frozen; Read files directly for current content.',
     );
   }
 
-  const pendingFiles = source.getPendingFiles();
   if (pendingFiles.length > 0) {
     lines.push('', '**Pending sync:**');
     for (const pending of pendingFiles) {

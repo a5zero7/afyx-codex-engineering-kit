@@ -302,6 +302,12 @@ describe('GET /api/stats', () => {
     expect(typeof body.index.lastIndexedAt).toBe('number');
     expect(body.index.backend).toBe('node-sqlite');
     expect(typeof body.index.extractionVersion).toBe('number');
+    expect(body.health.gitFreshness.state).toBe('UNKNOWN');
+    expect(body.health.extraction.state).toBe('complete');
+    expect(body.health.extraction.accounting.ignored).toBeNull();
+    expect(body.health.compatibility.reindexRecommended).toBe(false);
+    expect(body.health.pendingReferences).toBe(0);
+    expect(['ENABLED', 'DISABLED']).toContain(body.health.watcher.state);
 
     expect(body.graph.nodes).toBeGreaterThan(0);
     expect(body.graph.edges).toBeGreaterThan(0);

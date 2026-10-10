@@ -102,7 +102,7 @@ export function mountApp(target: HTMLElement, options: AfyxGraphUiOptions = {}):
     else if (route.view === 'steps') viewMount = StepsView(host, route);
     else if (route.view === 'dead') viewMount = DeadCodeView(host, { exported: route.exported });
     else if (route.view === 'unknown') viewMount = NotFoundView(host, route.path);
-    else viewMount = HomeView(host);
+    else viewMount = HomeView(host, project.stats);
     void resolveTrailNames();
     drawTopbar();
     drawTrail();

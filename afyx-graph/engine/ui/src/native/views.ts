@@ -19,6 +19,7 @@ import type {
   WireScreensPayload,
   WireSource,
   WireStepsPayload,
+  WireStats,
 } from '../lib/wire';
 import { empty, element, failure, loading, mount, replace, svgElement, type Dispose, type NativeMount } from './dom';
 import { renderMapGraph } from './graph';
@@ -323,8 +324,41 @@ export function DeadCodeView(target: HTMLElement, props: DeadCodeViewProps = {})
   });
 }
 
-export function HomeView(target: HTMLElement): NativeMount {
-  return mount(target, empty('Choose a view', 'Search for a symbol or open one of the project views above.'));
+export function HomeView(target: HTMLElement, stats: WireStats | null = null): NativeMount {
+  if (!stats) return mount(target, loading('Reading index health…'));
+  const health = stats.health;
+  const accounting = health.extraction.accounting;
+  const healthRow = (label: string, value: string, detail?: string): HTMLElement => element(
+    'div', { className: 'health-row' },
+    element('span', { className: 'health-label' }, label),
+    element('strong', { className: 'health-value' }, value),
+    detail ? element('span', { className: 'health-detail' }, detail) : null,
+  );
+  const root = element('section', { className: 'native-view health-view' },
+    element('header', { className: 'native-view-header' },
+      element('div', {}, element('h1', {}, 'Index Health'), element('p', {}, 'Independent trust signals for this project index.')),
+    ),
+    element('div', { className: 'health-grid' },
+      healthRow('Git snapshot', health.gitFreshness.state, health.gitFreshness.detail),
+      healthRow('Filesystem/content', health.pendingChanges.state,
+        health.pendingChanges.count === null ? 'No live watcher or filesystem scan available.' : `${health.pendingChanges.count} pending change(s).`),
+      healthRow('Extraction', health.extraction.state.toUpperCase(), accounting
+        ? `${accounting.indexed} indexed · ${accounting.skipped} skipped · ${accounting.unsupported} unsupported · ${accounting.failed} failed`
+        : 'Last full-index accounting unavailable.'),
+      healthRow('Extraction version', `${health.compatibility.builtWithExtractionVersion ?? 'unknown'}/${health.compatibility.currentExtractionVersion}`,
+        health.compatibility.reindexRecommended ? 'Re-index recommended.' : 'Compatible with this runtime.'),
+      healthRow('References', String(health.pendingReferences), health.pendingReferences > 0 ? 'Resolution is incomplete.' : 'No pending references.'),
+      healthRow('Watcher', health.watcher.state, health.watcher.reason ?? 'No degradation reason recorded.'),
+      healthRow('Ignored paths', 'NOT ENUMERATED', 'Ignored paths are deliberately not counted.'),
+      healthRow('Last full index', accounting?.completedAt ? new Date(accounting.completedAt).toLocaleString() : 'UNAVAILABLE',
+        accounting?.timings ? `scan ${accounting.timings.scanMs}ms · parse/store ${accounting.timings.parseStoreMs}ms · resolve/link ${accounting.timings.resolutionLinkMs}ms · maintenance ${accounting.timings.maintenanceMs}ms · total ${accounting.timings.totalMs}ms` : 'Phase timing unavailable.'),
+    ),
+  );
+  if (accounting?.skippedReasons && Object.keys(accounting.skippedReasons).length > 0) {
+    root.append(panel('Skipped reasons', Object.entries(accounting.skippedReasons).map(([reason, count]) =>
+      element('div', { className: 'native-row' }, element('span', { className: 'native-row-name' }, reason), element('span', { className: 'native-row-meta' }, String(count))))));
+  }
+  return mount(target, root);
 }
 
 export function NotFoundView(target: HTMLElement, path: string): NativeMount {

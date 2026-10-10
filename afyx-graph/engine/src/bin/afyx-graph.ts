@@ -78,6 +78,7 @@ import type { UiServerHandle } from '../ui-server';
 import { lookupSymbolNodes, describeSymbolNode, groupDefinitions } from '../graph/symbol-lookup';
 import { mergeSymbolImpact, computeAffectedTests } from '../impact';
 import type { Node, Edge } from '../types';
+import { buildIndexHealth } from '../index-health';
 
 // Decided once, before `--color`/`--no-color` are stripped from argv below
 // (#1281). Piped/redirected stdout, NO_COLOR, or --no-color -> plain output.
@@ -866,6 +867,14 @@ program
       // interrupted, so some files' call edges are missing (#1187).
       const pendingRefs = cg.getPendingReferenceCount();
       const accounting = cg.getIndexAccounting();
+      const health = buildIndexHealth(cg, projectPath, {
+        freshness,
+        diskChanges: {
+          added: changes.added.length,
+          modified: changes.modified.length,
+          removed: changes.removed.length,
+        },
+      });
 
       // JSON output mode
       if (options.json) {
@@ -877,6 +886,7 @@ program
           indexPath: getAfyxGraphDir(projectPath),
           lastIndexed: lastIndexedMs != null ? new Date(lastIndexedMs).toISOString() : null,
           freshness,
+          health,
           fileCount: stats.fileCount,
           nodeCount: stats.nodeCount,
           edgeCount: stats.edgeCount,
@@ -1012,7 +1022,25 @@ program
         }
         info('Run "afyx-graph sync" to update the index');
       } else {
-        success('Index is up to date');
+        success('Filesystem/content comparison is current');
+      }
+      console.log();
+
+      console.log(chalk.bold('Index Health:'));
+      console.log(`  Git snapshot:       ${health.gitFreshness.state} ${getGlyphs().dash} ${health.gitFreshness.detail}`);
+      console.log(`  Filesystem/content: ${health.pendingChanges.state}${health.pendingChanges.count === null ? '' : ` (${health.pendingChanges.count} pending)`}`);
+      console.log(`  Extraction:         ${health.extraction.state.toUpperCase()}`);
+      console.log(`  Extraction version: ${health.compatibility.builtWithExtractionVersion ?? 'unknown'}/${health.compatibility.currentExtractionVersion}${health.compatibility.reindexRecommended ? ' (re-index recommended)' : ''}`);
+      console.log(`  Pending references: ${health.pendingReferences}`);
+      console.log(`  Watcher:            ${health.watcher.state} in this process${health.watcher.reason ? ` ${getGlyphs().dash} ${health.watcher.reason}` : ''}`);
+      if (accounting?.skippedReasons && Object.keys(accounting.skippedReasons).length > 0) {
+        console.log(`  Skipped reasons:    ${Object.entries(accounting.skippedReasons).map(([reason, count]) => `${reason}=${count}`).join(', ')}`);
+      }
+      if (accounting?.timings) {
+        const timing = accounting.timings;
+        console.log(`  Last full timing:   scan ${timing.scanMs}ms; parse/store ${timing.parseStoreMs}ms; resolve/link ${timing.resolutionLinkMs}ms; maintenance ${timing.maintenanceMs}ms; total ${timing.totalMs}ms`);
+      } else {
+        console.log('  Last full timing:   unavailable');
       }
       console.log();
 

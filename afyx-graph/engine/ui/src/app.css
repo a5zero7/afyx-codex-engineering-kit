@@ -129,6 +129,12 @@ h3 {
 .native-view-header p { margin: 2px 0 0; }
 .native-view-header > .native-meta, .native-view-header > nav { margin-left: auto; }
 .native-summary { padding: 0 18px; color: var(--ink-2); }
+.health-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); border-bottom: 1px solid var(--rule-soft); }
+.health-row { min-width: 0; padding: 14px 18px; border-right: 1px solid var(--rule-soft); border-top: 1px solid var(--rule-faint); display: grid; gap: 3px; }
+.health-label, .health-detail { color: var(--ink-3); }
+.health-label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+.health-value { font: 600 13px/1.4 var(--mono); }
+.health-detail { font-size: 12px; }
 .mode-tabs { display: flex; gap: 12px; }
 .mode-tabs a.active { color: var(--accent-ink); border-bottom: 2px solid var(--accent); }
 

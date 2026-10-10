@@ -32,6 +32,15 @@ function runStatusJson(cwd: string): Record<string, unknown> {
   return JSON.parse(line);
 }
 
+function runStatusText(cwd: string): string {
+  return execFileSync(process.execPath, [BIN, 'status'], {
+    cwd,
+    encoding: 'utf-8',
+    env: { ...process.env, AFYX_GRAPH_NO_DAEMON: '1', NO_COLOR: '1' },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+}
+
 describe('afyx-graph status --json — CI fields (#329)', () => {
   let tempDir: string;
 
@@ -126,7 +135,44 @@ describe('index completeness marker (index_state)', () => {
       failed: 0,
       ignored: null,
       retry: { attemptedFiles: 0, recoveredFiles: 0, failedFiles: 0 },
+      skippedReasons: {},
+      unsupportedExtensions: [{ ext: '.unsupported', count: 1 }],
+      completedAt: expect.any(Number),
+      timings: {
+        scanMs: expect.any(Number),
+        parseStoreMs: expect.any(Number),
+        resolutionLinkMs: expect.any(Number),
+        maintenanceMs: expect.any(Number),
+        totalMs: expect.any(Number),
+      },
     });
+    expect((out.health as any).gitFreshness.state).toBe('UNKNOWN');
+    expect((out.health as any).pendingChanges).toMatchObject({ state: 'CURRENT', count: 0, source: 'filesystem-scan' });
+    expect((out.health as any).extraction.state).toBe('complete');
+    expect((out.health as any).watcher.state).toBe('DISABLED');
+  });
+
+  it('persists aggregate size skip reasons without exposing skipped file paths', async () => {
+    fs.writeFileSync(path.join(tempDir, 'small.ts'), 'export const ok = true;\n');
+    fs.writeFileSync(path.join(tempDir, 'large.ts'), `export const tooLarge = "${'x'.repeat(1024 * 1024)}";\n`);
+    const cg = AfyxGraph.initSync(tempDir);
+    await cg.indexAll();
+    const accounting = cg.getIndexAccounting();
+    cg.close();
+
+    expect(accounting).not.toBeNull();
+    expect(accounting!.skipped).toBe(1);
+    expect(accounting!.skippedReasons).toEqual({ size_exceeded: 1 });
+    expect(JSON.stringify(accounting)).not.toContain('large.ts');
+
+    const text = runStatusText(tempDir);
+    expect(text).toContain('Index Health:');
+    expect(text).toContain('Git snapshot:       UNKNOWN');
+    expect(text).toContain('Filesystem/content: CURRENT (0 pending)');
+    expect(text).toContain('Extraction:         COMPLETE');
+    expect(text).toContain('Skipped reasons:    size_exceeded=1');
+    expect(text).toContain('Last full timing:');
+    expect(text).not.toContain('Index is up to date');
   });
 
   it('a run killed mid-index leaves state=indexing, and status --json surfaces it', async () => {

@@ -113,8 +113,13 @@ function makeGraph(scenario: Scenario, calls: string[], root = 'C:/project') {
   return {
     getProjectRoot: record('getProjectRoot', root),
     getStats: record('getStats', stats),
+    getIndexState: record('getIndexState', 'complete'),
+    getIndexAccounting: record('getIndexAccounting', null),
+    getIndexBuildInfo: record('getIndexBuildInfo', { version: '1.0.0', extractionVersion: 27 }),
+    isIndexStale: record('isIndexStale', false),
     getJournalMode: record('getJournalMode', scenario.journalMode ?? (scenario.id === 'journal-undefined' ? undefined : 'wal')),
     getPendingReferenceCount: record('getPendingReferenceCount', scenario.pendingReferences ?? 0),
+    isWatching: record('isWatching', !(scenario.watcherDegraded ?? false)),
     isWatcherDegraded: record('isWatcherDegraded', scenario.watcherDegraded ?? false),
     getWatcherDegradedReason: record('getWatcherDegradedReason', scenario.degradedReason ?? null),
     getPendingFiles: record('getPendingFiles', scenario.pendingFiles ?? []),
@@ -240,10 +245,16 @@ describe('Afyx-native Status seam', () => {
 
     expect(calls).toEqual([
       'getStats',
-      'getJournalMode',
-      'getPendingReferenceCount',
-      'isWatcherDegraded',
       'getPendingFiles',
+      'getProjectRoot',
+      'isWatching',
+      'isWatcherDegraded',
+      'getIndexBuildInfo',
+      'getIndexState',
+      'getIndexAccounting',
+      'isIndexStale',
+      'getPendingReferenceCount',
+      'getJournalMode',
     ]);
     expect(result).toEqual({ content: [{ type: 'text', text:
       '**Afyx Graph Status**\n\n' +
@@ -252,6 +263,14 @@ describe('Afyx-native Status seam', () => {
       '**Total edges:** 7\n' +
       '**Database size:** 2.00 MB\n' +
       '**Backend:** node:sqlite (Node built-in) — full WAL + FTS5\n' +
+      '\n**Index Health:**\n' +
+      '- Git freshness: MISSING — no Afyx Graph database; run "afyx-graph init"\n' +
+      '- Filesystem/content: CURRENT (0 pending)\n' +
+      '- Extraction: COMPLETE\n' +
+      '- Extraction version: 27/27\n' +
+      '- Pending references: 0\n' +
+      '- Watcher: ENABLED\n' +
+      '- Last full index accounting: unavailable\n' +
       '**Journal mode:** wal (concurrent reads safe)\n\n' +
       '**Nodes by Kind:**\n' +
       '- function: 3\n' +
