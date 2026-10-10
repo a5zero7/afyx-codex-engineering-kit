@@ -161,8 +161,9 @@ afyx_promote_skill() {
     printf '%s post-install ownership verification failed.\n' "$label" >&2
     return 1
   fi
-  [[ -n "$old" && -e "$old" ]] && rm -rf -- "$old"
-  [[ -n "$backup" ]] && printf 'Backup: %s\n' "$backup" >&2
+  if [[ -n "$old" && -e "$old" ]]; then rm -rf -- "$old"; fi
+  if [[ -n "$backup" ]]; then printf 'Backup: %s\n' "$backup" >&2; fi
+  return 0
 }
 
 afyx_remove_skill() {
