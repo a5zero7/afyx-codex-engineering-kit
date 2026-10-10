@@ -1,12 +1,12 @@
 # Afyx v1 Master Roadmap
 
-Status: **Phase 5 active**  
+Status: **Phase 5 complete**
 Canonical since: **2026-10-03**  
-Contract revision: **2026-10-08**  
+Contract revision: **2026-10-10**
 v1 scope policy: **FROZEN — Phase 1 through Phase 11**  
 Post-v1 policy: **PLANNED EXPANSION — not a v1 release blocker**
 
-Current work: **Phase 5I — Final Independence Audit (BLOCKED)**
+Current work: **Phase 5I — Final Independence Audit (COMPLETE)**
 Task: `AFYX-91852`  
 Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`  
 Active implementation branch: `afyx/native-phase5f-parser-grammar`  
@@ -19,7 +19,7 @@ Latest verified Phase 5F grammar/packaging checkpoint: `a21d7b710f9c4e0c02f46109
 Latest verified Phase 5F parser-runtime isolation checkpoint: `080074f81f0cf5628f61e977a93abc1d75d00b6b`  
 Native-kernel closure starting checkpoint: `89302e45c8222e64c18885499f8aa556ae103960`
 Phase 5F final artifact/product viability audit: **PASS**
-Next boundary: **Phase 5I corrective closure; Technical Alpha is not active**
+Next boundary: **Technical Alpha activation decision; Technical Alpha is not active**
 Last merged Phase 5F major checkpoint: **PR #57 — Utility Runtime + UI Runtime**  
 Phase 5E merge baseline: `48b6078ed37349e405213258819fa5225bcdb3fb`
 
@@ -922,7 +922,7 @@ Exit:
 
 ### Phase 5I — Final Independence Audit
 
-Status: **BLOCKED (2026-10-09)**
+Status: **COMPLETE (2026-10-10)**
 
 Starting HEAD: `14c138024fef26cd303d9c0bcb16340830776652`.
 
@@ -995,8 +995,22 @@ pass. Additional regression isolation restored the TanStack `submit` attribution
 while keeping Expo `via=[]`; TanStack `29/29` and Expo `69/69` pass. Clean
 production/UI build, semantic `6/6`, CLI/MCP `21/21`, distribution verification,
 identity/metadata validation, legacy-identity audit, and component contract pass.
-The final decision below remains blocked until the corrective HEAD completes the
-Linux, Windows, and macOS Graph Build jobs.
+The last five Linux assertions were isolated without repeating Phase 5F-H audits.
+Environment leakage was disproved by unconditional production routing, matching
+focused Node 24/26 behavior, and deterministic same-HEAD Linux reproduction.
+Production HEAD `31ac39c394b5eb222117c2047e663f9ab1304a61` closed Go, Rust,
+TypeScript-call, and C++ receiver defects. Final production HEAD
+`54cc0786734be6c10fb9fe06d1316f0fa942e5f7` additionally rejects TypeScript
+object-literal keys as function references and freezes the corrected qualified
+Rust import expectation. The WAL concurrency assertion passed 5/5 in isolation,
+so no unrelated WAL change was made.
+
+Graph Build run [`38017609984`](https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/38017609984)
+passes at `54cc0786734be6c10fb9fe06d1316f0fa942e5f7`: Linux unit tests,
+semantic baseline, CLI/MCP smoke, and host-bundle smoke are green; Windows and
+macOS build, semantic, and CLI/MCP jobs are green. The earlier runs
+`37988190509` and `38015810450` remain the reproducible failure ledger rather
+than being reclassified as environmental noise.
 
 ```text
 historical runtime dependency                   = 0
@@ -1012,19 +1026,18 @@ unwanted third-party bundled runtime            = 0
 unwanted third-party attribution requirement    = 0
 unwanted third-party release notice payload     = 0
 UNCLEAR_PROVENANCE_OR_LEGAL_OBLIGATION          = 0
-V1_REQUIRED failure                             = BLOCKED (24 diagnostic assertions require closure)
+V1_REQUIRED failure                             = 0
 UNKNOWN product failure                         = 0
 UNJUSTIFIED_SKIP                                = 0
 
-PHASE_5I = BLOCKED
-AFYX_FULLY_INDEPENDENT = NOT_ESTABLISHED
-TECHNICAL_ALPHA_ENTRY_GATE = NOT_READY
+PHASE_5I = COMPLETE
+AFYX_FULLY_INDEPENDENT = TRUE
+TECHNICAL_ALPHA_ENTRY_GATE = READY_FOR_ACTIVATION
 ```
 
-The next boundary is a separately scoped correctness campaign for the remaining
-final-head Graph Build failures. It must begin from exact failure inventory,
-classify each as V1-required or documented post-v1 contract, and restore a green
-Linux/Windows/macOS gate. This audit does not begin that work.
+The next boundary is the separately authorized Technical Alpha activation
+decision. This audit establishes readiness only; it does not activate Technical
+Alpha and does not start Phase 6.
 
 Required audits:
 

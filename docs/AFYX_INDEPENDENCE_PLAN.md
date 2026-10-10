@@ -1,17 +1,19 @@
 # Afyx Graph Independence Audit and Closure Plan
 
-> **Phase 5I corrective continuation (2026-10-10):** The 24 Linux assertions
-> recorded below have been closed on branch `afyx/native-phase5f-parser-grammar`.
-> Production corrections cover native Go/Rust/TypeScript/Java/C++ facts, ArkTS
-> cross-language barrels, response-chain status propagation, RTK Query facts,
-> Expo screen attribution, and extension validation. Three obsolete expectations
-> now freeze the current native ranking, C++ raw-string, and normalized-path
-> contracts instead of historical failure behavior. The original 12-suite group
-> has zero assertion failures (`1,070 PASS`, one declared skip); local Windows
-> cleanup reports are the already-known temporary-directory `EPERM` condition.
-> Clean build, semantic `6/6`, CLI/MCP `21/21`, distribution, identity, legacy
-> identity, and component-contract gates pass. Final classification remains
-> pending until Linux, Windows, and macOS complete at the same corrective HEAD.
+> **Phase 5I closure (2026-10-10):** The 24 Linux assertions recorded below and
+> the final five-assertion continuation are closed on branch
+> `afyx/native-phase5f-parser-grammar`. The `AFYX_GRAPH_NATIVE_PARSER` leakage
+> hypothesis was disproved: production routing is unconditional, focused Node 24
+> and Node 26 behavior agrees, and same-HEAD Linux reruns reproduced the defects.
+> Corrections preserve qualified Rust imports and C++ receivers, fix Go anonymous
+> function ownership, exclude TypeScript type/object-literal syntax from call and
+> function-reference facts, and update one stale Rust expectation. The unrelated
+> WAL assertion passed 5/5 in isolation and required no source change. Graph Build
+> run `38017609984` at production HEAD
+> `54cc0786734be6c10fb9fe06d1316f0fa942e5f7` passes Linux unit, semantic,
+> CLI/MCP, and host-bundle gates plus Windows and macOS jobs. Phase 5I is complete,
+> full independence is established, and Technical Alpha is ready for a separate
+> activation decision; it is not activated by this audit.
 
 > **Phase 5I final-audit notice (2026-10-09):** Starting from
 > `14c138024fef26cd303d9c0bcb16340830776652`, current production dependencies,
