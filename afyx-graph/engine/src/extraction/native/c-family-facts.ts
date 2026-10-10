@@ -366,17 +366,26 @@ export function extractNativeCFamilyFacts(filePath: string, source: string, lang
     let owner = ownerFor(declarations, i, bodyEnd, containingKinds);
     let methodName = macroName ?? name.text;
     const cppReceiver = language === 'cpp' ? cppReceiverAt(i) : undefined;
+    let qualifiedOwner: string | undefined;
     if (cppReceiver) {
-      owner = declarations.find((item) =>
+      const receiverOwner = declarations.find((item) =>
         ['class', 'struct', 'union'].includes(item.kind) &&
         (item.name === cppReceiver.name || declarationQualifiedName(item) === cppReceiver.name)
-      ) ?? owner;
+      );
+      if (receiverOwner) {
+        owner = receiverOwner;
+      } else {
+        const lexicalPrefix = owner?.kind === 'namespace' ? declarationQualifiedName(owner) : undefined;
+        qualifiedOwner = lexicalPrefix && !cppReceiver.name.startsWith(`${lexicalPrefix}::`)
+          ? `${lexicalPrefix}::${cppReceiver.name}`
+          : cppReceiver.name;
+      }
     }
     if (language === 'cpp' && tokens[i - 1]?.text === '~') methodName = `~${name.text}`;
     const kind: NodeKind = owner && ['class', 'struct', 'union', 'interface'].includes(owner.kind) || cppReceiver ? 'method' : 'function';
     declarations.push({
       kind, name: methodName, start, end: bodyEnd, bodyStart, bodyEnd, parent: owner,
-      visibility: visibility(tokens, start, i), qualifiedOwner: cppReceiver && !owner ? cppReceiver.name : undefined,
+      visibility: visibility(tokens, start, i), qualifiedOwner,
       static: tokens.slice(start, i).some((token) => token.text === 'static'),
       async: tokens.slice(start, i).some((token) => token.text === 'async'),
       returnType: simpleReturnType(tokens, start, cppReceiver?.start ?? i),
@@ -494,8 +503,8 @@ export function extractNativeCFamilyFacts(filePath: string, source: string, lang
     if (!start) continue;
     const end = tokens[declaration.end] ?? start;
     const parentNode = declaration.parent ? nodeByDeclaration.get(declaration.parent) : undefined;
-    const qualifiedName = parentNode ? `${parentNode.qualifiedName}::${declaration.name}`
-      : declaration.qualifiedOwner ? `${declaration.qualifiedOwner}::${declaration.name}` : declaration.name;
+    const qualifiedName = declaration.qualifiedOwner ? `${declaration.qualifiedOwner}::${declaration.name}`
+      : parentNode ? `${parentNode.qualifiedName}::${declaration.name}` : declaration.name;
     const node: Node = {
       id: generateNodeId(filePath, declaration.kind, declaration.name, start.start.line),
       kind: declaration.kind, name: declaration.name, qualifiedName, filePath, language,

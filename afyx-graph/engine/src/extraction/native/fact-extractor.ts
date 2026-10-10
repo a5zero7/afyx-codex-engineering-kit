@@ -1389,6 +1389,9 @@ export function extractNativeFacts(filePath: string, source: string, language: L
       const name = tokens[i]!;
       const openParen = tokens[i + 1];
       if (tokens[i - 1]?.text === '@') continue;
+      // A Go function literal inside a package-level composite value is an
+      // initializer body, not a named member called `func`.
+      if (language === 'go' && name.text === 'func') continue;
       if (TS_FAMILY_LANGUAGES.has(language) &&
           ['class', 'interface', 'struct', 'type_alias'].includes(parent.kind) &&
           name.kind === 'identifier' && tokens[i + 1]?.text === ':') {
@@ -2139,6 +2142,9 @@ export function extractNativeFacts(filePath: string, source: string, language: L
       const callee = tokens[i]!;
       if (callee.kind !== 'identifier' || tokens[i + 1]?.text !== '(' ||
           (CALL_EXCLUSIONS.has(callee.text) && !(language === 'rust' && callee.text === 'new' && tokens[i - 1]?.text === '::'))) continue;
+      if (TYPED_TS_FAMILY_LANGUAGES.has(language) && [...scan.pairs].some(([open, close]) =>
+        tokens[open]?.text === '{' && open < i && i < close &&
+        ['as', 'satisfies'].includes(tokens[open - 1]?.text ?? ''))) continue;
       if (declarations.some((item) => item !== declaration && item.start === i)) continue;
       if (declarations.some((item) => item.parent === declaration && item.start <= i && item.end >= i)) continue;
       if (declarations.some((item) => item !== declaration && item.start > declaration.start &&
@@ -2503,8 +2509,10 @@ export function extractNativeFacts(filePath: string, source: string, language: L
       };
       nodes.push(importNode);
       edges.push({ source: importOwner.id, target: importNode.id, kind: 'contains' });
-      refs.push({
-        fromNodeId: importOwner.id, referenceName: importName, referenceKind: 'imports',
+    refs.push({
+      fromNodeId: importOwner.id,
+      referenceName: language === 'rust' ? fullName : importName,
+      referenceKind: 'imports',
         line: tokens[i]!.start.line, column: tokens[i]!.start.column,
       });
       i = end;
