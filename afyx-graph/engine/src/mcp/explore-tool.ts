@@ -29,6 +29,7 @@ import {
   symbolsInSpans,
 } from './explore-dedup';
 import { textToolResult, type ToolResult } from './tool-results';
+import { renderExactFileResolution, resolveExactUnindexedFiles } from './exact-file-retrieval';
 
 export interface ExploreToolHost {
   isFileStaleOnDisk(cg: AfyxGraph, relativePath: string, content?: string): boolean;
@@ -1502,6 +1503,15 @@ class ExploreTool {
           matchQuery = normalizeQuerySpelling(extraction.strippedQuery);
         }
       } catch { /* path pinning must never fail an explore call */ }
+    }
+    if (unresolvedPathSpans.length > 0) {
+      const exactFiles = resolveExactUnindexedFiles(projectRoot, unresolvedPathSpans);
+      if (exactFiles.direct.length > 0 || exactFiles.diagnostics.length > 0) {
+        return textToolResult(renderExactFileResolution(
+          exactFiles,
+          (source, firstLine) => this.host.numberSourceLines(source, firstLine),
+        ));
+      }
     }
     const pinnedSet = new Set(pinnedFiles);
     const pinnedOrder = new Map(pinnedFiles.map((p, i) => [p, i]));

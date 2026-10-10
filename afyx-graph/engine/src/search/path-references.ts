@@ -31,6 +31,7 @@ const MIN_SPAN_LENGTH = 4;
 const DOTTED_BASENAME = /^[^\s/\\]+\.[A-Za-z][A-Za-z0-9]{0,7}$/;
 const KEBAB_BASENAME = /^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)+$/;
 const FINAL_EXTENSION = /\.[A-Za-z][A-Za-z0-9]{0,7}$/;
+const DIRECT_SOURCE_BASENAME = /\.(?:ps1|psm1|psd1)$/i;
 
 /** Cheap gate: could this query contain a path at all? */
 const PATH_HINTS: readonly RegExp[] = [
@@ -90,7 +91,8 @@ function toRepoRelative(span: string): string {
 
 function isUnambiguouslyPath(normalized: string): boolean {
   const slash = normalized.lastIndexOf('/');
-  return slash > 0 && DOTTED_BASENAME.test(normalized.slice(slash + 1));
+  return DIRECT_SOURCE_BASENAME.test(normalized)
+    || (slash > 0 && DOTTED_BASENAME.test(normalized.slice(slash + 1)));
 }
 
 interface Resolution { matches: string[]; ambiguous: boolean }

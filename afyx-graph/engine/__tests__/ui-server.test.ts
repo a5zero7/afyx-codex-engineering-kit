@@ -19,6 +19,7 @@ import * as os from 'os';
 import * as path from 'path';
 import {
   browserOpenCommand,
+  browserSpawnOptions,
   cacheControlFor,
   contentTypeFor,
   isAllowedHost,
@@ -539,6 +540,15 @@ describe('security helpers', () => {
 });
 
 describe('browserOpenCommand', () => {
+  it('hides the detached opener console window', () => {
+    expect(browserSpawnOptions()).toMatchObject({
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
+      shell: false,
+    });
+  });
+
   it('uses the platform opener', () => {
     expect(browserOpenCommand('http://x', 'darwin')).toEqual({ command: 'open', args: ['http://x'] });
     expect(browserOpenCommand('http://x', 'linux')).toEqual({ command: 'xdg-open', args: ['http://x'] });

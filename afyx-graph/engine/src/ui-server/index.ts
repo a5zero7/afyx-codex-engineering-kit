@@ -57,7 +57,7 @@ export {
   resolveProjectFile,
   resolveStaticAsset,
 } from './security';
-export { browserOpenCommand, openBrowser } from './open-browser';
+export { browserOpenCommand, browserSpawnOptions, openBrowser } from './open-browser';
 export { contentTypeFor, cacheControlFor } from './static';
 export { createGraphApi, GraphSession, ApiError } from './api';
 export type { GraphApi, GraphApiOptions } from './api';

@@ -6,7 +6,7 @@
  * viewer adds to a CLI that currently has ten.
  */
 
-import { spawn } from 'child_process';
+import { spawn, type SpawnOptions } from 'child_process';
 import { BROWSER_ENV } from './constants';
 
 export { BROWSER_ENV };
@@ -16,6 +16,19 @@ const SUPPRESS_VALUES: ReadonlySet<string> = new Set(['', 'none', '0', 'false', 
 export interface OpenCommand {
   command: string;
   args: string[];
+}
+
+/** Detached best-effort launch options, exposed for a no-process unit check. */
+export function browserSpawnOptions(): SpawnOptions {
+  return {
+    detached: true,
+    stdio: 'ignore',
+    // `cmd /c start` otherwise briefly creates a visible console window on
+    // Windows. This option is harmless for the native macOS/Linux openers.
+    windowsHide: true,
+    // `start` is a shell builtin reached through `cmd /c`, so no shell here.
+    shell: false,
+  };
 }
 
 /**
@@ -65,12 +78,7 @@ export function openBrowser(url: string, platform: NodeJS.Platform = process.pla
   const open = browserOpenCommand(url, platform, process.env[BROWSER_ENV]);
   if (!open) return false;
   try {
-    const child = spawn(open.command, open.args, {
-      detached: true,
-      stdio: 'ignore',
-      // `start` is a shell builtin reached through `cmd /c`, so no shell here.
-      shell: false,
-    });
+    const child = spawn(open.command, open.args, browserSpawnOptions());
     child.on('error', () => {
       /* no opener installed — the printed URL is the fallback */
     });
