@@ -220,22 +220,23 @@ export function extractNativeFacts(filePath: string, source: string, language: L
   const pythonInheritanceTokenIndexes = new Set<number>();
   const pairStart = new Map<number, number>();
   for (const [open, close] of scan.pairs) pairStart.set(close, open);
-  let semicolonsByDepth: number[][] | undefined;
-  let depthAtToken: Int32Array | undefined;
+  let semicolonPositions: number[] | undefined;
+  let containingPairAtToken: Int32Array | undefined;
   let typedAssertionMask: Uint8Array | undefined;
 
   const ensureSemicolonIndex = (): void => {
-    if (semicolonsByDepth && depthAtToken) return;
-    semicolonsByDepth = [];
-    depthAtToken = new Int32Array(tokens.length);
-    let depth = 0;
+    if (semicolonPositions && containingPairAtToken) return;
+    semicolonPositions = [];
+    containingPairAtToken = new Int32Array(tokens.length);
+    containingPairAtToken.fill(-1);
+    const pairStack: number[] = [];
     for (let index = 0; index < tokens.length; index += 1) {
-      if (pairStart.has(index)) depth = Math.max(0, depth - 1);
-      depthAtToken[index] = depth;
-      if (tokens[index]!.text === ';') {
-        (semicolonsByDepth[depth] ??= []).push(index);
+      while (pairStack.length > 0 && (scan.pairs.get(pairStack[pairStack.length - 1]!) ?? -1) <= index) {
+        pairStack.pop();
       }
-      if (scan.pairs.has(index)) depth += 1;
+      containingPairAtToken[index] = pairStack[pairStack.length - 1] ?? -1;
+      if (tokens[index]!.text === ';') semicolonPositions.push(index);
+      if (scan.pairs.has(index)) pairStack.push(index);
     }
   };
   const tokenLineEnd = (from: number): number => {
@@ -255,26 +256,20 @@ export function extractNativeFacts(filePath: string, source: string, language: L
   };
   const topLevelSemicolon = (from: number): number => {
     ensureSemicolonIndex();
-    const baseDepth = depthAtToken![from] ?? 0;
-    let nearest = -1;
-    // The original rule accepts the first semicolon not nested in a pair that
-    // opened at/after `from`: equivalently, one at this token's depth or lower.
-    // Lists are ordered, so one binary search per reachable depth avoids
-    // repeatedly walking a whole minified statement for every declaration.
-    for (let depth = 0; depth <= baseDepth; depth += 1) {
-      const candidates = semicolonsByDepth![depth];
-      if (!candidates) continue;
-      let low = 0;
-      let high = candidates.length;
-      while (low < high) {
-        const middle = (low + high) >>> 1;
-        if (candidates[middle]! < from) low = middle + 1;
-        else high = middle;
-      }
-      const candidate = candidates[low];
-      if (candidate !== undefined && (nearest < 0 || candidate < nearest)) nearest = candidate;
+    let low = 0;
+    let high = semicolonPositions!.length;
+    while (low < high) {
+      const middle = (low + high) >>> 1;
+      if (semicolonPositions![middle]! < from) low = middle + 1;
+      else high = middle;
     }
-    return nearest;
+    for (let position = low; position < semicolonPositions!.length; position += 1) {
+      const candidate = semicolonPositions![position]!;
+      // This exactly matches the old strict interval check: a semicolon is
+      // nested only when an enclosing pair opened at or after `from`.
+      if (containingPairAtToken![candidate]! < from) return candidate;
+    }
+    return -1;
   };
 
   const insideTypedAssertion = (index: number): boolean => {
@@ -368,20 +363,14 @@ export function extractNativeFacts(filePath: string, source: string, language: L
   };
   const directlyInside = (index: number, open: number, close: number): boolean => {
     if (index <= open || index >= close) return false;
-    // ArkTS UI DSL blocks carry scanner pair shapes whose declaration
-    // boundaries are not always the owning delimiter itself. Preserve its
-    // established predicate; the pathological vendor case is JavaScript.
-    if (language === 'arkts') {
-      for (const [nestedOpen, nestedClose] of scan.pairs) {
-        if (nestedOpen > open && nestedClose < close && nestedOpen < index && index < nestedClose) return false;
-      }
-      return true;
-    }
     ensureSemicolonIndex();
-    // A direct child is exactly one delimiter level below its owner. The old
-    // implementation searched every pair for every candidate member, which
-    // made large minified object/class bodies quadratic.
-    return depthAtToken![index] === (depthAtToken![open] ?? -1) + 1;
+    // Preserve the original strict interval rule. A pair that shares the
+    // owner's closing boundary does not make the token indirect, so numeric
+    // depth alone is insufficient here.
+    const containingOpen = containingPairAtToken![index]!;
+    if (containingOpen < 0 || containingOpen === open) return true;
+    const containingClose = scan.pairs.get(containingOpen);
+    return !(containingOpen > open && containingClose !== undefined && containingClose < close);
   };
   const importedNames = new Set<string>();
   for (let i = 0; i < tokens.length; i += 1) {

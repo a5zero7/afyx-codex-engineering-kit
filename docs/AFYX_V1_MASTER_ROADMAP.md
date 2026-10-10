@@ -1078,7 +1078,12 @@ scans per call, and growing same-line prefix scans.
 
 The bounded Afyx-native correction builds reusable nesting/semicolon indexes,
 precomputes export and typed-assertion lookup data, and records same-line import
-prefix state. ArkTS retains its established DSL-specific membership predicate.
+prefix state. Final-head Linux validation exposed that numeric delimiter depth
+was not semantically equivalent when nested pairs shared an owner boundary.
+The corrected index records the innermost containing pair and applies the
+established strict interval rule for every language, retaining bounded lookup
+without changing ArkTS, JavaScript, TypeScript, Vue/Pinia, Java, or downstream
+context/UI semantics.
 No parser runtime, grammar, timeout, dependency, fallback, or private source was
 added. A generated one-line regression fixture covers nested initializers,
 large class bodies, and invalid/incomplete input classification. Extraction
@@ -1090,6 +1095,12 @@ result after 60 seconds to 1.86 seconds direct and 1.96 seconds through the real
 parse worker, with identical direct/worker output counts: 1,686 nodes, 1,685
 edges, 18,518 unresolved references, zero extraction errors. Private content and
 paths are not stored in this repository.
+
+Corrective validation after the Linux finding passed extraction `655/655`,
+the eight affected downstream suites `214` with one skip, and the synthetic
+long-line plus native-ArkTS guards `7/7`. TypeScript typecheck, clean
+production/UI build, semantic baseline, and CLI/MCP smoke also passed locally.
+Mandatory final-head Windows/Linux/macOS CI remains the completion gate.
 
 ### AFYX-258 — Extraction diagnostics partial scope
 
