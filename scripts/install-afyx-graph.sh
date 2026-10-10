@@ -13,6 +13,8 @@ archive_path=
 offline=false
 no_build_fallback=false
 allow_dirty_source=false
+configure_mcp=false
+skip_mcp=false
 artifact_source=
 source_revision=
 requested_revision=UNKNOWN
@@ -20,7 +22,7 @@ artifact_revision=UNKNOWN
 artifact_revision_status=UNKNOWN
 
 usage() {
-  printf '%s\n' 'Usage: scripts/install-afyx-graph.sh [--replace|--update|--validate-only|--uninstall] [--archive PATH] [--offline] [--no-build-fallback] [--allow-dirty-source]'
+  printf '%s\n' 'Usage: scripts/install-afyx-graph.sh [--replace|--update|--validate-only|--uninstall] [--archive PATH] [--offline] [--no-build-fallback] [--allow-dirty-source] [--configure-mcp|--skip-mcp]'
 }
 
 while (($#)); do
@@ -33,6 +35,8 @@ while (($#)); do
     --offline) offline=true; shift ;;
     --no-build-fallback) no_build_fallback=true; shift ;;
     --allow-dirty-source) allow_dirty_source=true; shift ;;
+    --configure-mcp) configure_mcp=true; shift ;;
+    --skip-mcp) skip_mcp=true; shift ;;
     -h|--help) usage; exit 0 ;;
     *) printf 'Unknown option: %s\n' "$1" >&2; usage >&2; exit 2 ;;
   esac
@@ -346,4 +350,26 @@ else
   ln -s "$RUNTIME_ROOT/current/bin/afyx-graph" "$destination"
 fi
 
-printf 'Afyx Graph %s [%s]: installed at %s\nArtifact source: %s; source revision: %s\nCLI: %s/afyx-graph\nMCP configuration was not changed.\n' "$VERSION" "$CHANNEL" "$RUNTIME_ROOT" "$artifact_source" "${source_revision:-release/explicit archive}" "$BIN_DIR"
+mcp_state=MCP_NOT_CONFIGURED
+if "$skip_mcp"; then
+  printf 'Afyx Graph MCP: skipped explicitly.\n'
+else
+  codex_home="${CODEX_HOME:-$HOME/.codex}"
+  mcp_args=("$PACKAGE_ROOT/scripts/afyx-mcp-integration.mjs" --node "$(command -v node)" --entry "$RUNTIME_ROOT/current/lib/dist/bin/afyx-graph.js" --codex-home "$codex_home")
+  if command -v codex >/dev/null 2>&1; then mcp_args+=(--codex "$(command -v codex)"); fi
+  "$configure_mcp" && mcp_args+=(--apply)
+  set +e
+  mcp_json="$(node "${mcp_args[@]}" 2>/dev/null)"; mcp_exit=$?
+  set -e
+  mcp_state="$(printf '%s' "$mcp_json" | sed -n 's/.*"mcp":"\([^"]*\)".*/\1/p')"
+  mcp_detail="$(printf '%s' "$mcp_json" | sed -n 's/.*"detail":"\([^"]*\)".*/\1/p')"
+  [[ -n "$mcp_state" ]] || mcp_state=MCP_BLOCKED
+  printf 'Afyx Graph MCP: %s — %s\n' "$mcp_state" "$mcp_detail"
+  if [[ "$configure_mcp" != true && "$mcp_state" == MCP_NOT_CONFIGURED ]]; then
+    printf 'Registration available: rerun the selected Graph lifecycle with --configure-mcp (or use the main installer selection).\n'
+  fi
+  : "$mcp_exit"
+fi
+
+printf 'Afyx Graph %s [%s]: installed at %s\nArtifact source: %s; source revision: %s\nCLI: %s/afyx-graph\n' "$VERSION" "$CHANNEL" "$RUNTIME_ROOT" "$artifact_source" "${source_revision:-UNKNOWN}" "$BIN_DIR"
+if "$skip_mcp"; then printf 'MCP configuration was not changed.\n'; fi

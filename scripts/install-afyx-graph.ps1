@@ -9,7 +9,9 @@ param(
     [switch]$SkipPathUpdate,
     [switch]$Offline,
     [switch]$NoBuildFallback,
-    [switch]$AllowDirtySource
+    [switch]$AllowDirtySource,
+    [switch]$ConfigureMcp,
+    [switch]$SkipMcp
 )
 
 Set-StrictMode -Version Latest
@@ -406,7 +408,37 @@ try {
 
 Update-UserPath
 
+$mcpState = 'MCP_NOT_CONFIGURED'
+if ($SkipMcp) {
+    Write-Host 'Afyx Graph MCP: skipped explicitly.'
+} else {
+    $codexCommand = Get-Command codex.exe -ErrorAction SilentlyContinue
+    if (-not $codexCommand) { $codexCommand = Get-Command codex.cmd -ErrorAction SilentlyContinue }
+    $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' }
+    $installedEntry = Join-Path $RuntimeRoot 'current\lib\dist\bin\afyx-graph.js'
+    $arguments = @(
+        (Join-Path $kitRoot 'scripts\afyx-mcp-integration.mjs'),
+        '--node', (Get-Command node).Source,
+        '--entry', $installedEntry,
+        '--codex-home', $codexHome
+    )
+    if ($codexCommand) { $arguments += @('--codex', $codexCommand.Source) }
+    if ($ConfigureMcp) { $arguments += '--apply' }
+    $mcpJson = (& (Get-Command node).Source @arguments 2>$null) -join ''
+    try {
+        $mcpResult = $mcpJson | ConvertFrom-Json
+        $mcpState = $mcpResult.mcp
+        Write-Host "Afyx Graph MCP: $($mcpResult.mcp) — $($mcpResult.detail)"
+    } catch {
+        $mcpState = 'MCP_BLOCKED'
+        Write-Warning 'Afyx Graph MCP integration could not be evaluated; the healthy Graph runtime was preserved.'
+    }
+    if (-not $ConfigureMcp -and $mcpState -eq 'MCP_NOT_CONFIGURED') {
+        Write-Host 'Registration available: rerun the selected Graph lifecycle with -ConfigureMcp (or use the main installer selection).'
+    }
+}
+
 Write-Host "Afyx Graph $($metadata.product_version) [$releaseChannel]: installed at $RuntimeRoot"
 Write-Host "Artifact source: $($resolvedArchive.Source); source revision: $(if ($resolvedArchive.Commit) { $resolvedArchive.Commit } else { 'release/explicit archive' })"
 Write-Host "CLI: $publicLauncher"
-Write-Host 'MCP configuration was not changed.'
+if ($SkipMcp) { Write-Host 'MCP configuration was not changed.' }

@@ -11,7 +11,8 @@ param(
 
     [switch]$AllowDirtySource,
     [switch]$InstallUsageTracker,
-    [switch]$SkipUsageTracker
+    [switch]$SkipUsageTracker,
+    [switch]$SkipGraphMcp
 )
 
 Set-StrictMode -Version Latest
@@ -57,7 +58,7 @@ $usageArguments = @{}
 if ($InstallUsageTracker) { $usageArguments.InstallUsageTracker = $true }
 elseif ($SkipUsageTracker) { $usageArguments.SkipUsageTracker = $true }
 
-& $installer -SkillsRoot $SkillsRoot -UpdateInstalled -ComponentAction $ComponentAction -Offline:$Offline -NoBuildFallback:$NoBuildFallback -AllowDirtySource:$AllowDirtySource -Confirm:$false -WhatIf:$WhatIfPreference @usageArguments
+& $installer -SkillsRoot $SkillsRoot -UpdateInstalled -ComponentAction $ComponentAction -Offline:$Offline -NoBuildFallback:$NoBuildFallback -AllowDirtySource:$AllowDirtySource -SkipGraphMcp:$SkipGraphMcp -Confirm:$false -WhatIf:$WhatIfPreference @usageArguments
 $installerSucceeded = $?
 $installerExitCode = 0
 if (Test-Path -LiteralPath variable:LASTEXITCODE) { $installerExitCode = [int]$LASTEXITCODE }

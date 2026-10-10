@@ -41,7 +41,8 @@ if ($node) {
 } else { Write-Result 'INFO' 'Node.js [COMPONENT_REQUIRED:Afyx Graph]' 'missing; install from https://nodejs.org/ before selecting Afyx Graph' }
 if ($npm) { Write-Result 'OK' 'npm [BUILD_ONLY:Afyx Graph]' ((& npm --version 2>$null) -join ' ') } else { Write-Result 'INFO' 'npm [BUILD_ONLY:Afyx Graph]' 'missing; required only for local artifact fallback' }
 Write-Result 'OK' 'Archive/checksum [COMPONENT_REQUIRED:Afyx Graph]' 'Expand-Archive and Get-FileHash available'
-$codex = Get-Command codex -ErrorAction SilentlyContinue
+$codex = Get-Command codex.exe -ErrorAction SilentlyContinue
+if (-not $codex) { $codex = Get-Command codex.cmd -ErrorAction SilentlyContinue }
 $extension = [bool](Get-ChildItem -Path (Join-Path $env:USERPROFILE '.vscode\extensions\openai.chatgpt-*') -Directory -ErrorAction SilentlyContinue | Select-Object -First 1)
 if ($codex) {
     try {
@@ -76,7 +77,18 @@ switch ($graph.State) {
     'INVALID' { Write-Result 'WARN' 'Afyx Graph' 'invalid metadata (optional)' }
     default { Write-Result 'WARN' 'Afyx Graph' "state $($graph.State): $($graph.Detail) (optional)" }
 }
-if (Test-McpEntry 'afyx_graph') { Write-Result 'OK' 'Afyx Graph MCP' 'configured explicitly' } else { Write-Result 'INFO' 'Afyx Graph MCP' 'not configured; installation does not mutate MCP config' }
+if ($graph.State -eq 'HEALTHY' -and $node -and $codex) {
+    $entry = Join-Path $graph.Path 'current\lib\dist\bin\afyx-graph.js'
+    $integrationTool = Join-Path $PSScriptRoot 'scripts\afyx-mcp-integration.mjs'
+    $integrationJson = (& $node.Source $integrationTool --node $node.Source --entry $entry --codex $codex.Source --codex-home $codexHome 2>$null) -join ''
+    try {
+        $integration = $integrationJson | ConvertFrom-Json
+        $level = if ($integration.mcp -eq 'MCP_REACHABLE') { 'OK' } elseif ($integration.mcp -eq 'MCP_NOT_CONFIGURED') { 'INFO' } else { 'WARN' }
+        Write-Result $level 'Afyx Graph MCP' "$($integration.mcp): $($integration.detail)"
+    } catch { Write-Result 'WARN' 'Afyx Graph MCP' 'MCP_BLOCKED: integration status unavailable' }
+} elseif (-not $codex) { Write-Result 'INFO' 'Afyx Graph MCP' 'MCP_BLOCKED: Codex CLI unavailable' }
+elseif ($graph.State -ne 'HEALTHY') { Write-Result 'INFO' 'Afyx Graph MCP' 'MCP_BLOCKED: Graph runtime unavailable' }
+else { Write-Result 'INFO' 'Afyx Graph MCP' 'MCP_NOT_CONFIGURED' }
 $headroom = [bool](Get-Command headroom -ErrorAction SilentlyContinue)
 $configText = if (Test-Path -LiteralPath $configPath -PathType Leaf) { Get-Content -Raw -LiteralPath $configPath -Encoding utf8 } else { '' }
 $headroomProvider = $configText -match '(?im)^\s*model_provider\s*=\s*["'']headroom["'']\s*$' -or

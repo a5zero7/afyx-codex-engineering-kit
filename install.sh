@@ -15,6 +15,7 @@ component_actions=()
 offline=false
 no_build_fallback=false
 allow_dirty_source=false
+skip_graph_mcp=false
 
 usage() {
   printf '%s\n' 'Usage: ./install.sh [--skills-root PATH] [--component ID=skip|install|update|repair] [--update-installed] [--force] [--validate-only] [--dry-run]'
@@ -29,6 +30,7 @@ while (($#)); do
     --offline) offline=true; shift ;;
     --no-build-fallback) no_build_fallback=true; shift ;;
     --allow-dirty-source) allow_dirty_source=true; shift ;;
+    --skip-graph-mcp) skip_graph_mcp=true; shift ;;
     --validate-only) validate_only=true; shift ;;
     --dry-run) dry_run=true; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -236,6 +238,7 @@ if [[ "$graph_action" != skip ]]; then
   "$offline" && graph_args+=(--offline)
   "$no_build_fallback" && graph_args+=(--no-build-fallback)
   "$allow_dirty_source" && graph_args+=(--allow-dirty-source)
+  if "$skip_graph_mcp"; then graph_args+=(--skip-mcp); else graph_args+=(--configure-mcp); fi
   "$dry_run" && graph_args+=(--validate-only)
   "$PACKAGE_ROOT/scripts/install-afyx-graph.sh" "${graph_args[@]}"
   graph_result="$graph_action"

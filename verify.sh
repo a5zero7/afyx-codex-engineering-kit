@@ -74,7 +74,17 @@ case "$AFYX_STATE" in
   INVALID) result WARN 'Afyx Graph' 'invalid metadata (optional)' ;;
   *) result WARN 'Afyx Graph' "state $AFYX_STATE: $AFYX_DETAIL (optional)" ;;
 esac
-if mcp_configured afyx_graph; then result OK 'Afyx Graph MCP' 'configured explicitly'; else result INFO 'Afyx Graph MCP' 'not configured; installation does not mutate MCP config'; fi
+if [[ "$AFYX_STATE" == HEALTHY ]] && command -v node >/dev/null 2>&1 && command -v codex >/dev/null 2>&1; then
+  set +e
+  integration_json="$(node "$PACKAGE_ROOT/scripts/afyx-mcp-integration.mjs" --node "$(command -v node)" --entry "$AFYX_PATH/current/lib/dist/bin/afyx-graph.js" --codex "$(command -v codex)" --codex-home "$codex_home" 2>/dev/null)"
+  set -e
+  integration_state="$(printf '%s' "$integration_json" | sed -n 's/.*"mcp":"\([^"]*\)".*/\1/p')"
+  integration_detail="$(printf '%s' "$integration_json" | sed -n 's/.*"detail":"\([^"]*\)".*/\1/p')"
+  case "$integration_state" in MCP_REACHABLE) level=OK ;; MCP_NOT_CONFIGURED) level=INFO ;; *) level=WARN ;; esac
+  result "$level" 'Afyx Graph MCP' "${integration_state:-MCP_BLOCKED}: ${integration_detail:-integration status unavailable}"
+elif ! command -v codex >/dev/null 2>&1; then result INFO 'Afyx Graph MCP' 'MCP_BLOCKED: Codex CLI unavailable'
+elif [[ "$AFYX_STATE" != HEALTHY ]]; then result INFO 'Afyx Graph MCP' 'MCP_BLOCKED: Graph runtime unavailable'
+else result INFO 'Afyx Graph MCP' 'MCP_NOT_CONFIGURED'; fi
 result INFO 'Usage Tracking' 'not installed; Windows-only runtime'
 headroom_cli=false; command -v headroom >/dev/null 2>&1 && headroom_cli=true
 headroom_provider=false; headroom_proxy=false

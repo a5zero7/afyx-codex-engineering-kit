@@ -10,7 +10,8 @@ param(
     [switch]$NoBuildFallback,
     [switch]$AllowDirtySource,
     [switch]$InstallUsageTracker,
-    [switch]$SkipUsageTracker
+    [switch]$SkipUsageTracker,
+    [switch]$SkipGraphMcp
 )
 
 Set-StrictMode -Version Latest
@@ -267,6 +268,7 @@ else {
     if ($Offline) { $arguments.Offline = $true }
     if ($NoBuildFallback) { $arguments.NoBuildFallback = $true }
     if ($AllowDirtySource) { $arguments.AllowDirtySource = $true }
+    if ($SkipGraphMcp) { $arguments.SkipMcp = $true } else { $arguments.ConfigureMcp = $true }
     & $graphInstaller -Confirm:$false -WhatIf:$WhatIfPreference @arguments
     if (-not $?) { throw 'Afyx Graph installation failed.' }
     $summary['Afyx Graph'] = $graphAction
