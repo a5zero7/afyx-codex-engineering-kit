@@ -40,7 +40,7 @@ const TEXT: &str = r#"fn ghost() {}"#;
     expect(result.nodes.find((node) => node.name === 'make')?.isAsync).toBe(true);
     expect(result.nodes.find((node) => node.name === 'run' && node.qualifiedName.includes('Buffer'))).toBeDefined();
     expect(result.unresolvedReferences).toEqual(expect.arrayContaining([
-      expect.objectContaining({ referenceKind: 'imports', referenceName: 'crate' }),
+      expect.objectContaining({ referenceKind: 'imports', referenceName: 'crate::helpers::buildrun' }),
       expect.objectContaining({ referenceKind: 'implements', referenceName: 'Runner' }),
       expect.objectContaining({ referenceKind: 'extends', referenceName: 'Display' }),
       expect.objectContaining({ referenceKind: 'calls', referenceName: 'module::Factory::new' }),

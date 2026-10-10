@@ -1832,6 +1832,8 @@ export function extractNativeFacts(filePath: string, source: string, language: L
         if (tokens[i + 1]?.text === '(' || tokens[i - 1]?.text === '.' || tokens[i - 1]?.text === 'function' ||
             tokens[i - 1]?.text === 'def' || tokens[i - 1]?.text === 'class') continue;
         const previous = tokens[i - 1]?.text;
+        if (TS_FAMILY_LANGUAGES.has(language) && tokens[i + 1]?.text === ':' &&
+            (previous === '{' || previous === ',')) continue;
         if (!previous || !valueIntroducers.has(previous)) continue;
         const owner = ownerAt(i);
         if (language === 'python' && previous === ':' && owner.kind === 'function' &&
