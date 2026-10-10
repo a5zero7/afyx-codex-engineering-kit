@@ -6,8 +6,8 @@ Contract revision: **2026-10-10**
 v1 scope policy: **FROZEN — Phase 1 through Phase 11**  
 Post-v1 policy: **PLANNED EXPANSION — not a v1 release blocker**
 
-Current work: **Technical Alpha Batch 1 — Native Parser Reliability (validation in progress)**
-Task: `AFYX-257`; related partial diagnostics scope: `AFYX-258`
+Current work: **Technical Alpha Batch 2 — Exact-File Explore & Retrieval Correctness (validation in progress)**
+Task: `AFYX-260`; `AFYX-248` remains in progress
 Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`  
 Active implementation branch: `afyx/native-phase5f-parser-grammar`  
 Latest verified Phase 5F implementation checkpoint: `62621a0639f42db0eaac69ef087436d851cdba88`  
@@ -1103,6 +1103,47 @@ production/UI build, semantic baseline, and CLI/MCP smoke also passed locally.
 Implementation-head CI `38063648783` and Afyx Graph Build `38063647999`
 passed on Windows, Linux, and macOS. AFYX-257 is resolved; AFYX-258 remains
 open for its explicitly deferred freshness/watcher UX scope.
+
+### AFYX-260 — Exact-file Explore and retrieval correctness
+
+Status: **IMPLEMENTED; final-head cross-platform CI pending**
+
+Baseline `386199301855091f6114eb5512386111ae4331a1`; implementation commit
+`5b6fc45326474d59cada52be55054f315f349029`. The reproduced defect was limited
+to explicitly named unsupported source: Explore resolved path spans only
+against the indexed file catalog, so named PowerShell files were invisible and
+installer vocabulary could rank an indexed TypeScript decoy instead.
+
+The bounded correction preserves graph-backed retrieval for indexed files and
+adds an Afyx-owned direct-source path for explicit `.ps1`, `.psm1`, and `.psd1`
+targets only. Exact/basename ambiguity, missing files, project ignore policy,
+lexical traversal, symlink escape, binary content, file count, walk count, and
+source length are all enforced before rendering. Direct source is labeled as
+non-graph evidence and never fabricates nodes, edges, calls, or semantic
+certainty. Open-ended Explore remains graph-backed. CLI and MCP use the same
+result path.
+
+Synthetic evidence: before the fix, both CLI and MCP returned only
+`src/lib/installer-decoy.ts` and reported no indexed match for
+`scripts/install-afyx-graph.ps1`; after the fix, both returned the requested
+`install.ps1` and `scripts/install-afyx-graph.ps1` source, returned no decoy,
+and had identical normalized 43-line result text. Focused path-pinning passed
+16 with one POSIX-only symlink check deferred to Linux CI; adjacent
+retrieval/MCP tests passed 43; UI/browser tests passed 53 with three
+platform skips; semantic baseline passed six fixtures; CLI/MCP smoke passed
+21 checks; TypeScript typecheck and clean production/UI build passed.
+
+Bounded Windows diagnosis found direct Node MCP startup already uses hidden
+child processes and does not traverse the `.cmd` launcher. `ui --no-open`
+does not launch a browser. The one relevant `cmd /c start` path was UI browser
+auto-launch; it now passes `windowsHide: true`, with spawn-option and UI
+lifecycle regression coverage. This is evidence of closing that source of
+console creation, not a claim that every third-party console flash was
+interactively reproduced.
+
+AFYX-260 does not add PowerShell parsing, change extraction version 27, alter
+MCP registration, or complete AFYX-205/AFYX-241. AFYX-248 remains in progress;
+AFYX-258 and the remaining lifecycle/observability work remain separate.
 
 ### AFYX-258 — Extraction diagnostics partial scope
 
