@@ -105,8 +105,8 @@ afyx_legacy_skill_provenance() {
     if [[ "$actual" == "$legacy_digest" ]]; then AFYX_LEGACY_PROVENANCE=MATCH; return 0; fi
     manifest="$target/SKILL.md"
     [[ -f "$manifest" && ! -L "$manifest" ]] || return 0
-    name="$(sed -n 's/^name:[[:space:]]*["'"']\{0,1\}\([^"'"']*\)["'"']\{0,1\}[[:space:]]*$/\1/p' "$manifest" | head -n 1)"
-    version="$(sed -n 's/^[[:space:]]*version:[[:space:]]*["'"']\{0,1\}\([^"'"'[:space:]]*\)["'"']\{0,1\}[[:space:]]*$/\1/p' "$manifest" | head -n 1)"
+    name="$(sed -n 's/^name:[[:space:]]*\([^[:space:]]*\).*/\1/p' "$manifest" | head -n 1)"
+    version="$(sed -n 's/^[[:space:]]*version:[[:space:]]*"\{0,1\}\([^"[:space:]]*\).*/\1/p' "$manifest" | head -n 1)"
     if [[ -z "$name" ]]; then return 0
     elif [[ "$name" != "$component" ]]; then AFYX_LEGACY_PROVENANCE=FOREIGN
     elif [[ -n "$version" && "$version" == "$legacy_version" ]]; then AFYX_LEGACY_PROVENANCE=MODIFIED
