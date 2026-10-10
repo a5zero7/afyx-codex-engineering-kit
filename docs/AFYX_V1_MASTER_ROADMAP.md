@@ -6,7 +6,7 @@ Contract revision: **2026-10-11**
 v1 scope policy: **FROZEN — Phase 1 through Phase 11**  
 Post-v1 policy: **PLANNED EXPANSION — not a v1 release blocker**
 
-Current work: **Technical Alpha Batch 3 — AFYX-259/256 implemented; AFYX-258 validation and final-head CI pending; AFYX-248 remains in progress**
+Current work: **Technical Alpha Batch 3 acceptance gates passed; AFYX-248 remains in progress**
 Task: `AFYX-259`, `AFYX-256`, and `AFYX-258`; `AFYX-248` remains in progress
 Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`  
 Active implementation branch: `afyx/native-phase5f-parser-grammar`  
@@ -1165,7 +1165,7 @@ activate Technical Alpha, Phase 6, formal Alpha, or unrelated post-v1 work.
 
 ### Technical Alpha Batch 3 — AFYX-259 / AFYX-256 / AFYX-258
 
-Status: **IMPLEMENTED LOCALLY; integrated validation and final-head CI pending**
+Status: **ACCEPTANCE GATES PASSED; AFYX-248 remains IN PROGRESS**
 
 AFYX-259 adds one revision-aware artifact identity across packaging and
 installation. Product version, channel, target, source/build revision, checksum,
@@ -1199,6 +1199,19 @@ Batch 3 does not enumerate ignored paths, increase the 1 MiB guard, modify
 ranking/search semantics, or reactivate formal Odoo/IJP indexing. AFYX-248
 remains in progress and Technical Alpha is not activated until mandatory
 integrated and cross-platform gates pass.
+
+Final CI closure: AFYX-259 (`8e74ccd`), AFYX-256 (`1701688`), and AFYX-258
+(`1656a08`) were validated together after the bounded CI correction
+`d0bf81f52186798d82a95caf63ca2a761d809087`. The correction retained the
+disabled unrelated MCP-server fixture without embedding an audited legacy
+identity token, and made Graph `--validate-only` tolerate an absent runtime
+metadata file without creating installation roots. Required focused identity,
+component, MCP integration, artifact identity, and lifecycle tests passed.
+Final correction-head [CI run 38079830273](https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/38079830273)
+and [Afyx Graph Build run 38079831486](https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/38079831486)
+both passed on Windows, Linux, and macOS. This closes the Batch 3 acceptance
+evidence for AFYX-259, AFYX-256, and AFYX-258; it does not close AFYX-248 or
+activate Technical Alpha.
 
 Required audits:
 
