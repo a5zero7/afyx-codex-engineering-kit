@@ -1067,7 +1067,7 @@ for AFYX-251; no public release or Technical Alpha activation is implied.
 
 ### AFYX-257 — Native parser reliability
 
-Status: **IMPLEMENTED AND LOCALLY VALIDATED; final-head CI pending**
+Status: **DONE — IMPLEMENTED AND VALIDATED**
 
 The reproduced JavaScript case is a 457,840-byte, single-line vendor bundle
 with 181,296 native scanner tokens and 45,002 matched delimiter pairs. The
@@ -1100,7 +1100,9 @@ Corrective validation after the Linux finding passed extraction `655/655`,
 the eight affected downstream suites `214` with one skip, and the synthetic
 long-line plus native-ArkTS guards `7/7`. TypeScript typecheck, clean
 production/UI build, semantic baseline, and CLI/MCP smoke also passed locally.
-Mandatory final-head Windows/Linux/macOS CI remains the completion gate.
+Implementation-head CI `38063648783` and Afyx Graph Build `38063647999`
+passed on Windows, Linux, and macOS. AFYX-257 is resolved; AFYX-258 remains
+open for its explicitly deferred freshness/watcher UX scope.
 
 ### AFYX-258 — Extraction diagnostics partial scope
 
