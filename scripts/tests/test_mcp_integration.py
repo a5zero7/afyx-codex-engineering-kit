@@ -40,12 +40,113 @@ class McpIntegrationTests(unittest.TestCase):
         script = f"""import {{classifyEntry}} from {json.dumps(HELPER.as_uri())};
 const expected={json.dumps(expected)};
 const current={{transport:{{type:'stdio',command:'C:/node/node.exe',args:[expected.entry,'serve','--mcp']}}}};
+const equivalent={{transport:{{type:'stdio',command:'node',args:[expected.entry,'serve','--mcp']}}}};
 const stale={{transport:{{type:'stdio',command:'node',args:['C:/old/lib/dist/bin/afyx-graph.js','serve','--mcp']}}}};
 const conflict={{transport:{{type:'stdio',command:'python',args:['other.py']}}}};
-console.log(JSON.stringify([classifyEntry(null,expected),classifyEntry(current,expected),classifyEntry(stale,expected),classifyEntry(conflict,expected)]));"""
+console.log(JSON.stringify([classifyEntry(null,expected),classifyEntry(current,expected),classifyEntry(equivalent,expected),classifyEntry(stale,expected),classifyEntry(conflict,expected)]));"""
         result = subprocess.run(["node", "--input-type=module", "-e", script], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertEqual(json.loads(result.stdout), ["MCP_NOT_CONFIGURED", "MCP_CONFIGURED", "MCP_STALE_OWNED", "MCP_BLOCKED"])
+        self.assertEqual(json.loads(result.stdout), ["MCP_NOT_CONFIGURED", "MCP_CONFIGURED", "MCP_CONFIGURED", "MCP_STALE_OWNED", "MCP_BLOCKED"])
+
+    @unittest.skipUnless(os.name == "nt", "Windows .cmd launcher regression")
+    def test_windows_cmd_launcher_preserves_arguments_and_is_idempotent(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            launcher_dir = base / "launcher & shim"
+            launcher_dir.mkdir()
+            codex_home = base / "codex home"
+            entry = base / "runtime with spaces/current/lib/dist/bin/afyx-graph.js"
+            fake_server(entry)
+
+            fake_codex = launcher_dir / "fake-codex.mjs"
+            fake_codex.write_text(
+                """import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+const home = process.env.CODEX_HOME;
+const state = resolve(home, 'fixture-state.json');
+const config = resolve(home, 'config.toml');
+const rejectAdd = resolve(home, 'reject-add');
+const [scope, action, name, ...rest] = process.argv.slice(2);
+if (scope !== 'mcp' || name !== 'afyx_graph') process.exit(9);
+if (action === 'get') {
+  if (!existsSync(state)) { console.error('MCP server afyx_graph not found'); process.exit(1); }
+  console.log(readFileSync(state, 'utf8'));
+} else if (action === 'add') {
+  if (existsSync(rejectAdd)) { console.error('synthetic registration rejection'); process.exit(7); }
+  const separator = rest.indexOf('--');
+  const command = rest.slice(separator + 1);
+  mkdirSync(home, { recursive: true });
+  writeFileSync(state, JSON.stringify({ transport: { type: 'stdio', command: command[0], args: command.slice(1) } }));
+  writeFileSync(config, '[mcp_servers.afyx_graph]\\n');
+} else if (action === 'remove') {
+  process.exit(0);
+} else {
+  process.exit(8);
+}
+""",
+                encoding="utf-8",
+            )
+            launcher = launcher_dir / "codex.cmd"
+            launcher.write_text(
+                f'@echo off\r\n"{shutil.which("node")}" "%~dp0fake-codex.mjs" %*\r\n',
+                encoding="utf-8",
+            )
+            command = [
+                "node", str(HELPER),
+                "--node", shutil.which("node") or "node",
+                "--entry", str(entry),
+                "--codex", str(launcher),
+                "--codex-home", str(codex_home),
+                "--apply",
+            ]
+
+            offered = subprocess.run(command[:-1], cwd=ROOT, capture_output=True, text=True)
+            self.assertEqual(offered.returncode, 0, offered.stdout + offered.stderr)
+            offered_payload = json.loads(offered.stdout)
+            self.assertEqual(offered_payload["mcp"], "MCP_NOT_CONFIGURED")
+            self.assertEqual(offered_payload["reason"], "MCP_ENTRY_NOT_FOUND")
+
+            first = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
+            self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+            first_payload = json.loads(first.stdout)
+            self.assertEqual(first_payload["graph"], "GRAPH_INSTALLED")
+            self.assertEqual(first_payload["mcp"], "MCP_REACHABLE")
+            self.assertEqual(first_payload["reason"], "")
+            self.assertTrue(first_payload["changed"])
+            state = json.loads((codex_home / "fixture-state.json").read_text(encoding="utf-8"))
+            self.assertEqual(state["transport"]["command"], shutil.which("node"))
+            self.assertEqual(state["transport"]["args"], [str(entry), "serve", "--mcp"])
+
+            second = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
+            self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
+            self.assertEqual(json.loads(second.stdout)["mcp"], "MCP_REACHABLE")
+            self.assertFalse(json.loads(second.stdout)["changed"])
+
+            (codex_home / "fixture-state.json").write_text("not json", encoding="utf-8")
+            invalid = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
+            self.assertEqual(invalid.returncode, 2, invalid.stdout + invalid.stderr)
+            invalid_payload = json.loads(invalid.stdout)
+            self.assertEqual(invalid_payload["graph"], "GRAPH_INSTALLED")
+            self.assertEqual(invalid_payload["reason"], "MCP_INVALID_CONFIGURATION")
+
+            (codex_home / "fixture-state.json").unlink()
+            (codex_home / "reject-add").write_text("reject", encoding="utf-8")
+            rejected = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
+            self.assertEqual(rejected.returncode, 2, rejected.stdout + rejected.stderr)
+            rejected_payload = json.loads(rejected.stdout)
+            self.assertEqual(rejected_payload["graph"], "GRAPH_INSTALLED")
+            self.assertEqual(rejected_payload["reason"], "MCP_REGISTRATION_FAILED")
+            self.assertIn("synthetic registration rejection", rejected_payload["detail"])
+
+            bad_launcher = base / "invalid-codex.exe"
+            bad_launcher.write_text("not an executable", encoding="utf-8")
+            launch_command = command.copy()
+            launch_command[launch_command.index(str(launcher))] = str(bad_launcher)
+            launch_failed = subprocess.run(launch_command, cwd=ROOT, capture_output=True, text=True)
+            self.assertEqual(launch_failed.returncode, 2, launch_failed.stdout + launch_failed.stderr)
+            launch_payload = json.loads(launch_failed.stdout)
+            self.assertEqual(launch_payload["graph"], "GRAPH_INSTALLED")
+            self.assertEqual(launch_payload["reason"], "CODEX_LAUNCH_FAILED")
 
     @unittest.skipUnless(codex_path(), "Codex CLI unavailable on this runner")
     def test_native_registration_is_idempotent_and_preserves_unrelated_config(self) -> None:
