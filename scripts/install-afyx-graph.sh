@@ -4,6 +4,8 @@ set -euo pipefail
 PACKAGE_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 METADATA="$PACKAGE_ROOT/afyx-graph/afyx-graph.json"
 DISTRIBUTION_PRODUCT="$PACKAGE_ROOT/afyx-graph/engine/scripts/distribution-product.json"
+ARTIFACT_IDENTITY="$PACKAGE_ROOT/scripts/afyx-graph-artifact.mjs"
+RELEASE_ROOT="${AFYX_GRAPH_RELEASE_ROOT:-$PACKAGE_ROOT/afyx-graph/engine/release}"
 RUNTIME_ROOT="${AFYX_GRAPH_RUNTIME_ROOT:-$HOME/.afyx/graph}"
 BIN_DIR="${AFYX_GRAPH_BIN_DIR:-$HOME/.local/bin}"
 mode=install
@@ -13,6 +15,9 @@ no_build_fallback=false
 allow_dirty_source=false
 artifact_source=
 source_revision=
+requested_revision=UNKNOWN
+artifact_revision=UNKNOWN
+artifact_revision_status=UNKNOWN
 
 usage() {
   printf '%s\n' 'Usage: scripts/install-afyx-graph.sh [--replace|--update|--validate-only|--uninstall] [--archive PATH] [--offline] [--no-build-fallback] [--allow-dirty-source]'
@@ -39,6 +44,9 @@ json_value() {
 
 VERSION="$(json_value product_version)"
 CHANNEL="$(sed -n 's/^[[:space:]]*"releaseChannel"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$DISTRIBUTION_PRODUCT" | head -n 1)"
+if command -v git >/dev/null 2>&1 && git -C "$PACKAGE_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  requested_revision="$(git -C "$PACKAGE_ROOT" rev-parse HEAD 2>/dev/null || printf UNKNOWN)"
+fi
 
 node_version() {
   command -v node >/dev/null 2>&1 || return 1
@@ -82,11 +90,11 @@ build_local_archive() {
   engine="$PACKAGE_ROOT/afyx-graph/engine"
   [[ -f "$engine/package-lock.json" ]] || { printf 'BUILD_ONLY: afyx-graph/engine/package-lock.json is missing; local source is incomplete.\n' >&2; return 1; }
   printf 'Verified release unavailable; building Afyx Graph locally from %s on %s.\n' "$source_revision" "$branch"
-  (cd "$engine" && npm ci && npm run build:clean && bash scripts/build-bundle.sh "$target") || {
+  (cd "$engine" && npm ci && npm run build:clean && AFYX_SOURCE_REVISION="$source_revision" bash scripts/build-bundle.sh "$target") || {
     printf 'BUILD_ONLY: Afyx Graph local build failed; the existing installation was not changed.\n' >&2
     return 1
   }
-  release="$engine/release"
+  release="$RELEASE_ROOT"
   archive_path="$release/$asset"
   [[ -f "$archive_path" ]] || { printf 'BUILD_ONLY: local build did not produce %s.\n' "$asset" >&2; return 1; }
   if command -v shasum >/dev/null 2>&1; then
@@ -126,6 +134,19 @@ archive_bundle_identity_valid() {
   return "$valid"
 }
 
+read_archive_identity() {
+  local path="$1" probe bundle json
+  probe="$(mktemp -d "${TMPDIR:-/tmp}/afyx-graph-identity.XXXXXX")" || return 1
+  if ! tar -xzf "$path" -C "$probe" >/dev/null 2>&1; then rm -rf -- "$probe"; return 1; fi
+  bundle="$probe/afyx-graph-$target"
+  json="$(node "$ARTIFACT_IDENTITY" inspect --metadata "$bundle/metadata.json" --requested-revision "$requested_revision")" || {
+    rm -rf -- "$probe"; return 1;
+  }
+  artifact_revision="$(printf '%s' "$json" | sed -n 's/.*"sourceRevision":"\([^"]*\)".*/\1/p')"
+  artifact_revision_status="$(printf '%s' "$json" | sed -n 's/.*"revisionStatus":"\([^"]*\)".*/\1/p')"
+  rm -rf -- "$probe"
+}
+
 graph_state() {
   if [[ ! -e "$RUNTIME_ROOT" ]]; then printf '%s' 'NOT INSTALLED'; return; fi
   if [[ ! -f "$RUNTIME_ROOT/metadata.json" || ! -x "$RUNTIME_ROOT/current/bin/afyx-graph" ]]; then
@@ -144,7 +165,15 @@ graph_owned() {
 
 state="$(graph_state)"
 if [[ "$mode" == validate ]]; then
-  printf 'Product: Afyx Graph\nState: %s\nRuntimeRoot: %s\nVersion: %s\n' "$state" "$RUNTIME_ROOT" "$VERSION"
+  installed_revision="$(sed -n 's/.*"source_revision"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$RUNTIME_ROOT/metadata.json" 2>/dev/null | head -n 1)"
+  installed_extraction="$(sed -n 's/.*"extraction_version"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$RUNTIME_ROOT/metadata.json" 2>/dev/null | head -n 1)"
+  installed_provenance="$(sed -n 's/.*"artifact_provenance"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$RUNTIME_ROOT/metadata.json" 2>/dev/null | head -n 1)"
+  installed_revision_status="$(sed -n 's/.*"revision_status"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$RUNTIME_ROOT/metadata.json" 2>/dev/null | head -n 1)"
+  if [[ -n "$installed_revision" && "$requested_revision" != UNKNOWN ]]; then
+    if [[ "$installed_revision" == "$requested_revision" ]]; then installed_revision_status=MATCH; else installed_revision_status=REVISION_MISMATCH; fi
+  else installed_revision_status=UNKNOWN; fi
+  printf 'Product: Afyx Graph\nState: %s\nRuntimeRoot: %s\nVersion: %s\nSourceRevision: %s\nExtractionVersion: %s\nProvenance: %s\nCurrentCheckoutRevision: %s\nRevisionStatus: %s\nUpdateAvailable: %s\n' "$state" "$RUNTIME_ROOT" "$VERSION" "${installed_revision:-UNKNOWN}" "${installed_extraction:-UNKNOWN}" "${installed_provenance:-UNKNOWN}" "$requested_revision" "$installed_revision_status" "$([[ "$installed_revision_status" == REVISION_MISMATCH ]] && printf true || printf false)"
+  if [[ "$installed_revision_status" == REVISION_MISMATCH ]]; then printf 'UPDATE AVAILABLE — REVISION MISMATCH\n'; fi
   [[ "$state" != INCOMPLETE && "$state" != INVALID ]]
   exit $?
 fi
@@ -193,11 +222,17 @@ cleanup() { rm -rf -- "$transaction"; }
 trap cleanup EXIT
 
 if [[ -z "$archive_path" ]]; then
-  local_archive="$PACKAGE_ROOT/afyx-graph/engine/release/$asset"
+  local_archive="$RELEASE_ROOT/$asset"
   if [[ -f "$local_archive" ]]; then
-    if archive_checksum_valid "$local_archive" && archive_bundle_identity_valid "$local_archive"; then
-      archive_path="$local_archive"
-      artifact_source=local-release-cache
+    if archive_checksum_valid "$local_archive" && archive_bundle_identity_valid "$local_archive" && read_archive_identity "$local_archive"; then
+      if [[ "$requested_revision" != UNKNOWN && "$artifact_revision_status" != MATCH ]]; then
+        printf 'Ignoring valid but stale local release cache (requested %s; artifact %s); rebuilding from validated source.\n' "$requested_revision" "$artifact_revision" >&2
+        build_local_archive
+      else
+        archive_path="$local_archive"
+        artifact_source=local-release-cache
+        source_revision="$artifact_revision"
+      fi
     else
       printf 'Ignoring invalid local release cache; rebuilding from validated source.\n' >&2
       build_local_archive
@@ -209,10 +244,16 @@ if [[ -z "$archive_path" ]]; then
       if curl -fsSL "$url" -o "$archive_path" &&
          curl -fsSL "https://github.com/a5zero7/afyx-codex-engineering-kit/releases/download/afyx-graph-v$VERSION/SHA256SUMS" -o "$transaction/SHA256SUMS"; then
         artifact_source=github-release
-        if ! archive_checksum_valid "$archive_path" || ! archive_bundle_identity_valid "$archive_path"; then
+        if ! archive_checksum_valid "$archive_path" || ! archive_bundle_identity_valid "$archive_path" || ! read_archive_identity "$archive_path"; then
           printf 'Downloaded release artifact failed integrity or identity validation; trying bounded local build fallback.\n' >&2
           rm -f -- "$archive_path" "$transaction/SHA256SUMS"
           build_local_archive
+        elif [[ "$requested_revision" != UNKNOWN && "$artifact_revision_status" != MATCH ]]; then
+          printf 'Downloaded release revision %s does not match requested checkout %s; trying bounded local build fallback.\n' "$artifact_revision" "$requested_revision" >&2
+          rm -f -- "$archive_path" "$transaction/SHA256SUMS"
+          build_local_archive
+        else
+          source_revision="$artifact_revision"
         fi
       else
         printf 'Verified GitHub release unavailable; trying bounded local build fallback.\n' >&2
@@ -255,6 +296,13 @@ node "$PACKAGE_ROOT/afyx-graph/engine/scripts/distribution-contract.mjs" verify-
   printf 'Afyx Graph staged bundle failed the distribution contract.\n' >&2
   exit 1
 }
+identity_json="$(node "$ARTIFACT_IDENTITY" inspect --metadata "$bundle/metadata.json" --requested-revision "$requested_revision")"
+identity_extraction="$(printf '%s' "$identity_json" | sed -n 's/.*"extractionVersion":\([0-9][0-9]*\).*/\1/p')"
+if [[ -n "$identity_extraction" ]]; then
+  compiled_extraction="$(node -e 'process.stdout.write(String(require(process.argv[1]).EXTRACTION_VERSION))' "$bundle/lib/dist/extraction/extraction-version.js")"
+  [[ "$compiled_extraction" == "$identity_extraction" ]] || { printf 'Installed artifact extraction identity mismatch: metadata %s, compiled runtime %s.\n' "$identity_extraction" "$compiled_extraction" >&2; exit 1; }
+fi
+node "$ARTIFACT_IDENTITY" record-install --metadata "$bundle/metadata.json" --archive "$archive_path" --provenance "$artifact_source" --requested-revision "$requested_revision" >/dev/null
 mv "$bundle" "$transaction/prepared/current"
 cp "$transaction/prepared/current/metadata.json" "$transaction/prepared/metadata.json"
 

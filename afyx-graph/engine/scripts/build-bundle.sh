@@ -3,12 +3,15 @@ set -euo pipefail
 
 readonly ENGINE_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 readonly CONTRACT="$ENGINE_ROOT/scripts/distribution-contract.mjs"
+readonly ARTIFACT_IDENTITY="$ENGINE_ROOT/../../scripts/afyx-graph-artifact.mjs"
 readonly TARGET="${1:?usage: build-bundle.sh <target>}"
 readonly RELEASE_ROOT="$ENGINE_ROOT/release"
 readonly TEMP_ROOT="$(mktemp -d)"
 readonly FAMILY="${TARGET%-*}"
 readonly BUNDLE_NAME="$(node "$CONTRACT" plan --target "$TARGET" --field bundleName)"
 readonly STAGE="$TEMP_ROOT/$BUNDLE_NAME"
+readonly SOURCE_REVISION="${AFYX_SOURCE_REVISION:-$(git -C "$ENGINE_ROOT" rev-parse HEAD 2>/dev/null || printf UNKNOWN)}"
+readonly EXTRACTION_VERSION="$(sed -n 's/^export const EXTRACTION_VERSION = \([0-9][0-9]*\);/\1/p' "$ENGINE_ROOT/src/extraction/extraction-version.ts")"
 ARCHIVE=""
 
 cleanup() { rm -rf "$TEMP_ROOT"; }
@@ -26,6 +29,7 @@ stage_application() {
   cp "$ENGINE_ROOT/package.json" "$STAGE/lib/"
   cp "$ENGINE_ROOT/../afyx-graph.json" "$STAGE/metadata.json"
   node -e 'const fs=require("node:fs"); const metadata=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); const product=JSON.parse(fs.readFileSync(process.argv[2],"utf8")); metadata.release_channel=product.releaseChannel; fs.writeFileSync(process.argv[1], JSON.stringify(metadata,null,2)+"\n");' "$STAGE/metadata.json" "$ENGINE_ROOT/scripts/distribution-product.json"
+  node "$ARTIFACT_IDENTITY" stamp --metadata "$STAGE/metadata.json" --target "$TARGET" --revision "$SOURCE_REVISION" --extraction-version "$EXTRACTION_VERSION" >/dev/null
   # Required attribution contract is owned by the artifact plan.
   while IFS='|' read -r source destination; do
     mkdir -p "$STAGE/$(dirname "$destination")"

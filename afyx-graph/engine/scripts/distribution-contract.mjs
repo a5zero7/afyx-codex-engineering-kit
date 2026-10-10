@@ -93,6 +93,16 @@ export function verifyBundle(root, target) {
   if (metadata.release_channel !== DISTRIBUTION_PRODUCT.releaseChannel) {
     throw new DistributionError('metadata.json has the wrong release channel');
   }
+  if (metadata.artifact_identity_schema !== undefined) {
+    if (metadata.artifact_identity_schema !== 1 || metadata.artifact_target !== target) {
+      throw new DistributionError('metadata.json has an invalid artifact identity schema or target');
+    }
+    if (!/^[0-9a-f]{7,64}$|^UNKNOWN$/i.test(String(metadata.source_revision || '')) ||
+        !String(metadata.build_identity || '').trim() ||
+        !Number.isSafeInteger(metadata.extraction_version)) {
+      throw new DistributionError('metadata.json has incomplete revision/build/extraction identity');
+    }
+  }
   for (const legal of plan.legalFiles) {
     const file = requireFile(join(bundle, ...legal.bundlePath.split('/')), legal.bundlePath);
     if (statSync(file).size === 0) throw new DistributionError(`${legal.bundlePath} is empty`);
