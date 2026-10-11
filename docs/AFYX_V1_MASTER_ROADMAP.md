@@ -2143,7 +2143,7 @@ Focused evidence: the new global-excludes lifecycle matrix passes 4/4 after fail
 
 ### AFYX-267 — Technical Alpha branch and release candidate
 
-Status: **IN PROGRESS — exact-head candidate CI required**
+Status: **DONE — candidate pinned and independently verified**
 
 The stabilization branch `release/alpha-0.1` is cut non-destructively from the
 approved development revision `fd96cd3a9ad41fc98346b46c56f3ade8e73cc1e8`.
@@ -2157,10 +2157,20 @@ and pull requests. Graph Build retains host-platform archives plus a
 commit-bound candidate manifest after verifying embedded revision, target,
 version, and SHA-256. The candidate label is `technical-alpha` / `alpha-0.1`;
 the existing `1.0.0` product metadata is unchanged and no stable release/tag is
-created. Exact final SHA, per-platform workflow conclusions, artifact digests,
-and isolated install/rollback evidence are required before AFYX-267 can move to
-Done. The canonical policy is [AFYX_ALPHA_RELEASE.md](AFYX_ALPHA_RELEASE.md).
-AFYX-248 remains In Progress.
+created.
+
+Candidate `a431ba9ad5fae7bd06329f1fc6e42f1ba503f6dd` passed
+[CI 38134702686](https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/38134702686)
+and
+[Afyx Graph Build 38134702720](https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/38134702720)
+on Windows, Linux, and macOS. Retained `win32-x64`, `linux-x64`, and
+`darwin-arm64` archives were downloaded and independently matched their
+commit-bound manifest SHA-256 values. A disposable Windows install reported
+revision `MATCH`, and restoration of the prior `fd96cd3` artifact validated the
+rollback path without changing the active user runtime or MCP configuration.
+The exact digests and canonical policy are in
+[AFYX_ALPHA_RELEASE.md](AFYX_ALPHA_RELEASE.md). AFYX-267 is complete;
+AFYX-248 remains In Progress pending its separate Technical Alpha program gate.
 
 # Final definition of success
 

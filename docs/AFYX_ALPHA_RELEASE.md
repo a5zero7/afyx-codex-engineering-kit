@@ -39,16 +39,24 @@ as a SHA-named workflow artifact. These artifacts are candidate inputs, not a
 stable GitHub Release. Publisher authenticity remains `UNVERIFIED` unless an
 independent attestation is added and verified.
 
-The initial candidate matrix is completed from the exact final workflow run:
+The accepted initial candidate is commit
+`a431ba9ad5fae7bd06329f1fc6e42f1ba503f6dd`, verified by
+[CI 38134702686](https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/38134702686)
+and
+[Afyx Graph Build 38134702720](https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/38134702720).
+Both workflows passed on Windows, Linux, and macOS. The retained archive
+digests were downloaded and independently matched against their manifests:
 
-| Candidate field | Required value |
+| Target | Archive SHA-256 |
 | --- | --- |
-| Branch | `release/alpha-0.1` |
-| Channel / series | `technical-alpha` / `alpha-0.1` |
-| Source revision | Exact successful workflow SHA |
-| Platforms | `win32-x64`, `linux-x64`, and the hosted macOS architecture |
-| Digest | Per-target SHA-256 in the retained candidate manifest |
-| Provenance | Exact Graph Build run URL plus commit-bound manifest |
+| `win32-x64` | `ade92e800b1ab129b89b76df33852d54cf1c20eaf32e16467b8a5ec0b295e8b9` |
+| `linux-x64` | `6bfbc8799ffe9f3578e5345cc4a3a4361da497c5112947070e8089feec4bc8e2` |
+| `darwin-arm64` | `369e00e0e8946c8ba62cb944068524030801d2c2311ae251b33a57dc30409f9e` |
+
+The GitHub Actions container digests are separate transport-integrity values;
+the table records the actual Afyx Graph archive digests bound by the candidate
+manifest. Publisher authenticity remains `UNVERIFIED`; no stable release or
+stable tag was created.
 
 ## Isolated acceptance and rollback
 
@@ -63,3 +71,8 @@ Before any later controlled deployment, retain the current runtime directory
 and its metadata as the rollback unit. Rollback restores that verified unit
 through the normal transactional installer path and reruns `--validate-only`;
 it does not reset Git branches or overwrite MCP configuration.
+
+The Windows candidate was also built and installed locally under a disposable
+runtime root. Its revision reported `MATCH`; restoring the prior
+`fd96cd3a9ad41fc98346b46c56f3ade8e73cc1e8` artifact restored that source
+identity and working CLI without touching the active user runtime.
