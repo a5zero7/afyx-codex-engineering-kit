@@ -6,8 +6,8 @@ Contract revision: **2026-10-11**
 v1 scope policy: **FROZEN — Phase 1 through Phase 11**  
 Post-v1 policy: **PLANNED EXPANSION — not a v1 release blocker**
 
-Current work: **AFYX-265 Windows Git subprocess console closure; AFYX-248 remains in progress**
-Task: `AFYX-265`; `AFYX-248` remains in progress
+Current work: **AFYX-268 Git global-excludes catch-up correctness; AFYX-248 remains in progress**
+Task: `AFYX-268`; `AFYX-248` remains in progress
 Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`  
 Active implementation branch: `afyx/native-phase5f-parser-grammar`  
 Latest verified Phase 5F implementation checkpoint: `62621a0639f42db0eaac69ef087436d851cdba88`  
@@ -2130,6 +2130,16 @@ Allowed state vocabulary:
 Only Phase 5I may authorize:
 
 `AFYX_FULLY_INDEPENDENT`.
+
+### AFYX-268 — Git global-excludes catch-up correctness
+
+Status: **SOURCE FIX VALIDATED; FINAL-HEAD GRAPH BUILD AND ISOLATED ARTIFACT VALIDATION PENDING; AFYX-248 IN PROGRESS**
+
+The retained AFYX-265 fixture proved Git's ground truth for `.gitignore`, `.git/info/exclude`, and `core.excludesFile`; it also self-healed the suspect global-excludes row on a later reconciliation. A fresh absolute-path source reproduction and a pre-opened QueryPool both stayed correct, so the AFYX-265 console fix and query-worker visibility were not changed. Focused negative regressions then isolated two deterministic incremental-scope defects: repository-relative `core.excludesFile` paths were tested against the process cwd instead of the repository cwd, and the scoped-sync matcher cache omitted the effective global-excludes path/content state. A newly created ignored directory could therefore be admitted after the matcher was warmed, or after the external excludes file changed.
+
+The bounded fix resolves relative paths from the repository root while preserving `~`/absolute handling, and includes the effective excludes path plus mtime/size in scoped matcher invalidation. Existing Git arguments, `windowsHide`, timeouts, stdio, error handling, full-index discovery, MCP lifecycle, and AFYX-265 console-suppression behavior remain unchanged.
+
+Focused evidence: the new global-excludes lifecycle matrix passes 4/4 after failing 2/2 before the fix; it covers initial/full indexing, scoped create/modify/rename/delete, restart/persistence, `.gitignore`, `.git/info/exclude`, absolute/relative `core.excludesFile`, unset/missing/non-file configuration, positive files, and supported stale-row reconciliation. Existing extraction ignore checks pass 3/3, watcher info/exclude 1/1, scoped-sync exclusion 1/1, MCP catch-up gate 7/7, and the frozen sync/watcher contract 87/87. TypeScript typecheck, clean production/UI build, semantic baseline 6/6, CLI/MCP smoke 21/21, Afyx identity validation, and legacy-identity audit pass locally. Active installed runtime and MCP configuration were not changed; AFYX-268 remains open until exact-final-SHA Afyx Graph Build passes Windows/Linux/macOS and the resulting artifact passes isolated installed-runtime acceptance.
 
 # Final definition of success
 

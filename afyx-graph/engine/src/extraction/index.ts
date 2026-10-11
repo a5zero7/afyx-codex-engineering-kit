@@ -345,6 +345,22 @@ function expandUserPath(p: string): string {
   return p;
 }
 
+/** Resolve the effective core.excludesFile using the same repository cwd as Git. */
+function resolveGitExcludesFile(rootDir: string): string | null {
+  try {
+    const configured = execFileSync(
+      'git',
+      ['-C', rootDir, 'config', '--get', 'core.excludesFile'],
+      { encoding: 'utf8', timeout: 5_000, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true },
+    ).trim();
+    if (!configured) return null;
+    const expanded = expandUserPath(configured);
+    return path.isAbsolute(expanded) ? path.normalize(expanded) : path.resolve(rootDir, expanded);
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Root-relative exclude patterns from git sources that are NOT the root
  * `.gitignore`: `.git/info/exclude` and `core.excludesFile`. Same semantics as
@@ -362,21 +378,10 @@ function readGitExcludeExtraPatterns(rootDir: string): string {
       if (patterns) chunks.push(patterns);
     }
   }
-  try {
-    const configured = execFileSync(
-      'git',
-      ['-C', rootDir, 'config', '--get', 'core.excludesFile'],
-      { encoding: 'utf8', timeout: 5_000, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true },
-    ).trim();
-    if (configured) {
-      const abs = expandUserPath(configured);
-      if (fs.existsSync(abs)) {
-        const patterns = readGitignorePatterns(abs);
-        if (patterns) chunks.push(patterns);
-      }
-    }
-  } catch {
-    // No git, unset, or timeout — leave extras empty.
+  const configuredPath = resolveGitExcludesFile(rootDir);
+  if (configuredPath && fs.existsSync(configuredPath)) {
+    const patterns = readGitignorePatterns(configuredPath);
+    if (patterns) chunks.push(patterns);
   }
   return chunks.join('\n');
 }
@@ -1724,7 +1729,8 @@ export class ExtractionOrchestrator {
   private detectedFrameworkNames: string[] | null = null;
   /**
    * Scope matcher for SCOPED syncs, memoized on the mtimes of the two root
-   * files it is derived from (`afyx-graph.json`, `.gitignore`). See
+   * files it is derived from (`afyx-graph.json`, `.gitignore`) plus Git's
+   * repository/global exclude sources. See
    * {@link scopedSyncMatcher}.
    */
   private scopedMatcher: { key: string; matcher: ScopeIgnore } | null = null;
@@ -1742,10 +1748,11 @@ export class ExtractionOrchestrator {
    * rule, a built-in default) is treated exactly as the full walk would treat
    * it: absent, hence removed if tracked, never parsed (#1590).
    *
-   * Memoized on the root config + root `.gitignore` mtimes: building the
-   * matcher runs embedded-repo discovery (`git ls-files`), which would defeat
-   * the scoped path's whole point (skipping O(repo) work) if paid per sync.
-   * Two `stat`s per sync while nothing changed. An embedded repo created
+   * Memoized on the root config + every root-level Git exclude source: building
+   * the matcher runs embedded-repo discovery (`git ls-files`), which would
+   * defeat the scoped path's whole point (skipping O(repo) work) if paid per
+   * sync. Cheap stats plus one effective-config lookup keep the matcher fresh
+   * when core.excludesFile or its contents change. An embedded repo created
    * between config edits joins the scoped matcher on the next full sync, the
    * same lifecycle the watcher's own matcher already has.
    */
@@ -1754,17 +1761,20 @@ export class ExtractionOrchestrator {
     // changed. Nested `.gitignore` edits force a full watcher sync, which
     // clears this cache (see the full-reconcile branch in sync()).
     const gitDir = resolveGitDir(this.rootDir);
+    const configuredExcludes = resolveGitExcludesFile(this.rootDir);
     const key = [
       PROJECT_CONFIG_FILENAME,
       '.gitignore',
       gitDir ? path.join(gitDir, 'info', 'exclude') : '',
+      configuredExcludes ?? '',
     ]
       .map((name) => {
         if (!name) return '-';
         try {
-          return String(fs.statSync(path.isAbsolute(name) ? name : path.join(this.rootDir, name)).mtimeMs);
+          const stat = fs.statSync(path.isAbsolute(name) ? name : path.join(this.rootDir, name));
+          return `${name}:${stat.mtimeMs}:${stat.size}`;
         } catch {
-          return '-';
+          return `${name}:-`;
         }
       })
       .join('|');
