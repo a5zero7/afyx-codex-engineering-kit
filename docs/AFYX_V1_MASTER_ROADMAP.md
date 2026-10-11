@@ -6,8 +6,8 @@ Contract revision: **2026-10-11**
 v1 scope policy: **FROZEN — Phase 1 through Phase 11**  
 Post-v1 policy: **PLANNED EXPANSION — not a v1 release blocker**
 
-Current work: **AFYX-267 Technical Alpha branch and release candidate; AFYX-248 remains in progress**
-Task: `AFYX-267`; `AFYX-248` remains in progress
+Current work: **AFYX-279 reviewed Alpha security candidate promotion; AFYX-248 remains in progress**
+Task: `AFYX-279`; `AFYX-248` remains in progress
 Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`  
 Active implementation branch: `afyx/native-phase5f-parser-grammar`  
 Latest verified Phase 5F implementation checkpoint: `62621a0639f42db0eaac69ef087436d851cdba88`  
@@ -2171,6 +2171,68 @@ rollback path without changing the active user runtime or MCP configuration.
 The exact digests and canonical policy are in
 [AFYX_ALPHA_RELEASE.md](AFYX_ALPHA_RELEASE.md). AFYX-267 is complete;
 AFYX-248 remains In Progress pending its separate Technical Alpha program gate.
+### AFYX-266 — Scoped dependency security remediation
+
+The immutable accepted Alpha candidate remains
+`a431ba9ad5fae7bd06329f1fc6e42f1ba503f6dd`; this remediation is confined to
+the development branch and requires review before any Alpha promotion.
+
+The authoritative pre-change npm audit reported **10 affected development/build
+package records: 2 critical, 5 high, 3 moderate** and **zero production-scope
+findings**. The records were Vitest (`GHSA-5xrq-8626-4rwp`,
+`GHSA-82fw-gwwq-j7x9`), `@vitest/mocker` (`GHSA-82fw-gwwq-j7x9`), Tinypool
+(`GHSA-5gmw-xhrv-c9v3`, `GHSA-85c8-ppgw-ccpr`), Vite
+(`GHSA-4w7w-66w2-5vf9`, `GHSA-v6wh-96g9-6wx3`,
+`GHSA-fx2h-pf6j-xcff`), esbuild (`GHSA-67mh-4wv8-2f99`), PostCSS
+(`GHSA-qx2v-qp2m-jg93`, `GHSA-6g55-p6wh-862q`,
+`GHSA-fxqj-rqcc-2cmp`, `GHSA-r28c-9q8g-f849`), Nanoid
+(`GHSA-28wg-ghj8-5hjv`, `GHSA-2v37-7h3g-55p8`,
+`GHSA-xwg4-73v4-xw9w`), Rollup (`GHSA-mw96-cpmx-2vgc`), and
+source-map-js (`GHSA-68fv-2mgg-jv7q`).
+
+The smallest compatible dependency closure moves Vitest `2.1.9 -> 4.1.11`,
+adds its fixed direct Vite peer at `6.4.3`, and resolves PostCSS
+`8.5.6 -> 8.5.29`, Nanoid `3.3.11 -> 3.3.20`, Rollup
+`4.57.1 -> 4.64.5`, source-map-js `1.2.1 -> 1.2.2`, and esbuild
+`0.21.5 -> 0.25.12`. The vulnerable Tinypool and vite-node records leave the
+tree. UI Vite remains `7.3.6` with UI esbuild `0.28.2`; no override is used.
+Post-change full and production-only npm audits both report **0 findings**.
+
+Vitest 4 no longer auto-discovers `vitest.workspace.mts`; the equivalent
+engine/node and UI/jsdom split now uses `test.projects` in the root config.
+The engine keeps its existing isolation and receives a 10-second test budget
+for the upgraded runner. Two failure-injection assertions now mutate the
+existing mocked functions rather than spying on ESM namespace properties,
+preserving their original observable contract under Vitest 4.
+
+Runtime support remains Node `>=22.5.0`. Release builds effectively require
+Node `>=22.12.0` because the intentionally retained UI Vite `7.3.6` has that
+build-time floor; CI uses Node 24. npm 11 reports the esbuild `0.25.12` and
+`0.28.2` install scripts as not approved by `allowScripts`. No script policy or
+global npm policy was changed: clean install and clean production/UI build
+succeed through the package's optional platform binaries.
+
+Release-critical Actions are pinned to reviewed immutable revisions:
+`actions/checkout@11d5960a326750d5838078e36cf38b85af677262` (`v4.4.0`),
+`actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020` (`v4.4.0`), and
+`actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be`
+(`v2.4.0`). Alpha promotion must also retain its already-reviewed
+`actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02`
+(`v4.6.2`) pin.
+
+Local evidence on the supported contract includes clean install, typecheck and
+clean production/UI build PASS; focused Vitest 4 UI **21/21** and git-currency
+**13/13** PASS; semantic baseline **6/6** PASS; CLI/MCP smoke **21/21** PASS;
+artifact identity/legal **12/12** PASS; component, independence, identity and
+legal validators PASS. A full local run on unsupported Node 26 completed
+**5647 PASS / 34 FAIL / 31 SKIP**: failures were Windows open-handle cleanup,
+load-sensitive timeouts/performance assertions, and one Windows `which`
+fixture, while supported final-head Node 24 CI remains the acceptance authority.
+Exact-head CI, Graph Build, candidate archive/manifest integrity, and isolated
+artifact installation evidence are required before engineering closure.
+Publisher authenticity remains **UNVERIFIED**. AFYX-266 must stop for review
+after engineering closure; it does not mutate or promote the frozen Alpha
+candidate and does not replace the active installed runtime.
 
 # Final definition of success
 
