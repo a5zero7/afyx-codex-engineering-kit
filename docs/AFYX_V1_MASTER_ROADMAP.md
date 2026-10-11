@@ -1247,7 +1247,7 @@ Evidence lokal: refinement matrix 3/3 PASS (`2/6 → 6/6 FULL`); routing intent 
 
 ### AFYX-265 — Windows Git subprocess console closure
 
-Status: **IMPLEMENTED; FINAL-HEAD CI AND DEPLOYMENT VALIDATION PENDING; AFYX-248 remains IN PROGRESS**
+Status: **IMPLEMENTED; FINAL-HEAD CI PASS; DEPLOYMENT VALIDATION PENDING; AFYX-248 remains IN PROGRESS**
 
 Baseline `61f041b15cdb2d6f4c29e8eeba4a9ea01f6f1d0f`. Three production
 `execFileSync('git', ...)` sites that still used the default
@@ -1267,9 +1267,11 @@ pass on the source candidate. Windows visible-window observation recorded no
 visible or foreground console window during repeated ignore/scope Git paths.
 The installed runtime and active MCP configuration remain unchanged.
 
-Final-head Windows/Linux/macOS CI, controlled deployment, and actual installed
-Codex MCP Windows validation remain required. AFYX-265 must not move to Done
-until those gates pass.
+Implementation commit `940b772a6be6e8dac09397726f27da7130382f02` passed
+[CI run 38127465410](https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/38127465410)
+on Windows, Linux, and macOS. Controlled deployment and actual installed Codex
+MCP Windows validation remain required. AFYX-265 must not move to Done until
+those deployment gates pass.
 
 Required audits:
 
