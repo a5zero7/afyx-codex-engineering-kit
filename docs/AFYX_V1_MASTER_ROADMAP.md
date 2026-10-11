@@ -2198,11 +2198,18 @@ legal validators PASS. A full local run on unsupported Node 26 completed
 **5647 PASS / 34 FAIL / 31 SKIP**: failures were Windows open-handle cleanup,
 load-sensitive timeouts/performance assertions, and one Windows `which`
 fixture, while supported final-head Node 24 CI remains the acceptance authority.
-Exact-head CI, Graph Build, candidate archive/manifest integrity, and isolated
-artifact installation evidence are required before engineering closure.
-Publisher authenticity remains **UNVERIFIED**. AFYX-266 must stop for review
-after engineering closure; it does not mutate or promote the frozen Alpha
-candidate and does not replace the active installed runtime.
+Implementation commit `5989661b1444c4f30d37fb1fafddd5ae3023379c`
+passed [engineering-kit CI 38155025673](https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/38155025673)
+and [Afyx Graph Build 38155028757](https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/38155028757)
+on Windows, Linux, and macOS. The exact-revision Windows candidate archive
+(`win32-x64`, SHA-256
+`a55083939d4fa04824133b7fabaa0117e2a8027a2561491e48c76a9077853d01`)
+passed bundle/manifest verification and isolated installation: source revision
+`MATCH`, release manifest `VERIFIED`, build provenance
+`COMMIT_BOUND_MANIFEST`, CLI `1.0.0`, state `HEALTHY`. Publisher authenticity
+remains **UNVERIFIED**. AFYX-266 engineering closure is ready for review; it
+does not mutate or promote the frozen Alpha candidate and does not replace the
+active installed runtime.
 
 # Final definition of success
 
