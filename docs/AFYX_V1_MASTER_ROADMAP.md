@@ -6,8 +6,8 @@ Contract revision: **2026-10-11**
 v1 scope policy: **FROZEN — Phase 1 through Phase 11**  
 Post-v1 policy: **PLANNED EXPANSION — not a v1 release blocker**
 
-Current work: **AFYX-261 Efficient Coding v2 refinement; AFYX-248 remains in progress**
-Task: `AFYX-261`; `AFYX-248` remains in progress
+Current work: **AFYX-265 Windows Git subprocess console closure; AFYX-248 remains in progress**
+Task: `AFYX-265`; `AFYX-248` remains in progress
 Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`  
 Active implementation branch: `afyx/native-phase5f-parser-grammar`  
 Latest verified Phase 5F implementation checkpoint: `62621a0639f42db0eaac69ef087436d851cdba88`  
@@ -1244,6 +1244,32 @@ Matriks sintetis enam skenario yang sama memberi baseline 1.1.0 `2/6 FULL` dan k
 Adoption provenance 1.1.0 tetap dibekukan pada digest historis AFYX-264 dan kini diuji memakai fixture historis terpisah; instalasi pengguna tidak dimutasi. Acceptance memerlukan focused matrix, routing/component/doctor/adoption regressions, validators, dan final-head CI lintas platform.
 
 Evidence lokal: refinement matrix 3/3 PASS (`2/6 → 6/6 FULL`); routing intent 20/20 PASS; routing mutation guard 11/11 PASS; component 8/8 PASS dengan satu host-only cross-shell skip; doctor 10/10 PASS; legacy adoption 4/4 PASS; component, graph identity, dan independence validators PASS; Python syntax dan `git diff --check` PASS. Corpus empat dokumen bertambah dari 751 menjadi 956 kata untuk kontrak baru; provider token usage dan outcome model tidak diukur, sehingga tidak ada klaim penghematan token atau superioritas model.
+
+### AFYX-265 — Windows Git subprocess console closure
+
+Status: **IMPLEMENTED; FINAL-HEAD CI AND DEPLOYMENT VALIDATION PENDING; AFYX-248 remains IN PROGRESS**
+
+Baseline `61f041b15cdb2d6f4c29e8eeba4a9ea01f6f1d0f`. Three production
+`execFileSync('git', ...)` sites that still used the default
+`windowsHide: false` now set `windowsHide: true`:
+`readGitExcludeExtraPatterns()`, `listGitIgnoredDirectories()`, and
+`gitUserName()`. Arguments, cwd, stdio, timeout, maxBuffer, result handling,
+and fallback behavior are unchanged; no caching or lifecycle refactor was made.
+
+The Windows `mcp-initialize.test.ts` teardown previously requested `SIGKILL`
+and immediately removed the child's temporary cwd. Because `child.kill()` does
+not wait for process handles to close, all assertions could finish before
+cleanup failed with `EPERM`. Teardown now awaits the child `close` event before
+`rmSync`, without delay or failure suppression. Focused extraction/ignore/Trails,
+MCP initialize and catch-up, negative Git cases, TypeScript typecheck,
+production/UI build, and the 19-call production Git console-visibility audit
+pass on the source candidate. Windows visible-window observation recorded no
+visible or foreground console window during repeated ignore/scope Git paths.
+The installed runtime and active MCP configuration remain unchanged.
+
+Final-head Windows/Linux/macOS CI, controlled deployment, and actual installed
+Codex MCP Windows validation remain required. AFYX-265 must not move to Done
+until those gates pass.
 
 Required audits:
 

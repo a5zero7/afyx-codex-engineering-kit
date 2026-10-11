@@ -106,11 +106,13 @@ describe('MCP initialize handshake (issue #172)', () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-graph-mcp-init-'));
   });
 
-  afterEach(() => {
-    if (child && !child.killed) {
+  afterEach(async () => {
+    if (child && child.exitCode === null && child.signalCode === null) {
+      const closed = new Promise<void>((resolve) => child!.once('close', () => resolve()));
       child.kill('SIGKILL');
-      child = null;
+      await closed;
     }
+    child = null;
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
