@@ -9,9 +9,11 @@ on:
   push:
     branches:
       - main
+      - release/alpha-0.1
   pull_request:
     branches:
       - main
+      - release/alpha-0.1
 
 permissions:
   contents: read

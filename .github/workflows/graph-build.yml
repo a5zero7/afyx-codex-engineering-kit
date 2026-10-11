@@ -7,8 +7,10 @@ name: Afyx Graph Build
 
 on:
   workflow_dispatch:
+  push:
+    branches: [release/alpha-0.1]
   pull_request:
-    branches: [main]
+    branches: [main, release/alpha-0.1]
     paths:
       - 'afyx-graph/**'
       - 'scripts/install-afyx-graph.*'
@@ -61,11 +63,26 @@ jobs:
         working-directory: afyx-graph/engine
         run: |
           bash scripts/build-bundle.sh linux-x64
-          (cd release && sha256sum afyx-graph-* > SHA256SUMS)
+          version=$(node -p "require('../afyx-graph.json').product_version")
+          node ../../scripts/afyx-graph-artifact.mjs create-release-manifest \
+            --directory release --output release/ALPHA-CANDIDATE-MANIFEST.json \
+            --revision "$GITHUB_SHA" --version "$version" --tag "alpha-0.1-$GITHUB_SHA"
           mkdir -p /tmp/afyx-graph-smoke
           tar -xzf release/afyx-graph-linux-x64.tar.gz -C /tmp/afyx-graph-smoke
+          node ../../scripts/afyx-graph-artifact.mjs verify-release-manifest \
+            --manifest release/ALPHA-CANDIDATE-MANIFEST.json \
+            --archive release/afyx-graph-linux-x64.tar.gz \
+            --metadata /tmp/afyx-graph-smoke/afyx-graph-linux-x64/metadata.json
           /tmp/afyx-graph-smoke/afyx-graph-linux-x64/bin/afyx-graph --version
           /tmp/afyx-graph-smoke/afyx-graph-linux-x64/bin/afyx-graph help
+      - name: Retain SHA-pinned Linux Alpha candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: afyx-graph-alpha-linux-x64-${{ github.sha }}
+          path: |
+            afyx-graph/engine/release/afyx-graph-linux-x64.tar.gz
+            afyx-graph/engine/release/ALPHA-CANDIDATE-MANIFEST.json
+          if-no-files-found: error
 
   windows:
     runs-on: windows-latest
@@ -99,6 +116,22 @@ jobs:
           ./scripts/install-afyx-graph.ps1 -RuntimeRoot $runtime -ValidateOnly
           & (Join-Path $runtime 'current/bin/afyx-graph.cmd') --version
           & (Join-Path $runtime 'current/bin/afyx-graph.cmd') help
+          $version = node -p "require('./afyx-graph/afyx-graph.json').product_version"
+          node scripts/afyx-graph-artifact.mjs create-release-manifest `
+            --directory afyx-graph/engine/release --output afyx-graph/engine/release/ALPHA-CANDIDATE-MANIFEST.json `
+            --revision $env:GITHUB_SHA --version $version --tag "alpha-0.1-$env:GITHUB_SHA"
+          node scripts/afyx-graph-artifact.mjs verify-release-manifest `
+            --manifest afyx-graph/engine/release/ALPHA-CANDIDATE-MANIFEST.json `
+            --archive afyx-graph/engine/release/afyx-graph-win32-x64.zip `
+            --metadata (Join-Path $runtime 'current/metadata.json')
+      - name: Retain SHA-pinned Windows Alpha candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: afyx-graph-alpha-win32-x64-${{ github.sha }}
+          path: |
+            afyx-graph/engine/release/afyx-graph-win32-x64.zip
+            afyx-graph/engine/release/ALPHA-CANDIDATE-MANIFEST.json
+          if-no-files-found: error
 
   macos:
     runs-on: macos-latest
@@ -136,3 +169,18 @@ jobs:
           ./scripts/install-afyx-graph.sh --validate-only
           "$AFYX_GRAPH_RUNTIME_ROOT/current/bin/afyx-graph" --version
           "$AFYX_GRAPH_RUNTIME_ROOT/current/bin/afyx-graph" help
+          version=$(node -p "require('./afyx-graph/afyx-graph.json').product_version")
+          node scripts/afyx-graph-artifact.mjs create-release-manifest \
+            --directory afyx-graph/engine/release --output afyx-graph/engine/release/ALPHA-CANDIDATE-MANIFEST.json \
+            --revision "$GITHUB_SHA" --version "$version" --tag "alpha-0.1-$GITHUB_SHA"
+          node scripts/afyx-graph-artifact.mjs verify-release-manifest \
+            --manifest afyx-graph/engine/release/ALPHA-CANDIDATE-MANIFEST.json \
+            --archive "$archive" --metadata "$AFYX_GRAPH_RUNTIME_ROOT/current/metadata.json"
+      - name: Retain SHA-pinned macOS Alpha candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: afyx-graph-alpha-darwin-${{ runner.arch }}-${{ github.sha }}
+          path: |
+            afyx-graph/engine/release/afyx-graph-darwin-*.tar.gz
+            afyx-graph/engine/release/ALPHA-CANDIDATE-MANIFEST.json
+          if-no-files-found: error

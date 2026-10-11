@@ -6,8 +6,8 @@ Contract revision: **2026-10-11**
 v1 scope policy: **FROZEN — Phase 1 through Phase 11**  
 Post-v1 policy: **PLANNED EXPANSION — not a v1 release blocker**
 
-Current work: **AFYX-268 Git global-excludes catch-up correctness; AFYX-248 remains in progress**
-Task: `AFYX-268`; `AFYX-248` remains in progress
+Current work: **AFYX-267 Technical Alpha branch and release candidate; AFYX-248 remains in progress**
+Task: `AFYX-267`; `AFYX-248` remains in progress
 Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`  
 Active implementation branch: `afyx/native-phase5f-parser-grammar`  
 Latest verified Phase 5F implementation checkpoint: `62621a0639f42db0eaac69ef087436d851cdba88`  
@@ -2140,6 +2140,27 @@ The retained AFYX-265 fixture proved Git's ground truth for `.gitignore`, `.git/
 The bounded fix resolves relative paths from the repository root while preserving `~`/absolute handling, and includes the effective excludes path plus mtime/size in scoped matcher invalidation. Existing Git arguments, `windowsHide`, timeouts, stdio, error handling, full-index discovery, MCP lifecycle, and AFYX-265 console-suppression behavior remain unchanged.
 
 Focused evidence: the new global-excludes lifecycle matrix passes 4/4 after failing 2/2 before the fix; it covers initial/full indexing, scoped create/modify/rename/delete, restart/persistence, `.gitignore`, `.git/info/exclude`, absolute/relative `core.excludesFile`, unset/missing/non-file configuration, positive files, and supported stale-row reconciliation. Existing extraction ignore checks pass 3/3, watcher info/exclude 1/1, scoped-sync exclusion 1/1, MCP catch-up gate 7/7, and the frozen sync/watcher contract 87/87. TypeScript typecheck, clean production/UI build, semantic baseline 6/6, CLI/MCP smoke 21/21, Afyx identity validation, and legacy-identity audit pass locally. Implementation commit `1c9a9c4dac8b75a3e384509d6f038c2de3720e25` passed [Afyx Graph Build 38130937586](https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/38130937586) on Windows, Linux, and macOS. An official-bundle-format Windows runtime installed under a disposable `%TEMP%` root reported revision `MATCH`, passed Git-grounded scope/reconciliation/restart acceptance, and passed installed CLI/MCP smoke 21/21. The active installed runtime and MCP configuration were not changed. AFYX-268 engineering acceptance is complete; AFYX-248 remains in progress.
+
+### AFYX-267 — Technical Alpha branch and release candidate
+
+Status: **IN PROGRESS — exact-head candidate CI required**
+
+The stabilization branch `release/alpha-0.1` is cut non-destructively from the
+approved development revision `fd96cd3a9ad41fc98346b46c56f3ade8e73cc1e8`.
+`main` remains canonical integration and
+`afyx/native-phase5f-parser-grammar` remains ongoing engineering. Only reviewed
+promotions and approved Alpha fixes enter the stabilization branch; Alpha
+hotfixes must flow back to development.
+
+Engineering-kit CI and Afyx Graph Build now run independently for Alpha pushes
+and pull requests. Graph Build retains host-platform archives plus a
+commit-bound candidate manifest after verifying embedded revision, target,
+version, and SHA-256. The candidate label is `technical-alpha` / `alpha-0.1`;
+the existing `1.0.0` product metadata is unchanged and no stable release/tag is
+created. Exact final SHA, per-platform workflow conclusions, artifact digests,
+and isolated install/rollback evidence are required before AFYX-267 can move to
+Done. The canonical policy is [AFYX_ALPHA_RELEASE.md](AFYX_ALPHA_RELEASE.md).
+AFYX-248 remains In Progress.
 
 # Final definition of success
 
