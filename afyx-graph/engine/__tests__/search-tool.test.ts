@@ -62,6 +62,31 @@ describe('MCP Search adapter', () => {
     expect([...text.matchAll(/^\*\*(.+?)\*\* \(/gm)].map((match) => match[1])).toEqual(['handA', 'handB', 'genA', 'genB']);
   });
 
+  it('uses the over-fetched boundary row when composing handwritten before generated results', () => {
+    const { source, calls } = fixture([
+      result('generatedTop', 'src/generated/top.ts'),
+      result('handRankedSecond'),
+      result('handBoundary'),
+    ]);
+    const text = executeSearchTool(source, { query: 'q', limit: 2 }).content[0]!.text;
+    expect(calls[0]).toEqual({ query: 'q', options: { limit: 3, kinds: undefined } });
+    expect([...text.matchAll(/^\*\*(.+?)\*\* \(/gm)].map((match) => match[1]))
+      .toEqual(['handRankedSecond', 'handBoundary']);
+    expect(text).not.toContain('**generatedTop**');
+    expect(text).toContain('Results truncated at 2');
+  });
+
+  it('distinguishes an exact full page from a page with one over-fetched result', () => {
+    const exact = fixture([result('one'), result('two')]);
+    const exactText = executeSearchTool(exact.source, { query: 'q', limit: 2 }).content[0]!.text;
+    expect(exactText).not.toContain('Results truncated');
+
+    const over = fixture([result('one'), result('two'), result('three')]);
+    const overText = executeSearchTool(over.source, { query: 'q', limit: 2 }).content[0]!.text;
+    expect(overText).toContain('Results truncated at 2');
+    expect(overText).toContain('not an exhaustive source-declaration inventory');
+  });
+
   it('preserves exact compact formatting, optional signature, and optional line', () => {
     const { source } = fixture([
       result('signed', 'src/signed.ts', { startLine: 17, signature: 'signed(): void' }),
@@ -95,5 +120,7 @@ describe('MCP Search adapter', () => {
     const text = executeSearchTool(source, { query: 'q', limit: 100 }).content[0]!.text;
     expect(text.endsWith('\n\n... (output truncated)')).toBe(true);
     expect(text.length).toBeLessThanOrEqual(15_024);
+    expect(text).toContain('Results truncated at 100');
+    expect(text).toContain('not an exhaustive source-declaration inventory');
   });
 });

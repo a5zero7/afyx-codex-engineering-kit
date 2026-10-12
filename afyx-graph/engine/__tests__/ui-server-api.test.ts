@@ -13,7 +13,7 @@
  * resolve, and one deliberately hot function with 500 callers.
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import * as http from 'http';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -86,6 +86,35 @@ async function getStatusAndJson(requestPath: string): Promise<{ status: number; 
   const res = await request(requestPath);
   expect(res.headers['content-type']).toBe('application/json; charset=utf-8');
   return { status: res.status, body: JSON.parse(res.body) };
+}
+
+/**
+ * Observe the database access shape behind one node payload. Query counts are
+ * the deterministic N+1 contract; loopback wall time varies with shared CI
+ * load and cannot prove whether callers were resolved individually.
+ */
+async function observeNodeReadBatches<T>(run: () => Promise<T>): Promise<{
+  value: T;
+  getNodeCalls: number;
+  nodeBatchSizes: number[];
+  fanInBatchSizes: number[];
+}> {
+  const getNode = vi.spyOn(AfyxGraph.prototype, 'getNode');
+  const getNodesByIds = vi.spyOn(AfyxGraph.prototype, 'getNodesByIds');
+  const getFanIn = vi.spyOn(AfyxGraph.prototype, 'getFanIn');
+  try {
+    const value = await run();
+    return {
+      value,
+      getNodeCalls: getNode.mock.calls.length,
+      nodeBatchSizes: getNodesByIds.mock.calls.map(([ids]) => ids.length),
+      fanInBatchSizes: getFanIn.mock.calls.map(([ids]) => ids.length),
+    };
+  } finally {
+    getNode.mockRestore();
+    getNodesByIds.mockRestore();
+    getFanIn.mockRestore();
+  }
 }
 
 /** Find a symbol in the fixture by name, through the API itself. */
@@ -625,13 +654,12 @@ describe('GET /api/node/<id> — the type hierarchy block', () => {
 });
 
 describe('GET /api/node/<id> — the busiest symbol', () => {
-  it('caps the caller list, keeps the true total, and stays fast', async () => {
+  it('caps the caller list, keeps the true total, and resolves callers in batches', async () => {
     const hotId = await idOf('hot', 'function');
     await request(`/api/node/${hotId}`); // warm the connection and the caches
 
-    const started = performance.now();
-    const res = await request(`/api/node/${hotId}`);
-    const elapsed = performance.now() - started;
+    const observed = await observeNodeReadBatches(() => request(`/api/node/${hotId}`));
+    const res = observed.value;
     expect(res.status).toBe(200);
 
     const body = JSON.parse(res.body);
@@ -644,8 +672,11 @@ describe('GET /api/node/<id> — the busiest symbol', () => {
     expect(body.counts.callers).toBeGreaterThanOrEqual(500);
     expect(body.blast.direct).toBe(body.counts.callers);
 
-    // 500 callers resolved one query at a time would be nowhere near this.
-    expect(elapsed).toBeLessThan(100);
+    // One focal lookup, one 500-caller batch and one fan-in batch for the 300
+    // shown rows. A per-caller lookup would turn getNodeCalls into 501.
+    expect(observed.getNodeCalls).toBe(1);
+    expect(observed.nodeBatchSizes).toEqual([500]);
+    expect(observed.fanInBatchSizes).toEqual([300, 0]);
   });
 });
 
@@ -1050,7 +1081,7 @@ describe.runIf(AfyxGraph.isInitialized(path.resolve(__dirname, '..')))(
     const repoGet = (requestPath: string): Promise<Response> =>
       requestOn(repoServer.port, requestPath);
 
-    it('answers in under 100 ms with grouped, capped lists and correct counts', async () => {
+    it('answers with grouped, capped lists, correct counts and batched caller reads', async () => {
       const search = JSON.parse(
         (await repoGet('/api/search?q=' + encodeURIComponent('LRUCache.get'))).body
       );
@@ -1061,9 +1092,8 @@ describe.runIf(AfyxGraph.isInitialized(path.resolve(__dirname, '..')))(
 
       await repoGet(`/api/node/${hit.id}`); // warm
 
-      const started = performance.now();
-      const res = await repoGet(`/api/node/${hit.id}`);
-      const elapsed = performance.now() - started;
+      const observed = await observeNodeReadBatches(() => repoGet(`/api/node/${hit.id}`));
+      const res = observed.value;
 
       expect(res.status).toBe(200);
       const body = JSON.parse(res.body);
@@ -1087,7 +1117,10 @@ describe.runIf(AfyxGraph.isInitialized(path.resolve(__dirname, '..')))(
       expect(body.blast.direct).toBe(body.counts.callers);
       expect(body.tests.reached).toBe(true);
 
-      expect(elapsed).toBeLessThan(100);
+      expect(observed.getNodeCalls).toBe(1);
+      expect(observed.nodeBatchSizes).toHaveLength(1);
+      expect(observed.nodeBatchSizes[0]).toBeGreaterThanOrEqual(500);
+      expect(observed.fanInBatchSizes).toEqual([body.incoming.shown, 0]);
     });
   }
 );
