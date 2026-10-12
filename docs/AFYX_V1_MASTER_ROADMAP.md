@@ -2224,10 +2224,14 @@ Local evidence on the supported contract includes clean install, typecheck and
 clean production/UI build PASS; focused Vitest 4 UI **21/21** and git-currency
 **13/13** PASS; semantic baseline **6/6** PASS; CLI/MCP smoke **21/21** PASS;
 artifact identity/legal **12/12** PASS; component, independence, identity and
-legal validators PASS. A full local run on unsupported Node 26 completed
-**5647 PASS / 34 FAIL / 31 SKIP**: failures were Windows open-handle cleanup,
-load-sensitive timeouts/performance assertions, and one Windows `which`
-fixture, while supported final-head Node 24 CI remains the acceptance authority.
+legal validators PASS. Node 26 is included by the declared Node `>=22.5.0`
+runtime compatibility contract; Node 24 is the CI-tested acceptance baseline.
+A full local Node 26 run completed **5647 PASS / 34 FAIL / 31 SKIP**. Review
+classified the failures as Windows test-isolation/resource-cleanup compatibility,
+load-sensitive test flakiness, and one environment-specific Windows `which`
+fixture; no wrong product result was demonstrated. Node 26 full-suite cleanliness
+remains a separately scoped compatibility/test-infrastructure risk and the
+published runtime contract is not narrowed to conceal it.
 Implementation commit `5989661b1444c4f30d37fb1fafddd5ae3023379c`
 passed [engineering-kit CI 38155025673](https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/38155025673)
 and [Afyx Graph Build 38155028757](https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/38155028757)

@@ -76,7 +76,7 @@ jobs:
           /tmp/afyx-graph-smoke/afyx-graph-linux-x64/bin/afyx-graph --version
           /tmp/afyx-graph-smoke/afyx-graph-linux-x64/bin/afyx-graph help
       - name: Retain SHA-pinned Linux Alpha candidate
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: afyx-graph-alpha-linux-x64-${{ github.sha }}
           path: |
@@ -125,7 +125,7 @@ jobs:
             --archive afyx-graph/engine/release/afyx-graph-win32-x64.zip `
             --metadata (Join-Path $runtime 'current/metadata.json')
       - name: Retain SHA-pinned Windows Alpha candidate
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: afyx-graph-alpha-win32-x64-${{ github.sha }}
           path: |
@@ -177,7 +177,7 @@ jobs:
             --manifest afyx-graph/engine/release/ALPHA-CANDIDATE-MANIFEST.json \
             --archive "$archive" --metadata "$AFYX_GRAPH_RUNTIME_ROOT/current/metadata.json"
       - name: Retain SHA-pinned macOS Alpha candidate
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: afyx-graph-alpha-darwin-${{ runner.arch }}-${{ github.sha }}
           path: |
