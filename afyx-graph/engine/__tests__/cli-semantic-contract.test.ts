@@ -12,7 +12,7 @@ const BIN = path.resolve(__dirname, '../dist/bin/afyx-graph.js');
 const PACKAGE_VERSION = JSON.parse(
   fs.readFileSync(path.resolve(__dirname, '../package.json'), 'utf8'),
 ).version as string;
-const ROOT_HELP_SHA256 = 'c37f1c94b207601e524ee591056da18238df1e5b7cc2b1e55eab0a015db23168';
+const ROOT_HELP_SHA256 = 'be58c0d1fae7fc27b682fe90e9fc280357549df5b355c4785d9013967a3cacb9';
 const QUERY_HELP_SHA256 = '0ce2d5d2c93401f903871589a0db50b588e969524eb405253488bc81618b8bcd';
 
 interface CliRun {
@@ -87,7 +87,7 @@ describe('CLI public semantic contract', () => {
 
   it('keeps the Afyx-native command registry and global invocation semantics explicit', () => {
     expect(CLI_COMMANDS.map(({ name }) => name)).toEqual([
-      'init', 'uninit', 'index', 'sync', 'status', 'query', 'explore', 'context',
+      'init', 'uninit', 'index', 'sync', 'status', 'query', 'inventory', 'explore', 'context',
       'prompt-hook', 'node', 'files', 'daemon', 'ui', 'serve', 'unlock', 'callers',
       'callees', 'impact', 'affected', 'install', 'uninstall', 'upgrade', 'version',
     ]);
