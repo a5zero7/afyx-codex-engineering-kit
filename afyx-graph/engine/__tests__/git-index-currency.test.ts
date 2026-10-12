@@ -80,14 +80,16 @@ describe('git index currency across commits and restores (#1829)', () => {
 
   it('falls back when git diff fails instead of claiming a clean index', () => {
     write('new.ts', 'newSymbol'); commit();
-    const real = cp.execFileSync;
+    const mockedExecFileSync = vi.mocked(cp.execFileSync);
+    const real = mockedExecFileSync.getMockImplementation()!;
     let injected = 0;
-    vi.spyOn(cp, 'execFileSync').mockImplementation(((file: string, args: string[], options: any) => {
+    mockedExecFileSync.mockImplementation(((file: string, args: string[], options: any) => {
       if (file === 'git' && args[0] === 'diff') { injected++; throw new Error('Injected git diff timeout'); }
       return real(file, args, options);
     }) as typeof cp.execFileSync);
     expect(cg.getChangedFiles().added).toEqual(['new.ts']);
     expect(injected).toBeGreaterThan(0);
+    mockedExecFileSync.mockImplementation(real);
   });
 
   it('does not advance the commit stamp after a scoped sync', async () => {
@@ -132,16 +134,17 @@ describe('git index currency across commits and restores (#1829)', () => {
 
   it('keeps a committed path pending when sync cannot read it', async () => {
     write('new.ts', 'newSymbol'); commit();
-    const real = fs.readFileSync;
+    const mockedReadFileSync = vi.mocked(fs.readFileSync);
+    const real = mockedReadFileSync.getMockImplementation()!;
     let injected = 0;
-    vi.spyOn(fs, 'readFileSync').mockImplementation(((file: any, ...args: any[]) => {
+    mockedReadFileSync.mockImplementation(((file: any, ...args: any[]) => {
       if (String(file) === path.join(root, 'new.ts')) { injected++; throw new Error('Injected transient read error'); }
       return (real as any)(file, ...args);
     }) as typeof fs.readFileSync);
     await cg.sync();
     expect(injected).toBeGreaterThan(0);
     expect(symbols('newSymbol')).not.toContain('newSymbol');
-    vi.restoreAllMocks();
+    mockedReadFileSync.mockImplementation(real);
     expect(cg.getChangedFiles().added).toEqual(['new.ts']);
     await cg.sync(); clean();
   });

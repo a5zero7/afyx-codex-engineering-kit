@@ -144,6 +144,54 @@ class LifecycleContractTests(unittest.TestCase):
             self.assertIn("22.5", result.stdout + result.stderr)
             self.assertFalse(runtime.exists())
 
+    @unittest.skipUnless(WINDOWS, "PowerShell installer regression is Windows-specific")
+    def test_graph_installer_accepts_detached_head_checkout(self) -> None:
+        shell = pwsh_path()
+        git = shutil.which("git")
+        if not shell or not git:
+            self.skipTest("PowerShell and Git are required")
+
+        with tempfile.TemporaryDirectory() as raw:
+            checkout = Path(raw) / "checkout"
+            runtime = Path(raw) / "runtime"
+            for relative in (
+                "scripts/install-afyx-graph.ps1",
+                "afyx-graph/afyx-graph.json",
+                "afyx-graph/engine/scripts/distribution-product.json",
+            ):
+                destination = checkout / relative
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(ROOT / relative, destination)
+
+            subprocess.run([git, "init", "-q", str(checkout)], check=True)
+            subprocess.run([git, "-C", str(checkout), "config", "user.name", "Afyx Test"], check=True)
+            subprocess.run([git, "-C", str(checkout), "config", "user.email", "test@afyx.invalid"], check=True)
+            subprocess.run([git, "-C", str(checkout), "add", "."], check=True)
+            subprocess.run([git, "-C", str(checkout), "commit", "-qm", "fixture"], check=True)
+            subprocess.run([git, "-C", str(checkout), "checkout", "-q", "--detach", "HEAD"], check=True)
+
+            result = subprocess.run(
+                [
+                    shell,
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-File",
+                    str(checkout / "scripts/install-afyx-graph.ps1"),
+                    "-RuntimeRoot",
+                    str(runtime),
+                    "-SkipPathUpdate",
+                    "-Offline",
+                    "-NoBuildFallback",
+                ],
+                cwd=checkout,
+                capture_output=True,
+                text=True,
+            )
+            output = result.stdout + result.stderr
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("COMPONENT_REQUIRED", output)
+            self.assertNotIn("null-valued expression", output)
+
     def test_checksum_failure_preserves_owned_runtime(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             base = Path(raw)

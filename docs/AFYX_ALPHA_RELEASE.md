@@ -76,3 +76,17 @@ The Windows candidate was also built and installed locally under a disposable
 runtime root. Its revision reported `MATCH`; restoring the prior
 `fd96cd3a9ad41fc98346b46c56f3ade8e73cc1e8` artifact restored that source
 identity and working CLI without touching the active user runtime.
+
+## AFYX-279 security-candidate promotion
+
+AFYX-266 development source `908e56d63ba2e5b38bb557a28e2b88325204f101`
+is eligible only for a reviewed promotion into this branch. The promotion must
+preserve the Alpha triggers, SHA-named candidate artifacts, manifest checks,
+and rollback policy while retaining immutable pins for checkout, Node setup,
+artifact upload, and release provenance actions. Node `>=22.5.0` remains the
+declared runtime compatibility contract; Node 24 is the CI-tested baseline.
+
+The previous `a431ba9ad5fae7bd06329f1fc6e42f1ba503f6dd` candidate remains frozen
+and accepted until the promotion PR is approved, merged, and its resulting
+Alpha SHA passes all candidate and isolated-install acceptance gates. A PR head
+or mutable branch tip is not a replacement candidate identity.
