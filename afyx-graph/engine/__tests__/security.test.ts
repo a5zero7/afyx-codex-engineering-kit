@@ -403,6 +403,7 @@ describe('MCP Input Validation', () => {
         startLine: 1,
         endLine: 2,
         language: 'typescript',
+        signature: `${'arg: string, '.repeat(20)}result: string`,
       },
       score: 1,
     }));
@@ -415,7 +416,7 @@ describe('MCP Input Validation', () => {
     };
     const fakeHandler = new ToolHandler(fakeCg as unknown as AfyxGraph);
 
-    const result = await fakeHandler.execute('afyx_graph_search', { query: 'x' });
+    const result = await fakeHandler.execute('afyx_graph_search', { query: 'x', limit: 100 });
 
     expect(result.isError).toBeFalsy();
     expect(result.content[0].text).toContain('... (output truncated)');
