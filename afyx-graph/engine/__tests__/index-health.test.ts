@@ -14,7 +14,7 @@ describe('shared index health contract', () => {
     return {
       getIndexState: () => 'complete',
       getIndexAccounting: () => null,
-      getIndexBuildInfo: () => ({ version: '1.0.0', extractionVersion: 27 }),
+      getIndexBuildInfo: () => ({ version: '1.0.0', extractionVersion: 28 }),
       isIndexStale: () => false,
       getPendingReferenceCount: () => 0,
       isWatching: () => true,
@@ -62,7 +62,7 @@ describe('shared index health contract', () => {
     expect(health.extraction.state).toBe('complete');
     expect(health.compatibility).toMatchObject({
       builtWithExtractionVersion: 26,
-      currentExtractionVersion: 27,
+      currentExtractionVersion: 28,
       reindexRecommended: true,
     });
   });

@@ -99,6 +99,8 @@ default project — but the tools are available and work **per project**:
 
 - Use \`afyx_graph_inventory\` for exact supported declaration lists/counts and
   \`afyx_graph_explore\` for relational/context questions; pass \`projectPath\` to either.
+  Ranked/capped results are not exhaustive; when index coverage cannot prove
+  the requested fact, state the limitation and use direct source inspection.
 
 - To query a project that HAS a \`.afyx-graph/\` index (e.g. a service inside a
   monorepo, or a second repo), pass its path as \`projectPath\` to
