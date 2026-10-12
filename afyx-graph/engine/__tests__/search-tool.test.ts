@@ -24,17 +24,17 @@ describe('MCP Search adapter', () => {
   it('maps type to type_alias and invokes the domain exactly once', () => {
     const { source, calls } = fixture([result('hit')]);
     executeSearchTool(source, { query: 'needle', kind: 'type', limit: 5 });
-    expect(calls).toEqual([{ query: 'needle', options: { limit: 5, kinds: ['type_alias'] } }]);
+    expect(calls).toEqual([{ query: 'needle', options: { limit: 6, kinds: ['type_alias'] } }]);
   });
 
   it('omits kinds when no kind is supplied and forwards other runtime kinds', () => {
     const omitted = fixture([result('hit')]);
     executeSearchTool(omitted.source, { query: 'q' });
-    expect(omitted.calls[0]).toEqual({ query: 'q', options: { limit: 10, kinds: undefined } });
+    expect(omitted.calls[0]).toEqual({ query: 'q', options: { limit: 11, kinds: undefined } });
 
     const unknown = fixture([result('hit')]);
     executeSearchTool(unknown.source, { query: 'q', kind: 'mystery' });
-    expect(unknown.calls[0]).toEqual({ query: 'q', options: { limit: 10, kinds: ['mystery'] } });
+    expect(unknown.calls[0]).toEqual({ query: 'q', options: { limit: 11, kinds: ['mystery'] } });
   });
 
   it.each([
@@ -42,7 +42,7 @@ describe('MCP Search adapter', () => {
   ])('normalizes limit %p to %p', (input, expected) => {
     const { source, calls } = fixture([result('hit')]);
     executeSearchTool(source, { query: 'q', limit: input });
-    expect((calls[0]!.options as { limit: number }).limit).toBe(expected);
+    expect((calls[0]!.options as { limit: number }).limit).toBe(expected + 1);
   });
 
   it('returns exact success-shaped empty result', () => {
@@ -68,10 +68,23 @@ describe('MCP Search adapter', () => {
       result('plain', 'src/plain.ts'),
     ]);
     expect(executeSearchTool(source, { query: 'q' }).content[0]!.text).toBe(
-      '**Search Results (2 found)**\n\n' +
+      '**Search Results (2 shown)**\n\n' +
       '**signed** (function)\nsrc/signed.ts:17\n`signed(): void`\n\n' +
       '**plain** (function)\nsrc/plain.ts\n'
     );
+  });
+
+  it('reports a bounded Odoo-like discovery page without presenting it as a complete inventory', () => {
+    const matches = Array.from({ length: 9 }, (_, index) =>
+      result(`SaleOrderAddon${index + 1}`, `addon_${index + 1}/models/sale_order.py`),
+    );
+    const { source, calls } = fixture(matches);
+    const text = executeSearchTool(source, { query: 'sale.order', limit: 4 }).content[0]!.text;
+    expect(calls[0]).toEqual({ query: 'sale.order', options: { limit: 5, kinds: undefined } });
+    expect(text).toContain('**Search Results (4 shown)**');
+    expect(text).not.toContain('**SaleOrderAddon5**');
+    expect(text).toContain('Results truncated at 4; pass `limit` (up to 100) to widen.');
+    expect(text).toContain('not an exhaustive source-declaration inventory');
   });
 
   it('consumes the frozen shared output bound', () => {
