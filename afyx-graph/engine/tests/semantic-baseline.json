@@ -1855,11 +1855,11 @@
   },
   "odoo": {
     "files": 11,
-    "nodes": 28,
-    "edges": 31,
+    "nodes": 30,
+    "edges": 33,
     "relations": {
       "calls": 3,
-      "contains": 17,
+      "contains": 19,
       "imports": 11
     },
     "languages": {
@@ -2108,6 +2108,20 @@
         "filePath": "addons/base_mod/tests/test_partner.py",
         "startLine": 5,
         "endLine": 7
+      },
+      {
+        "kind": "property",
+        "name": "_inherit",
+        "filePath": "addons/base_mod/models/partner.py",
+        "startLine": 5,
+        "endLine": 5
+      },
+      {
+        "kind": "property",
+        "name": "_inherit",
+        "filePath": "addons/dep_mod/models/partner_ext.py",
+        "startLine": 5,
+        "endLine": 5
       }
     ],
     "edgeList": [
@@ -2148,8 +2162,18 @@
       },
       {
         "kind": "contains",
+        "source": "class:ResPartner@addons/base_mod/models/partner.py:4",
+        "target": "property:_inherit@addons/base_mod/models/partner.py:5"
+      },
+      {
+        "kind": "contains",
         "source": "class:ResPartnerExt@addons/dep_mod/models/partner_ext.py:4",
         "target": "method:compute_loyalty@addons/dep_mod/models/partner_ext.py:7"
+      },
+      {
+        "kind": "contains",
+        "source": "class:ResPartnerExt@addons/dep_mod/models/partner_ext.py:4",
+        "target": "property:_inherit@addons/dep_mod/models/partner_ext.py:5"
       },
       {
         "kind": "contains",
