@@ -2297,10 +2297,12 @@ Owned Odoo-like ground truth covers nine Odoo-17-style declarations and forty-fi
 
 ### AFYX-281 + AFYX-282 — Final engineering acceptance closure
 
-Status: **LOCAL ACCEPTANCE PASS; EXACT-HEAD GRAPH BUILD REQUIRED; AFYX-248 AND MAC.4 REMAIN IN PROGRESS**
+Status: **ENGINEERING ACCEPTANCE PASS; AFYX-248 AND MAC.4 REMAIN IN PROGRESS**
 
 AFYX-281 Linux Graph Build failures (`112.72 ms` and `100.96 ms` against a `100 ms` assertion) retained every functional contract: 500+ true callers, 300 shown, truncation, count parity, uniqueness, and blast-radius parity. Bounded focused reproduction did not demonstrate a product slowdown. The assertion measured loopback HTTP wall time under shared-runner load, which cannot distinguish a batched implementation from N+1 reads. The regression contract now observes the database access shape directly: one focal lookup, one 500-caller batch, and fan-in batches for the 300 displayed rows. Product behavior and thresholds are unchanged.
 
 AFYX-282 had incorrectly incorporated extraction-v28 `_inherit` property facts into the pre-independence semantic snapshot. The historical file is restored byte-for-byte to the digest recorded by `semantic-baseline.meta.json`, with repository attributes pinning its checkout to LF so the same byte identity is enforced on Windows, Linux, and macOS. A separate deterministic additive contract verifies the exact two property facts and two class-containment edges, removes only those additions, and then compares all six fixtures with the unchanged historical oracle. A controlled unrelated TypeScript file-count mutation still fails the historical gate. Canonical `--write` is refused; disposable snapshots require an explicit alternate path.
 
 AFYX-280 boundary validation confirmed `limit + 1` over-fetch and handwritten-before-generated composition. It also reproduced a presentation defect near the shared output bound: a tail-positioned completeness notice could be trimmed. The notice now precedes result rows, so bounded output retains both the ranked-search incompleteness warning and the generic character-truncation marker. Ranking and result composition are unchanged.
+
+Focused regressions, typecheck, clean production/UI build, the six-fixture semantic baseline, 21-check CLI/MCP smoke, identity/component/independence validation, and artifact-identity tests passed. Exact-source-head [Afyx Graph Build 38324265023](https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/38324265023) passed on Windows, Linux, and macOS. AFYX-281 and AFYX-282 engineering acceptance is complete; this does not activate Technical Alpha or complete AFYX-248 or AFYX-272 MAC.4.
