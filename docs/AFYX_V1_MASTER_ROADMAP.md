@@ -6,8 +6,8 @@ Contract revision: **2026-10-11**
 v1 scope policy: **FROZEN — Phase 1 through Phase 11**  
 Post-v1 policy: **PLANNED EXPANSION — not a v1 release blocker**
 
-Current work: **AFYX-280 Graph discovery completeness closure; AFYX-248 remains in progress**
-Task: `AFYX-280`; `AFYX-248` remains in progress
+Current work: **AFYX-262 Odoo Engineering refinement; AFYX-248 remains in progress**
+Task: `AFYX-262`; `AFYX-248` remains in progress
 Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`  
 Active implementation branch: `afyx/native-phase5f-parser-grammar`  
 Latest verified Phase 5F implementation checkpoint: `62621a0639f42db0eaac69ef087436d851cdba88`  
@@ -1244,6 +1244,18 @@ Matriks sintetis enam skenario yang sama memberi baseline 1.1.0 `2/6 FULL` dan k
 Adoption provenance 1.1.0 tetap dibekukan pada digest historis AFYX-264 dan kini diuji memakai fixture historis terpisah; instalasi pengguna tidak dimutasi. Acceptance memerlukan focused matrix, routing/component/doctor/adoption regressions, validators, dan final-head CI lintas platform.
 
 Evidence lokal: refinement matrix 3/3 PASS (`2/6 → 6/6 FULL`); routing intent 20/20 PASS; routing mutation guard 11/11 PASS; component 8/8 PASS dengan satu host-only cross-shell skip; doctor 10/10 PASS; legacy adoption 4/4 PASS; component, graph identity, dan independence validators PASS; Python syntax dan `git diff --check` PASS. Corpus empat dokumen bertambah dari 751 menjadi 956 kata untuk kontrak baru; provider token usage dan outcome model tidak diukur, sehingga tidak ada klaim penghematan token atau superioritas model.
+
+### Technical Alpha Batch 4B.2 — AFYX-262
+
+Status: **IMPLEMENTED; ACCEPTANCE REQUIRES FINAL-HEAD CI; AFYX-248 remains IN PROGRESS**
+
+Odoo Engineering 1.2.0 mempertahankan version isolation dan sebelas reference Odoo 10–20 tanpa blanket rewrite. Refinement menambahkan corroboration dua supporting signal independen ketika strong version evidence tidak tersedia, unresolved handling untuk konflik, pemeriksaan override/`super`, multi-record/batching/prefetch/N+1, serta batas eksplisit group implication dan `sudo`. Pertanyaan penjelasan sederhana tetap ringan. Kontrak XML inheritance, persisted identifier, Odoo 20 exact-evidence safeguard, dan source/target migration isolation yang sudah benar dipertahankan.
+
+Matriks sintetis enam skenario yang sama memberi baseline 1.1.0 `3/6 FULL` dan kandidat 1.2.0 `6/6 FULL`: Odoo 10 legacy compatibility, Odoo 17 multi-record ORM, Odoo 19 security, Odoo 20 exact evidence, conflicting migration evidence, serta XML/authorization negative behavior. Ini evaluasi kontrak instruksi deterministik, bukan eksekusi Odoo, model-quality benchmark, atau klaim token savings. Major version 2.0.0 dan rewrite sebelas version references ditolak karena tidak dibenarkan oleh perubahan semantik.
+
+Provenance adoption 1.1.0 tetap dibekukan pada digest AFYX-264 melalui fixture historis terpisah; instalasi user, CODEX_HOME, MCP, database, dan IJP tidak disentuh. Synthetic skill evaluation tidak menyelesaikan formal Technical Alpha/IJP testing.
+
+Evidence lokal: refinement matrix 3/3 PASS (`3/6 → 6/6 FULL`); routing guard 11/11 PASS; component contract 8/8 PASS dengan satu host-only cross-shell skip; doctor 10/10 PASS; legacy adoption 4/4 PASS; historical fixture 15/15 blob MATCH; component, graph identity/legal, dan legacy-independence validators PASS; Python syntax dan `git diff --check` PASS. Provider token usage dan outcome model tidak diukur, sehingga tidak ada klaim token savings atau superioritas model.
 
 ### AFYX-265 — Windows Git subprocess console closure
 

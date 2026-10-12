@@ -89,8 +89,8 @@ class LegacySkillAdoptionTests(unittest.TestCase):
         target = self.skills / component
         target.parent.mkdir(parents=True, exist_ok=True)
         source = (
-            ROOT / "scripts" / "tests" / "fixtures" / "legacy-efficient-coding-1.1.0"
-            if component == "efficient-coding"
+            ROOT / "scripts" / "tests" / "fixtures" / f"legacy-{component}-1.1.0"
+            if component in {"efficient-coding", "odoo-engineering"}
             else ROOT / "skills" / component
         )
         shutil.copytree(source, target)

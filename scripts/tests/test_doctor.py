@@ -111,7 +111,7 @@ class DoctorTests(unittest.TestCase):
         self.install_core()
         for shell, (_code, out) in self.doctors().items():
             self.assertIn("[OK] Efficient Coding — 1.2.0", out, shell)
-            self.assertIn("[OK] Odoo Engineering — 1.1.0", out, shell)
+            self.assertIn("[OK] Odoo Engineering — 1.2.0", out, shell)
             self.assertIn("[OK] Prompt Master", out, shell)
             self.assertNotIn("[FAIL] Efficient Coding", out, shell)
 

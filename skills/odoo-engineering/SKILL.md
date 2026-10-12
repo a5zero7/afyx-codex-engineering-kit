@@ -2,12 +2,14 @@
 name: odoo-engineering
 description: Version-aware Odoo engineering for Odoo repositories, modules, ORM, views, reports, security, migrations, and debugging. Stable references cover Odoo 10–20; select one target version from repository evidence.
 metadata:
-  version: "1.1.0"
+  version: "1.2.0"
 ---
 
 # Odoo Engineering
 
 Apply only to Odoo work. Determine the actual major version from repository/runtime evidence before using version-specific behavior. Prefer `odoo/release.py`, release metadata, `odoo-bin --version`, explicit branch/tag, server runtime, manifest conventions, dependency files, and established code patterns.
+
+For a simple explanation without a target repository or runtime, avoid heavyweight investigation: state the assumed Odoo version or ask for it only when the answer materially depends on the release.
 
 Never import Python/runtime features, ORM APIs, view/XML syntax, JavaScript/OWL modules, asset declarations, security behavior, report patterns, or migration conventions from another release based on familiarity. Repository evidence is authoritative.
 

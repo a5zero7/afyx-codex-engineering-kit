@@ -52,7 +52,9 @@ Untuk diagnosis project, `afyx-graph status` dan `afyx-graph status --json` mena
 
 ## Odoo Engineering 10–20 stable
 
-Skill Odoo dipasang bersama Efficient Coding. Referensi Odoo 10–20 berstatus stable, tetapi Odoo 20 tetap memerlukan evidence exact 20.0 sebelum perilaku spesifik versi digunakan. Saat task Odoo dimulai, skill menentukan versi dari repository lalu memuat reference yang sesuai untuk mencegah penerapan API lintas-versi tanpa verifikasi.
+Odoo Engineering 1.2.0 dipasang bersama Efficient Coding. Referensi Odoo 10–20 berstatus stable, tetapi Odoo 20 tetap memerlukan evidence exact 20.0 sebelum perilaku spesifik versi digunakan. Saat task Odoo dimulai, skill menentukan versi dari repository lalu memuat reference yang sesuai untuk mencegah penerapan API lintas-versi tanpa verifikasi. Jika strong source/runtime evidence tidak tersedia, pemilihan versi memerlukan dua supporting signal independen; konflik dibiarkan unresolved sampai ada bukti lebih kuat.
+
+Untuk perubahan code, skill memeriksa inheritance/`super`, perilaku multi-record dan batching, security layers, XML inheritance, serta persisted identifier sesuai boundary yang terdampak. Pertanyaan penjelasan sederhana tidak memicu investigasi repository yang berat bila versi tidak material.
 
 Kedua skill memakai frontmatter Agent Skills dengan `name`, `description`, dan `metadata.version`. Entrypoint tetap ringkas; detail kondisional dimuat dari `references/` hanya saat routing task membutuhkannya.
 
