@@ -43,16 +43,18 @@ export function executeSearchTool(source: SearchToolSource, request: SearchToolR
 function formatSearchResults(results: SearchResult[], truncated: boolean, limit: number): string {
   const lines: string[] = [`**Search Results (${results.length} shown)**`, ''];
 
+  if (truncated) {
+    // Lead with completeness because the shared character bound can trim the
+    // tail of a page containing long paths/signatures.
+    lines.push(`> Results truncated at ${limit}; pass \`limit\` (up to 100) to widen. Ranked symbol search is not an exhaustive source-declaration inventory.`, '');
+  }
+
   for (const { node } of results) {
     const location = node.startLine ? `:${node.startLine}` : '';
     lines.push(`**${node.name}** (${node.kind})`);
     lines.push(`${node.filePath}${location}`);
     if (node.signature) lines.push(`\`${node.signature}\``);
     lines.push('');
-  }
-
-  if (truncated) {
-    lines.push(`> Results truncated at ${limit}; pass \`limit\` (up to 100) to widen. Ranked symbol search is not an exhaustive source-declaration inventory.`);
   }
 
   return lines.join('\n');
