@@ -13,6 +13,7 @@ const DEFINITIONS = [
   { name: 'sync', aliases: [], hidden: false },
   { name: 'status', aliases: [], hidden: false },
   { name: 'query', aliases: [], hidden: false },
+  { name: 'inventory', aliases: [], hidden: false },
   { name: 'explore', aliases: [], hidden: false },
   { name: 'context', aliases: [], hidden: false },
   { name: 'prompt-hook', aliases: [], hidden: true },

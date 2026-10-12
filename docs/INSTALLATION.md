@@ -50,6 +50,8 @@ Jika Afyx Graph dipilih, installer dapat mendaftarkan MCP melalui antarmuka nati
 
 Untuk diagnosis project, `afyx-graph status` dan `afyx-graph status --json` menampilkan dimensi terpisah: Git freshness, pending filesystem/content changes, extraction completeness, extraction-version compatibility, pending references, watcher state, dan accounting full-index terakhir. Viewer menampilkan kontrak Index Health yang sama. `ignored: null` berarti path ignored tidak dienumerasi—bukan hitungan nol. Alasan skip seperti `size_exceeded` dan timing fase hanya muncul bila telah direkam oleh full index; nilai lama/tidak tersedia tidak direka sebagai nol.
 
+Untuk inventory struktural yang harus exhaustive dalam scope terindeks, gunakan `afyx-graph inventory <declaration> <value> --scope <path>` atau default MCP `afyx_graph_inventory`. Operasi ini berbeda dari ranked search/explore: hasil melaporkan total declaration/file/module, pagination, unresolved expression, serta coverage stale/failed/skipped/unsupported/ignored. Page terbatas tidak pernah dilabeli complete. Fakta Python class assignment adalah static source evidence dan bukan Odoo runtime registry.
+
 ## Odoo Engineering 10–20 stable
 
 Odoo Engineering 1.2.0 dipasang bersama Efficient Coding. Referensi Odoo 10–20 berstatus stable, tetapi Odoo 20 tetap memerlukan evidence exact 20.0 sebelum perilaku spesifik versi digunakan. Saat task Odoo dimulai, skill menentukan versi dari repository lalu memuat reference yang sesuai untuk mencegah penerapan API lintas-versi tanpa verifikasi. Jika strong source/runtime evidence tidak tersedia, pemilihan versi memerlukan dua supporting signal independen; konflik dibiarkan unresolved sampai ada bukti lebih kuat.

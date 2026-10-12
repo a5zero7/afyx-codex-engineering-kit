@@ -24,4 +24,6 @@
 // v27: long single-line JavaScript bundles that previously exhausted the parse
 // budget now contribute their nodes/edges, so existing indexes may be missing
 // material extracted content and should be rebuilt.
-export const EXTRACTION_VERSION = 27;
+// v28: supported Python class-level static string assignments now contribute
+// source-located property facts for exact structural inventories.
+export const EXTRACTION_VERSION = 28;

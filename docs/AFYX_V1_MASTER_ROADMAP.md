@@ -6,8 +6,8 @@ Contract revision: **2026-10-11**
 v1 scope policy: **FROZEN — Phase 1 through Phase 11**  
 Post-v1 policy: **PLANNED EXPANSION — not a v1 release blocker**
 
-Current work: **AFYX-262 Odoo Engineering refinement; AFYX-248 remains in progress**
-Task: `AFYX-262`; `AFYX-248` remains in progress
+Current work: **AFYX-282 native Graph source-intelligence refinement; AFYX-248 remains in progress**
+Task: `AFYX-282`; `AFYX-248` remains in progress
 Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`  
 Active implementation branch: `afyx/native-phase5f-parser-grammar`  
 Latest verified Phase 5F implementation checkpoint: `62621a0639f42db0eaac69ef087436d851cdba88`  
@@ -2284,3 +2284,13 @@ provide the engineering acceptance evidence. No active runtime, MCP
 configuration, Alpha branch/candidate, Adit environment, or IJP repository was
 modified. Formal AFYX-272 MAC.4 remains unverified and must not be marked PASS
 from this investigation.
+
+### AFYX-282 — Native Graph source-intelligence refinement
+
+Status: **IMPLEMENTED; FINAL-HEAD GRAPH BUILD REQUIRED; AFYX-248 IN PROGRESS**
+
+Root cause was layered: the native Python extractor indexed classes and methods but omitted direct class assignments, the Node contract had no structural fact for `_inherit`, ranked FTS search could only return bounded metadata candidates, and default MCP instructions incorrectly encouraged treating ranked exploration as universally exhaustive. The SQLite schema itself was sufficient: source-located `property` nodes with exact class ownership and literal signatures fit the existing node/persistence contract, so no schema migration was introduced. Extraction version advances to 28 so older indexes explicitly request re-indexing.
+
+The new generic Python class-assignment fact supports scalar and multiline list/tuple string literals. Dynamic/aliased expressions remain unresolved and are never converted into invented values. `afyx_graph_inventory` and `afyx-graph inventory` provide exact value matching, project-relative scope, stable source locations, exact totals across declarations/files/modules, bounded pagination, and explicit extraction/failure/skipped/unsupported/ignored/stale coverage. A limited page is labelled incomplete. Existing ranked search/explore behavior remains available for navigation and relationships; default MCP now exposes inventory plus explore and routes hybrid requests to enumerate first.
+
+Owned Odoo-like ground truth covers nine Odoo-17-style declarations and forty-five Odoo-20-style declarations (44 scalar plus one list-form), duplicate class names, multiple declarations per file, multiline values, `_name`, `sale.order.line`, comments/strings, dynamic expressions, ignored and sibling paths, catch-up, create/modify/delete/rename, restart, path refusal, pagination, worker dispatch, and existing ranked-search/explore regressions. These synthetic fixtures validate the product contract only; they are not real IJP/Odoo acceptance, do not establish runtime registry behavior, and do not change AFYX-272 MAC.4.

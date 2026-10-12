@@ -11,6 +11,7 @@ import { NotIndexedError, type ToolResult } from '../src/mcp/tool-results';
 type ReadHandler = (args: Record<string, unknown>) => Promise<ToolResult>;
 type ReadHandlerMethod =
   | 'handleSearch'
+  | 'handleInventory'
   | 'handleCallers'
   | 'handleCallees'
   | 'handleImpact'
@@ -20,6 +21,7 @@ type ReadHandlerMethod =
 
 const routes: ReadonlyArray<readonly [string, ReadHandlerMethod]> = [
   ['afyx_graph_search', 'handleSearch'],
+  ['afyx_graph_inventory', 'handleInventory'],
   ['afyx_graph_callers', 'handleCallers'],
   ['afyx_graph_callees', 'handleCallees'],
   ['afyx_graph_impact', 'handleImpact'],

@@ -3,6 +3,7 @@ import type { Edge, ExtractionResult, Language, Node, NodeKind, UnresolvedRefere
 import { generateNodeId } from '../node-id';
 import { extractNativeCFamilyFacts, isNativeCFamilyLanguage } from './c-family-facts';
 import { scanSource, type NativeToken } from './scanner';
+import { parsePythonStaticStringValues } from './python-class-assignments';
 import { extractNativeSwiftFacts } from './swift-facts';
 import { extractNativeSolidityFacts } from './solidity-facts';
 import { extractNativePhpFacts } from './php-facts';
@@ -613,6 +614,48 @@ export function extractNativeFacts(filePath: string, source: string, language: L
         signature: `= ${source.slice(tokens[i + 2]!.start.offset, tokens[end]!.end.offset).slice(0, 100)}`,
       });
       i = end;
+    }
+  }
+
+  if (language === 'python') {
+    const classes = declarations.filter((declaration) => declaration.kind === 'class');
+    for (const parent of classes) {
+      const parentColumn = tokens[parent.start]!.start.column;
+      for (let index = parent.start + 1; index <= parent.end - 2; index += 1) {
+        const name = tokens[index]!;
+        if (name.kind !== 'identifier' || tokens[index + 1]?.text !== '=' ||
+            name.start.column <= parentColumn) continue;
+        if (index > 0 && tokens[index - 1]!.start.line === name.start.line) continue;
+
+        const owner = declarations
+          .filter((candidate) => candidate.bodyStart !== undefined &&
+            candidate.bodyStart < index && candidate.end >= index)
+          .sort((left, right) => (left.end - left.start) - (right.end - right.start))[0];
+        if (owner !== parent) continue;
+
+        const valueStart = index + 2;
+        let end = valueStart;
+        const pairedEnd = ['[', '('].includes(tokens[valueStart]?.text ?? '')
+          ? scan.pairs.get(valueStart)
+          : undefined;
+        if (pairedEnd !== undefined) {
+          end = pairedEnd;
+        } else {
+          while (end + 1 <= parent.end && tokens[end + 1]!.start.line === name.start.line) end += 1;
+        }
+        if (!tokens[valueStart] || !tokens[end]) continue;
+        const expression = source.slice(tokens[valueStart]!.start.offset, tokens[end]!.end.offset).trim();
+        const literalValues = parsePythonStaticStringValues(expression);
+        // Preserve unresolved `_inherit` declarations so inventory can report
+        // unsupported coverage. Other class attributes enter the graph only
+        // when their value is a supported static string/list/tuple literal.
+        if (literalValues === null && name.text !== '_inherit') continue;
+        declarations.push({
+          kind: 'property', name: name.text, start: index, end, parent,
+          signature: `= ${expression.slice(0, 300)}`,
+        });
+        index = end;
+      }
     }
   }
 

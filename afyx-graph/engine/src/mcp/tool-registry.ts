@@ -3,6 +3,7 @@ import type { ToolDefinition } from './tools';
 /** Internal handler routes. These values never appear on the MCP wire. */
 export type ToolRoute =
   | 'search'
+  | 'inventory'
   | 'callers'
   | 'callees'
   | 'impact'
@@ -13,6 +14,7 @@ export type ToolRoute =
 
 const TOOL_ROUTES = new Map<string, ToolRoute>([
   ['afyx_graph_search', 'search'],
+  ['afyx_graph_inventory', 'inventory'],
   ['afyx_graph_callers', 'callers'],
   ['afyx_graph_callees', 'callees'],
   ['afyx_graph_impact', 'impact'],
@@ -22,7 +24,7 @@ const TOOL_ROUTES = new Map<string, ToolRoute>([
   ['afyx_graph_files', 'files'],
 ]);
 
-const DEFAULT_TOOL_ROUTES = new Set<ToolRoute>(['explore']);
+const DEFAULT_TOOL_ROUTES = new Set<ToolRoute>(['inventory', 'explore']);
 
 /** Public names in stable registration order. Used to prove catalog parity. */
 export const REGISTERED_TOOL_NAMES = Object.freeze([...TOOL_ROUTES.keys()]);

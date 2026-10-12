@@ -57,6 +57,7 @@ import {
 } from './tool-results';
 import { dispatchReadTool, type ReadToolHandlers } from './tool-dispatch';
 import { executeSearchTool } from './search-tool';
+import { executeInventoryTool } from './inventory-tool';
 import { executeFilesTool } from './files-tool';
 import { executeRelationshipTool, type RelationshipToolSource } from './relationship-tool';
 import { executeImpactTool, type ImpactToolSource } from './impact-tool';
@@ -373,6 +374,40 @@ export const tools: ToolDefinition[] = [
     annotations: READ_ONLY_ANNOTATIONS,
   },
   {
+    name: 'afyx_graph_inventory',
+    description: 'Exact, bounded inventory of indexed Python class assignments with a source-grounded literal value. Use for exhaustive count/list questions such as classes declaring `_inherit = "sale.order"`; unlike ranked search, it reports total matches, pagination, index coverage, unsupported expressions, and exclusions. Static source facts do not imply the Odoo runtime registry.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        declaration: {
+          type: 'string',
+          description: 'Exact class-assignment name, for example `_inherit` or `_name`.',
+        },
+        value: {
+          type: 'string',
+          description: 'Exact string literal value to enumerate, for example `sale.order`.',
+        },
+        path: {
+          type: 'string',
+          description: 'Optional project-relative scope such as `addons` or `src/addons`.',
+        },
+        offset: {
+          type: 'number',
+          description: 'Zero-based result offset for bounded pagination (default: 0).',
+          default: 0,
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum declarations returned (default: 100, maximum: 200). A truncated page is explicitly marked incomplete.',
+          default: 100,
+        },
+        projectPath: projectPathProperty,
+      },
+      required: ['declaration', 'value'],
+    },
+    annotations: READ_ONLY_ANNOTATIONS,
+  },
+  {
   name: 'afyx_graph_callers',
     description: 'List functions that call <symbol>. For the full flow, use afyx_graph_explore.',
     inputSchema: {
@@ -491,13 +526,13 @@ export const tools: ToolDefinition[] = [
   },
   {
   name: 'afyx_graph_explore',
-    description: 'PRIMARY TOOL — call FIRST for almost any question OR before an edit: how does X work, architecture, a bug, where/what is X, surveying an area, or the symbols you are about to change. Returns the verbatim source of the relevant symbols grouped by file in ONE capped call (Read-equivalent — treat the shown source as already Read; do NOT re-open those files), plus the call path among them. Query can be a natural-language question OR a bag of symbol/file names. Usually the ONLY call you need — more accurate context, in far fewer tokens and round-trips than a search/Read/Grep loop.',
+    description: 'Ranked relational/source exploration for how code works, architecture, flow, impact, or an area being changed. Returns verbatim source of relevant symbols grouped by file in one capped call plus paths among them. It is intentionally ranked and bounded: NEVER use it as an exhaustive declaration inventory; use afyx_graph_inventory for supported exact class-assignment counts/lists, or direct source inspection when the requested fact is unsupported or index coverage is limited.',
     inputSchema: {
       type: 'object',
       properties: {
         query: {
           type: 'string',
-          description: 'Symbol names, file names, or short code terms to explore (e.g., "AuthService loginUser session-manager", "GraphTraverser BFS impact traversal.ts"). For a flow question, name the symbols spanning the flow (e.g. "mutateElement renderScene"). A natural-language question works too — no prior afyx_graph_search needed.',
+          description: 'Symbol names, file names, or short code terms for ranked relational exploration. For a flow question, name the symbols spanning the flow. A natural-language question works too; exact inventory/count requests belong to afyx_graph_inventory.',
         },
         maxFiles: {
           type: 'number',
@@ -589,11 +624,10 @@ export function getStaticTools(): ToolDefinition[] {
 }
 
 /**
- * The MCP tools served by DEFAULT (short names). Pared to ONLY `afyx_graph_explore`
- * — the single tool that reliably earns its place: one capped call returns the
- * verbatim source of the relevant symbols grouped by file. Every other tool is a
- * narrower slice of what explore already does, and presence itself steers
- * mis-picks, so they are no longer LISTED to agents.
+ * The MCP tools served by default are the two distinct correctness routes:
+ * `afyx_graph_inventory` for exact supported declaration enumeration and
+ * `afyx_graph_explore` for ranked relational/source context. Every other tool is
+ * a narrower slice and remains unlisted unless explicitly allowlisted.
  *
  * The other defined tools (`node`, `search`, `callers`, plus callees/impact/files/
  * status) remain fully functional — handlers stay, the library API and CLI are
@@ -642,6 +676,7 @@ export class ToolHandler {
   /** Stable explicit dependencies for worker-safe read-tool dispatch. */
   private readonly readToolHandlers: ReadToolHandlers = {
     search: (args) => this.handleSearch(args),
+    inventory: (args) => this.handleInventory(args),
     callers: (args) => this.handleCallers(args),
     callees: (args) => this.handleCallees(args),
     impact: (args) => this.handleImpact(args),
@@ -1338,6 +1373,22 @@ export class ToolHandler {
     return executeSearchTool(cg, {
       query,
       kind: args.kind as string | undefined,
+      limit: args.limit,
+    });
+  }
+
+  /** Handle exact structural declaration inventory. */
+  private async handleInventory(args: Record<string, unknown>): Promise<ToolResult> {
+    const declaration = this.validateString(args.declaration, 'declaration');
+    if (typeof declaration !== 'string') return declaration;
+    const value = this.validateString(args.value, 'value');
+    if (typeof value !== 'string') return value;
+    const cg = this.getAfyxGraph(args.projectPath as string | undefined);
+    return executeInventoryTool(cg, {
+      declaration,
+      value,
+      path: args.path as string | undefined,
+      offset: args.offset,
       limit: args.limit,
     });
   }
