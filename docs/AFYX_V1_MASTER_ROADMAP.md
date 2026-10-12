@@ -6,8 +6,8 @@ Contract revision: **2026-10-11**
 v1 scope policy: **FROZEN — Phase 1 through Phase 11**  
 Post-v1 policy: **PLANNED EXPANSION — not a v1 release blocker**
 
-Current work: **AFYX-266 scoped dependency security remediation; AFYX-248 remains in progress**
-Task: `AFYX-266`; `AFYX-248` remains in progress
+Current work: **AFYX-280 Graph discovery completeness closure; AFYX-248 remains in progress**
+Task: `AFYX-280`; `AFYX-248` remains in progress
 Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`  
 Active implementation branch: `afyx/native-phase5f-parser-grammar`  
 Latest verified Phase 5F implementation checkpoint: `62621a0639f42db0eaac69ef087436d851cdba88`  
@@ -2242,3 +2242,33 @@ Then, and only then:
 After v1, evolution follows Track A / Track B / Track C / Track D without
 reopening the v1 feature contract unless maintenance of an existing v1
 guarantee requires it.
+
+### AFYX-280 — Graph discovery coverage and completeness
+
+Status: **ENGINEERING CLOSURE PASS; AFYX-272 MAC.4 REMAINS SEPARATE; AFYX-248 IN PROGRESS**
+
+The AFYX-272 report of four Graph-assisted files versus nine direct-source
+declarations is not reproducible as a comparable measurement because the
+original query, tool response, result limit, indexed revision, and execution
+environment were not recorded. A disposable Git-backed Python fixture at
+development baseline `908e56d63ba2e5b38bb557a28e2b88325204f101` established
+nine direct `_inherit = 'sale.order'` declarations, multiline syntax, negative
+comment/string/unrelated-model cases, and a Git-ignored declaration. Initial
+indexing was complete (10 eligible/indexed Python files, 0 failed), and all nine
+target files were present in ranked discovery while the ignored file remained
+excluded. Literal `sale.order` search also admitted negative metadata matches,
+confirming that this command is ranked symbol-metadata discovery rather than an
+exhaustive source-declaration query.
+
+The controlled `limit: 4` MCP case confirmed a separate generic presentation
+defect: MCP requested exactly four rows and labelled them `4 found`, unlike the
+CLI's existing one-extra-row truncation detection. The MCP adapter now fetches
+one extra ranked result, renders `N shown`, reports truncation and the supported
+limit widening path, and explicitly says ranked symbol search is not an
+exhaustive source-declaration inventory. Ranking, extraction, indexing, CLI
+JSON shape, and Odoo-specific semantics were not changed. Focused Search/MCP
+contract tests, clean typecheck/UI build, semantic baseline, and CLI/MCP smoke
+provide the engineering acceptance evidence. No active runtime, MCP
+configuration, Alpha branch/candidate, Adit environment, or IJP repository was
+modified. Formal AFYX-272 MAC.4 remains unverified and must not be marked PASS
+from this investigation.

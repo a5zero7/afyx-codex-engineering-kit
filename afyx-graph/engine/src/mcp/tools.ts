@@ -348,7 +348,7 @@ const READ_ONLY_ANNOTATIONS: ToolAnnotations = {
 export const tools: ToolDefinition[] = [
   {
   name: 'afyx_graph_search',
-    description: 'Quick symbol search by name. Returns locations only (no code). Use afyx_graph_explore instead to get the actual source / understand an area in one call.',
+    description: 'Quick ranked symbol-metadata search by name. Returns bounded locations only (no code), not an exhaustive source-text or declaration inventory; truncated responses say how to widen them. Use afyx_graph_explore instead to get the actual source / understand an area in one call.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -363,7 +363,7 @@ export const tools: ToolDefinition[] = [
         },
         limit: {
           type: 'number',
-          description: 'Maximum results (default: 10)',
+          description: 'Maximum displayed results (default: 10, maximum: 100). The response reports when more ranked matches exist.',
           default: 10,
         },
         projectPath: projectPathProperty,
