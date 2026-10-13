@@ -2549,3 +2549,30 @@ outside both and denied by the same root-deny profile. The controller alone
 retains ground truth. A1 and B1 must use the identical profile and permissions.
 No real holdout, DEVELOPMENT pilot, or formal A1/B1 was run in this checkpoint.
 Focused regression and exact-head CI remain engineering closure gates.
+
+### 2026-10-14 — AFYX-283D.2 pilot evidence review
+
+Status: **EVALUATOR REVIEW BLOCKED / FORMAL A1-B1 BLOCKED**. The accessible
+independent-host control evidence is fresh and correlated: child health `PASS`,
+isolation `PASS`, matching `control_run_id`
+`718a0a8d0aff49f6b6a9a6d28ad71f5f`, positive workspace read `PASS`, four
+negative controls denied, no external read or canary exposure, command tool
+observed, no timeout, and cleanup `PASS`. The active manifest still selects the
+Codex 0.162.1 MXC fingerprint.
+
+Substantive pilot provenance is incomplete. The accessible results tree contains
+zero `result.json` records rather than five fresh scenario records. It contains
+only one empty `pilot-expert-security-001-B1-r1-3ecb6933` directory; the prior
+`latest-summary.json` is historical and was not reused. Therefore Architecture,
+Security, Database/Reliability, ERP/Odoo, and Negative Routing cannot be graded
+for correctness, task fidelity, evidence quality, security, activation,
+reference/workflow loading, claims, tools, tokens, or duration. Protected
+rubrics and holdouts were not imported into the developer boundary.
+
+No Expert source optimization is approved from this evidence. The earlier Case
+A progressive-disclosure finding (seven references loaded) remains open because
+no fresh scenario record resolves it. Before evaluation continues, the
+independent controller must export five sanitized immutable result records with
+scenario identity, shared control-run correlation, runtime fingerprint, observed
+skill/reference/workflow events, response, tool events, provider usage, elapsed
+time, and explicit incomplete/failure status. Formal A1/B1 remains blocked.
