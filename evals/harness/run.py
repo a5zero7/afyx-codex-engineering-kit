@@ -34,6 +34,7 @@ AFYX_SKILLS = (
     "prompt-master",
     "afyx-engineering-expert",
 )
+EVALUATION_PERMISSION_PROFILE = "afyx-evaluation"
 
 
 def load_json(path: Path) -> dict:
@@ -165,15 +166,38 @@ def skills_override() -> str:
     return f"skills.config=[{entries}]"
 
 
+def evaluation_permissions_override() -> str:
+    """Least-privilege profile for evaluated commands and descendants."""
+    return (
+        f"permissions.{EVALUATION_PERMISSION_PROFILE}={{ "
+        'extends = ":workspace", filesystem = { '
+        '":root" = "deny", ":minimal" = "read", '
+        '":tmpdir" = "deny", ":slash_tmp" = "deny" }, '
+        "network = { enabled = false } }"
+    )
+
+
+def windows_workspace_control(path: Path) -> str:
+    literal = str(path).replace("'", "''")
+    return (
+        "Write-Output 'AFYX_CONTROL_workspace:'; "
+        f"Get-Content -Raw -LiteralPath '{literal}'"
+    )
+
+
 def codex_command(work: Path, prompt: str, *, include_skills: bool = True) -> list[str]:
     command = [
         "codex", "exec", "--ephemeral", "--ignore-user-config",
-        "--skip-git-repo-check", "--sandbox", "workspace-write", "--json", "-C", str(work),
+        "--skip-git-repo-check", "--json", "-C", str(work),
         "-m", "gpt-5.6-sol",
+        "-c", f'default_permissions="{EVALUATION_PERMISSION_PROFILE}"',
+        "-c", evaluation_permissions_override(),
         "-c", 'approval_policy="never"',
         "-c", 'model_provider="openai"',
         "-c", 'model_reasoning_effort="medium"',
     ]
+    if os.name == "nt":
+        command.extend(["-c", 'windows.sandbox="mxc"'])
     if include_skills:
         command.extend(["-c", skills_override()])
     command.append(prompt)
@@ -391,7 +415,7 @@ def verify_runtime_fingerprint(environment: dict) -> dict:
     contract_output = contract_probe["stdout"] + "\n" + contract_probe["stderr"]
     required_options = (
         "--ephemeral", "--ignore-user-config", "--skip-git-repo-check",
-        "--sandbox", "--json", "--cd", "--model", "--config",
+        "--json", "--cd", "--model", "--config",
     )
     missing = [option for option in required_options if option not in contract_output]
     if (
@@ -403,12 +427,31 @@ def verify_runtime_fingerprint(environment: dict) -> dict:
             "Codex CLI runtime contract check failed"
             + (f"; missing options: {', '.join(missing)}" if missing else "")
         )
+    permission_probe = bounded_process(["codex", "sandbox", "--help"], REPO_ROOT, 15)
+    permission_output = permission_probe["stdout"] + "\n" + permission_probe["stderr"]
+    permission_options = ("--permission-profile", "--include-managed-config", "--cd")
+    missing_permissions = [
+        option for option in permission_options if option not in permission_output
+    ]
+    if (
+        not permission_probe["started"]
+        or permission_probe["returncode"] != 0
+        or missing_permissions
+    ):
+        raise RuntimeError(
+            "Codex CLI permission-profile contract check failed"
+            + (
+                f"; missing options: {', '.join(missing_permissions)}"
+                if missing_permissions else ""
+            )
+        )
     return {
         "expected_version": expected,
         "actual_version": actual,
         "executable": version_probe["executable"],
         "launcher_kind": version_probe["launcher_kind"],
         "required_options": list(required_options),
+        "permission_profile_options": list(permission_options),
     }
 
 
@@ -825,10 +868,7 @@ def run_isolation_canary(timeout: int) -> dict:
             allowed_path = work / "allowed.txt"
             allowed_path.write_text(allowed_marker, encoding="utf-8")
             if os.name == "nt":
-                commands = [
-                    'Write-Output -NoEnumerate "AFYX_CONTROL_workspace:"; '
-                    'Get-Content -Raw -LiteralPath ".\\allowed.txt"'
-                ] + [
+                commands = [windows_workspace_control(allowed_path)] + [
                     "$ErrorActionPreference='Stop'; try { "
                     f'$null = Get-Content -Raw -LiteralPath "{path}"; '
                     f'Write-Output "AFYX_CONTROL_{label}:READ_SUCCEEDED" '

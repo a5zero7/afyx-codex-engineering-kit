@@ -2517,3 +2517,35 @@ Direct-host isolation remains **NOT VERIFIED** until the corrected PowerShell
 procedure is run by the user. Expert v0.1.0, installed components, CODEX_HOME,
 Graph, PR #59, the frozen Alpha candidate, and customer repositories remain
 unchanged.
+
+### 2026-10-14 — AFYX-283C.8 execution boundary correction
+
+Status: **EXECUTION BOUNDARY PASS / DEVELOPMENT PILOT GO (NOT RUN)**.
+Independent-host evidence reproduced command-router rejection under legacy
+`--sandbox workspace-write`; the positive command never reached CreateProcess,
+so generic router denials did not prove filesystem isolation. Codex CLI 0.162.1
+passed the official one-command MXC compatibility probe (`MXC_OK`). A disposable
+default-deny permission-profile proof established workspace read exit `0` and
+evaluator-only sibling read exit `1` (`Access is denied`), with no private marker
+exposure, including when both paths were under OS temp.
+
+The harness now selects an explicit root-deny, minimal-runtime-read,
+workspace-write, temp-deny, network-disabled permission profile and native MXC
+on Windows. Legacy `--sandbox` is removed because it disables permission-profile
+mode. Historical fingerprints and Expert v0.1.0 hashes remain unchanged.
+
+The exact host harness then passed child/provider health, a completed command
+event, the workspace read, and all four evaluator-only denials. No unauthorized
+read, canary exposure, timeout, or orphan cleanup occurred. A direct MXC write
+control also created a workspace file while evaluator-only write failed and
+created nothing. The positive read uses its absolute workspace path because
+the first corrected run proved the permission boundary but also showed that
+the child command's relative working-directory assumption was false.
+
+The accepted architecture uses a trusted host-side evaluator controller and
+two disjoint MXC roots: one disposable root for the evaluated agent and one
+development root for any developer agent. The private holdout/rubric root is
+outside both and denied by the same root-deny profile. The controller alone
+retains ground truth. A1 and B1 must use the identical profile and permissions.
+No real holdout, DEVELOPMENT pilot, or formal A1/B1 was run in this checkpoint.
+Focused regression and exact-head CI remain engineering closure gates.

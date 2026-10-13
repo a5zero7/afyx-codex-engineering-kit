@@ -12,7 +12,7 @@ import sys
 import tempfile
 import unittest
 from contextlib import contextmanager
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from unittest import mock
 
 
@@ -452,11 +452,17 @@ class EvaluationHarnessTests(unittest.TestCase):
         environment = {"runtime": {"codex_cli": "0.162.1"}}
         required_help = " ".join((
             "--ephemeral", "--ignore-user-config", "--skip-git-repo-check",
-            "--sandbox", "--json", "--cd", "--model", "--config",
+            "--json", "--cd", "--model", "--config",
         ))
+        permission_help = "--permission-profile --include-managed-config --cd"
 
         def fake_process(command, cwd, timeout):
-            output = "codex-cli 0.162.1" if command == ["codex", "--version"] else required_help
+            if command == ["codex", "--version"]:
+                output = "codex-cli 0.162.1"
+            elif command == ["codex", "sandbox", "--help"]:
+                output = permission_help
+            else:
+                output = required_help
             return {
                 "started": True, "pid": 1, "returncode": 0,
                 "stdout": output, "stderr": "", "timed_out": False,
@@ -468,12 +474,35 @@ class EvaluationHarnessTests(unittest.TestCase):
         with mock.patch.object(run, "bounded_process", side_effect=fake_process):
             result = run.verify_runtime_fingerprint(environment)
         self.assertEqual(result["actual_version"], "0.162.1")
+        self.assertIn("--permission-profile", result["permission_profile_options"])
 
         drifted = dict(fake_process(["codex", "--version"], ROOT, 15))
         drifted["stdout"] = "codex-cli 0.163.0"
         with mock.patch.object(run, "bounded_process", return_value=drifted):
             with self.assertRaisesRegex(RuntimeError, "fingerprint mismatch"):
                 run.verify_runtime_fingerprint(environment)
+
+    def test_codex_command_uses_isolated_permission_profile(self) -> None:
+        command = run.codex_command(Path("workspace with spaces"), "probe", include_skills=False)
+        self.assertNotIn("--sandbox", command)
+        self.assertIn('default_permissions="afyx-evaluation"', command)
+        profile = run.evaluation_permissions_override()
+        self.assertIn('extends = ":workspace"', profile)
+        self.assertIn('":root" = "deny"', profile)
+        self.assertIn('":minimal" = "read"', profile)
+        self.assertIn('":tmpdir" = "deny"', profile)
+        self.assertIn('network = { enabled = false }', profile)
+        if os.name == "nt":
+            self.assertIn('windows.sandbox="mxc"', command)
+        self.assertEqual(
+            run.windows_workspace_control(PureWindowsPath("C:/path with spaces/allowed.txt")),
+            "Write-Output 'AFYX_CONTROL_workspace:'; "
+            "Get-Content -Raw -LiteralPath 'C:\\path with spaces\\allowed.txt'",
+        )
+        self.assertIn(
+            "two''quotes",
+            run.windows_workspace_control(PureWindowsPath("C:/two'quotes")),
+        )
 
     def test_child_health_failure_replaces_stale_isolation_with_correlated_status(self) -> None:
         with tempfile.TemporaryDirectory() as results:

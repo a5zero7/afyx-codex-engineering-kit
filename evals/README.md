@@ -6,10 +6,11 @@ This directory contains the deterministic Phase 3 benchmark foundation. Phase 3A
 
 `environment.json` preserves the historical Phase 3A fingerprint, and
 `environment-expert-v0.1.0.json` preserves the AFYX-283 Codex 0.156.1 evidence.
-The active manifest points to
-`environment-expert-v0.1.0-codex-0.162.1.json`, an explicit successor covering
-the same repository subject and skill hashes with the verified 0.162.1 runtime
-contract and execution-permission/tool observability boundary. The runner
+`environment-expert-v0.1.0-codex-0.162.1.json` preserves the initial 0.162.1
+legacy-sandbox evidence. The active manifest points to
+`environment-expert-v0.1.0-codex-0.162.1-mxc.json`, which covers the same
+repository subject and skill hashes with the verified MXC permission-profile
+boundary. The runner
 uses the recorded `gpt-5.6-sol`, medium reasoning, and direct `openai` provider
 settings explicitly. It does not read or store authentication secrets.
 
@@ -50,8 +51,12 @@ Codex officially supports per-skill enablement through `skills.config`. Every in
 3. copies only the selected frozen skill sources into the fresh fixture's repository-local `.agents/skills` directory;
 4. places the evaluated workspace under the operating-system temporary root,
    outside the evaluator/source repository and its answer-bearing ancestors;
-5. runs an ephemeral Codex session with `workspace-write`, no approval
-   escalation, and no user configuration.
+5. runs an ephemeral Codex session with the `afyx-evaluation` permission
+   profile: root and OS-temp reads denied, minimal runtime paths readable,
+   only the evaluated workspace writable, network disabled, and no approval
+   escalation;
+6. selects native MXC on Windows. It does not pass legacy `--sandbox`, because
+   that mode disables permission-profile enforcement.
 
 This preserves `N`, `E`, `O`, `P`, `EO`, `PO`, and `CORE`, and adds `X`
 (Expert only) plus `CORE_X` (CORE + Expert). Formal aliases are `A0=N`,
@@ -90,6 +95,14 @@ version and required non-model command options before model execution.
 Child-health and isolation evidence share a `control_run_id`; blocked health
 overwrites current isolation evidence with `NOT_EXECUTED`, preventing reuse of
 a stale result.
+
+The C.8 host acceptance uses Codex's supported permission-profile path rather
+than universal command rejection. On Windows, the profile is enforced by MXC.
+The trusted evaluator controller keeps evaluator-only inputs outside both the
+evaluated and developer workspace roots; both agent roles must run with the
+same root-deny profile. A1 and B1 use identical permissions. Synthetic host
+controls proved workspace read/write, four evaluator-only read denials, and an
+evaluator-only write denial without marker exposure, timeout, or orphan cleanup.
 
 ## Scenario and evaluator separation
 
