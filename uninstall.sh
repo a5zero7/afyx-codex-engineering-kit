@@ -7,6 +7,7 @@ remove_prompt_master=false
 remove_afyx_graph=false
 dry_run=false
 selected_components=()
+selected_component_count=0
 
 printf 'Afyx Codex Engineering Kit — Linux/macOS uninstaller (Bash)\n'
 
@@ -17,7 +18,7 @@ usage() {
 while (($#)); do
   case "$1" in
     --skills-root) (($# >= 2)) || { printf '%s\n' '--skills-root requires a value.' >&2; exit 2; }; skills_root="$2"; shift 2 ;;
-    --component) (($# >= 2)) || { printf '%s\n' '--component requires a value.' >&2; exit 2; }; selected_components+=("$2"); shift 2 ;;
+    --component) (($# >= 2)) || { printf '%s\n' '--component requires a value.' >&2; exit 2; }; selected_components+=("$2"); selected_component_count=$((selected_component_count + 1)); shift 2 ;;
     --remove-prompt-master) remove_prompt_master=true; shift ;;
     --remove-afyx-graph) remove_afyx_graph=true; shift ;;
     --dry-run) dry_run=true; shift ;;
@@ -33,16 +34,18 @@ done
 . "$root/scripts/lib/afyx-skill-lifecycle.sh"
 component_selected() {
   local wanted="$1" selected
-  ((${#selected_components[@]} == 0)) && return 0
+  ((selected_component_count == 0)) && return 0
   for selected in "${selected_components[@]}"; do [[ "$selected" == "$wanted" ]] && return 0; done
   return 1
 }
-for selected in "${selected_components[@]}"; do
-  [[ "$(afyx_component_field "$selected" type)" == skill && "$(afyx_component_field "$selected" ownership)" == afyx ]] || {
-    printf 'Unknown or non-removable Afyx skill component: %s\n' "$selected" >&2
-    exit 2
-  }
-done
+if ((selected_component_count > 0)); then
+  for selected in "${selected_components[@]}"; do
+    [[ "$(afyx_component_field "$selected" type)" == skill && "$(afyx_component_field "$selected" ownership)" == afyx ]] || {
+      printf 'Unknown or non-removable Afyx skill component: %s\n' "$selected" >&2
+      exit 2
+    }
+  done
+fi
 for component_id in $(afyx_component_ids); do
   [[ "$(afyx_component_field "$component_id" type)" == skill ]] || continue
   ownership="$(afyx_component_field "$component_id" ownership)"

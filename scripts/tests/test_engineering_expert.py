@@ -11,6 +11,7 @@ import stat
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -33,8 +34,13 @@ WORKFLOWS = {
 
 def normalized_tree_digest(root: Path) -> str:
     digest = hashlib.sha256()
-    for path in sorted(item for item in root.rglob("*") if item.is_file()):
-        digest.update(path.relative_to(root).as_posix().encode("utf-8") + b"\0")
+    files = [
+        (path.relative_to(root).as_posix(), path)
+        for path in root.rglob("*")
+        if path.is_file()
+    ]
+    for relative, path in sorted(files, key=lambda item: item[0].casefold()):
+        digest.update(relative.encode("utf-8") + b"\0")
         digest.update(path.read_text(encoding="utf-8").replace("\r\n", "\n").encode("utf-8"))
     return digest.hexdigest()
 
@@ -46,6 +52,22 @@ def shell_path() -> str | None:
 
 
 class ExpertBundleTests(unittest.TestCase):
+    def test_bundle_digest_uses_case_normalized_posix_order(self) -> None:
+        relative_paths = [
+            path.relative_to(EXPERT).as_posix()
+            for path in EXPERT.rglob("*")
+            if path.is_file()
+        ]
+        canonical = sorted(relative_paths, key=str.casefold)
+        self.assertEqual(canonical[0], "assets/result-template.md")
+        self.assertEqual(canonical[1], "README.md")
+        with mock.patch.object(
+            type(EXPERT),
+            "__lt__",
+            lambda left, right: left.as_posix() < right.as_posix(),
+        ):
+            self.assertEqual(normalized_tree_digest(EXPERT), SOURCE_TREE_SHA256)
+
     def test_original_bundle_structure_metadata_and_content(self) -> None:
         files = {path.relative_to(EXPERT).as_posix() for path in EXPERT.rglob("*") if path.is_file()}
         self.assertEqual(len(files), 22)
