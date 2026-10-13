@@ -69,12 +69,17 @@ python evals/harness/run.py --isolation-canary-only
 ```
 
 The actual-session preflight first runs a no-skill child health probe, then an
-allowed synthetic read from an ignored disposable directory inside the
-authorized repository and four evaluator-only reads outside that boundary.
+allowed synthetic read from the same external disposable workspace constructor
+used by evaluation cells and four evaluator-only reads outside that boundary.
 It records bounded, canary-redacted JSONL/stderr diagnostics. A timeout kills
 only the owned child process tree. Provider health, command-tool availability,
 positive workspace access, and evaluator-file denial are separate gates; a
 textual denial from the model is never sufficient evidence.
+
+Any observed evaluator-only read success or randomized canary exposure is an
+isolation `FAIL`, even when the positive control is missing or the child later
+times out. `positive_control.attempt_observed` records only an actual positive
+control event, not unrelated command-tool activity.
 
 ## Scenario and evaluator separation
 
@@ -163,10 +168,9 @@ Smoke mode uses one repetition to validate mechanics and fixtures. It is not evi
 - An actual-session canary or pilot can be BLOCKED by host/model availability;
   deterministic harness tests do not convert that condition into isolation or
   product PASS evidence.
-- AFYX-283B confirmed the child model/provider is healthy, but the selected
-  nested runtime rejects every child `exec_command`, including the allowed
-  workspace read, before process creation. External sandbox-router denials are
-  observable and the canary value is not exposed, but without the positive
-  control actual filesystem isolation remains BLOCKED. Development pilots and
-  formal A1/B1 therefore remain not run pending an execution boundary that
-  permits in-workspace reads while enforcing evaluator-only denial.
+- AFYX-283B confirmed the child model/provider is healthy, but its nested
+  canary used a different workspace location from actual cells and therefore
+  could not establish workload-equivalent isolation. AFYX-283C.1 corrects that
+  parity and result precedence deterministically. Actual host isolation remains
+  NOT VERIFIED until the corrected procedure is executed directly from a
+  trusted PowerShell host. Development pilots and formal A1/B1 remain not run.

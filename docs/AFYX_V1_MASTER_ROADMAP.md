@@ -2461,3 +2461,28 @@ not run. The remaining prerequisite is a genuinely restricted execution
 boundary (restricted OS account, isolated container, or filesystem ACL) that
 allows the evaluated workspace and denies evaluator-only files; Expert v0.1.0
 is unchanged.
+
+### 2026-10-13 AFYX-283C.1 — canary/workload parity correction
+
+Status: **DETERMINISTIC CORRECTION IMPLEMENTED / HOST ISOLATION NOT VERIFIED / PILOT NOT RUN**
+
+The AFYX-283B canary and evaluation cells did not use the same workspace
+construction: cells ran from `%TEMP%/afyx-eval-*/work`, while the canary ran
+under repository-local `evals/results/.isolation-work-*`. The earlier nested
+result therefore diagnosed command-policy interference but could not establish
+the filesystem boundary used by real evaluation workloads.
+
+AFYX-283C.1 gives cells and canary one shared external disposable-workspace
+constructor. The positive attempt flag now derives only from its own observed
+tool event. Confirmed evaluator-only read success or canary exposure has `FAIL`
+precedence over missing positive evidence, timeout, or other `BLOCKED`
+conditions. Bounded execution, redacted evidence, and owned process-tree
+cleanup remain unchanged. Deterministic regressions cover workspace parity,
+allowed reads, unrelated tool activity, unauthorized reads, marker exposure,
+and result precedence.
+
+No direct-host control or DEVELOPMENT pilot was executed from the developer
+sandbox. Actual isolation remains **NOT VERIFIED** until the corrected procedure
+runs from a trusted PowerShell host and supplies sanitized evidence. Expert
+v0.1.0, formal A1/B1, installed components, CODEX_HOME, Graph runtime, PR #59,
+the frozen Alpha candidate, and private evaluation material remain unchanged.

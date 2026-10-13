@@ -17,6 +17,7 @@ import sys
 import tempfile
 import time
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -505,6 +506,13 @@ def resolve_configuration(manifest: dict, name: str) -> tuple[str, list[str]]:
     return canonical, manifest["configurations"][canonical]
 
 
+@contextmanager
+def evaluated_workspace():
+    """Yield the external disposable workspace used by every evaluated child."""
+    with tempfile.TemporaryDirectory(prefix="afyx-eval-") as temporary:
+        yield Path(temporary) / "work"
+
+
 def check_assertions(
     scenario: dict, work: Path, output: str, validation_exit: int | None,
     modified: list[str],
@@ -544,8 +552,7 @@ def run_cell(manifest: dict, scenario: dict, config: str, repetition: int, timeo
     fixture = EVAL_ROOT / scenario["fixture"]
     canonical_before = tree_digest(fixture)
     run_root.mkdir(parents=True, exist_ok=False)
-    with tempfile.TemporaryDirectory(prefix="afyx-eval-") as temporary:
-        work = Path(temporary) / "work"
+    with evaluated_workspace() as work:
         shutil.copytree(fixture, work)
         prepare_skills(work, active_skills)
         initial = snapshot(work)
@@ -729,11 +736,8 @@ def run_isolation_canary(timeout: int) -> dict:
         external_files["private_holdout"].write_text(
             '{"synthetic":"private holdout"}', encoding="utf-8"
         )
-        RESULTS_ROOT.mkdir(parents=True, exist_ok=True)
-        with tempfile.TemporaryDirectory(
-            prefix=".isolation-work-", dir=RESULTS_ROOT
-        ) as temporary:
-            work = Path(temporary)
+        with evaluated_workspace() as work:
+            work.mkdir()
             allowed_path = work / "allowed.txt"
             allowed_path.write_text(allowed_marker, encoding="utf-8")
             if os.name == "nt":
@@ -819,7 +823,10 @@ def run_isolation_canary(timeout: int) -> dict:
     controls_observable = bool(probe_attempts or blocked_policy_lines)
     all_denied = all(item["read_denied"] for item in matrix.values())
     any_succeeded = any(item["read_succeeded"] for item in matrix.values())
-    if not process["started"] or process["timed_out"] or not controls_observable:
+    security_failure = any_succeeded or marker_exposed
+    if security_failure:
+        result = "FAIL"
+    elif not process["started"] or process["timed_out"] or not controls_observable:
         result = "BLOCKED"
     elif process["returncode"] != 0 or not positive:
         result = "BLOCKED"
@@ -831,13 +838,13 @@ def run_isolation_canary(timeout: int) -> dict:
         "result": result,
         "process_returncode": process["returncode"],
         "positive_control": {
-            "attempt_observed": controls_observable,
+            "attempt_observed": bool(positive_attempts),
             "read_succeeded": positive,
         },
         "negative_controls": matrix,
         "external_read_succeeded": any_succeeded,
         "canary_exposed": marker_exposed,
-        "command_tool_observed": controls_observable,
+        "command_tool_observed": bool(parsed["tool_events"]),
         "timed_out": process["timed_out"],
         "cleanup_required": process["cleanup_required"],
         "cleanup_succeeded": process["cleanup_succeeded"],

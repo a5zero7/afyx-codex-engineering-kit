@@ -5,10 +5,12 @@ from __future__ import annotations
 
 import importlib
 import json
+import re
 import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
 from unittest import mock
 
@@ -96,7 +98,7 @@ class EvaluationHarnessTests(unittest.TestCase):
             evidence["efficient-coding"]["state"], "ACTIVATION_NOT_OBSERVABLE"
         )
 
-    def test_evaluated_workspace_is_external_and_contains_no_ground_truth(self) -> None:
+    def test_cell_and_canary_share_external_workspace_constructor(self) -> None:
         scenario = {
             "scenario_id": "isolation-unit",
             "fixture": "fixtures/expert-pilot",
@@ -118,22 +120,65 @@ class EvaluationHarnessTests(unittest.TestCase):
             observed_cwd.append(cwd)
             self.assertFalse((cwd / "manifest.json").exists())
             self.assertFalse((cwd / "evals").exists())
-            event = {"type": "item.completed", "item": {"type": "agent_message", "text": "OK"}}
+            if (cwd / "allowed.txt").exists():
+                allowed = (cwd / "allowed.txt").read_text(encoding="utf-8")
+                events = [{
+                    "type": "item.completed",
+                    "item": {
+                        "type": "command_execution",
+                        "command": "Write-Output AFYX_CONTROL_workspace:; Get-Content allowed.txt",
+                        "status": "completed", "exit_code": 0,
+                        "aggregated_output": f"AFYX_CONTROL_workspace:{allowed}",
+                    },
+                }]
+                for label in ("canary", "manifest", "rubric", "private_holdout"):
+                    events.append({
+                        "type": "item.completed",
+                        "item": {
+                            "type": "command_execution",
+                            "command": f"Write-Output AFYX_CONTROL_{label}:READ_DENIED",
+                            "status": "completed", "exit_code": 0,
+                            "aggregated_output": f"AFYX_CONTROL_{label}:READ_DENIED",
+                        },
+                    })
+                stdout = "\n".join(json.dumps(event) for event in events)
+            else:
+                event = {
+                    "type": "item.completed",
+                    "item": {"type": "agent_message", "text": "OK"},
+                }
+                stdout = json.dumps(event)
             return {
                 "started": True, "pid": 123, "returncode": 0,
-                "stdout": json.dumps(event), "stderr": "", "timed_out": False,
+                "stdout": stdout, "stderr": "", "timed_out": False,
                 "cleanup_required": False, "cleanup_succeeded": True,
                 "cleanup_method": "not-required",
                 "elapsed_seconds": 0.01, "executable": "codex",
             }
 
+        original_workspace = run.evaluated_workspace
+
+        @contextmanager
+        def traced_workspace():
+            with original_workspace() as work:
+                yield work
+
         with tempfile.TemporaryDirectory() as results, mock.patch.object(
             run, "RESULTS_ROOT", Path(results)
         ), mock.patch.object(run, "bounded_process", side_effect=fake_process):
-            record = run.run_cell(manifest, scenario, "A0", 1, 30)
+            with mock.patch.object(
+                run, "evaluated_workspace", wraps=traced_workspace
+            ) as workspace_factory:
+                record = run.run_cell(manifest, scenario, "A0", 1, 30)
+                canary = run.run_isolation_canary(30)
         self.assertEqual(record["result"], "PASS")
-        self.assertTrue(observed_cwd)
+        self.assertEqual(canary["result"], "PASS")
+        self.assertTrue(canary["positive_control"]["attempt_observed"])
+        self.assertTrue(canary["positive_control"]["read_succeeded"])
+        self.assertEqual(workspace_factory.call_count, 2)
+        self.assertEqual(len(observed_cwd), 2)
         for cwd in observed_cwd:
+            self.assertEqual(cwd.name, "work")
             with self.assertRaises(ValueError):
                 cwd.relative_to(ROOT.resolve())
 
@@ -184,7 +229,24 @@ class EvaluationHarnessTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as results, mock.patch.object(
             run, "RESULTS_ROOT", Path(results)
         ), mock.patch.object(run, "bounded_process", return_value=no_attempt):
-            self.assertEqual(run.run_isolation_canary(30)["result"], "BLOCKED")
+            result = run.run_isolation_canary(30)
+            self.assertEqual(result["result"], "BLOCKED")
+            self.assertFalse(result["positive_control"]["attempt_observed"])
+
+        unrelated_tool = child_result(json.dumps({
+            "type": "item.completed",
+            "item": {
+                "type": "command_execution", "command": "Write-Output unrelated",
+                "status": "completed", "exit_code": 0, "aggregated_output": "unrelated",
+            },
+        }))
+        with tempfile.TemporaryDirectory() as results, mock.patch.object(
+            run, "RESULTS_ROOT", Path(results)
+        ), mock.patch.object(run, "bounded_process", return_value=unrelated_tool):
+            result = run.run_isolation_canary(30)
+            self.assertEqual(result["result"], "BLOCKED")
+            self.assertTrue(result["command_tool_observed"])
+            self.assertFalse(result["positive_control"]["attempt_observed"])
 
         with tempfile.TemporaryDirectory() as results, mock.patch.object(
             run, "RESULTS_ROOT", Path(results)
@@ -233,6 +295,54 @@ class EvaluationHarnessTests(unittest.TestCase):
         self.assertEqual(result["result"], "FAIL")
         self.assertTrue(result["external_read_succeeded"])
         self.assertFalse(result["canary_exposed"])
+
+    def test_unauthorized_read_or_canary_exposure_overrides_blocked_state(self) -> None:
+        def leaking_timeout(command, cwd, timeout):
+            event = {
+                "type": "item.completed",
+                "item": {
+                    "type": "command_execution",
+                    "command": "Write-Output AFYX_CONTROL_canary:READ_SUCCEEDED",
+                    "status": "completed", "exit_code": 0,
+                    "aggregated_output": "AFYX_CONTROL_canary:READ_SUCCEEDED",
+                },
+            }
+            return {
+                "started": True, "pid": 791, "returncode": None,
+                "stdout": json.dumps(event), "stderr": "", "timed_out": True,
+                "cleanup_required": True, "cleanup_succeeded": True,
+                "cleanup_method": "synthetic-cleanup",
+                "elapsed_seconds": 30.0, "executable": "codex",
+            }
+
+        with tempfile.TemporaryDirectory() as results, mock.patch.object(
+            run, "RESULTS_ROOT", Path(results)
+        ), mock.patch.object(run, "bounded_process", side_effect=leaking_timeout):
+            result = run.run_isolation_canary(30)
+        self.assertEqual(result["result"], "FAIL")
+        self.assertTrue(result["external_read_succeeded"])
+        self.assertFalse(result["positive_control"]["attempt_observed"])
+        self.assertTrue(result["timed_out"])
+
+        def exposed_marker_timeout(command, cwd, timeout):
+            prompt = command[-1]
+            canary_path = re.search(
+                r'(?:LiteralPath|cat)\s+"([^"]*canary\.txt)"', prompt
+            ).group(1)
+            marker = Path(canary_path).read_text(encoding="utf-8")
+            result = leaking_timeout(command, cwd, timeout)
+            result["stdout"] = json.dumps({
+                "type": "item.completed",
+                "item": {"type": "agent_message", "text": marker},
+            })
+            return result
+
+        with tempfile.TemporaryDirectory() as results, mock.patch.object(
+            run, "RESULTS_ROOT", Path(results)
+        ), mock.patch.object(run, "bounded_process", side_effect=exposed_marker_timeout):
+            result = run.run_isolation_canary(30)
+        self.assertEqual(result["result"], "FAIL")
+        self.assertTrue(result["canary_exposed"])
 
     def test_sandbox_router_denials_are_observable_access_failures(self) -> None:
         def router_blocked_process(command, cwd, timeout):
