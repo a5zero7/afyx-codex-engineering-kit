@@ -60,6 +60,13 @@ foreach ($component in ($componentStates.Values | Where-Object { $_.Tier -eq 'co
     else { Write-Result 'FAIL' $component.Name "$($component.State): $($component.Detail)"; $coreFailure = $true }
 }
 
+$expert = $componentStates['afyx-engineering-expert']
+switch ($expert.State) {
+    'HEALTHY' { Write-Result 'OK' $expert.Name "$($expert.Version); optional skill valid" }
+    'NOT INSTALLED' { Write-Result 'INFO' $expert.Name 'not installed (optional)' }
+    default { Write-Result 'WARN' $expert.Name "$($expert.State): $($expert.Detail) (optional)" }
+}
+
 $graph = $componentStates['afyx-graph']
 switch ($graph.State) {
     'NOT INSTALLED' { Write-Result 'INFO' 'Afyx Graph' 'not installed (optional)' }

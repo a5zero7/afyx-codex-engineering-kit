@@ -115,6 +115,16 @@ class DoctorTests(unittest.TestCase):
             self.assertIn("[OK] Prompt Master", out, shell)
             self.assertNotIn("[FAIL] Efficient Coding", out, shell)
 
+    def test_optional_expert_is_reported_without_affecting_core_readiness(self) -> None:
+        self.install_core()
+        for shell, (_code, out) in self.doctors().items():
+            self.assertIn("[INFO] Afyx Engineering Expert", out, shell)
+            self.assertNotIn("[FAIL] Afyx Engineering Expert", out, shell)
+
+        shutil.copytree(ROOT / "skills" / "afyx-engineering-expert", self.skills / "afyx-engineering-expert")
+        for shell, (_code, out) in self.doctors().items():
+            self.assertIn("[OK] Afyx Engineering Expert — 0.1.0", out, shell)
+
     def test_verdict_agrees_with_fail_lines(self) -> None:
         self.install_core()
         for shell, (code, out) in self.doctors().items():

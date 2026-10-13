@@ -18,7 +18,7 @@ Headroom tidak diperlukan untuk memasang skill. Jika digunakan, pasang terlebih 
 3. Jalankan installer platform Anda untuk memasang jika target belum ada.
 4. Mulai sesi Codex baru.
 
-Installer melakukan inventory read-only lebih dahulu untuk Efficient Coding, Odoo Engineering, Prompt Master, Afyx Graph, dan Usage Tracking. State menentukan action yang sah: `NOT INSTALLED` = Install/Skip, `HEALTHY` = Update/Skip, `INCOMPLETE`/`INVALID` = Repair/Skip, dan `UNKNOWN` = Skip saja. Mode non-interaktif selalu Skip kecuali action diberikan melalui `-ComponentAction id=...` atau `--component id=...`. `-ValidateOnly`, `-WhatIf`, dan `--dry-run` tidak membuat mutasi.
+Installer melakukan inventory read-only lebih dahulu untuk Efficient Coding, Odoo Engineering, Afyx Engineering Expert, Prompt Master, Afyx Graph, dan Usage Tracking. State menentukan action yang sah: `NOT INSTALLED` = Install/Skip, `HEALTHY` = Update/Skip, `INCOMPLETE`/`INVALID` = Repair/Skip, dan `UNKNOWN` = Skip saja. Mode non-interaktif selalu Skip kecuali action diberikan melalui `-ComponentAction id=...` atau `--component id=...`. `-ValidateOnly`, `-WhatIf`, dan `--dry-run` tidak membuat mutasi.
 
 ## Afyx Graph Technical Alpha
 
@@ -34,7 +34,7 @@ Skill yang dipasang oleh Afyx memiliki `.afyx-install.json` berisi identitas kom
 
 Backup skill disimpan di `${AFYX_BACKUP_ROOT}` bila diatur, atau secara default di `~/.afyx/backups/<component>/`, bukan di checkout kit. Batas default adalah 20 backup per komponen (`AFYX_BACKUP_LIMIT`); saat batas tercapai operasi berhenti tanpa menghapus backup lama. Pemulihan manual dilakukan dengan menyalin direktori backup pilihan kembali ke skill root ketika target tidak ada. Jika proses terputus setelah target lama dipindah, retry memulihkan `.<component>.afyx-old` secara otomatis; keadaan ambigu dengan target baru dan recovery path sekaligus dihentikan untuk inspeksi manual.
 
-Instalasi legacy sebelum marker dapat diadopsi secara eksplisit per komponen dengan `-ComponentAction efficient-coding=adopt` / `--component efficient-coding=adopt` (gunakan ID `odoo-engineering` atau `prompt-master` untuk komponen lain). Jalankan `-WhatIf` / `--dry-run` lebih dahulu untuk preview read-only. Adoption hanya menambahkan metadata setelah provenance cocok dan backup diverifikasi; isi skill tidak diganti, di-upgrade, atau dihapus. Efficient Coding/Odoo Engineering harus cocok byte-for-byte dengan digest distribusi historis 1.1.0. Prompt Master 1.8.0 harus berupa checkout Git bersih pada origin resmi dan revision allowlist tepat—nama/version saja tidak cukup. State `MODIFIED`, `FOREIGN`, `UNKNOWN`, path tidak aman, atau backup gagal selalu ditolak; `-Force` / `--force` bukan pengganti verifikasi adoption.
+Instalasi legacy sebelum marker dapat diadopsi secara eksplisit per komponen dengan `-ComponentAction efficient-coding=adopt` / `--component efficient-coding=adopt` (gunakan ID `odoo-engineering` atau `prompt-master` untuk komponen lain). Jalankan `-WhatIf` / `--dry-run` lebih dahulu untuk preview read-only. Adoption hanya menambahkan metadata setelah provenance cocok dan backup diverifikasi; isi skill tidak diganti, di-upgrade, atau dihapus. Efficient Coding/Odoo Engineering harus cocok byte-for-byte dengan digest distribusi historis 1.1.0. Prompt Master 1.8.0 harus berupa checkout Git bersih pada origin resmi dan revision allowlist tepat—nama/version saja tidak cukup. Afyx Engineering Expert 0.1.0 tidak memiliki distribusi legacy dan tidak dapat diadopsi. State `MODIFIED`, `FOREIGN`, `UNKNOWN`, path tidak aman, atau backup gagal selalu ditolak; `-Force` / `--force` bukan pengganti verifikasi adoption.
 
 Prompt Master tetap dimiliki upstream dan tidak dibundel. Default acquisition dipin ke commit yang tercatat di `scripts/components.json`; installer fetch commit tersebut, memverifikasi `HEAD`, struktur skill, remote, dan clean state sebelum promosi. Perubahan revision harus berupa perubahan contract yang direview. Mode offline tidak mengklaim dapat memasang/update komponen ini.
 
@@ -62,6 +62,14 @@ Kedua skill memakai frontmatter Agent Skills dengan `name`, `description`, dan `
 
 Efficient Coding 1.2.0 memakai loop `GROUND → LOCATE → REPRODUCE → CHANGE → VALIDATE → REPORT`, validasi berbasis risiko, dan routing tool selektif. Afyx Graph dipakai hanya untuk relasi struktural yang material; fallback selalu inspeksi source langsung dan tidak pernah dependency graph eksternal yang sudah deprecated. Versi ini tidak mengubah provenance adoption historis 1.1.0.
 
+## Afyx Engineering Expert 0.1.0 (opsional)
+
+Pasang secara eksplisit dengan `./install.ps1 -ComponentAction afyx-engineering-expert=install` atau `./install.sh --component afyx-engineering-expert=install`. Setelah membuka sesi Codex baru, panggil standalone dengan menyebut `afyx-engineering-expert` untuk product discovery, requirements, architecture, security review, incident/reliability, AI/data, atau koordinasi ERP yang substantif.
+
+Skill ini tetap satu orchestrator adaptif: pilih satu domain utama dan mula-mula paling banyak dua domain pendukung, lalu muat hanya reference/workflow yang relevan. Untuk implementasi/debugging, ia berkomposisi dengan Efficient Coding; untuk Odoo, ERP expert menangani arsitektur proses sedangkan Odoo Engineering tetap otoritatif untuk detail teknis versi-spesifik. Afyx Graph bersifat opsional dan tidak menjadi activation dependency. Prompt Master tetap independen dan upstream-owned.
+
+Folder skill yang sama tetap kompatibel sebagai ZIP berisi satu top-level folder untuk lingkungan ChatGPT yang memang menyediakan upload Skills. Installer Kit hanya memasang ke Codex CLI/VS Code skill root; ia tidak memasang atau mengaktifkan skill di ChatGPT secara otomatis.
+
 ## Saat skill sudah ada
 
 | Kondisi | Perilaku default | Opsi aman |
@@ -82,7 +90,7 @@ Installer tidak memodifikasi `auth.json`, Headroom, plugin, sandbox, model, prov
 
 ## Penghapusan
 
-`./uninstall.ps1` atau `./uninstall.sh` menghapus Efficient Coding dan Odoo Engineering. Prompt Master hanya dihapus saat opsi `-RemovePromptMaster` atau `--remove-prompt-master` disebut secara eksplisit. Uninstaller dapat menghapus runtime Afyx Graph milik Afyx, tetapi tidak menghapus konfigurasi Codex atau state `.afyx-graph/` milik project.
+`./uninstall.ps1` atau `./uninstall.sh` menghapus skill Afyx yang ownership-nya terverifikasi, termasuk Efficient Coding, Odoo Engineering, dan Afyx Engineering Expert bila terpasang. Gunakan `./uninstall.ps1 -Component afyx-engineering-expert` atau `./uninstall.sh --component afyx-engineering-expert` untuk menghapus hanya Expert tanpa menyentuh skill Afyx lain. Prompt Master hanya dihapus saat opsi `-RemovePromptMaster` atau `--remove-prompt-master` disebut secara eksplisit. Uninstaller dapat menghapus runtime Afyx Graph milik Afyx, tetapi tidak menghapus konfigurasi Codex atau state `.afyx-graph/` milik project.
 
 ## Pemulihan
 

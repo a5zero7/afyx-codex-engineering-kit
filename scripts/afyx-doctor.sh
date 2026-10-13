@@ -64,6 +64,12 @@ for id in efficient-coding odoo-engineering prompt-master; do
 done
 
 printf '\nOPTIONAL\n'
+afyx_component_evaluate afyx-engineering-expert
+case "$AFYX_STATE" in
+  HEALTHY) line OK 'Afyx Engineering Expert' "$AFYX_VERSION" ;;
+  'NOT INSTALLED') line INFO 'Afyx Engineering Expert' 'not installed (optional)' ;;
+  *) line WARN 'Afyx Engineering Expert' "$AFYX_STATE: $AFYX_DETAIL" ;;
+esac
 afyx_component_evaluate afyx-graph
 case "$AFYX_STATE" in
   HEALTHY) line OK 'Afyx Graph' "$AFYX_VERSION"; printf '     State: %s\n' "$AFYX_STATE" ;;

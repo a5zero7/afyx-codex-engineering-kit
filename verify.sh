@@ -61,6 +61,13 @@ for component_id in efficient-coding odoo-engineering prompt-master; do
   else result FAIL "$component_name" "$AFYX_STATE: $AFYX_DETAIL"; core_failure=true; fi
 done
 
+afyx_component_evaluate afyx-engineering-expert
+case "$AFYX_STATE" in
+  HEALTHY) result OK 'Afyx Engineering Expert' "$AFYX_VERSION; optional skill valid" ;;
+  'NOT INSTALLED') result INFO 'Afyx Engineering Expert' 'not installed (optional)' ;;
+  *) result WARN 'Afyx Engineering Expert' "$AFYX_STATE: $AFYX_DETAIL (optional)" ;;
+esac
+
 afyx_component_evaluate afyx-graph
 case "$AFYX_STATE" in
   'NOT INSTALLED') result INFO 'Afyx Graph' 'not installed (optional)' ;;

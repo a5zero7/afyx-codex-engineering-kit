@@ -21,7 +21,7 @@ OWNERSHIP = {"afyx", "upstream", "external"}
 PLATFORMS = {"all", "windows"}
 INSTALL_ROOTS = {"skills_root", "afyx_graph_root", "codex_tools", ""}
 REQUIRED_KEYS = {"id", "name", "type", "tier", "ownership", "platforms", "install_root", "install_path"}
-EXPECTED_IDS = ["efficient-coding", "odoo-engineering", "prompt-master", "afyx-graph", "codex-usage-tracking", "headroom"]
+EXPECTED_IDS = ["efficient-coding", "odoo-engineering", "afyx-engineering-expert", "prompt-master", "afyx-graph", "codex-usage-tracking", "headroom"]
 LINE_RE = re.compile(r'^\s*"[a-z_]+":\s*"[^"\\]*",?\s*$')
 
 
@@ -78,7 +78,7 @@ for component in components:
 by_id = {component["id"]: component for component in components}
 
 # Bundled skills must ship exactly what the contract requires.
-for cid in ("efficient-coding", "odoo-engineering"):
+for cid in ("efficient-coding", "odoo-engineering", "afyx-engineering-expert"):
     component = by_id[cid]
     skill_dir = ROOT / "skills" / component["install_path"]
     for relative in component["required_files"].split(";"):
@@ -89,6 +89,10 @@ for cid in ("efficient-coding", "odoo-engineering"):
         fail(f"{cid}: SKILL.md name does not match the component id")
     if component["version_required"] == "true" and not re.search(r'(?ms)^metadata:\s*\n\s+version:\s*["\'][^"\']+["\']', manifest):
         fail(f"{cid}: SKILL.md metadata.version is required by the contract")
+    if cid == "afyx-engineering-expert":
+        if any(key.startswith("legacy_") for key in component):
+            fail("afyx-engineering-expert: new skill must not claim legacy adoption evidence")
+        continue
     if component.get("legacy_version") != "1.1.0" or component.get("legacy_distribution_revision") != "b0b4d88eb7c42627598de71d6b0bf26317b9a694":
         fail(f"{cid}: legacy adoption evidence must identify the verified 1.1.0 baseline")
     if not re.fullmatch(r"[0-9a-f]{64}", component.get("legacy_content_digest", "")) or not re.fullmatch(r"[0-9a-f]{64}", component.get("legacy_content_digest_bash", "")):

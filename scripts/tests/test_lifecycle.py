@@ -19,6 +19,7 @@ WINDOWS = os.name == "nt"
 SELECTABLE = [
     "efficient-coding",
     "odoo-engineering",
+    "afyx-engineering-expert",
     "prompt-master",
     "afyx-graph",
     "codex-usage-tracking",
@@ -49,7 +50,7 @@ def write(path: Path, text: str, executable: bool = False) -> None:
 
 
 class LifecycleContractTests(unittest.TestCase):
-    def test_five_selectable_components_and_prerequisite_classes(self) -> None:
+    def test_six_selectable_components_and_prerequisite_classes(self) -> None:
         contract = json.loads((ROOT / "scripts/components.json").read_text(encoding="utf-8"))
         actual = [item["id"] for item in contract["components"] if item["id"] != "headroom"]
         self.assertEqual(actual, SELECTABLE)

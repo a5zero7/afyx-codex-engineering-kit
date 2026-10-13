@@ -31,6 +31,11 @@ def posix(path: Path) -> str:
 
 def run_bash(skills: Path, graph: Path, codex: Path) -> dict[str, tuple[str, str]]:
     bash = shutil.which("bash")
+    if not bash and WINDOWS:
+        for candidate in (Path("C:/Program Files/Git/bin/bash.exe"), Path("C:/Program Files/Git/usr/bin/bash.exe")):
+            if candidate.is_file():
+                bash = str(candidate)
+                break
     if not bash:
         return {}
     script = (
@@ -115,6 +120,13 @@ class ComponentContractTests(unittest.TestCase):
     def test_skill_incomplete_when_a_reference_is_missing(self) -> None:
         (self.install_skill("efficient-coding") / "references" / "tool-routing.md").unlink()
         self.assert_state("efficient-coding", "INCOMPLETE")
+
+    def test_optional_expert_skill_is_versioned_and_complete(self) -> None:
+        target = self.install_skill("afyx-engineering-expert")
+        for shell, states in self.shells().items():
+            self.assertEqual(states["afyx-engineering-expert"], ("HEALTHY", "0.1.0"), shell)
+        (target / "workflows" / "review-audit.md").unlink()
+        self.assert_state("afyx-engineering-expert", "INCOMPLETE")
 
     def test_skill_invalid_without_frontmatter(self) -> None:
         write(self.skills / "odoo-engineering" / "SKILL.md", "no frontmatter here\n")

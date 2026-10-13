@@ -45,6 +45,19 @@
       "legacy_distribution_revision": "b0b4d88eb7c42627598de71d6b0bf26317b9a694"
     },
     {
+      "id": "afyx-engineering-expert",
+      "name": "Afyx Engineering Expert",
+      "type": "skill",
+      "tier": "optional",
+      "ownership": "afyx",
+      "platforms": "all",
+      "install_root": "skills_root",
+      "install_path": "afyx-engineering-expert",
+      "version_source": "SKILL.md#metadata.version",
+      "version_required": "true",
+      "required_files": "SKILL.md;README.md;assets/result-template.md;references/ai-ml-engineer.md;references/business-analyst.md;references/cybersecurity-devsecops.md;references/database-administrator.md;references/erp-technical-specialist.md;references/product-manager.md;references/qa-engineer.md;references/site-reliability-engineer.md;references/software-engineer.md;references/solutions-architect.md;references/subject-matter-expert.md;references/system-analyst.md;references/ui-ux-designer.md;workflows/ai-data-erp.md;workflows/debugging.md;workflows/discovery-design.md;workflows/implementation.md;workflows/incident-reliability.md;workflows/review-audit.md"
+    },
+    {
       "id": "prompt-master",
       "name": "Prompt Master",
       "type": "skill",

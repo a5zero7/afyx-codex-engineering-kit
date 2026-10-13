@@ -77,6 +77,12 @@ foreach ($id in @('efficient-coding', 'odoo-engineering', 'prompt-master')) {
 
 Write-Host ''
 Write-Host 'OPTIONAL'
+$expert = $states['afyx-engineering-expert']
+switch ($expert.State) {
+    'HEALTHY' { Write-Line 'OK' $expert.Name $expert.Version }
+    'NOT INSTALLED' { Write-Line 'INFO' $expert.Name 'not installed (optional)' }
+    default { Write-Line 'WARN' $expert.Name "$($expert.State): $($expert.Detail)" }
+}
 $graph = $states['afyx-graph']
 switch ($graph.State) {
     'HEALTHY' { Write-Line 'OK' $graph.Name $graph.Version; Write-Host "     State: $($graph.State)" }

@@ -6,8 +6,8 @@ Contract revision: **2026-10-11**
 v1 scope policy: **FROZEN — Phase 1 through Phase 11**  
 Post-v1 policy: **PLANNED EXPANSION — not a v1 release blocker**
 
-Current work: **AFYX-282 native Graph source-intelligence refinement; AFYX-248 remains in progress**
-Task: `AFYX-282`; `AFYX-248` remains in progress
+Current work: **Afyx Engineering Expert v0.1.0 native Kit integration; AFYX-248 remains in progress**
+Task: Afyx Engineering Expert v0.1.0 integration; `AFYX-248` remains in progress
 Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`  
 Active implementation branch: `afyx/native-phase5f-parser-grammar`  
 Latest verified Phase 5F implementation checkpoint: `62621a0639f42db0eaac69ef087436d851cdba88`  
@@ -2306,3 +2306,43 @@ AFYX-282 had incorrectly incorporated extraction-v28 `_inherit` property facts i
 AFYX-280 boundary validation confirmed `limit + 1` over-fetch and handwritten-before-generated composition. It also reproduced a presentation defect near the shared output bound: a tail-positioned completeness notice could be trimmed. The notice now precedes result rows, so bounded output retains both the ranked-search incompleteness warning and the generic character-truncation marker. Ranking and result composition are unchanged.
 
 Focused regressions, typecheck, clean production/UI build, the six-fixture semantic baseline, 21-check CLI/MCP smoke, identity/component/independence validation, and artifact-identity tests passed. Exact-source-head [Afyx Graph Build 38324265023](https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/38324265023) passed on Windows, Linux, and macOS. AFYX-281 and AFYX-282 engineering acceptance is complete; this does not activate Technical Alpha or complete AFYX-248 or AFYX-272 MAC.4.
+
+### Afyx Engineering Expert v0.1.0 — native Kit integration
+
+Status: **IMPLEMENTED; FINAL-HEAD CI REQUIRED; AFYX-248 IN PROGRESS**
+
+The first-party source package
+`afyx-engineering-expert-kit-ready-v0.1.0.zip` was accepted only after its
+SHA-256 matched
+`fe762234d8d21819b53a9963fa37e682635e142d6d4735066f9d692cbeaf0350`.
+All 22 safe relative members are strict UTF-8 and the normalized source-tree
+digest is
+`9ebefe30bf9c7f73b101a53542b3cb09c993cfe9a4d565d15afc5834465569b7`.
+The unchanged source tree is bundled as the optional Afyx-owned
+`afyx-engineering-expert` 0.1.0 component: one adaptive orchestrator, thirteen
+domain references, six workflows, and one result template. No legacy-adoption
+claim was created.
+
+PowerShell and Bash lifecycle paths now support explicit install, update,
+repair, skip, dry-run/WhatIf, ValidateOnly, verified ownership, transactional
+backup/rollback, read-only verifier/doctor reporting, and independently scoped
+uninstall. A missing optional Expert installation does not affect core
+readiness. Deterministic routing keeps ordinary coding with Efficient Coding,
+version-specific Odoo implementation details with Odoo Engineering, and prompt
+authoring with Prompt Master; substantive product/architecture, security,
+incident/reliability, AI/data, and ERP process advisory can route to Expert.
+Simple questions do not route to Expert.
+
+Bundle, component, lifecycle, security, legacy-adoption, doctor, routing,
+Graph validator, identity, and evaluation-harness checks pass locally. An
+isolated advisory-only Odoo agent run exited successfully, preserved its
+fixture, and produced an advisory response. It attempted to read both Expert
+and Odoo skill manifests, but the read commands were rejected by the isolated
+sandbox before either manifest was loaded; therefore actual functional skill
+activation remains **NOT VERIFIED** and is not inferred from response quality
+or static routing.
+
+No active skill installation, `CODEX_HOME`, MCP configuration, Graph runtime,
+Alpha branch/candidate, PR #59, Adit environment, or IJP repository was
+modified. Final-head cross-platform engineering CI remains required before
+this integration can be reported complete.

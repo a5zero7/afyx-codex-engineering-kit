@@ -6,16 +6,18 @@ skills_root="${CODEX_SKILLS_ROOT:-$HOME/.agents/skills}"
 remove_prompt_master=false
 remove_afyx_graph=false
 dry_run=false
+selected_components=()
 
 printf 'Afyx Codex Engineering Kit — Linux/macOS uninstaller (Bash)\n'
 
 usage() {
-  printf '%s\n' 'Usage: ./uninstall.sh [--skills-root PATH] [--remove-prompt-master] [--remove-afyx-graph] [--dry-run]'
+  printf '%s\n' 'Usage: ./uninstall.sh [--skills-root PATH] [--component AFYX-SKILL-ID] [--remove-prompt-master] [--remove-afyx-graph] [--dry-run]'
 }
 
 while (($#)); do
   case "$1" in
     --skills-root) (($# >= 2)) || { printf '%s\n' '--skills-root requires a value.' >&2; exit 2; }; skills_root="$2"; shift 2 ;;
+    --component) (($# >= 2)) || { printf '%s\n' '--component requires a value.' >&2; exit 2; }; selected_components+=("$2"); shift 2 ;;
     --remove-prompt-master) remove_prompt_master=true; shift ;;
     --remove-afyx-graph) remove_afyx_graph=true; shift ;;
     --dry-run) dry_run=true; shift ;;
@@ -29,10 +31,22 @@ done
 # shellcheck source=scripts/lib/afyx-components.sh
 . "$root/scripts/lib/afyx-components.sh"
 . "$root/scripts/lib/afyx-skill-lifecycle.sh"
+component_selected() {
+  local wanted="$1" selected
+  ((${#selected_components[@]} == 0)) && return 0
+  for selected in "${selected_components[@]}"; do [[ "$selected" == "$wanted" ]] && return 0; done
+  return 1
+}
+for selected in "${selected_components[@]}"; do
+  [[ "$(afyx_component_field "$selected" type)" == skill && "$(afyx_component_field "$selected" ownership)" == afyx ]] || {
+    printf 'Unknown or non-removable Afyx skill component: %s\n' "$selected" >&2
+    exit 2
+  }
+done
 for component_id in $(afyx_component_ids); do
   [[ "$(afyx_component_field "$component_id" type)" == skill ]] || continue
   ownership="$(afyx_component_field "$component_id" ownership)"
-  if [[ "$ownership" == afyx ]] || { [[ "$ownership" == upstream ]] && "$remove_prompt_master"; }; then
+  if { [[ "$ownership" == afyx ]] && component_selected "$component_id"; } || { [[ "$ownership" == upstream ]] && "$remove_prompt_master"; }; then
     target="$(afyx_component_root "$component_id")"
     if "$dry_run"; then
       afyx_classify_skill "$target" "$component_id" "$ownership"

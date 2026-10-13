@@ -39,6 +39,8 @@ class RoutingGuardTests(unittest.TestCase):
             "Fix record rule Odoo 17": {"efficient-coding", "odoo-engineering"},
             "Write a prompt for Claude that summarizes legal contracts": {"prompt-master"},
             "Write a prompt that asks an LLM to review Odoo 17 record rules": {"prompt-master", "odoo-engineering"},
+            "Run product discovery and design the system architecture for a multi-tenant approval platform": {"afyx-engineering-expert"},
+            "Review an Odoo transactional workflow that creates multi-vendor RFQs from an approved Purchase Request, including quantity limits, company permissions, duplicate operations and concurrency. Advisory only; do not edit the repository.": {"afyx-engineering-expert", "odoo-engineering"},
             "What is the capital of France?": set(),
         }
         for prompt, skills in expected.items():
@@ -67,6 +69,14 @@ class RoutingGuardTests(unittest.TestCase):
             if rule["skill"] == "odoo-engineering":
                 rule["when"] = "odoo_domain"
         self.assertTrue(any("conversation-odoo-what-is" in item for item in self.failures(router, self.cases)))
+
+    def test_expanding_expert_to_ordinary_coding_is_caught(self) -> None:
+        router = copy.deepcopy(self.router)
+        for rule in router["rules"]:
+            if rule["skill"] == "afyx-engineering-expert":
+                rule["when"] = "expert_domain or coding"
+        failed = self.failures(router, self.cases)
+        self.assertTrue(any("expert-ordinary-debugging" in item for item in failed), failed)
 
     def test_efficient_coding_losing_its_prompt_exclusion_is_caught(self) -> None:
         original = routing.description_of

@@ -21,8 +21,10 @@ Write-Host 'Afyx Codex Engineering Kit — Windows installer (PowerShell)'
 $packageRoot = $PSScriptRoot
 $bundledEfficientCoding = Join-Path $packageRoot 'skills\efficient-coding'
 $bundledOdooEngineering = Join-Path $packageRoot 'skills\odoo-engineering'
+$bundledEngineeringExpert = Join-Path $packageRoot 'skills\afyx-engineering-expert'
 $efficientTarget = Join-Path $SkillsRoot 'efficient-coding'
 $odooTarget = Join-Path $SkillsRoot 'odoo-engineering'
+$expertTarget = Join-Path $SkillsRoot 'afyx-engineering-expert'
 $promptTarget = Join-Path $SkillsRoot 'prompt-master'
 $usageTrackerInstaller = Join-Path $packageRoot 'scripts\install-codex-usage-tracker.ps1'
 $graphInstaller = Join-Path $packageRoot 'scripts\install-afyx-graph.ps1'
@@ -56,13 +58,14 @@ foreach ($specification in $ComponentAction) {
     }
     $componentActions[$Matches[1]] = $Matches[2]
 }
-$knownSelectable = @('efficient-coding', 'odoo-engineering', 'prompt-master', 'afyx-graph', 'codex-usage-tracking')
+$knownSelectable = @('efficient-coding', 'odoo-engineering', 'afyx-engineering-expert', 'prompt-master', 'afyx-graph', 'codex-usage-tracking')
 foreach ($id in $componentActions.Keys) { if ($id -notin $knownSelectable) { throw "Unknown selectable component: $id" } }
 
 function Get-AvailableVersion([string]$Id) {
     switch ($Id) {
         'efficient-coding' { return Get-AfyxSkillVersion -Directory $bundledEfficientCoding }
         'odoo-engineering' { return Get-AfyxSkillVersion -Directory $bundledOdooEngineering }
+        'afyx-engineering-expert' { return Get-AfyxSkillVersion -Directory $bundledEngineeringExpert }
         'afyx-graph' { return (Get-Content -Raw -LiteralPath $graphMetadataPath | ConvertFrom-Json).product_version }
         default { return '' }
     }
@@ -201,6 +204,7 @@ function Install-PromptMasterPinned([bool]$ReplaceExisting) {
 
 if (-not (Test-SkillManifest $bundledEfficientCoding)) { throw 'Bundled Efficient Coding is invalid or missing.' }
 if (-not (Test-SkillManifest $bundledOdooEngineering)) { throw 'Bundled Odoo Engineering is invalid or missing.' }
+if (-not (Test-SkillManifest $bundledEngineeringExpert)) { throw 'Bundled Afyx Engineering Expert is invalid or missing.' }
 if (-not (Test-Path -LiteralPath $graphMetadataPath -PathType Leaf)) { throw 'Bundled Afyx Graph metadata is missing.' }
 
 $codexCliDetected = [bool](Get-Command codex -ErrorAction SilentlyContinue)
@@ -210,6 +214,7 @@ $graphReleaseChannel = (Get-Content -Raw -LiteralPath (Join-Path $packageRoot 'a
 $states = [ordered]@{
     'Efficient Coding' = $componentStates['efficient-coding'].State
     'Odoo Engineering' = $componentStates['odoo-engineering'].State
+    'Afyx Engineering Expert' = $componentStates['afyx-engineering-expert'].State
     'Prompt Master' = $componentStates['prompt-master'].State
     'Afyx Graph' = $componentStates['afyx-graph'].State
     'Usage Tracking' = $componentStates['codex-usage-tracking'].State
@@ -217,7 +222,7 @@ $states = [ordered]@{
 Write-Host ''
 Write-Host 'Component Inventory'
 foreach ($entry in $states.GetEnumerator()) {
-    $id = switch ($entry.Key) { 'Efficient Coding' { 'efficient-coding' } 'Odoo Engineering' { 'odoo-engineering' } 'Prompt Master' { 'prompt-master' } 'Afyx Graph' { 'afyx-graph' } default { 'codex-usage-tracking' } }
+    $id = switch ($entry.Key) { 'Efficient Coding' { 'efficient-coding' } 'Odoo Engineering' { 'odoo-engineering' } 'Afyx Engineering Expert' { 'afyx-engineering-expert' } 'Prompt Master' { 'prompt-master' } 'Afyx Graph' { 'afyx-graph' } default { 'codex-usage-tracking' } }
     $installed = $componentStates[$id].Version
     $available = Get-AvailableVersion $id
     Write-Host ("{0}: {1}; installed={2}; available={3}; ownership={4}" -f $entry.Key, $entry.Value, $(if ($installed) { $installed } else { 'n/a' }), $(if ($available) { $available } else { 'external/n/a' }), $componentStates[$id].Ownership)
@@ -249,6 +254,10 @@ if ($ValidateOnly) {
         InstalledOdooEngineering = $states['Odoo Engineering'] -eq 'HEALTHY'
         OdooEngineeringState = $states['Odoo Engineering']
         OdooEngineeringVersion = $componentStates['odoo-engineering'].Version
+        BundledAfyxEngineeringExpert = Test-SkillManifest $bundledEngineeringExpert
+        InstalledAfyxEngineeringExpert = $states['Afyx Engineering Expert'] -eq 'HEALTHY'
+        AfyxEngineeringExpertState = $states['Afyx Engineering Expert']
+        AfyxEngineeringExpertVersion = $componentStates['afyx-engineering-expert'].Version
         InstalledPromptMaster = $states['Prompt Master'] -eq 'HEALTHY'
         PromptMasterState = $states['Prompt Master']
         BundledAfyxGraphSource = Test-Path -LiteralPath (Join-Path $packageRoot 'afyx-graph\engine\package.json')
@@ -270,7 +279,8 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) { throw 'Git is requir
 $summary = [ordered]@{}
 foreach ($component in @(
     @{ Id = 'efficient-coding'; Name = 'Efficient Coding'; Source = $bundledEfficientCoding; Target = $efficientTarget },
-    @{ Id = 'odoo-engineering'; Name = 'Odoo Engineering'; Source = $bundledOdooEngineering; Target = $odooTarget }
+    @{ Id = 'odoo-engineering'; Name = 'Odoo Engineering'; Source = $bundledOdooEngineering; Target = $odooTarget },
+    @{ Id = 'afyx-engineering-expert'; Name = 'Afyx Engineering Expert'; Source = $bundledEngineeringExpert; Target = $expertTarget }
 )) {
     $action = Get-ComponentAction $component.Id $component.Name
     if ($action -eq 'skip') { $summary[$component.Name] = 'skipped'; continue }

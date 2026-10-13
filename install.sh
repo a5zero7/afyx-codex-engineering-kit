@@ -4,6 +4,7 @@ set -euo pipefail
 PACKAGE_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 BUNDLED_EFFICIENT="$PACKAGE_ROOT/skills/efficient-coding"
 BUNDLED_ODOO="$PACKAGE_ROOT/skills/odoo-engineering"
+BUNDLED_EXPERT="$PACKAGE_ROOT/skills/afyx-engineering-expert"
 PROMPT_MASTER_REPOSITORY="${AFYX_PROMPT_MASTER_REPOSITORY:-https://github.com/nidhinjs/prompt-master.git}"
 skills_root="${CODEX_SKILLS_ROOT:-$HOME/.agents/skills}"
 graph_root="${AFYX_GRAPH_RUNTIME_ROOT:-$HOME/.afyx/graph}"
@@ -70,6 +71,7 @@ available_version() {
   case "$1" in
     efficient-coding) afyx_skill_version "$BUNDLED_EFFICIENT" ;;
     odoo-engineering) afyx_skill_version "$BUNDLED_ODOO" ;;
+    afyx-engineering-expert) afyx_skill_version "$BUNDLED_EXPERT" ;;
     afyx-graph) sed -n 's/.*"product_version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$PACKAGE_ROOT/afyx-graph/afyx-graph.json" ;;
     *) printf '' ;;
   esac
@@ -87,7 +89,7 @@ explicit_action() {
   local wanted="$1" specification id action
   for specification in "${component_actions[@]}"; do
     case "$specification" in *=*) id="${specification%%=*}"; action="${specification#*=}" ;; *) printf 'Invalid --component value: %s\n' "$specification" >&2; return 2 ;; esac
-    case "$id" in efficient-coding|odoo-engineering|prompt-master|afyx-graph|codex-usage-tracking) ;; *) printf 'Unknown selectable component: %s\n' "$id" >&2; return 2 ;; esac
+    case "$id" in efficient-coding|odoo-engineering|afyx-engineering-expert|prompt-master|afyx-graph|codex-usage-tracking) ;; *) printf 'Unknown selectable component: %s\n' "$id" >&2; return 2 ;; esac
     case "$action" in skip|install|update|repair|adopt) ;; *) printf 'Invalid action for %s: %s\n' "$id" "$action" >&2; return 2 ;; esac
     [[ "$id" == "$wanted" ]] && { printf '%s' "$action"; return 0; }
   done
@@ -201,19 +203,23 @@ stage_prompt_master() {
 
 valid_manifest "$BUNDLED_EFFICIENT" || { printf 'Bundled Efficient Coding is invalid.\n' >&2; exit 1; }
 valid_manifest "$BUNDLED_ODOO" || { printf 'Bundled Odoo Engineering is invalid.\n' >&2; exit 1; }
+valid_manifest "$BUNDLED_EXPERT" || { printf 'Bundled Afyx Engineering Expert is invalid.\n' >&2; exit 1; }
 [[ -s "$PACKAGE_ROOT/afyx-graph/afyx-graph.json" ]] || { printf 'Bundled Afyx Graph metadata is missing.\n' >&2; exit 1; }
 
 efficient_target="$skills_root/efficient-coding"
 odoo_target="$skills_root/odoo-engineering"
 prompt_target="$skills_root/prompt-master"
+expert_target="$skills_root/afyx-engineering-expert"
 efficient_state="$(component_state efficient-coding)"
 odoo_state="$(component_state odoo-engineering)"
 prompt_state="$(component_state prompt-master)"
+expert_state="$(component_state afyx-engineering-expert)"
 afyx_graph_state="$(component_state afyx-graph)"
 
 printf '\nComponent Inventory\n'
 printf 'Efficient Coding: %s; installed=%s; available=%s; ownership=afyx\n' "$efficient_state" "$(component_version efficient-coding)" "$(available_version efficient-coding)"
 printf 'Odoo Engineering: %s; installed=%s; available=%s; ownership=afyx\n' "$odoo_state" "$(component_version odoo-engineering)" "$(available_version odoo-engineering)"
+printf 'Afyx Engineering Expert: %s; installed=%s; available=%s; ownership=afyx\n' "$expert_state" "$(component_version afyx-engineering-expert)" "$(available_version afyx-engineering-expert)"
 printf 'Prompt Master: %s; installed=%s; available=external; ownership=upstream\n' "$prompt_state" "$(component_version prompt-master)"
 printf 'Afyx Graph: %s; installed=%s; available=%s; ownership=afyx\n' "$afyx_graph_state" "$(component_version afyx-graph)" "$(available_version afyx-graph)"
 printf 'Usage Tracking: NOT INSTALLED (Windows-only runtime)\n'
@@ -240,6 +246,7 @@ if "$validate_only"; then
   graph_version="$(sed -n 's/.*"product_version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$PACKAGE_ROOT/afyx-graph/afyx-graph.json")"
   printf 'BundledEfficientCoding: true\nInstalledEfficientCoding: %s\nEfficientCodingState: %s\nEfficientCodingVersion: %s\n' "$([[ "$efficient_state" == HEALTHY ]] && echo true || echo false)" "$efficient_state" "$(component_version efficient-coding)"
   printf 'BundledOdooEngineering: true\nInstalledOdooEngineering: %s\nOdooEngineeringState: %s\nOdooEngineeringVersion: %s\n' "$([[ "$odoo_state" == HEALTHY ]] && echo true || echo false)" "$odoo_state" "$(component_version odoo-engineering)"
+  printf 'BundledAfyxEngineeringExpert: true\nInstalledAfyxEngineeringExpert: %s\nAfyxEngineeringExpertState: %s\nAfyxEngineeringExpertVersion: %s\n' "$([[ "$expert_state" == HEALTHY ]] && echo true || echo false)" "$expert_state" "$(component_version afyx-engineering-expert)"
   printf 'InstalledPromptMaster: %s\nPromptMasterState: %s\n' "$([[ "$prompt_state" == HEALTHY ]] && echo true || echo false)" "$prompt_state"
   printf 'BundledAfyxGraphSource: true\nInstalledAfyxGraph: %s\nAfyxGraphState: %s\nAfyxGraphVersion: %s\n' "$([[ "$afyx_graph_state" == HEALTHY ]] && echo true || echo false)" "$afyx_graph_state" "$graph_version"
   printf 'InstalledUsageTracker: false\nUsageTrackerState: NOT INSTALLED\nCodexCliDetected: %s\nVsCodeExtensionDetected: %s\n' "$codex_cli_detected" "$vscode_extension_detected"
@@ -252,12 +259,18 @@ run mkdir -p "$skills_root"
 
 efficient_action="$(component_action efficient-coding 'Efficient Coding' "$efficient_state" "$(component_version efficient-coding)")"
 odoo_action="$(component_action odoo-engineering 'Odoo Engineering' "$odoo_state" "$(component_version odoo-engineering)")"
+expert_action="$(component_action afyx-engineering-expert 'Afyx Engineering Expert' "$expert_state" "$(component_version afyx-engineering-expert)")"
 efficient_result=skipped
 odoo_result=skipped
+expert_result=skipped
 if [[ "$efficient_action" == adopt ]]; then efficient_result="$(adopt_legacy_skill efficient-coding 'Efficient Coding' "$efficient_target")"
 elif [[ "$efficient_action" != skip ]]; then efficient_result="$(safe_skill_install efficient-coding 'Efficient Coding' "$BUNDLED_EFFICIENT" "$efficient_target" "$([[ "$efficient_action" == install ]] && printf false || printf true)")"; fi
 if [[ "$odoo_action" == adopt ]]; then odoo_result="$(adopt_legacy_skill odoo-engineering 'Odoo Engineering' "$odoo_target")"
 elif [[ "$odoo_action" != skip ]]; then odoo_result="$(safe_skill_install odoo-engineering 'Odoo Engineering' "$BUNDLED_ODOO" "$odoo_target" "$([[ "$odoo_action" == install ]] && printf false || printf true)")"; fi
+if [[ "$expert_action" == adopt ]]; then
+  printf 'Afyx Engineering Expert has no trusted legacy provenance and cannot be adopted.\n' >&2
+  exit 1
+elif [[ "$expert_action" != skip ]]; then expert_result="$(safe_skill_install afyx-engineering-expert 'Afyx Engineering Expert' "$BUNDLED_EXPERT" "$expert_target" "$([[ "$expert_action" == install ]] && printf false || printf true)")"; fi
 
 prompt_result=skipped
 prompt_action="$(component_action prompt-master 'Prompt Master' "$prompt_state" "$(component_version prompt-master)")"
@@ -308,6 +321,6 @@ if [[ "$graph_action" != skip ]]; then
   graph_result="$graph_action"
 fi
 
-printf '\nInstallation Summary\n[%s] Efficient Coding\n[%s] Odoo Engineering\n[%s] Prompt Master\n[%s] Afyx Graph\n[SKIPPED] Usage Tracking (Windows-only)\n' "$efficient_result" "$odoo_result" "$prompt_result" "$graph_result"
+printf '\nInstallation Summary\n[%s] Efficient Coding\n[%s] Odoo Engineering\n[%s] Afyx Engineering Expert\n[%s] Prompt Master\n[%s] Afyx Graph\n[SKIPPED] Usage Tracking (Windows-only)\n' "$efficient_result" "$odoo_result" "$expert_result" "$prompt_result" "$graph_result"
 printf '[INFO] Headroom — externally managed; unchanged\n'
 "$dry_run" && printf 'Dry-run completed; no files or configuration were changed.\n' || printf 'Start a new Codex session to load installed components.\n'

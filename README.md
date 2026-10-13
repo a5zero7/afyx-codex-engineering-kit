@@ -10,12 +10,13 @@ Paket ini memasang `efficient-coding` dan `odoo-engineering`, serta mengambil `p
 |---|---|---|
 | Efficient Coding | Salinan utuh dari `~/.agents/skills/efficient-coding`, termasuk `references/` | Dipasang ke skill root yang dipilih tanpa mengubah isinya |
 | Odoo Engineering | Dibundel di repositori ini | Stable Odoo 10–20 |
+| Afyx Engineering Expert | Original Afyx instruction-only skill di `skills/afyx-engineering-expert/` | Skill opsional adaptif: satu orchestrator, 13 reference, enam workflow, dan result template |
 | Prompt Master | [nidhinjs/prompt-master](https://github.com/nidhinjs/prompt-master) | Dipasang atau diganti melalui staging, validasi, backup, dan swap aman |
 | Afyx Graph | Komponen Afyx, dibundel di `afyx-graph/` | Komponen opsional untuk structural intelligence lokal; memerlukan Node.js eksternal 22.5.0 atau lebih baru |
 | Headroom | [headroomlabs-ai/headroom](https://github.com/headroomlabs-ai/headroom) | Enhancement eksternal opsional; hanya dideteksi |
 | Usage Tracking | Dibundel di `tools/codex-usage/` | Opsional, Windows; ringkasan token/cost otomatis melalui global Stop hook |
 
-**Core:** Efficient Coding, Odoo Engineering, dan Prompt Master. **Komponen opsional Afyx:** Afyx Graph dan Usage Tracking. **Enhancement eksternal:** Headroom. Core skill tetap berfungsi tanpa komponen opsional atau eksternal. Distribusi saat ini adalah **Technical Alpha prerelease**, bukan Stable v1 atau public release yang sudah dijamin tersedia.
+**Core:** Efficient Coding, Odoo Engineering, dan Prompt Master. **Komponen opsional Afyx:** Afyx Engineering Expert, Afyx Graph, dan Usage Tracking. **Enhancement eksternal:** Headroom. Core skill tetap berfungsi tanpa komponen opsional atau eksternal. Distribusi saat ini adalah **Technical Alpha prerelease**, bukan Stable v1 atau public release yang sudah dijamin tersedia.
 
 ## Pilih installer sesuai sistem operasi
 
@@ -46,7 +47,7 @@ Secara default skill dipasang ke `~/.agents/skills`, yaitu lokasi skill personal
 
 Installer mendeteksi Codex CLI, ekstensi ChatGPT/Codex VS Code, atau keduanya. Ketiganya memakai skill root personal yang sama secara default; gunakan `-SkillsRoot` / `--skills-root` hanya untuk lingkungan terisolasi yang memang Anda kelola sendiri.
 
-Setelah selesai, buka sesi Codex baru. Skill akan aktif hanya pada task yang sesuai: Efficient Coding untuk pekerjaan engineering dan Prompt Master saat Anda secara eksplisit meminta pembuatan/perbaikan prompt.
+Setelah selesai, buka sesi Codex baru. Skill akan aktif hanya pada task yang sesuai: Efficient Coding untuk implementasi/debugging, Odoo Engineering untuk bukti teknis versi-spesifik Odoo, Prompt Master saat Anda meminta pembuatan/perbaikan prompt, dan Afyx Engineering Expert bila dipasang untuk analisis lintas-disiplin yang substantif. Pertanyaan sederhana tidak memicu routing Expert yang berat.
 
 `odoo-engineering` hanya aktif untuk pekerjaan Odoo. Referensi Odoo 10–20 berstatus stable dan tetap harus dipilih berdasarkan evidence repository versi target.
 
@@ -60,7 +61,7 @@ Installer tidak pernah menulis atau mengganti:
 - `%USERPROFILE%\.codex\auth.json`
 - provider model, Headroom proxy, server MCP, atau plugin Codex
 
-Installer melakukan inventory sebelum mutasi untuk lima komponen selectable: Efficient Coding, Odoo Engineering, Prompt Master, Afyx Graph, dan Usage Tracking. Pilihan mengikuti state: belum terpasang = Install/Skip, sehat = Update/Skip, incomplete/invalid = Repair/Skip, sedangkan ownership tidak dikenal selalu ditolak. Mode non-interaktif selalu memilih Skip kecuali action disebut eksplisit. Update/repair memakai staging, validasi, backup, swap, dan rollback bila pemasangan gagal.
+Installer melakukan inventory sebelum mutasi untuk enam komponen selectable: Efficient Coding, Odoo Engineering, Afyx Engineering Expert, Prompt Master, Afyx Graph, dan Usage Tracking. Pilihan mengikuti state: belum terpasang = Install/Skip, sehat = Update/Skip, incomplete/invalid = Repair/Skip, sedangkan ownership tidak dikenal selalu ditolak. Mode non-interaktif selalu memilih Skip kecuali action disebut eksplisit. Update/repair memakai staging, validasi, backup, swap, dan rollback bila pemasangan gagal.
 
 ### Afyx Graph
 
@@ -77,11 +78,13 @@ Instalasi normal tidak mengubah konfigurasi MCP. Installer mencari artifact Tech
 .\install.ps1 -WhatIf
 .\install.ps1 -SkillsRoot "$env:USERPROFILE\.agents\skills"
 .\install.ps1 -ComponentAction efficient-coding=install -ComponentAction afyx-graph=install -Confirm:$false
+.\install.ps1 -ComponentAction afyx-engineering-expert=install -Confirm:$false
 .\install.ps1 -Offline -ComponentAction afyx-graph=install
 .\install.ps1 -InstallUsageTracker
 .\install.ps1 -SkipUsageTracker
 .\update.ps1 -ComponentAction afyx-graph=update
 .\uninstall.ps1
+.\uninstall.ps1 -Component afyx-engineering-expert
 .\uninstall.ps1 -RemoveUsageTracker
 .\uninstall.ps1 -RemovePromptMaster
 .\verify.ps1
@@ -93,11 +96,13 @@ Linux/macOS memakai opsi yang setara:
 ./install.sh --validate-only
 ./install.sh --dry-run
 ./install.sh --skills-root "$HOME/.agents/skills"
+./install.sh --component afyx-engineering-expert=install
 ./install.sh --component efficient-coding=install --component afyx-graph=install
 ./install.sh --offline --component afyx-graph=install
 ./update.sh --component afyx-graph=update
 ./uninstall.sh --remove-prompt-master
 ./verify.sh
+./uninstall.sh --component afyx-engineering-expert
 ```
 
 Updater melakukan self-update kit dengan `git pull --ff-only` hanya pada checkout bersih, lalu memilih update berdasarkan state/version; ia tidak lagi memaksa replacement seluruh komponen. Pilihan per komponen dapat diberikan dengan `-ComponentAction id=skip|install|update|repair` atau `--component id=skip|install|update|repair`. Jika worktree memiliki perubahan lokal, updater berhenti sebelum installer dijalankan; gunakan `git status` untuk menanganinya atau `-SkipSelfUpdate` / `--skip-self-update` untuk secara sengaja memakai current checkout.
@@ -116,7 +121,7 @@ Jika Headroom sudah ada, installer hanya menampilkan statusnya. Ini mencegah kon
 
 ## Verifikasi
 
-`verify.ps1` dan `verify.sh` membedakan `OK`, `WARN`, dan `FAIL`. Kegagalan core menghasilkan exit code non-zero; Afyx Graph dan Headroom yang tidak tersedia atau belum dikonfigurasi tidak menggagalkan core readiness.
+`verify.ps1` dan `verify.sh` membedakan `OK`, `WARN`, dan `FAIL`. Kegagalan core menghasilkan exit code non-zero; Afyx Engineering Expert, Afyx Graph, dan Headroom yang tidak tersedia atau belum dikonfigurasi tidak menggagalkan core readiness.
 
 Sebagai pemeriksaan manual opsional, jalankan `python scripts/check-reference-staleness.py` untuk menampilkan `WARN` bila header `Last verified` pada reference Odoo lebih lama dari enam bulan. Pemeriksaan ini selalu exit `0`, tidak dijalankan oleh installer, verifier, atau CI, dan bukan klaim bahwa isi reference valid atau tidak valid.
 
@@ -136,4 +141,4 @@ Evidence historis technical independence Afyx Graph tersedia di [docs/AFYX_INDEP
 
 ## Lisensi dan atribusi
 
-Wrapper installer, Efficient Coding, dan Afyx Graph dilisensikan MIT. Prompt Master tidak dibundel; paket ini mengambilnya dari upstream yang memiliki lisensi sendiri. Headroom hanya dideteksi dan tetap dikelola secara eksternal. Bukti historis sebelum penutupan independensi dipertahankan dalam dokumentasi Phase 5 dan riwayat Git, bukan sebagai notice release aktif.
+Wrapper installer, Efficient Coding, Afyx Engineering Expert, dan Afyx Graph dilisensikan MIT. Afyx Engineering Expert adalah draft instruksi original tanpa implementation pihak ketiga, runtime dependency, atau download tersembunyi. Prompt Master tidak dibundel; paket ini mengambilnya dari upstream yang memiliki lisensi sendiri. Headroom hanya dideteksi dan tetap dikelola secara eksternal. Bukti historis sebelum penutupan independensi dipertahankan dalam dokumentasi Phase 5 dan riwayat Git, bukan sebagai notice release aktif.
