@@ -2552,27 +2552,43 @@ Focused regression and exact-head CI remain engineering closure gates.
 
 ### 2026-10-14 — AFYX-283D.2 pilot evidence review
 
-Status: **EVALUATOR REVIEW BLOCKED / FORMAL A1-B1 BLOCKED**. The accessible
-independent-host control evidence is fresh and correlated: child health `PASS`,
-isolation `PASS`, matching `control_run_id`
+Status: **PILOT REVIEW PROVISIONAL / PROVENANCE BLOCKED / FORMAL A1-B1
+BLOCKED**. The accessible independent-host control evidence is fresh and
+correlated: child health `PASS`, isolation `PASS`, matching control
 `718a0a8d0aff49f6b6a9a6d28ad71f5f`, positive workspace read `PASS`, four
 negative controls denied, no external read or canary exposure, command tool
-observed, no timeout, and cleanup `PASS`. The active manifest still selects the
-Codex 0.162.1 MXC fingerprint.
+observed, no timeout, and cleanup `PASS`. The active manifest selects the Codex
+0.162.1 MXC fingerprint. Five fresh scenario records eventually completed, but
+none stores the controlling `control_run_id`; the required record-to-isolation
+correlation therefore cannot be proven.
 
-Substantive pilot provenance is incomplete. The accessible results tree contains
-zero `result.json` records rather than five fresh scenario records. It contains
-only one empty `pilot-expert-security-001-B1-r1-3ecb6933` directory; the prior
-`latest-summary.json` is historical and was not reused. Therefore Architecture,
-Security, Database/Reliability, ERP/Odoo, and Negative Routing cannot be graded
-for correctness, task fidelity, evidence quality, security, activation,
-reference/workflow loading, claims, tools, tokens, or duration. Protected
-rubrics and holdouts were not imported into the developer boundary.
+Substantive visible-output review: Architecture, Security, and
+Database/Reliability are technically coherent, bounded advisory responses and
+activate Expert with relevant references. ERP/Odoo gives strong Odoo 17,
+company, quantity, idempotency, retry, and concurrency guidance, but reads only
+Odoo Engineering; the required Expert composition is absent. Negative Routing
+correctly gives a concise Python list-reversal answer with zero skill/tool reads;
+its automated `FAIL` is a keyword-assertion false negative. No scenario modifies
+fixtures, times out, reports a failed tool, or claims executed validation.
 
-No Expert source optimization is approved from this evidence. The earlier Case
-A progressive-disclosure finding (seven references loaded) remains open because
-no fresh scenario record resolves it. Before evaluation continues, the
-independent controller must export five sanitized immutable result records with
-scenario identity, shared control-run correlation, runtime fingerprint, observed
-skill/reference/workflow events, response, tool events, provider usage, elapsed
-time, and explicit incomplete/failure status. Formal A1/B1 remains blocked.
+Observed progressive disclosure is improved but does not close the historical
+Case A defect: Architecture reads Expert plus three domain references and one
+workflow; Security reads Expert plus three references; Database reads Expert,
+three references, and one workflow. The earlier seven-reference load remains an
+open regression target until repeated evidence demonstrates resolution.
+
+Provider counters across five records: input `218169`, cached input `176768`,
+output `11628`, reasoning `1741`, derived input+output `229797`, derived uncached
+input `41401`, wall time `231.03s`, and 17 command/read tool calls. Provider
+`total_tokens` is absent and is not inferred as a billing total.
+
+Optimization decision: no Expert source change in this review. P0 is evidence
+integrity—persist `control_run_id` and atomically publish complete/failure records.
+P1 is ERP composition routing so Expert orchestrates the cross-disciplinary
+analysis while Odoo Engineering owns version-specific facts. P2 retains the
+progressive-disclosure regression gate and reduces reference loading only when
+quality is preserved. P3 replaces brittle exact-keyword acceptance with semantic
+or structured checks while preserving negative-routing exclusion. Protected
+rubrics and holdouts were not imported into the developer boundary. Formal A1/B1
+remains blocked until provenance is repaired and the affected DEVELOPMENT cases
+are rerun once.
