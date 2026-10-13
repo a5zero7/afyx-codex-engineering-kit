@@ -6,7 +6,9 @@ import { afterEach, describe, expect, it } from 'vitest';
 import AfyxGraph from '../src/index';
 import { extractNativeFacts } from '../src/extraction/native/fact-extractor';
 import { parsePythonStaticStringValues } from '../src/extraction/native/python-class-assignments';
+import { executeInventoryTool } from '../src/mcp/inventory-tool';
 import { ToolHandler } from '../src/mcp/tools';
+import type { FileRecord, Node } from '../src/types';
 
 function model(name: string, value = "'sale.order'"): string {
   return `class ${name}(models.Model):\n    _inherit = ${value}\n`;
@@ -60,6 +62,50 @@ describe('Python structural class-assignment inventory', () => {
     }));
     expect(parsePythonStaticStringValues("['sale.order', 'pos.load.mixin']")).toEqual(['sale.order', 'pos.load.mixin']);
     expect(parsePythonStaticStringValues('inherited_model()')).toBeNull();
+  });
+
+  it('separates query-scoped Python diagnostics from global index diagnostics', () => {
+    const target: Node = {
+      id: 'target', kind: 'property', name: '_inherit', qualifiedName: 'SaleOrder::_inherit',
+      filePath: 'addons/sale/models/sale.py', language: 'python', startLine: 3, endLine: 3,
+      startColumn: 4, endColumn: 27, signature: "= 'sale.order'", updatedAt: 1,
+    };
+    const diagnostic = (
+      filePath: string,
+      severity: 'error' | 'warning',
+    ): FileRecord => ({
+      path: filePath, contentHash: filePath, language: 'python', size: 1,
+      modifiedAt: 1, indexedAt: 1, nodeCount: 0,
+      errors: [{ message: `${severity} diagnostic`, filePath, severity, code: 'parse_error' }],
+    });
+    const files = [diagnostic('vendor/outside.py', 'error')];
+    const source = {
+      getNodesByName: () => [target],
+      getFiles: () => files,
+      getIndexState: () => 'complete' as const,
+      getIndexAccounting: () => ({
+        discovered: 2, eligible: 2, indexed: 1, skipped: 0, unsupported: 0, failed: 1,
+        ignored: null, retry: { attemptedFiles: 1, recoveredFiles: 0, failedFiles: 1 },
+        skippedReasons: {}, unsupportedExtensions: [], completedAt: 1, timings: null,
+      }),
+      getIndexBuildInfo: () => ({ version: '1.0.0', extractionVersion: 28 }),
+      isIndexStale: () => false,
+    };
+
+    let text = executeInventoryTool(source, {
+      declaration: '_inherit', value: 'sale.order', path: 'addons',
+    }).content[0]!.text;
+    expect(text).toMatch(/COMPLETE FOR SUPPORTED LITERAL DECLARATIONS/);
+    expect(text).toMatch(/Scoped Python files with extraction diagnostics: 0/);
+    expect(text).toMatch(/Global file records with extraction diagnostics: 1 \(1 error-severity, 0 warning-only\)/);
+
+    files.push(diagnostic('addons/warning.py', 'warning'));
+    text = executeInventoryTool(source, {
+      declaration: '_inherit', value: 'sale.order', path: 'addons',
+    }).content[0]!.text;
+    expect(text).toMatch(/LIMITED INDEX COVERAGE/);
+    expect(text).toMatch(/Scoped Python files with extraction diagnostics: 1 \(0 error-severity, 1 warning-only\)/);
+    expect(text).toMatch(/Global file records with extraction diagnostics: 2 \(1 error-severity, 1 warning-only\)/);
   });
 
   it('indexes and exactly enumerates the nine-item Odoo-17-like ground truth across catch-up and restart', async () => {

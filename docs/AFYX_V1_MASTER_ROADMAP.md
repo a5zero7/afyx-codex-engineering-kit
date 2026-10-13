@@ -2326,3 +2326,41 @@ AFYX-281 Linux Graph Build failures (`112.72 ms` and `100.96 ms` against a `100 
 AFYX-282 had incorrectly incorporated extraction-v28 `_inherit` property facts into the pre-independence semantic snapshot. The historical file is restored byte-for-byte to the digest recorded by `semantic-baseline.meta.json`, with repository attributes pinning its checkout to LF so the same byte identity is enforced on Windows, Linux, and macOS. A separate deterministic additive contract verifies the exact two property facts and two class-containment edges, removes only those additions, and then compares all six fixtures with the unchanged historical oracle. A controlled unrelated TypeScript file-count mutation still fails the historical gate. Canonical `--write` is refused; disposable snapshots require an explicit alternate path.
 
 AFYX-280 boundary validation confirmed `limit + 1` over-fetch and handwritten-before-generated composition. It also reproduced a presentation defect near the shared output bound: a tail-positioned completeness notice could be trimmed. The notice now precedes result rows, so bounded output retains both the ranked-search incompleteness warning and the generic character-truncation marker. Ranking and result composition are unchanged.
+
+### Repository knowledge catalog acceptance
+
+Status: **TARGETED REFINEMENT IMPLEMENTED; FINAL-HEAD GRAPH BUILD REQUIRED; AFYX-248 IN PROGRESS**
+
+Read-only Odoo 17 evidence confirmed the full-index accounting contract:
+93,003 discovered, 42,130 eligible, 42,123 indexed, 6 size-skipped, 50,873
+unsupported, and one parser-timeout failure. The previously reported 807
+records are not 807 failed files: they contain 901 diagnostics, comprising 800
+warning-only `native_incomplete_source` files, six warning-only
+`size_exceeded` files, and one error-severity `parse_error` file. Independent
+Python AST ground truth found the same nine scoped literal
+`_inherit = 'sale.order'` declarations, paths, classes, and lines as Graph.
+
+Inventory coverage now distinguishes scoped Python diagnostics from global
+file-record diagnostics and separates error-severity files from warning-only
+files. A localized failure outside the requested scope no longer makes a clean
+scope look incomplete; any Python extraction diagnostic inside the scope, an
+unlocated full-index failure, partial/failed index state, stale extraction, or
+bounded page still preserves the conservative limited/partial verdict. Exact
+inventory remains static supported-literal evidence rather than the Odoo
+runtime registry.
+
+The Odoo 17 dependency file `winerror.py` completed in an isolated one-file
+index (7,250 nodes, 7,266 edges, 56.7 seconds), so the prior 60-second timeout
+is a load-sensitive large-file limitation rather than a deterministic parser
+failure. No timeout or dependency-exclusion policy changed. Its full-index
+completion timestamp and a later freshness/sync timestamp remain distinct.
+
+Odoo 17 has an empty/non-functional `.git` directory, so null Git-head
+freshness is correctly `UNKNOWN`, not silently fresh. A bounded locking fixture
+confirmed WAL readers proceed during an active WAL writer, while an exclusive
+MEMORY-journal writer makes a concurrent open fail with `database is locked`;
+this is the fresh-build isolation boundary. The Odoo 19 log preserves that
+initial open failure and shows successful retry, watcher startup, catch-up,
+subsequent syncs, complete index state, zero pending references, and WAL mode.
+No writer coordination, daemon lifecycle, schema, parser, ranking, or timeout
+change was justified by this acceptance slice.
