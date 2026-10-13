@@ -6,8 +6,8 @@ Contract revision: **2026-10-11**
 v1 scope policy: **FROZEN — Phase 1 through Phase 11**  
 Post-v1 policy: **PLANNED EXPANSION — not a v1 release blocker**
 
-Current work: **Afyx Engineering Expert v0.1.0 native Kit integration; AFYX-248 remains in progress**
-Task: Afyx Engineering Expert v0.1.0 integration; `AFYX-248` remains in progress
+Current work: **Repository knowledge catalog acceptance and scoped coverage refinement; AFYX-248 remains in progress**
+Task: repository knowledge catalog acceptance; `AFYX-248` remains in progress
 Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`  
 Active implementation branch: `afyx/native-phase5f-parser-grammar`  
 Latest verified Phase 5F implementation checkpoint: `62621a0639f42db0eaac69ef087436d851cdba88`  
@@ -2306,6 +2306,44 @@ AFYX-282 had incorrectly incorporated extraction-v28 `_inherit` property facts i
 AFYX-280 boundary validation confirmed `limit + 1` over-fetch and handwritten-before-generated composition. It also reproduced a presentation defect near the shared output bound: a tail-positioned completeness notice could be trimmed. The notice now precedes result rows, so bounded output retains both the ranked-search incompleteness warning and the generic character-truncation marker. Ranking and result composition are unchanged.
 
 Focused regressions, typecheck, clean production/UI build, the six-fixture semantic baseline, 21-check CLI/MCP smoke, identity/component/independence validation, and artifact-identity tests passed. Exact-source-head [Afyx Graph Build 38324265023](https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/38324265023) passed on Windows, Linux, and macOS. AFYX-281 and AFYX-282 engineering acceptance is complete; this does not activate Technical Alpha or complete AFYX-248 or AFYX-272 MAC.4.
+
+### Repository knowledge catalog acceptance
+
+Status: **TARGETED REFINEMENT IMPLEMENTED; FINAL-HEAD GRAPH BUILD REQUIRED; AFYX-248 IN PROGRESS**
+
+Read-only Odoo 17 evidence confirmed the full-index accounting contract:
+93,003 discovered, 42,130 eligible, 42,123 indexed, 6 size-skipped, 50,873
+unsupported, and one parser-timeout failure. The previously reported 807
+records are not 807 failed files: they contain 901 diagnostics, comprising 800
+warning-only `native_incomplete_source` files, six warning-only
+`size_exceeded` files, and one error-severity `parse_error` file. Independent
+Python AST ground truth found the same nine scoped literal
+`_inherit = 'sale.order'` declarations, paths, classes, and lines as Graph.
+
+Inventory coverage now distinguishes scoped Python diagnostics from global
+file-record diagnostics and separates error-severity files from warning-only
+files. A localized failure outside the requested scope no longer makes a clean
+scope look incomplete; any Python extraction diagnostic inside the scope, an
+unlocated full-index failure, partial/failed index state, stale extraction, or
+bounded page still preserves the conservative limited/partial verdict. Exact
+inventory remains static supported-literal evidence rather than the Odoo
+runtime registry.
+
+The Odoo 17 dependency file `winerror.py` completed in an isolated one-file
+index (7,250 nodes, 7,266 edges, 56.7 seconds), so the prior 60-second timeout
+is a load-sensitive large-file limitation rather than a deterministic parser
+failure. No timeout or dependency-exclusion policy changed. Its full-index
+completion timestamp and a later freshness/sync timestamp remain distinct.
+
+Odoo 17 has an empty/non-functional `.git` directory, so null Git-head
+freshness is correctly `UNKNOWN`, not silently fresh. A bounded locking fixture
+confirmed WAL readers proceed during an active WAL writer, while an exclusive
+MEMORY-journal writer makes a concurrent open fail with `database is locked`;
+this is the fresh-build isolation boundary. The Odoo 19 log preserves that
+initial open failure and shows successful retry, watcher startup, catch-up,
+subsequent syncs, complete index state, zero pending references, and WAL mode.
+No writer coordination, daemon lifecycle, schema, parser, ranking, or timeout
+change was justified by this acceptance slice.
 
 ### Afyx Engineering Expert v0.1.0 — native Kit integration
 

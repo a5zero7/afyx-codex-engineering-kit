@@ -63,10 +63,18 @@ export function executeInventoryTool(source: InventoryToolSource, request: Inven
   const page = matches.slice(offset, offset + limit);
   const pageComplete = offset + page.length >= matches.length;
   const accounting = source.getIndexAccounting();
-  const failedFiles = source.getFiles().filter((file) => (file.errors?.length ?? 0) > 0);
+  const diagnosticFiles = source.getFiles().filter((file) => (file.errors?.length ?? 0) > 0);
+  const errorFiles = diagnosticFiles.filter(hasErrorSeverity);
+  const scopedPythonDiagnosticFiles = diagnosticFiles.filter((file) =>
+    file.language === 'python' && inScope(file.path, scope));
+  const scopedPythonErrorFiles = scopedPythonDiagnosticFiles.filter(hasErrorSeverity);
+  // Full-index accounting normally has a persisted marker for every failed file.
+  // If an older/incomplete index lacks one, its location cannot be proven outside
+  // this query scope, so retain the conservative LIMITED verdict.
+  const unlocatedFailures = Math.max(0, (accounting?.failed ?? 0) - errorFiles.length);
   const build = source.getIndexBuildInfo();
   const indexComplete = source.getIndexState() === 'complete' && !source.isIndexStale() &&
-    (accounting?.failed ?? 0) === 0 && failedFiles.length === 0;
+    scopedPythonDiagnosticFiles.length === 0 && unlocatedFailures === 0;
   const status = !pageComplete
     ? 'PARTIAL PAGE — DO NOT TREAT AS COMPLETE INVENTORY'
     : indexComplete
@@ -97,7 +105,11 @@ export function executeInventoryTool(source: InventoryToolSource, request: Inven
     `- Index state: ${(source.getIndexState() ?? 'unknown').toUpperCase()}`,
     `- Extraction version: ${build.extractionVersion ?? 'unknown'}${source.isIndexStale() ? ' (stale; re-index required)' : ''}`,
     `- Unresolved/unsupported \`${declaration}\` expressions in scope: ${unresolved.length} (excluded from literal matches, never inferred)`,
-    `- Indexed files with extraction errors: ${failedFiles.length}`,
+    `- Scoped Python files with extraction diagnostics: ${scopedPythonDiagnosticFiles.length} ` +
+      `(${scopedPythonErrorFiles.length} error-severity, ` +
+      `${scopedPythonDiagnosticFiles.length - scopedPythonErrorFiles.length} warning-only)`,
+    `- Global file records with extraction diagnostics: ${diagnosticFiles.length} ` +
+      `(${errorFiles.length} error-severity, ${diagnosticFiles.length - errorFiles.length} warning-only)`,
   );
   if (accounting) {
     lines.push(`- Last full index: ${accounting.indexed} indexed, ${accounting.skipped} skipped, ${accounting.unsupported} unsupported, ${accounting.failed} failed`);
@@ -109,6 +121,10 @@ export function executeInventoryTool(source: InventoryToolSource, request: Inven
   }
   lines.push('- Ignored/excluded paths are outside the indexed scope and are not enumerated. This is static source evidence, not the Odoo runtime registry.');
   return textToolResult(lines.join('\n'));
+}
+
+function hasErrorSeverity(file: FileRecord): boolean {
+  return file.errors?.some((error) => error.severity === 'error') ?? false;
 }
 
 function literalValues(node: Node): string[] | null {
