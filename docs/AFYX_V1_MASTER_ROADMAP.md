@@ -2430,3 +2430,34 @@ and 120 seconds) without any command/read event. It therefore records
 Until a canary proves evaluator ground truth inaccessible and the bounded pilot
 is calibrated, formal comparative acceptance is **BLOCKED**. AFYX-249's formal
 Alpha gate is unchanged, and neither AFYX-248 nor Technical Alpha is complete.
+
+### 2026-10-13 AFYX-283B — child diagnostics and actual isolation checkpoint
+
+Status: **HARNESS DIAGNOSTICS REPAIRED / ACTUAL ISOLATION BLOCKED / PILOT NOT RUN**
+
+The original 120–180 second canary timeouts were not evidence of filesystem
+denial. A minimal no-skill child showed that the process started, emitted
+`thread.started` and `turn.started`, then could not reach the provider inside
+the parent network sandbox. The same bounded command with provider access
+completed successfully using the frozen `gpt-5.6-sol` / OpenAI / medium
+fingerprint. This separates startup and provider health from isolation.
+
+The harness now uses bounded `Popen` execution, preserves redacted partial
+JSONL/stderr, classifies startup/authentication/model/network/timeout failures,
+and terminates only its owned process tree. The reproduced Windows timeout used
+a kill-on-close Job Object and left no owned child running. Pilot mode defaults
+to one repetition; benchmark mode retains its three-repetition minimum.
+
+The actual isolation control remains **BLOCKED**. The child runtime rejected
+all `exec_command` operations before process creation, including the positive
+read of a disposable file inside the authorized repository. Four external
+attempts were requested; sandbox-router denial was observed for canary,
+manifest and rubric, while the final private-holdout attempt did not complete
+before the 45-second bound. No external read succeeded and the randomized
+canary value was not exposed, but negative denial without a successful positive
+control cannot prove the intended trust boundary. Cleanup completed through the
+Windows Job Object. The five DEVELOPMENT pilot scenarios and formal A1/B1 were
+not run. The remaining prerequisite is a genuinely restricted execution
+boundary (restricted OS account, isolated container, or filesystem ACL) that
+allows the evaluated workspace and denies evaluator-only files; Expert v0.1.0
+is unchanged.

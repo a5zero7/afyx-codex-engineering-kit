@@ -113,17 +113,23 @@ class EvaluationHarnessTests(unittest.TestCase):
         manifest = run.load_json(ROOT / "evals" / "manifest.json")
         observed_cwd: list[Path] = []
 
-        def fake_process(command, **kwargs):
-            cwd = Path(kwargs["cwd"]).resolve()
+        def fake_process(command, cwd, timeout):
+            cwd = Path(cwd).resolve()
             observed_cwd.append(cwd)
             self.assertFalse((cwd / "manifest.json").exists())
             self.assertFalse((cwd / "evals").exists())
             event = {"type": "item.completed", "item": {"type": "agent_message", "text": "OK"}}
-            return subprocess.CompletedProcess(command, 0, json.dumps(event), "")
+            return {
+                "started": True, "pid": 123, "returncode": 0,
+                "stdout": json.dumps(event), "stderr": "", "timed_out": False,
+                "cleanup_required": False, "cleanup_succeeded": True,
+                "cleanup_method": "not-required",
+                "elapsed_seconds": 0.01, "executable": "codex",
+            }
 
         with tempfile.TemporaryDirectory() as results, mock.patch.object(
             run, "RESULTS_ROOT", Path(results)
-        ), mock.patch.object(run.subprocess, "run", side_effect=fake_process):
+        ), mock.patch.object(run, "bounded_process", side_effect=fake_process):
             record = run.run_cell(manifest, scenario, "A0", 1, 30)
         self.assertEqual(record["result"], "PASS")
         self.assertTrue(observed_cwd)
@@ -132,48 +138,153 @@ class EvaluationHarnessTests(unittest.TestCase):
                 cwd.relative_to(ROOT.resolve())
 
     def test_canary_fails_closed_unless_attempt_is_observed_and_blocked(self) -> None:
-        def blocked_process(command, **kwargs):
-            prompt = command[-1]
-            canary = prompt.split("exact file ", 1)[1].split(". If", 1)[0]
-            event = {
-                "type": "item.completed",
-                "item": {
-                    "type": "command_execution",
-                    "command": f"Get-Content '{canary}'",
-                    "status": "failed",
-                    "exit_code": 1,
-                    "aggregated_output": "Access denied",
-                },
+        def child_result(stdout: str, *, timed_out: bool = False) -> dict:
+            return {
+                "started": True, "pid": 456,
+                "returncode": None if timed_out else 0,
+                "stdout": stdout, "stderr": "", "timed_out": timed_out,
+                "cleanup_required": timed_out, "cleanup_succeeded": True,
+                "cleanup_method": "synthetic-cleanup" if timed_out else "not-required",
+                "elapsed_seconds": 0.1, "executable": "codex",
             }
-            message = {
-                "type": "item.completed",
-                "item": {"type": "agent_message", "text": "ACCESS_BLOCKED"},
-            }
-            return subprocess.CompletedProcess(
-                command, 0, json.dumps(event) + "\n" + json.dumps(message), ""
-            )
+
+        def blocked_process(command, cwd, timeout):
+            allowed = (Path(cwd) / "allowed.txt").read_text(encoding="utf-8")
+            events = [
+                {
+                    "type": "item.completed",
+                    "item": {
+                        "type": "command_execution",
+                        "command": "Write-Output AFYX_CONTROL_workspace:; Get-Content allowed.txt",
+                        "status": "completed", "exit_code": 0,
+                        "aggregated_output": f"AFYX_CONTROL_workspace:{allowed}",
+                    },
+                }
+            ]
+            for label in ("canary", "manifest", "rubric", "private_holdout"):
+                events.append({
+                    "type": "item.completed",
+                    "item": {
+                        "type": "command_execution",
+                        "command": f"Write-Output AFYX_CONTROL_{label}:READ_DENIED",
+                        "status": "completed", "exit_code": 0,
+                        "aggregated_output": f"AFYX_CONTROL_{label}:READ_DENIED:PermissionError",
+                    },
+                })
+            return child_result("\n".join(json.dumps(event) for event in events))
 
         with tempfile.TemporaryDirectory() as results, mock.patch.object(
             run, "RESULTS_ROOT", Path(results)
-        ), mock.patch.object(run.subprocess, "run", side_effect=blocked_process):
+        ), mock.patch.object(run, "bounded_process", side_effect=blocked_process):
             self.assertEqual(run.run_isolation_canary(30)["result"], "PASS")
 
-        no_attempt = subprocess.CompletedProcess([], 0, json.dumps({
+        no_attempt = child_result(json.dumps({
             "type": "item.completed", "item": {"type": "agent_message", "text": "ACCESS_BLOCKED"}
-        }), "")
+        }))
         with tempfile.TemporaryDirectory() as results, mock.patch.object(
             run, "RESULTS_ROOT", Path(results)
-        ), mock.patch.object(run.subprocess, "run", return_value=no_attempt):
-            self.assertEqual(run.run_isolation_canary(30)["result"], "FAIL")
+        ), mock.patch.object(run, "bounded_process", return_value=no_attempt):
+            self.assertEqual(run.run_isolation_canary(30)["result"], "BLOCKED")
 
         with tempfile.TemporaryDirectory() as results, mock.patch.object(
             run, "RESULTS_ROOT", Path(results)
         ), mock.patch.object(
-            run.subprocess, "run", side_effect=subprocess.TimeoutExpired(["codex"], 30)
+            run, "bounded_process", return_value=child_result("", timed_out=True)
         ):
             blocked = run.run_isolation_canary(30)
             self.assertEqual(blocked["result"], "BLOCKED")
-            self.assertIn("timed out", blocked["error_summary"])
+            self.assertTrue(blocked["cleanup_succeeded"])
+
+    def test_external_read_success_is_isolation_failure_without_secret_output(self) -> None:
+        def readable_process(command, cwd, timeout):
+            allowed = (Path(cwd) / "allowed.txt").read_text(encoding="utf-8")
+            events = [{
+                "type": "item.completed",
+                "item": {
+                    "type": "command_execution",
+                    "command": "Write-Output AFYX_CONTROL_workspace:; Get-Content allowed.txt",
+                    "status": "completed", "exit_code": 0,
+                    "aggregated_output": f"AFYX_CONTROL_workspace:{allowed}",
+                },
+            }]
+            for label in ("canary", "manifest", "rubric", "private_holdout"):
+                events.append({
+                    "type": "item.completed",
+                    "item": {
+                        "type": "command_execution",
+                        "command": f"Write-Output AFYX_CONTROL_{label}:READ_SUCCEEDED",
+                        "status": "completed", "exit_code": 0,
+                        "aggregated_output": f"AFYX_CONTROL_{label}:READ_SUCCEEDED",
+                    },
+                })
+            return {
+                "started": True, "pid": 789, "returncode": 0,
+                "stdout": "\n".join(json.dumps(event) for event in events),
+                "stderr": "", "timed_out": False,
+                "cleanup_required": False, "cleanup_succeeded": True,
+                "cleanup_method": "not-required",
+                "elapsed_seconds": 0.1, "executable": "codex",
+            }
+
+        with tempfile.TemporaryDirectory() as results, mock.patch.object(
+            run, "RESULTS_ROOT", Path(results)
+        ), mock.patch.object(run, "bounded_process", side_effect=readable_process):
+            result = run.run_isolation_canary(30)
+        self.assertEqual(result["result"], "FAIL")
+        self.assertTrue(result["external_read_succeeded"])
+        self.assertFalse(result["canary_exposed"])
+
+    def test_sandbox_router_denials_are_observable_access_failures(self) -> None:
+        def router_blocked_process(command, cwd, timeout):
+            allowed = (Path(cwd) / "allowed.txt").read_text(encoding="utf-8")
+            positive = {
+                "type": "item.completed",
+                "item": {
+                    "type": "command_execution",
+                    "command": "Write-Output AFYX_CONTROL_workspace:; Get-Content allowed.txt",
+                    "status": "completed", "exit_code": 0,
+                    "aggregated_output": f"AFYX_CONTROL_workspace:{allowed}",
+                },
+            }
+            stderr = "\n".join(
+                f"exec_command failed: Write-Output AFYX_CONTROL_{label}: "
+                "synthetic-path rejected: blocked by policy"
+                for label in ("canary", "manifest", "rubric", "private_holdout")
+            )
+            return {
+                "started": True, "pid": 790, "returncode": 0,
+                "stdout": json.dumps(positive), "stderr": stderr, "timed_out": False,
+                "cleanup_required": False, "cleanup_succeeded": True,
+                "cleanup_method": "not-required",
+                "elapsed_seconds": 0.1, "executable": "codex",
+            }
+
+        with tempfile.TemporaryDirectory() as results, mock.patch.object(
+            run, "RESULTS_ROOT", Path(results)
+        ), mock.patch.object(run, "bounded_process", side_effect=router_blocked_process):
+            result = run.run_isolation_canary(30)
+        self.assertEqual(result["result"], "PASS")
+        self.assertTrue(all(
+            control["denial_source"] == "sandbox_router"
+            for control in result["negative_controls"].values()
+        ))
+
+    def test_bounded_process_cleans_up_timed_out_owned_child(self) -> None:
+        result = run.bounded_process(
+            [sys.executable, "-c", "import time; time.sleep(20)"], ROOT, 1
+        )
+        self.assertTrue(result["started"])
+        self.assertTrue(result["timed_out"])
+        self.assertTrue(result["cleanup_required"])
+        self.assertTrue(result["cleanup_succeeded"])
+        self.assertIsNotNone(result["returncode"])
+
+    def test_pilot_defaults_to_one_repetition_contract(self) -> None:
+        source = (ROOT / "evals" / "harness" / "run.py").read_text(encoding="utf-8")
+        self.assertIn(
+            'repetitions = args.repetitions or (3 if args.mode == "benchmark" else 1)',
+            source,
+        )
 
     def test_current_fingerprint_matches_repository_sources(self) -> None:
         environment = run.load_json(ROOT / "evals" / "environment-expert-v0.1.0.json")
