@@ -2309,7 +2309,7 @@ Focused regressions, typecheck, clean production/UI build, the six-fixture seman
 
 ### Repository knowledge catalog acceptance
 
-Status: **TARGETED REFINEMENT IMPLEMENTED; FINAL-HEAD GRAPH BUILD REQUIRED; AFYX-248 IN PROGRESS**
+Status: **ENGINEERING ACCEPTANCE PASS; AFYX-248 IN PROGRESS**
 
 Read-only Odoo 17 evidence confirmed the full-index accounting contract:
 93,003 discovered, 42,130 eligible, 42,123 indexed, 6 size-skipped, 50,873
@@ -2344,6 +2344,14 @@ initial open failure and shows successful retry, watcher startup, catch-up,
 subsequent syncs, complete index state, zero pending references, and WAL mode.
 No writer coordination, daemon lifecycle, schema, parser, ranking, or timeout
 change was justified by this acceptance slice.
+
+Implementation commit `8837ea98aa63a4c93a2c15c599f82148ad3320b0`
+passed exact-source-head [Afyx Graph Build 38357255978](https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/38357255978)
+on Windows, Linux, and macOS, including clean build, unit tests, semantic
+baseline, CLI/MCP smoke, installer verification, identity, attribution, and
+operational-independence gates. This closes only the repository-knowledge
+engineering acceptance boundary; it does not promote Alpha or complete
+AFYX-248.
 
 ### Afyx Engineering Expert v0.1.0 — native Kit integration
 
