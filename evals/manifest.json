@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "random_seed": 3102026,
-  "environment": "environment-expert-v0.1.0.json",
+  "environment": "environment-expert-v0.1.0-codex-0.162.1.json",
   "configurations": {
     "N": [],
     "E": ["efficient-coding"],

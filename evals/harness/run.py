@@ -251,6 +251,36 @@ def close_windows_handle(handle: int | None) -> bool:
     return bool(ctypes.WinDLL("kernel32", use_last_error=True).CloseHandle(handle))
 
 
+def resolve_process_command(
+    command: list[str], *, windows: bool | None = None
+) -> tuple[list[str], str | None, str]:
+    """Resolve an argv-safe executable, including npm PowerShell shims on Windows."""
+    if not command:
+        raise OSError("empty child command")
+    is_windows = os.name == "nt" if windows is None else windows
+    executable = shutil.which(command[0])
+    if not executable:
+        raise OSError(f"executable not found: {command[0]}")
+    if is_windows and Path(executable).suffix.lower() in {".cmd", ".bat"}:
+        powershell_shim = Path(executable).with_suffix(".ps1")
+        powershell = shutil.which("pwsh.exe") or shutil.which("powershell.exe")
+        if not powershell_shim.is_file() or not powershell:
+            raise OSError(
+                "Windows command shim cannot be launched without its sibling "
+                f"PowerShell shim and PowerShell runtime: {executable}"
+            )
+        return (
+            [
+                powershell, "-NoLogo", "-NoProfile", "-NonInteractive",
+                "-ExecutionPolicy", "Bypass", "-File", str(powershell_shim),
+                *command[1:],
+            ],
+            executable,
+            "windows-powershell-shim",
+        )
+    return [executable, *command[1:]], executable, "direct"
+
+
 def bounded_process(command: list[str], cwd: Path, timeout: int) -> dict:
     """Run one owned child and terminate only its process group/tree on timeout."""
     started = time.perf_counter()
@@ -260,10 +290,12 @@ def bounded_process(command: list[str], cwd: Path, timeout: int) -> dict:
         creationflags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW
     else:
         popen_kwargs["start_new_session"] = True
-    executable = shutil.which(command[0])
+    executable = shutil.which(command[0]) if command else None
+    launcher_kind = "unresolved"
     try:
+        launch_command, executable, launcher_kind = resolve_process_command(command)
         process = subprocess.Popen(
-            command, cwd=cwd, text=True, encoding="utf-8", errors="replace",
+            launch_command, cwd=cwd, text=True, encoding="utf-8", errors="replace",
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             creationflags=creationflags, **popen_kwargs,
         )
@@ -275,6 +307,7 @@ def bounded_process(command: list[str], cwd: Path, timeout: int) -> dict:
             "cleanup_method": "not-started",
             "elapsed_seconds": time.perf_counter() - started,
             "executable": executable,
+            "launcher_kind": launcher_kind,
         }
 
     windows_job = windows_kill_on_close_job(process)
@@ -326,6 +359,56 @@ def bounded_process(command: list[str], cwd: Path, timeout: int) -> dict:
         "cleanup_method": cleanup_method,
         "elapsed_seconds": time.perf_counter() - started,
         "executable": executable,
+        "launcher_kind": launcher_kind,
+    }
+
+
+def parse_codex_cli_version(output: str) -> str | None:
+    match = re.search(r"\bcodex(?:-cli)?\s+([0-9]+(?:\.[0-9]+){2}(?:[-+][^\s]+)?)", output)
+    return match.group(1) if match else None
+
+
+def verify_runtime_fingerprint(environment: dict) -> dict:
+    """Verify the installed CLI identity and required non-model command contract."""
+    expected = environment.get("runtime", {}).get("codex_cli")
+    if not expected:
+        raise RuntimeError("frozen environment runtime.codex_cli is missing")
+    version_probe = bounded_process(["codex", "--version"], REPO_ROOT, 15)
+    if not version_probe["started"] or version_probe["returncode"] != 0:
+        raise RuntimeError(
+            "Codex CLI version probe failed: "
+            + sanitize_diagnostic(version_probe["stderr"] or "child did not start")
+        )
+    actual = parse_codex_cli_version(
+        version_probe["stdout"] + "\n" + version_probe["stderr"]
+    )
+    if actual != expected:
+        raise RuntimeError(
+            f"Codex CLI fingerprint mismatch (expected {expected}, actual {actual or 'unknown'})"
+        )
+    contract_command = codex_command(REPO_ROOT, "", include_skills=False)[:-1] + ["--help"]
+    contract_probe = bounded_process(contract_command, REPO_ROOT, 15)
+    contract_output = contract_probe["stdout"] + "\n" + contract_probe["stderr"]
+    required_options = (
+        "--ephemeral", "--ignore-user-config", "--skip-git-repo-check",
+        "--sandbox", "--json", "--cd", "--model", "--config",
+    )
+    missing = [option for option in required_options if option not in contract_output]
+    if (
+        not contract_probe["started"]
+        or contract_probe["returncode"] != 0
+        or missing
+    ):
+        raise RuntimeError(
+            "Codex CLI runtime contract check failed"
+            + (f"; missing options: {', '.join(missing)}" if missing else "")
+        )
+    return {
+        "expected_version": expected,
+        "actual_version": actual,
+        "executable": version_probe["executable"],
+        "launcher_kind": version_probe["launcher_kind"],
+        "required_options": list(required_options),
     }
 
 
@@ -383,6 +466,7 @@ def run_child_health_probe(timeout: int) -> dict:
         "cleanup_method": process["cleanup_method"],
         "elapsed_seconds": process["elapsed_seconds"],
         "executable": process["executable"],
+        "launcher_kind": process.get("launcher_kind"),
         "cwd_external_to_repository": True,
         "inherited_environment_names": sorted(
             name for name in os.environ
@@ -856,6 +940,16 @@ def run_isolation_canary(timeout: int) -> dict:
     }
 
 
+def isolation_not_executed(control_run_id: str, reason: str) -> dict:
+    return {
+        "result": "NOT_EXECUTED",
+        "control_run_id": control_run_id,
+        "reason": reason,
+        "canary_exposed": False,
+        "timed_out": False,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", choices=("smoke", "pilot", "benchmark"), default="smoke")
@@ -884,23 +978,50 @@ def main() -> int:
     environment = load_json(EVAL_ROOT / manifest["environment"])
     try:
         verify_frozen_environment(environment)
+        runtime_fingerprint = verify_runtime_fingerprint(environment)
     except (KeyError, FileNotFoundError, RuntimeError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 2
     if args.preflight_only:
-        print("Frozen environment preflight passed.")
+        print(json.dumps({
+            "frozen_environment_preflight": "PASS",
+            "runtime_fingerprint": runtime_fingerprint,
+        }, indent=2))
         return 0
+    RESULTS_ROOT.mkdir(parents=True, exist_ok=True)
+    control_run_id = uuid.uuid4().hex
     health = run_child_health_probe(args.control_timeout)
+    health["control_run_id"] = control_run_id
+    health["runtime_fingerprint"] = runtime_fingerprint
     (RESULTS_ROOT / "latest-child-health.json").write_text(
         json.dumps(health, indent=2), encoding="utf-8"
     )
     if health["result"] != "PASS":
-        print(json.dumps({"child_health": health}, indent=2))
+        isolation = isolation_not_executed(control_run_id, "CHILD_HEALTH_BLOCKED")
+        (RESULTS_ROOT / "latest-isolation-preflight.json").write_text(
+            json.dumps(isolation, indent=2), encoding="utf-8"
+        )
+        print(json.dumps({
+            "control_run_id": control_run_id,
+            "child_health": health,
+            "isolation": isolation,
+            "pilot": "NOT_RUN",
+        }, indent=2))
         return 2
     if args.child_health_only:
-        print(json.dumps({"child_health": health}, indent=2))
+        isolation = isolation_not_executed(control_run_id, "CHILD_HEALTH_ONLY")
+        (RESULTS_ROOT / "latest-isolation-preflight.json").write_text(
+            json.dumps(isolation, indent=2), encoding="utf-8"
+        )
+        print(json.dumps({
+            "control_run_id": control_run_id,
+            "child_health": health,
+            "isolation": isolation,
+            "pilot": "NOT_RUN",
+        }, indent=2))
         return 0
     canary = run_isolation_canary(args.control_timeout)
+    canary["control_run_id"] = control_run_id
     (RESULTS_ROOT / "latest-isolation-preflight.json").write_text(
         json.dumps(canary, indent=2), encoding="utf-8"
     )

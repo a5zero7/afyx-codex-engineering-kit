@@ -2486,3 +2486,34 @@ sandbox. Actual isolation remains **NOT VERIFIED** until the corrected procedure
 runs from a trusted PowerShell host and supplies sanitized evidence. Expert
 v0.1.0, formal A1/B1, installed components, CODEX_HOME, Graph runtime, PR #59,
 the frozen Alpha candidate, and private evaluation material remain unchanged.
+
+### 2026-10-14 AFYX-283C.5 — Windows child launcher and runtime fingerprint repair
+
+Status: **ENGINEERING PASS / DIRECT-HOST ACCEPTANCE PENDING / PILOT NOT RUN**
+
+Independent Windows Terminal evidence identified two concrete defects. Host
+Codex was authenticated at 0.162.1, while the frozen fingerprint still declared
+0.156.1 and preflight did not verify the installed version. Python resolved the
+npm launcher to `codex.CMD` and passed it directly to `Popen(shell=False)`,
+producing `WinError 2`; the child never started and the displayed isolation JSON
+belonged to an older run.
+
+The runner now dispatches a Windows npm `.CMD` launcher through its sibling
+`codex.ps1` using PowerShell `-File` and a discrete argv. No shell command is
+constructed, argument boundaries are preserved, and missing safe shim support
+fails closed. Direct executable behavior on Linux/macOS is unchanged. Bounded
+timeouts and owned process-tree cleanup remain intact.
+
+Codex CLI 0.162.1 passed non-model compatibility checks for the exact harness
+flags and command options. A new explicit 0.162.1 runtime fingerprint is active;
+the historical 0.156.1 fingerprint and all Expert/skill hashes are preserved.
+Frozen preflight now checks the installed CLI version and command contract
+before model execution. Child-health and isolation records carry one
+`control_run_id`; blocked health overwrites current isolation as
+`NOT_EXECUTED`, preventing stale evidence reuse.
+
+No canary or DEVELOPMENT pilot was executed inside the developer sandbox.
+Direct-host isolation remains **NOT VERIFIED** until the corrected PowerShell
+procedure is run by the user. Expert v0.1.0, installed components, CODEX_HOME,
+Graph, PR #59, the frozen Alpha candidate, and customer repositories remain
+unchanged.

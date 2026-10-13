@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import os
 import re
 import subprocess
 import sys
@@ -389,6 +390,123 @@ class EvaluationHarnessTests(unittest.TestCase):
         self.assertTrue(result["cleanup_succeeded"])
         self.assertIsNotNone(result["returncode"])
 
+    def test_windows_cmd_launcher_uses_sibling_powershell_shim_with_argv(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            cmd = root / "codex.cmd"
+            ps1 = root / "codex.ps1"
+            cmd.write_text("@echo off\r\n", encoding="utf-8")
+            ps1.write_text("$args | ConvertTo-Json -Compress\n", encoding="utf-8")
+            powershell = r"C:\Program Files\PowerShell\7\pwsh.exe"
+
+            def fake_which(name):
+                if name == "codex":
+                    return str(cmd)
+                if name == "pwsh.exe":
+                    return powershell
+                return None
+
+            with mock.patch.object(run.shutil, "which", side_effect=fake_which):
+                resolved, executable, kind = run.resolve_process_command(
+                    ["codex", "exec", "path with spaces", "literal&value"],
+                    windows=True,
+                )
+            self.assertEqual(executable, str(cmd))
+            self.assertEqual(kind, "windows-powershell-shim")
+            self.assertEqual(resolved[0], powershell)
+            self.assertEqual(resolved[resolved.index("-File") + 1], str(ps1))
+            self.assertEqual(resolved[-3:], ["exec", "path with spaces", "literal&value"])
+
+            ps1.unlink()
+            with mock.patch.object(run.shutil, "which", side_effect=fake_which):
+                with self.assertRaisesRegex(OSError, "PowerShell shim"):
+                    run.resolve_process_command(["codex", "--version"], windows=True)
+
+        with mock.patch.object(
+            run, "resolve_process_command", side_effect=OSError("synthetic launch failure")
+        ):
+            failed = run.bounded_process(["codex", "--version"], ROOT, 1)
+        self.assertFalse(failed["started"])
+        self.assertEqual(run.classify_child_health(failed), "CHILD_DID_NOT_START")
+        self.assertIn("synthetic launch failure", failed["stderr"])
+
+    @unittest.skipUnless(os.name == "nt", "Windows launcher execution regression")
+    def test_windows_cmd_launcher_executes_synthetic_shim(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            cmd = root / "synthetic.cmd"
+            ps1 = root / "synthetic.ps1"
+            cmd.write_text("@echo off\r\n", encoding="utf-8")
+            ps1.write_text("$args | ConvertTo-Json -Compress\n", encoding="utf-8")
+            result = run.bounded_process(
+                [str(cmd), "path with spaces", "literal&value"], root, 10
+            )
+        self.assertTrue(result["started"], result["stderr"])
+        self.assertEqual(result["returncode"], 0, result["stderr"])
+        self.assertEqual(result["launcher_kind"], "windows-powershell-shim")
+        self.assertEqual(
+            json.loads(result["stdout"]), ["path with spaces", "literal&value"]
+        )
+
+    def test_runtime_fingerprint_verifies_version_and_command_contract(self) -> None:
+        environment = {"runtime": {"codex_cli": "0.162.1"}}
+        required_help = " ".join((
+            "--ephemeral", "--ignore-user-config", "--skip-git-repo-check",
+            "--sandbox", "--json", "--cd", "--model", "--config",
+        ))
+
+        def fake_process(command, cwd, timeout):
+            output = "codex-cli 0.162.1" if command == ["codex", "--version"] else required_help
+            return {
+                "started": True, "pid": 1, "returncode": 0,
+                "stdout": output, "stderr": "", "timed_out": False,
+                "cleanup_required": False, "cleanup_succeeded": True,
+                "cleanup_method": "not-required", "elapsed_seconds": 0.01,
+                "executable": "codex.cmd", "launcher_kind": "windows-powershell-shim",
+            }
+
+        with mock.patch.object(run, "bounded_process", side_effect=fake_process):
+            result = run.verify_runtime_fingerprint(environment)
+        self.assertEqual(result["actual_version"], "0.162.1")
+
+        drifted = dict(fake_process(["codex", "--version"], ROOT, 15))
+        drifted["stdout"] = "codex-cli 0.163.0"
+        with mock.patch.object(run, "bounded_process", return_value=drifted):
+            with self.assertRaisesRegex(RuntimeError, "fingerprint mismatch"):
+                run.verify_runtime_fingerprint(environment)
+
+    def test_child_health_failure_replaces_stale_isolation_with_correlated_status(self) -> None:
+        with tempfile.TemporaryDirectory() as results:
+            results_root = Path(results)
+            isolation_path = results_root / "latest-isolation-preflight.json"
+            isolation_path.write_text('{"result":"PASS","control_run_id":"stale"}')
+            blocked_health = {
+                "result": "BLOCKED", "classification": "CHILD_DID_NOT_START",
+            }
+            with mock.patch.object(run, "RESULTS_ROOT", results_root), mock.patch.object(
+                run, "verify_frozen_environment"
+            ), mock.patch.object(
+                run, "verify_runtime_fingerprint", return_value={"actual_version": "0.162.1"}
+            ), mock.patch.object(
+                run, "run_child_health_probe", return_value=blocked_health
+            ), mock.patch.object(
+                run, "run_isolation_canary"
+            ) as canary, mock.patch.object(
+                sys, "argv", ["run.py", "--isolation-canary-only"]
+            ), mock.patch(
+                "builtins.print"
+            ):
+                self.assertEqual(run.main(), 2)
+            health = json.loads(
+                (results_root / "latest-child-health.json").read_text(encoding="utf-8")
+            )
+            isolation = json.loads(isolation_path.read_text(encoding="utf-8"))
+        canary.assert_not_called()
+        self.assertNotEqual(isolation["control_run_id"], "stale")
+        self.assertEqual(health["control_run_id"], isolation["control_run_id"])
+        self.assertEqual(isolation["result"], "NOT_EXECUTED")
+        self.assertEqual(isolation["reason"], "CHILD_HEALTH_BLOCKED")
+
     def test_pilot_defaults_to_one_repetition_contract(self) -> None:
         source = (ROOT / "evals" / "harness" / "run.py").read_text(encoding="utf-8")
         self.assertIn(
@@ -397,14 +515,21 @@ class EvaluationHarnessTests(unittest.TestCase):
         )
 
     def test_current_fingerprint_matches_repository_sources(self) -> None:
-        environment = run.load_json(ROOT / "evals" / "environment-expert-v0.1.0.json")
+        manifest = run.load_json(ROOT / "evals" / "manifest.json")
+        environment = run.load_json(ROOT / "evals" / manifest["environment"])
+        historical = run.load_json(ROOT / "evals" / "environment-expert-v0.1.0.json")
         for name in freeze.REPOSITORY_SKILLS:
             self.assertEqual(
                 environment["skills"][name]["content_sha256"],
                 freeze.directory_content_sha256(ROOT / "skills" / name),
             )
+            self.assertEqual(
+                environment["skills"][name]["content_sha256"],
+                historical["skills"][name]["content_sha256"],
+            )
         self.assertEqual(environment["skills"]["efficient-coding"]["version"], "1.2.0")
-        self.assertEqual(environment["runtime"]["codex_cli"], "0.156.1")
+        self.assertEqual(environment["runtime"]["codex_cli"], "0.162.1")
+        self.assertEqual(historical["runtime"]["codex_cli"], "0.156.1")
 
 
 if __name__ == "__main__":

@@ -4,11 +4,12 @@ This directory contains the deterministic Phase 3 benchmark foundation. Phase 3A
 
 ## Frozen environment
 
-`environment.json` preserves the historical Phase 3A fingerprint. The active
-manifest points to `environment-expert-v0.1.0.json`, a separate AFYX-283
-fingerprint covering the exact repository subject, all four skill identities,
-verified Prompt Master checkout identity, Codex/model/provider/runtime flags,
-and the supported execution-permission/tool observability boundary. The runner
+`environment.json` preserves the historical Phase 3A fingerprint, and
+`environment-expert-v0.1.0.json` preserves the AFYX-283 Codex 0.156.1 evidence.
+The active manifest points to
+`environment-expert-v0.1.0-codex-0.162.1.json`, an explicit successor covering
+the same repository subject and skill hashes with the verified 0.162.1 runtime
+contract and execution-permission/tool observability boundary. The runner
 uses the recorded `gpt-5.6-sol`, medium reasoning, and direct `openai` provider
 settings explicitly. It does not read or store authentication secrets.
 
@@ -80,6 +81,15 @@ Any observed evaluator-only read success or randomized canary exposure is an
 isolation `FAIL`, even when the positive control is missing or the child later
 times out. `positive_control.attempt_observed` records only an actual positive
 control event, not unrelated command-tool activity.
+
+On Windows, npm may resolve `codex` to a `.CMD` shim that cannot be passed
+directly to Python `Popen(shell=False)`. The runner resolves its sibling
+`codex.ps1` and invokes it through PowerShell `-File` with a discrete argv; it
+never concatenates a shell command. Frozen preflight verifies the installed CLI
+version and required non-model command options before model execution.
+Child-health and isolation evidence share a `control_run_id`; blocked health
+overwrites current isolation evidence with `NOT_EXECUTED`, preventing reuse of
+a stale result.
 
 ## Scenario and evaluator separation
 
