@@ -4,7 +4,13 @@ This directory contains the deterministic Phase 3 benchmark foundation. Phase 3A
 
 ## Frozen environment
 
-`environment.json` records the repository commit, skill versions and Prompt Master SHA, Codex/model/provider settings, tool versions, and optional enhancement availability. The runner uses the recorded `gpt-5.6-sol`, medium reasoning, and direct `openai` provider settings explicitly. It does not read or store authentication secrets.
+`environment.json` preserves the historical Phase 3A fingerprint. The active
+manifest points to `environment-expert-v0.1.0.json`, a separate AFYX-283
+fingerprint covering the exact repository subject, all four skill identities,
+verified Prompt Master checkout identity, Codex/model/provider/runtime flags,
+and the supported execution-permission/tool observability boundary. The runner
+uses the recorded `gpt-5.6-sol`, medium reasoning, and direct `openai` provider
+settings explicitly. It does not read or store authentication secrets.
 
 Before a benchmark series, compare installed component versions with the fingerprint. Do not update a skill or tool during the series. If a mismatch is found, stop and create a new fingerprint rather than mixing results.
 
@@ -14,7 +20,13 @@ Freeze repository skill content before the first run:
 python evals/harness/freeze.py
 ```
 
-The freezer hashes the sorted POSIX-relative file list and full bytes of every file under Efficient Coding and Odoo Engineering. Every runner invocation recomputes both hashes and verifies the installed Prompt Master checkout SHA before constructing a run or calling a model. Any mismatch aborts with exit code 2.
+The freezer hashes the sorted POSIX-relative file list and full bytes of every
+file under Efficient Coding, Odoo Engineering, and Afyx Engineering Expert.
+Every runner invocation recomputes those hashes and verifies Prompt Master's
+commit, origin, and clean checkout before constructing a run or calling a
+model. Any mismatch aborts with exit code 2. The freezer updates only the
+environment selected by the manifest; the historical Phase 3A fingerprint is
+not silently rewritten.
 
 Validate only the frozen inputs without constructing runs or calling a model:
 
@@ -33,15 +45,36 @@ python evals/harness/validate.py
 Codex officially supports per-skill enablement through `skills.config`. Every invocation:
 
 1. uses `--ignore-user-config` and explicit model/provider/reasoning arguments;
-2. disables the three personal Afyx skill paths with a session-only `-c skills.config=...` override;
+2. disables all four personal Afyx skill paths with a session-only `-c skills.config=...` override;
 3. copies only the selected frozen skill sources into the fresh fixture's repository-local `.agents/skills` directory;
-4. runs an ephemeral, fresh Codex session.
+4. places the evaluated workspace under the operating-system temporary root,
+   outside the evaluator/source repository and its answer-bearing ancestors;
+5. runs an ephemeral Codex session with `workspace-write`, no approval
+   escalation, and no user configuration.
 
-This supports `N`, `E`, `O`, `P`, `EO`, `PO`, and `CORE`. It neither renames/deletes personal skills nor edits production config. Authentication remains in the existing `CODEX_HOME`; the harness never copies or serializes it. Non-Afyx system/plugin skills are outside the ablation definition.
+This preserves `N`, `E`, `O`, `P`, `EO`, `PO`, and `CORE`, and adds `X`
+(Expert only) plus `CORE_X` (CORE + Expert). Formal aliases are `A0=N`,
+`A1=CORE`, `B0=X`, and `B1=CORE_X`; A0/B0 are diagnostic while A1/B1 are the
+primary comparison. The harness neither renames/deletes personal skills nor
+edits production config. Authentication remains in the existing `CODEX_HOME`;
+the harness never copies or serializes it.
+
+Before any evaluated cell, an actual-session canary attempts one exact read of
+an evaluator-only file. A run proceeds only when the attempt is observable,
+blocked, and the random canary content is absent from all returned events. A
+timeout, missing read event, successful read, or exposed marker fails closed.
+
+```text
+python evals/harness/run.py --isolation-canary-only
+```
 
 ## Scenario and evaluator separation
 
-`manifest.json` stores scenario prompts and evaluator-only fields: assertions, forbidden patterns, validation command, and allowed/expected file scope. The harness sends only `user_prompt` to the agent. The agent works inside a fixture copy and cannot infer assertions from filenames in its working tree.
+`manifest.json` stores scenario prompts and evaluator-only fields: assertions,
+forbidden patterns, validation command, allowed/expected file scope, and pilot
+rubrics. The harness sends only `user_prompt` to the agent. The external
+fixture copy contains no manifest, rubric, private holdout, or answer-bearing
+repository ancestor.
 
 Each scenario defines:
 
@@ -55,9 +88,16 @@ Each scenario defines:
 
 Phase 3A includes only three neutral smoke fixtures: a Python bug, an Odoo version trap, and a prompt-authoring request.
 
+AFYX-283 adds five explicitly DEVELOPMENT-only pilot scenarios. They are rubric
+calibration inputs, not private holdouts and not a formal A1/B1 campaign.
+
 ## Fresh fixtures
 
-Every cell copies its canonical fixture to a unique ignored directory under `evals/results/<run-id>/work`. The runner hashes the canonical tree before and after the run and fails `canonical_fixture_unchanged` if it changes. File-diff metrics exclude injected `.agents/skills` content.
+Every cell copies its canonical fixture to a unique disposable directory under
+the operating-system temporary root. Run events/results remain in the ignored
+`evals/results/<run-id>` evidence directory. The runner hashes the canonical
+tree before and after the run and fails `canonical_fixture_unchanged` if it
+changes. File-diff metrics exclude injected `.agents/skills` content.
 
 ## Running
 
@@ -65,6 +105,12 @@ Smoke once per declared cell:
 
 ```text
 python evals/harness/run.py --mode smoke
+```
+
+Run the bounded development-pilot calibration (only after the canary passes):
+
+```text
+python evals/harness/run.py --mode pilot
 ```
 
 Benchmark mode enforces at least three repetitions:
@@ -83,7 +129,14 @@ python evals/harness/analyze.py
 
 ## Metrics
 
-Each `result.json` follows a stable machine-readable shape. Provider-reported tokens are captured when present. Wall time, tool/search/read calls observable in Codex JSON events, modified files, validation commands, failed tools, critical assertions, and version-contamination counters are recorded.
+Each `result.json` follows a stable machine-readable shape. Provider-reported
+tokens are captured when present. Wall time, tool/search/read calls observable
+in Codex JSON events, modified files, validation commands, failed tools,
+critical assertions, and version-contamination counters are recorded.
+Activation evidence separately records availability, discovery/read attempt,
+successful `SKILL.md` content observation, blocked/failed read, and
+`ACTIVATION_NOT_OBSERVABLE`. A command that merely mentions `SKILL.md` is not a
+successful activation observation.
 
 Unavailable fields are `null`; the harness never estimates tokens or file-read counts. Provider `total_tokens` remains untouched and nullable. `derived_input_output_tokens` and `derived_uncached_input_tokens` are separately labeled arithmetic diagnostics, never substitutes for provider totals. Character or word counts are not substitutes for tokens. Correctness assertions gate PASS before efficiency can be considered.
 
@@ -99,3 +152,6 @@ Smoke mode uses one repetition to validate mechanics and fixtures. It is not evi
 - File-open and duplicate-read counts remain unavailable when event payloads do not identify paths.
 - Phase 3A does not evaluate Afyx Graph, Headroom, end-to-end Prompt Master value, or comparative skill effectiveness.
 - The current fixtures validate the harness only and must not be used to claim benchmark superiority.
+- An actual-session canary or pilot can be BLOCKED by host/model availability;
+  deterministic harness tests do not convert that condition into isolation or
+  product PASS evidence.

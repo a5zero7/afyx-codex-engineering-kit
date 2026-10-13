@@ -17,6 +17,11 @@ REPO_ROOT = EVAL_ROOT.parent
 MANIFEST_PATH = EVAL_ROOT / "manifest.json"
 FIXTURES_ROOT = (EVAL_ROOT / "fixtures").resolve()
 ODOO_REFERENCES = REPO_ROOT / "skills" / "odoo-engineering" / "references"
+AFYX_SKILLS = {
+    "efficient-coding", "odoo-engineering", "prompt-master",
+    "afyx-engineering-expert",
+}
+FORMAL_ALIASES = {"A0": "N", "A1": "CORE", "B0": "X", "B1": "CORE_X"}
 
 REQUIRED_TOP_LEVEL_KEYS = {
     "schema_version",
@@ -65,6 +70,13 @@ def validate_manifest(violations: list[str]) -> None:
         configuration_names: set[str] = set()
     else:
         configuration_names = set(configurations)
+        for name, skills in configurations.items():
+            if not isinstance(skills, list) or any(skill not in AFYX_SKILLS for skill in skills):
+                violations.append(f"configuration {name!r} contains invalid skills")
+
+    aliases = manifest.get("evaluation_aliases")
+    if aliases != FORMAL_ALIASES:
+        violations.append(f"evaluation_aliases must equal {FORMAL_ALIASES}")
 
     scenarios = manifest.get("scenarios")
     if not isinstance(scenarios, list):
@@ -112,10 +124,24 @@ def validate_manifest(violations: list[str]) -> None:
             violations.append(f"{prefix} configurations must be an array")
         else:
             for name in referenced_configs:
-                if name not in configuration_names:
+                canonical = aliases.get(name, name) if isinstance(aliases, dict) else name
+                if canonical not in configuration_names:
                     violations.append(
                         f"{prefix} references unknown configuration: {name!r}"
                     )
+
+        for key in ("required_skill_reads", "forbidden_skill_reads"):
+            values = scenario.get(key, [])
+            if isinstance(values, list) and any(value not in AFYX_SKILLS for value in values):
+                violations.append(f"{prefix} {key} contains an unknown skill")
+
+        if scenario.get("stage") == "development-pilot":
+            rubric = scenario.get("evaluator_rubric")
+            required_gates = {"correctness", "task_fidelity", "evidence_quality", "security"}
+            if not isinstance(rubric, dict) or set(rubric) != required_gates:
+                violations.append(
+                    f"{prefix} evaluator_rubric must define exactly {sorted(required_gates)}"
+                )
 
     duplicates = sorted(
         scenario_id for scenario_id, count in Counter(scenario_ids).items()
@@ -148,14 +174,20 @@ def validate_subject_ancestry(subject: str, violations: list[str]) -> None:
 
 
 def validate_environment(violations: list[str]) -> None:
-    path = EVAL_ROOT / "environment.json"
+    try:
+        manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+        path = (EVAL_ROOT / manifest["environment"]).resolve()
+        path.relative_to(EVAL_ROOT.resolve())
+    except (OSError, json.JSONDecodeError, KeyError, ValueError) as error:
+        violations.append(f"selected environment path is invalid: {error}")
+        return
     try:
         environment = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         violations.append(f"environment.json is not readable JSON: {error}")
         return
-    if environment.get("schema_version") != 2:
-        violations.append("environment.json schema_version must be 2")
+    if environment.get("schema_version") != 3:
+        violations.append(f"{path.name} schema_version must be 3")
     if "afyx_commit" in environment:
         violations.append("environment.json must not carry the ambiguous top-level afyx_commit")
     repository = environment.get("repository")
@@ -169,6 +201,18 @@ def validate_environment(violations: list[str]) -> None:
         validate_subject_ancestry(subject, violations)
     if not repository.get("branch"):
         violations.append("repository.branch is required")
+    skills = environment.get("skills")
+    if not isinstance(skills, dict) or set(skills) != AFYX_SKILLS:
+        violations.append(f"{path.name} must fingerprint exactly the four Afyx skills")
+    runtime = environment.get("runtime")
+    if not isinstance(runtime, dict):
+        violations.append(f"{path.name} requires runtime details")
+    else:
+        for key in ("codex_cli", "model", "provider", "reasoning_effort", "runtime_flags"):
+            if not runtime.get(key):
+                violations.append(f"{path.name} runtime.{key} is required")
+    if not isinstance(environment.get("execution"), dict):
+        violations.append(f"{path.name} requires execution permissions/tooling details")
 
 
 def validate_odoo_headers(violations: list[str]) -> None:

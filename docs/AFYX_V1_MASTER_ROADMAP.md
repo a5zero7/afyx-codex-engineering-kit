@@ -2392,3 +2392,41 @@ No active skill installation, `CODEX_HOME`, MCP configuration, Graph runtime,
 Alpha branch/candidate, PR #59, Adit environment, or IJP repository was
 modified. Final-head cross-platform engineering CI remains required before
 this integration can be reported complete.
+
+### 2026-10-13 correction — Expert integration, activation evidence, and AFYX-283
+
+Status: **AFYX-284 DONE; AFYX-283 HARNESS REPAIRED / PILOT BLOCKED; AFYX-248 IN PROGRESS**
+
+AFYX-284 native Kit integration is DONE. The implementation and documentation
+head `7fab789af6e0e1c122a2744210ca0f13cbfbac01` passed exact-head
+[Engineering/Graph Build 38357724286](https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/38357724286)
+on Windows, Linux, and macOS. This correction supersedes only the earlier
+pending-CI wording; it does not alter the accepted 22-file Expert v0.1.0 source.
+
+Functional Activation Smoke Test v2 produced observable host evidence. Case A
+successfully read Expert `SKILL.md` but loaded seven domain references and zero
+workflows, violating the intended progressive-disclosure boundary; it remains
+**FAIL/open**. Case B passed Expert + Odoo Engineering composition. Case C
+passed negative routing for a simple Python question. Case D was unnecessary.
+Two experimental v0.1.1 refinements still loaded six references and zero
+workflows, so they were rejected and reverted; no Expert source optimization is
+accepted from those experiments.
+
+AFYX-283 extends the existing Phase 3A JSON harness rather than creating a
+parallel evaluator. Historical `environment.json` and result evidence remain
+unchanged. The active Expert fingerprint records Efficient Coding 1.2.0, Odoo
+Engineering 1.2.0, Expert 0.1.0, verified Prompt Master checkout identity,
+Codex 0.156.1, and explicit runtime/permission flags. All four installed Afyx
+skills are disabled per session before only the selected frozen configuration
+is copied to an external disposable workspace. `X`/`CORE_X` and formal
+`A0=N`, `A1=CORE`, `B0=X`, `B1=CORE_X` aliases are defined. Successful
+activation now requires observed `SKILL.md` content from a completed host event;
+mentions, failed reads, and unavailable events are not treated as activation.
+
+Deterministic isolation/configuration/fingerprint tests and static preflight
+pass. The required actual-session evaluator canary timed out twice (180 seconds
+and 120 seconds) without any command/read event. It therefore records
+**BLOCKED**, not PASS. No development pilot or formal A1/B1 comparison was run.
+Until a canary proves evaluator ground truth inaccessible and the bounded pilot
+is calibrated, formal comparative acceptance is **BLOCKED**. AFYX-249's formal
+Alpha gate is unchanged, and neither AFYX-248 nor Technical Alpha is complete.

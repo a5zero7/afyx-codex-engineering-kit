@@ -12,6 +12,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import uuid
 from datetime import datetime, timezone
@@ -24,7 +25,12 @@ EVAL_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = EVAL_ROOT.parent
 MANIFEST_PATH = EVAL_ROOT / "manifest.json"
 RESULTS_ROOT = EVAL_ROOT / "results"
-AFYX_SKILLS = ("efficient-coding", "odoo-engineering", "prompt-master")
+AFYX_SKILLS = (
+    "efficient-coding",
+    "odoo-engineering",
+    "prompt-master",
+    "afyx-engineering-expert",
+)
 
 
 def load_json(path: Path) -> dict:
@@ -65,6 +71,33 @@ def verify_frozen_environment(environment: dict) -> None:
                     f"(expected {expected_prompt_sha}, actual {actual_prompt_sha})"
                 )
 
+    expected_origin = prompt_entry.get("git_origin")
+    if expected_origin:
+        origin = subprocess.run(
+            [
+                "git", "-c", f"safe.directory={prompt_checkout.as_posix()}",
+                "-C", str(prompt_checkout), "remote", "get-url", "origin",
+            ],
+            text=True, encoding="utf-8", errors="replace", capture_output=True,
+        )
+        actual_origin = origin.stdout.strip() if origin.returncode == 0 else None
+        if actual_origin != expected_origin:
+            failures.append(
+                "prompt-master: Git origin mismatch "
+                f"(expected {expected_origin}, actual {actual_origin or 'unavailable'})"
+            )
+
+    if prompt_entry.get("clean") is True:
+        status = subprocess.run(
+            [
+                "git", "-c", f"safe.directory={prompt_checkout.as_posix()}",
+                "-C", str(prompt_checkout), "status", "--porcelain=v1",
+            ],
+            text=True, encoding="utf-8", errors="replace", capture_output=True,
+        )
+        if status.returncode != 0 or status.stdout.strip():
+            failures.append("prompt-master: checkout is unavailable or not clean")
+
     if failures:
         details = "\n  - ".join(failures)
         raise RuntimeError(f"frozen environment preflight failed:\n  - {details}")
@@ -101,6 +134,7 @@ def skill_sources() -> dict[str, Path]:
         "efficient-coding": REPO_ROOT / "skills" / "efficient-coding",
         "odoo-engineering": REPO_ROOT / "skills" / "odoo-engineering",
         "prompt-master": user_root / "prompt-master",
+        "afyx-engineering-expert": REPO_ROOT / "skills" / "afyx-engineering-expert",
     }
 
 
@@ -131,8 +165,9 @@ def skills_override() -> str:
 def codex_command(work: Path, prompt: str) -> list[str]:
     return [
         "codex", "exec", "--ephemeral", "--ignore-user-config",
-        "--skip-git-repo-check", "--approve-for-me", "--json", "-C", str(work),
+        "--skip-git-repo-check", "--sandbox", "workspace-write", "--json", "-C", str(work),
         "-m", "gpt-5.6-sol",
+        "-c", 'approval_policy="never"',
         "-c", 'model_provider="openai"',
         "-c", 'model_reasoning_effort="medium"',
         "-c", skills_override(), prompt,
@@ -147,6 +182,7 @@ def parse_events(stdout: str) -> dict:
     search_calls = 0
     read_calls = 0
     commands = []
+    command_events = []
     for line in stdout.splitlines():
         try:
             event = json.loads(line)
@@ -165,6 +201,19 @@ def parse_events(stdout: str) -> dict:
             command = item.get("command", "")
             trace = command or json.dumps(item, sort_keys=True)
             commands.append(trace)
+            output = item.get("aggregated_output") or item.get("output") or ""
+            exit_code = item.get("exit_code")
+            failed = item.get("status") in {"failed", "error"} or (
+                exit_code is not None and exit_code != 0
+            )
+            command_events.append({
+                "type": item_type,
+                "trace": trace,
+                "output": output if isinstance(output, str) else json.dumps(output),
+                "status": item.get("status"),
+                "exit_code": exit_code,
+                "failed": failed,
+            })
             if command and re.search(r"\b(rg|grep|find|search)\b", command, re.I):
                 search_calls += 1
             if command and re.search(r"\b(Get-Content|cat|type|read)\b", command, re.I):
@@ -179,7 +228,45 @@ def parse_events(stdout: str) -> dict:
         "search_calls": search_calls,
         "read_calls": read_calls,
         "commands": commands,
+        "command_events": command_events,
     }
+
+
+def activation_evidence(parsed: dict, active_skills: list[str]) -> dict[str, dict]:
+    """Classify activation from completed host events without inferring from prose."""
+    evidence = {}
+    for name in AFYX_SKILLS:
+        path_pattern = re.compile(rf"{re.escape(name)}[\\/]+SKILL\.md", re.I)
+        related = [
+            event for event in parsed["command_events"]
+            if path_pattern.search(event["trace"])
+        ]
+        successful = [
+            event for event in related
+            if not event["failed"]
+            and re.search(rf"\bname:\s*{re.escape(name)}\b", event["output"], re.I)
+        ]
+        failed = [event for event in related if event["failed"]]
+        if successful:
+            state = "SKILL_MD_READ_OBSERVED"
+        elif failed:
+            state = "SKILL_MD_READ_FAILED"
+        else:
+            state = "ACTIVATION_NOT_OBSERVABLE"
+        evidence[name] = {
+            "available": name in active_skills,
+            "discovery_or_selection_attempted": bool(related),
+            "skill_md_read_attempted": bool(related),
+            "successful_skill_md_read": bool(successful),
+            "read_blocked_or_failed": bool(failed),
+            "state": state,
+        }
+    return evidence
+
+
+def resolve_configuration(manifest: dict, name: str) -> tuple[str, list[str]]:
+    canonical = manifest.get("evaluation_aliases", {}).get(name, name)
+    return canonical, manifest["configurations"][canonical]
 
 
 def check_assertions(
@@ -200,7 +287,7 @@ def check_assertions(
         (work / rel).read_text(encoding="utf-8", errors="replace")
         for rel in modified if (work / rel).is_file()
     )
-    corpus = output if scenario["output_kind"] == "generated_prompt" else file_corpus
+    corpus = output if scenario["output_kind"] in {"generated_prompt", "advisory"} else file_corpus
     for pattern in scenario["forbidden_patterns"]:
         checks.append({
             "type": "forbidden_pattern", "expected": pattern,
@@ -217,46 +304,56 @@ def check_assertions(
 def run_cell(manifest: dict, scenario: dict, config: str, repetition: int, timeout: int) -> dict:
     run_id = f"{scenario['scenario_id']}-{config}-r{repetition}-{uuid.uuid4().hex[:8]}"
     run_root = RESULTS_ROOT / run_id
-    work = run_root / "work"
+    canonical_config, active_skills = resolve_configuration(manifest, config)
     fixture = EVAL_ROOT / scenario["fixture"]
     canonical_before = tree_digest(fixture)
-    shutil.copytree(fixture, work)
-    prepare_skills(work, manifest["configurations"][config])
-    initial = snapshot(work)
-    started = time.perf_counter()
-    process = subprocess.run(
-        codex_command(work, scenario["user_prompt"]),
-        cwd=work, text=True, encoding="utf-8", errors="replace",
-        capture_output=True, timeout=timeout,
-    )
-    elapsed = time.perf_counter() - started
-    (run_root / "events.jsonl").write_text(process.stdout, encoding="utf-8")
-    (run_root / "stderr.log").write_text(process.stderr, encoding="utf-8")
-    parsed = parse_events(process.stdout)
-    final = snapshot(work)
-    modified = sorted({*initial, *final} - {k for k in initial if initial.get(k) == final.get(k)})
-    validation_exit = None
-    validation_output = None
-    validation_commands = []
-    if scenario["validation_command"]:
-        validation_commands.append(scenario["validation_command"])
-        validation = subprocess.run(
-            scenario["validation_command"], cwd=work, text=True,
-            encoding="utf-8", errors="replace",
+    run_root.mkdir(parents=True, exist_ok=False)
+    with tempfile.TemporaryDirectory(prefix="afyx-eval-") as temporary:
+        work = Path(temporary) / "work"
+        shutil.copytree(fixture, work)
+        prepare_skills(work, active_skills)
+        initial = snapshot(work)
+        started = time.perf_counter()
+        process = subprocess.run(
+            codex_command(work, scenario["user_prompt"]),
+            cwd=work, text=True, encoding="utf-8", errors="replace",
             capture_output=True, timeout=timeout,
         )
-        validation_exit = validation.returncode
-        validation_output = validation.stdout + validation.stderr
-    output = parsed["message"]
-    if scenario["output_kind"] == "generated_prompt":
-        (run_root / "generated_prompt.txt").write_text(output, encoding="utf-8")
-    assertions = check_assertions(scenario, work, output, validation_exit, modified)
-    command_text = "\n".join(parsed["commands"])
-    observed_skill_reads = sorted(
-        name for name in AFYX_SKILLS
-        if re.search(rf"{re.escape(name)}[\\/]+SKILL\.md", command_text, re.I)
-    )
-    active_skills = manifest["configurations"][config]
+        elapsed = time.perf_counter() - started
+        (run_root / "events.jsonl").write_text(process.stdout, encoding="utf-8")
+        (run_root / "stderr.log").write_text(process.stderr, encoding="utf-8")
+        parsed = parse_events(process.stdout)
+        final = snapshot(work)
+        modified = sorted(
+            {*initial, *final} - {key for key in initial if initial.get(key) == final.get(key)}
+        )
+        validation_exit = None
+        validation_output = None
+        validation_commands = []
+        if scenario["validation_command"]:
+            validation_commands.append(scenario["validation_command"])
+            validation = subprocess.run(
+                scenario["validation_command"], cwd=work, text=True,
+                encoding="utf-8", errors="replace",
+                capture_output=True, timeout=timeout,
+            )
+            validation_exit = validation.returncode
+            validation_output = validation.stdout + validation.stderr
+        output = parsed["message"]
+        response_path = None
+        if scenario["output_kind"] in {"generated_prompt", "advisory"}:
+            response_path = (
+                "generated_prompt.txt"
+                if scenario["output_kind"] == "generated_prompt"
+                else "agent_response.txt"
+            )
+            (run_root / response_path).write_text(output, encoding="utf-8")
+        assertions = check_assertions(scenario, work, output, validation_exit, modified)
+        activation = activation_evidence(parsed, active_skills)
+        observed_skill_reads = sorted(
+            name for name, item in activation.items()
+            if item["successful_skill_md_read"]
+        )
     required_skill_reads = scenario["required_skill_reads"]
     forbidden_skill_reads = scenario["forbidden_skill_reads"]
     observed_set = set(observed_skill_reads)
@@ -308,9 +405,14 @@ def run_cell(manifest: dict, scenario: dict, config: str, repetition: int, timeo
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "scenario_id": scenario["scenario_id"],
         "configuration": config,
+        "resolved_configuration": canonical_config,
         "isolated_skills": active_skills,
         "observed_skill_reads": observed_skill_reads,
-        "isolation_method": "session skills.config disable + repository-local selected copies",
+        "activation_evidence": activation,
+        "isolation_method": (
+            "session disable of all installed Afyx skills + selected frozen copies "
+            "in an external disposable workspace"
+        ),
         "component_versions": load_json(EVAL_ROOT / manifest["environment"])["skills"],
         "model_provider_fingerprint": load_json(EVAL_ROOT / manifest["environment"])["runtime"],
         "result": "PASS" if passed else "FAIL",
@@ -350,20 +452,94 @@ def run_cell(manifest: dict, scenario: dict, config: str, repetition: int, timeo
         "canonical_fixture_unchanged": canonical_before == tree_digest(fixture),
         "validation_exit": validation_exit,
         "validation_output": validation_output,
-        "generated_prompt_path": "generated_prompt.txt" if scenario["output_kind"] == "generated_prompt" else None,
+        "generated_prompt_path": (
+            "generated_prompt.txt" if scenario["output_kind"] == "generated_prompt" else None
+        ),
+        "agent_response_path": (
+            "agent_response.txt" if scenario["output_kind"] == "advisory" else None
+        ),
         "error_summary": None if process.returncode == 0 else process.stderr[-2000:],
     }
     (run_root / "result.json").write_text(json.dumps(record, indent=2), encoding="utf-8")
     return record
 
 
+def run_isolation_canary(timeout: int) -> dict:
+    """Use an actual Codex session to prove evaluator ground truth is unreadable."""
+    RESULTS_ROOT.mkdir(parents=True, exist_ok=True)
+    nonce = uuid.uuid4().hex
+    marker = f"AFYX_EVALUATOR_CANARY_{nonce}"
+    canary_path = RESULTS_ROOT / f".isolation-canary-{nonce}.txt"
+    canary_path.write_text(marker, encoding="utf-8")
+    try:
+        with tempfile.TemporaryDirectory(prefix="afyx-canary-") as temporary:
+            work = Path(temporary) / "work"
+            work.mkdir()
+            prompt = (
+                "Isolation preflight only. Use one shell command to attempt to read the exact "
+                f"file {canary_path}. If the operating system blocks or cannot find it, reply "
+                "ACCESS_BLOCKED. If content is returned, reply ACCESSIBLE. Do not search for "
+                "alternatives and do not modify any file."
+            )
+            try:
+                process = subprocess.run(
+                    codex_command(work, prompt), cwd=work, text=True,
+                    encoding="utf-8", errors="replace", capture_output=True, timeout=timeout,
+                )
+            except subprocess.TimeoutExpired as error:
+                partial_stdout = error.stdout or ""
+                if isinstance(partial_stdout, bytes):
+                    partial_stdout = partial_stdout.decode("utf-8", errors="replace")
+                parsed = parse_events(partial_stdout)
+                return {
+                    "result": "BLOCKED",
+                    "process_returncode": None,
+                    "read_attempt_observed": bool(parsed["command_events"]),
+                    "read_blocked": False,
+                    "canary_exposed": marker in partial_stdout,
+                    "message": parsed["message"],
+                    "error_summary": f"Codex isolation preflight timed out after {timeout}s",
+                }
+        parsed = parse_events(process.stdout)
+        path_pattern = re.compile(re.escape(canary_path.name), re.I)
+        attempts = [
+            event for event in parsed["command_events"]
+            if path_pattern.search(event["trace"])
+        ]
+        marker_exposed = marker in process.stdout or any(
+            marker in event["output"] for event in attempts
+        )
+        blocked = bool(attempts) and all(event["failed"] for event in attempts)
+        passed = (
+            process.returncode == 0
+            and blocked
+            and not marker_exposed
+            and "ACCESS_BLOCKED" in parsed["message"]
+        )
+        return {
+            "result": "PASS" if passed else "FAIL",
+            "process_returncode": process.returncode,
+            "read_attempt_observed": bool(attempts),
+            "read_blocked": blocked,
+            "canary_exposed": marker_exposed,
+            "message": parsed["message"],
+            "error_summary": None if process.returncode == 0 else process.stderr[-2000:],
+        }
+    finally:
+        canary_path.unlink(missing_ok=True)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", choices=("smoke", "benchmark"), default="smoke")
+    parser.add_argument("--mode", choices=("smoke", "pilot", "benchmark"), default="smoke")
     parser.add_argument("--repetitions", type=int)
     parser.add_argument("--seed", type=int)
     parser.add_argument("--timeout", type=int, default=300)
     parser.add_argument("--scenario", action="append")
+    parser.add_argument(
+        "--isolation-canary-only", action="store_true",
+        help="run the actual-session ground-truth access canary and no scenarios",
+    )
     parser.add_argument(
         "--preflight-only", action="store_true",
         help="verify frozen inputs and exit without constructing runs or calling a model",
@@ -379,13 +555,26 @@ def main() -> int:
     if args.preflight_only:
         print("Frozen environment preflight passed.")
         return 0
+    canary = run_isolation_canary(args.timeout)
+    (RESULTS_ROOT / "latest-isolation-preflight.json").write_text(
+        json.dumps(canary, indent=2), encoding="utf-8"
+    )
+    if canary["result"] != "PASS":
+        print(json.dumps({"isolation_canary": canary}, indent=2))
+        return 2
+    if args.isolation_canary_only:
+        print(json.dumps({"isolation_canary": canary}, indent=2))
+        return 0
     repetitions = args.repetitions or (1 if args.mode == "smoke" else 3)
     if args.mode == "benchmark" and repetitions < 3:
         parser.error("benchmark mode requires at least 3 repetitions")
     seed = args.seed if args.seed is not None else manifest["random_seed"]
     scenarios = [
-        s for s in manifest["scenarios"]
-        if not args.scenario or s["scenario_id"] in args.scenario
+        scenario for scenario in manifest["scenarios"]
+        if (
+            (args.mode == "pilot") == (scenario.get("stage") == "development-pilot")
+            and (not args.scenario or scenario["scenario_id"] in args.scenario)
+        )
     ]
     cells = [
         (scenario, config, repetition)
