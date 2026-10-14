@@ -3,7 +3,7 @@
   "frozen_at": "2026-10-14T00:00:00+07:00",
   "purpose": "AFYX-283 Expert v0.1.1 composition candidate fingerprint for Codex CLI 0.162.1 with isolated permission profile",
   "repository": {
-    "benchmark_subject_commit": "d34f9d013eeec13b536ebf1fa7358071126345eb",
+    "benchmark_subject_commit": "8df29c3f9e31aa4661cc1e7d6f80328096e3f1ce",
     "branch": "afyx/native-phase5f-parser-grammar"
   },
   "skills": {

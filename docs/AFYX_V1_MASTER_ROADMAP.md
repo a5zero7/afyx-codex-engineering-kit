@@ -2642,3 +2642,48 @@ Expert. That hypothesis is preparation only and needs a separately authorized
 source change and fresh DEVELOPMENT rerun. The earlier seven-reference Case A
 progressive-disclosure defect remains open. No model evaluation or formal A1/B1
 was run in D.3.
+
+### 2026-10-14 — AFYX-283D.4 Expert/Odoo composition candidate
+
+Status: **v0.1.1 CANDIDATE PREPARED / INDEPENDENT-HOST DEVELOPMENT RERUN
+REQUIRED / FORMAL A1-B1 BLOCKED**.
+
+The D.2 ERP record observably read Odoo Engineering and did not read Expert.
+The source-level cause is overlapping discovery ownership: Odoo Engineering's
+description directly matches Odoo implementation and process work, while
+Expert v0.1.0 listed ERP among broad capabilities but did not state when a
+cross-disciplinary ERP review needs Expert orchestration or how responsibilities
+compose. This was not an activation-observation defect.
+
+Candidate v0.1.1 changes only Expert discovery/composition text and its version
+label within the 22-file skill. Expert owns cross-disciplinary problem framing,
+process invariants, architecture alternatives, risks, and acceptance strategy;
+Odoo Engineering retains release-specific ORM, multi-company/security,
+model/view, transaction, and implementation facts. Narrow Odoo implementation
+questions may continue to use Odoo Engineering without Expert. Composition is
+not permission to broaden context: Expert still starts with one primary domain
+and no more than two supporting domains, loads the ERP workflow only for a
+material multistep process review, and expands only for a concrete dependency
+or risk.
+
+The candidate skill source commit is
+`8df29c3f9e31aa4661cc1e7d6f80328096e3f1ce`, content SHA-256 is
+`06d947c595f164ed1ad94e8ef97aa412a3ec7559c5f79cb467f0ec1ad488095c`,
+and normalized 22-file tree SHA-256 is
+`40cfa1f8b4fe3743a7eca81f8e4eb76c879d7adcd650c33b5611b0a2775ea138`.
+The selected candidate environment is
+`environment-expert-v0.1.1-codex-0.162.1-mxc.json`. Historical v0.1.0
+fingerprints remain unchanged and retain content SHA-256
+`69f85c93dbab28fb11460b0a9a2bbc38dbcf9c04f02747af7199ba84077334db`
+and original normalized source-tree SHA-256
+`9ebefe30bf9c7f73b101a53542b3cb09c993cfe9a4d565d15afc5834465569b7`.
+
+Zero-token routing fixtures cover cross-disciplinary ERP composition, narrow
+Odoo exclusion, simple Python negative routing, and general architecture,
+security, database, reliability, and AI/data routing. The unchanged DEVELOPMENT
+ERP prompt still requires observable reads of both Expert and Odoo Engineering
+and forbids fabricated database/module execution claims. These deterministic
+contracts do not prove actual model routing. Expert v0.1.1 remains a candidate
+until a fresh independent-host DEVELOPMENT run with D.3 provenance observes
+the intended composition and bounded disclosure. The historical Case A
+seven-reference regression remains open; no pilot or formal A1/B1 was run here.
