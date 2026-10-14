@@ -96,6 +96,11 @@ Child-health and isolation evidence share a `control_run_id`; blocked health
 overwrites current isolation evidence with `NOT_EXECUTED`, preventing reuse of
 a stale result.
 
+`environment-expert-v0.1.1-codex-0.162.1-mxc.json` is the distinct AFYX-283D.4
+candidate fingerprint. The three v0.1.0 files remain immutable historical
+evidence; candidate results must use the v0.1.1 fingerprint and D.3
+`evaluation_run_id` correlation and must never be relabelled as v0.1.0.
+
 The C.8 host acceptance uses Codex's supported permission-profile path rather
 than universal command rejection. On Windows, the profile is enforced by MXC.
 The trusted evaluator controller keeps evaluator-only inputs outside both the

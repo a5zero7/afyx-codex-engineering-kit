@@ -123,7 +123,7 @@ class DoctorTests(unittest.TestCase):
 
         shutil.copytree(ROOT / "skills" / "afyx-engineering-expert", self.skills / "afyx-engineering-expert")
         for shell, (_code, out) in self.doctors().items():
-            self.assertIn("[OK] Afyx Engineering Expert — 0.1.0", out, shell)
+            self.assertIn("[OK] Afyx Engineering Expert — 0.1.1", out, shell)
 
     def test_verdict_agrees_with_fail_lines(self) -> None:
         self.install_core()

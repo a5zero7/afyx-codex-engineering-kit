@@ -41,6 +41,8 @@ class RoutingGuardTests(unittest.TestCase):
             "Write a prompt that asks an LLM to review Odoo 17 record rules": {"prompt-master", "odoo-engineering"},
             "Run product discovery and design the system architecture for a multi-tenant approval platform": {"afyx-engineering-expert"},
             "Review an Odoo transactional workflow that creates multi-vendor RFQs from an approved Purchase Request, including quantity limits, company permissions, duplicate operations and concurrency. Advisory only; do not edit the repository.": {"afyx-engineering-expert", "odoo-engineering"},
+            "Add a computed field to res.partner in Odoo 16": {"efficient-coding", "odoo-engineering"},
+            "Review the database reliability architecture and migration strategy for a multi-region service": {"afyx-engineering-expert"},
             "What is the capital of France?": set(),
         }
         for prompt, skills in expected.items():
@@ -77,6 +79,20 @@ class RoutingGuardTests(unittest.TestCase):
                 rule["when"] = "expert_domain or coding"
         failed = self.failures(router, self.cases)
         self.assertTrue(any("expert-ordinary-debugging" in item for item in failed), failed)
+
+    def test_expert_candidate_preserves_bounded_odoo_composition_contract(self) -> None:
+        description = routing.description_of(
+            "afyx-engineering-expert", self.router["skills"]["afyx-engineering-expert"]
+        ).lower()
+        self.assertIn("cross-disciplinary odoo/erp", description)
+        self.assertIn("narrow odoo implementation questions", description)
+        body = (ROOT / "skills" / "afyx-engineering-expert" / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("Expert owns problem framing, process invariants", body)
+        self.assertIn("Odoo Engineering for release-specific ORM", body)
+        self.assertIn("one primary Expert domain and at most two supporting domains", body)
+        self.assertIn("Do not duplicate its version references", body)
 
     def test_efficient_coding_losing_its_prompt_exclusion_is_caught(self) -> None:
         original = routing.description_of

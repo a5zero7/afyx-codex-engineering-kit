@@ -1,4 +1,4 @@
-# Afyx Engineering Expert — v0.1.0
+# Afyx Engineering Expert — v0.1.1
 
 A single portable Agent Skill with 13 selectively loaded specialist references and 6 optional workflows. Its goal is adaptive, evidence-based product and software engineering across technologies, including ERP when relevant. No external scripts, runtime dependencies, MCP requirement, code borrowed from other projects, or implicit network access.
 

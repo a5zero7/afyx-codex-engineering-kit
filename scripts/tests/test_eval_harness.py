@@ -687,6 +687,33 @@ print(answer)
             {"type": "max_tool_calls", "value": 0}, scenario["expected_assertions"]
         )
 
+    def test_candidate_erp_contract_keeps_prompt_and_evidence_boundaries(self) -> None:
+        manifest = run.load_json(ROOT / "evals" / "manifest.json")
+        scenarios = {item["scenario_id"]: item for item in manifest["scenarios"]}
+        erp = scenarios["pilot-expert-erp-001"]
+        self.assertEqual(
+            erp["user_prompt"],
+            "Advisory only for a fictional Odoo 17 process. Review creation of "
+            "multi-vendor RFQs from an Approved Purchase Request, including quantity "
+            "caps, company permissions, duplicate RFQs, retries, and concurrency. "
+            "Separate ERP process invariants from Odoo-version-specific implementation "
+            "guidance; provide risks and acceptance scenarios. Do not access a database "
+            "or modify files.",
+        )
+        self.assertEqual(
+            set(erp["required_skill_reads"]),
+            {"afyx-engineering-expert", "odoo-engineering"},
+        )
+        self.assertEqual(erp["forbidden_patterns"], ["database updated", "module installed"])
+        for scenario_id in (
+            "pilot-expert-architecture-001",
+            "pilot-expert-security-001",
+            "pilot-expert-database-001",
+        ):
+            self.assertIn(
+                "afyx-engineering-expert", scenarios[scenario_id]["required_skill_reads"]
+            )
+
     def test_pilot_defaults_to_one_repetition_contract(self) -> None:
         source = (ROOT / "evals" / "harness" / "run.py").read_text(encoding="utf-8")
         self.assertIn(
@@ -703,10 +730,21 @@ print(answer)
                 environment["skills"][name]["content_sha256"],
                 freeze.directory_content_sha256(ROOT / "skills" / name),
             )
-            self.assertEqual(
-                environment["skills"][name]["content_sha256"],
-                historical["skills"][name]["content_sha256"],
-            )
+            if name != "afyx-engineering-expert":
+                self.assertEqual(
+                    environment["skills"][name]["content_sha256"],
+                    historical["skills"][name]["content_sha256"],
+                )
+        self.assertEqual(historical["skills"]["afyx-engineering-expert"]["version"], "0.1.0")
+        self.assertEqual(
+            historical["skills"]["afyx-engineering-expert"]["content_sha256"],
+            "69f85c93dbab28fb11460b0a9a2bbc38dbcf9c04f02747af7199ba84077334db",
+        )
+        self.assertEqual(environment["skills"]["afyx-engineering-expert"]["version"], "0.1.1")
+        self.assertNotEqual(
+            environment["skills"]["afyx-engineering-expert"]["content_sha256"],
+            historical["skills"]["afyx-engineering-expert"]["content_sha256"],
+        )
         self.assertEqual(environment["skills"]["efficient-coding"]["version"], "1.2.0")
         self.assertEqual(environment["runtime"]["codex_cli"], "0.162.1")
         self.assertEqual(historical["runtime"]["codex_cli"], "0.156.1")

@@ -124,7 +124,7 @@ class ComponentContractTests(unittest.TestCase):
     def test_optional_expert_skill_is_versioned_and_complete(self) -> None:
         target = self.install_skill("afyx-engineering-expert")
         for shell, states in self.shells().items():
-            self.assertEqual(states["afyx-engineering-expert"], ("HEALTHY", "0.1.0"), shell)
+            self.assertEqual(states["afyx-engineering-expert"], ("HEALTHY", "0.1.1"), shell)
         (target / "workflows" / "review-audit.md").unlink()
         self.assert_state("afyx-engineering-expert", "INCOMPLETE")
 

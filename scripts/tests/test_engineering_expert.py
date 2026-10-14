@@ -18,7 +18,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 EXPERT = ROOT / "skills" / "afyx-engineering-expert"
 WINDOWS = os.name == "nt"
-SOURCE_TREE_SHA256 = "9ebefe30bf9c7f73b101a53542b3cb09c993cfe9a4d565d15afc5834465569b7"
+HISTORICAL_SOURCE_TREE_SHA256 = "9ebefe30bf9c7f73b101a53542b3cb09c993cfe9a4d565d15afc5834465569b7"
+CANDIDATE_SOURCE_TREE_SHA256 = "40cfa1f8b4fe3743a7eca81f8e4eb76c879d7adcd650c33b5611b0a2775ea138"
 REFERENCES = {
     "ai-ml-engineer.md", "business-analyst.md", "cybersecurity-devsecops.md",
     "database-administrator.md", "erp-technical-specialist.md", "product-manager.md",
@@ -66,18 +67,18 @@ class ExpertBundleTests(unittest.TestCase):
             "__lt__",
             lambda left, right: left.as_posix() < right.as_posix(),
         ):
-            self.assertEqual(normalized_tree_digest(EXPERT), SOURCE_TREE_SHA256)
+            self.assertEqual(normalized_tree_digest(EXPERT), CANDIDATE_SOURCE_TREE_SHA256)
 
-    def test_original_bundle_structure_metadata_and_content(self) -> None:
+    def test_candidate_structure_metadata_and_content(self) -> None:
         files = {path.relative_to(EXPERT).as_posix() for path in EXPERT.rglob("*") if path.is_file()}
         self.assertEqual(len(files), 22)
         self.assertEqual({Path(item).name for item in files if item.startswith("references/")}, REFERENCES)
         self.assertEqual({Path(item).name for item in files if item.startswith("workflows/")}, WORKFLOWS)
         self.assertIn("assets/result-template.md", files)
-        self.assertEqual(normalized_tree_digest(EXPERT), SOURCE_TREE_SHA256)
+        self.assertNotEqual(normalized_tree_digest(EXPERT), HISTORICAL_SOURCE_TREE_SHA256)
         manifest = (EXPERT / "SKILL.md").read_text(encoding="utf-8")
         self.assertIn('name: afyx-engineering-expert', manifest)
-        self.assertIn('version: "0.1.0"', manifest)
+        self.assertIn('version: "0.1.1"', manifest)
         self.assertIn("one adaptive workflow", manifest)
         self.assertIn("Bahasa Indonesia", manifest)
 
@@ -183,7 +184,7 @@ class ExpertLifecycleTests(unittest.TestCase):
         self.assertFalse((self.base / "graph").exists())
         marker = json.loads((self.target / ".afyx-install.json").read_text(encoding="utf-8"))
         self.assertEqual((marker["component"], marker["owner"], marker["version"]),
-                         ("afyx-engineering-expert", "afyx", "0.1.0"))
+                         ("afyx-engineering-expert", "afyx", "0.1.1"))
 
         self.install("update")
         self.assertEqual(len(list((self.backups / "afyx-engineering-expert").iterdir())), 1)

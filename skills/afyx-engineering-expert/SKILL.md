@@ -1,8 +1,8 @@
 ---
 name: afyx-engineering-expert
-description: Adaptive, cross-disciplinary software/product engineering for ambiguous requirements, product discovery, system/solution architecture, cybersecurity and DevSecOps, UI/UX, implementation, AI/ML, ERP, database design, reliability, QA, debugging, and technical reviews. Use when a user needs end-to-end or expert-level analysis, design, execution, or validation for a software system; route only to relevant specialist references. Do not trigger for unrelated questions or simple programming syntax answers.
+description: Adaptive, cross-disciplinary software/product engineering for ambiguous or system-level work spanning requirements, architecture, security, data, reliability, implementation, ERP process design, or acceptance. Use for end-to-end analysis or when multiple engineering responsibilities must be orchestrated; for cross-disciplinary Odoo/ERP reviews, pair with Odoo Engineering for release-specific facts. Do not trigger for narrow Odoo implementation questions, unrelated questions, or simple programming syntax answers.
 metadata:
-  version: "0.1.0"
+  version: "0.1.1"
 ---
 
 # Afyx Engineering Expert
@@ -23,6 +23,10 @@ Deliver pragmatic, evidence-based engineering outcomes using the minimum relevan
 3. Choose **one primary domain** and up to **two supporting domains** initially using the routing table; expand only when a concrete dependency/risk warrants it. Read selected references in full. Do not read all 13 by default.
 4. Choose the workflow that matches the task from `workflows/`; read it when a multistep task warrants it. Simple tasks may be answered directly using only these core instructions.
 5. Treat quality and security as risk-based cross-cutting checks, not an excuse to perform every specialist's entire checklist on every request.
+
+For cross-disciplinary Odoo/ERP work, Expert owns problem framing, process invariants, architecture alternatives, risks, and acceptance strategy; compose with Odoo Engineering for release-specific ORM, multi-company/security, model/view, transaction, and implementation facts. Do not duplicate its version references. A narrow Odoo fact or implementation question that does not need cross-disciplinary orchestration may use Odoo Engineering alone.
+
+Composition with another skill does not justify broad Expert loading. Start with one primary Expert domain and at most two supporting domains; for a multistep ERP process review, load `workflows/ai-data-erp.md` when its decision gates are material. Expand only for a concrete dependency or risk, not merely because ERP touches many business functions.
 
 | Signal | Primary reference | Common supporting reference |
 |---|---|---|

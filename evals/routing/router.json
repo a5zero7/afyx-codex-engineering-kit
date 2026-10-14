@@ -51,6 +51,7 @@
       "\\b(product discovery|product strategy|business requirements?|business process|system architecture|solution architecture|architecture tradeoffs?)\\b",
       "\\b(threat model|security-sensitive design|security design review|devsecops review)\\b",
       "\\b(production incident|incident response|reliability review|availability review|postmortem)\\b",
+      "\\b(database reliability architecture|database architecture|schema migration strategy)\\b",
       "\\b(ai solution|machine learning solution|data solution|model evaluation|data pipeline review)\\b",
       "\\b(purchase request|multi-vendor rfqs?|erp workflow|transactional workflow)\\b"
     ]
