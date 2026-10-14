@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import ctypes
 import hashlib
+import io
 import json
 import os
 import random
@@ -17,7 +19,7 @@ import sys
 import tempfile
 import time
 import uuid
-from contextlib import contextmanager
+from contextlib import contextmanager, redirect_stdout
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -39,6 +41,68 @@ EVALUATION_PERMISSION_PROFILE = "afyx-evaluation"
 
 def load_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def atomic_write_json(path: Path, payload: dict) -> None:
+    """Publish one complete JSON document or leave the previous document intact."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as stream:
+            json.dump(payload, stream, indent=2)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def evaluation_provenance(manifest: dict, environment: dict) -> dict:
+    """Create correlation metadata; a shared UUID is not cryptographic attestation."""
+    evaluation_run_id = uuid.uuid4().hex
+    environment_path = EVAL_ROOT / manifest["environment"]
+    revision = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"],
+        text=True, encoding="utf-8", errors="replace", capture_output=True,
+    )
+    if revision.returncode != 0 or not revision.stdout.strip():
+        raise RuntimeError("unable to resolve exact repository source revision")
+    return {
+        "evaluation_run_id": evaluation_run_id,
+        "control_run_id": evaluation_run_id,
+        "control_run_id_relationship": "same_as_evaluation_run_id",
+        "correlation_guarantee": "shared run correlation only; not cryptographic attestation",
+        "source_revision": revision.stdout.strip(),
+        "benchmark_subject_commit": environment["repository"]["benchmark_subject_commit"],
+        "environment_fingerprint": {
+            "path": manifest["environment"],
+            "sha256": hashlib.sha256(environment_path.read_bytes()).hexdigest(),
+        },
+    }
+
+
+def correlation_status(expected_id: str, records: list[dict]) -> dict:
+    """Reject mixed runs and keep legacy records without an ID explicitly unverified."""
+    missing = [index for index, record in enumerate(records) if not record.get("evaluation_run_id")]
+    if missing:
+        return {
+            "result": "UNVERIFIED", "reason": "MISSING_EVALUATION_RUN_ID",
+            "record_indexes": missing,
+        }
+    mismatched = [
+        index for index, record in enumerate(records)
+        if record["evaluation_run_id"] != expected_id
+    ]
+    if mismatched:
+        return {
+            "result": "REJECTED", "reason": "EVALUATION_RUN_ID_MISMATCH",
+            "record_indexes": mismatched,
+        }
+    return {"result": "VERIFIED", "reason": None, "record_indexes": []}
 
 
 def verify_frozen_environment(environment: dict) -> None:
@@ -480,7 +544,7 @@ def classify_child_health(process: dict) -> str:
     return "CHILD_FAILED"
 
 
-def run_child_health_probe(timeout: int) -> dict:
+def run_child_health_probe(timeout: int, provenance: dict | None = None) -> dict:
     """Verify startup/provider response without skills, fixtures, or evaluator secrets."""
     with tempfile.TemporaryDirectory(prefix="afyx-child-health-") as temporary:
         work = Path(temporary) / "work"
@@ -495,6 +559,7 @@ def run_child_health_probe(timeout: int) -> dict:
     classification = classify_child_health(process)
     parsed = parse_events(process["stdout"])
     return {
+        **(provenance or {}),
         "result": "PASS" if classification == "PASS" else "BLOCKED",
         "classification": classification,
         "started": process["started"],
@@ -642,7 +707,7 @@ def evaluated_workspace():
 
 def check_assertions(
     scenario: dict, work: Path, output: str, validation_exit: int | None,
-    modified: list[str],
+    modified: list[str], tool_calls: int = 0,
 ) -> list[dict]:
     checks = []
     for assertion in scenario["expected_assertions"]:
@@ -651,6 +716,10 @@ def check_assertions(
             passed = validation_exit == value
         elif kind == "output_contains":
             passed = value.lower() in output.lower()
+        elif kind == "python_list_reversal":
+            passed = python_list_reversal_is_correct(output)
+        elif kind == "max_tool_calls":
+            passed = tool_calls <= value
         else:
             passed = False
         checks.append({"type": kind, "expected": value, "passed": passed})
@@ -672,8 +741,103 @@ def check_assertions(
     return checks
 
 
-def run_cell(manifest: dict, scenario: dict, config: str, repetition: int, timeout: int) -> dict:
-    run_id = f"{scenario['scenario_id']}-{config}-r{repetition}-{uuid.uuid4().hex[:8]}"
+def python_list_reversal_is_correct(output: str) -> bool:
+    """Execute only a tiny safe Python subset and verify reversal semantics."""
+    snippets = re.findall(r"```(?:python)?\s*\n(.*?)```", output, re.I | re.S)
+    snippets.extend(
+        snippet for snippet in re.findall(r"`([^`\n]+)`", output)
+        if "=" in snippet or ".reverse(" in snippet
+    )
+    if not snippets:
+        snippets = [output]
+    allowed_nodes = (
+        ast.Module, ast.Assign, ast.Expr, ast.Call, ast.Name, ast.Load, ast.Store,
+        ast.List, ast.Tuple, ast.Constant, ast.Attribute, ast.Subscript, ast.Slice,
+        ast.UnaryOp, ast.USub,
+    )
+    for snippet in snippets:
+        try:
+            tree = ast.parse(snippet.strip())
+        except (SyntaxError, ValueError):
+            continue
+        if any(not isinstance(node, allowed_nodes) for node in ast.walk(tree)):
+            continue
+        safe = True
+        reversal_operation = False
+        initial_lists = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign):
+                if len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name):
+                    safe = False
+                    break
+                try:
+                    literal = ast.literal_eval(node.value)
+                except (ValueError, TypeError):
+                    literal = None
+                if isinstance(literal, list) and len(literal) >= 2:
+                    initial_lists.append(literal)
+            if isinstance(node, ast.Call):
+                named = (
+                    isinstance(node.func, ast.Name)
+                    and node.func.id in {"print", "list", "reversed"}
+                    and not node.keywords
+                )
+                reverse = (
+                    isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "reverse"
+                    and isinstance(node.func.value, ast.Name)
+                    and not node.args and not node.keywords
+                )
+                if not (named or reverse):
+                    safe = False
+                    break
+                if reverse or (isinstance(node.func, ast.Name) and node.func.id == "reversed"):
+                    reversal_operation = True
+            if isinstance(node, ast.Attribute) and node.attr != "reverse":
+                safe = False
+                break
+            if (
+                isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Slice)
+                and isinstance(node.slice.step, ast.UnaryOp)
+                and isinstance(node.slice.step.op, ast.USub)
+                and isinstance(node.slice.step.operand, ast.Constant)
+                and node.slice.step.operand.value == 1
+            ):
+                reversal_operation = True
+        if not safe or not initial_lists or not reversal_operation:
+            continue
+        namespace: dict = {}
+        captured = io.StringIO()
+        try:
+            with redirect_stdout(captured):
+                exec(
+                    compile(tree, "<negative-routing-example>", "exec"),
+                    {"__builtins__": {"print": print, "list": list, "reversed": reversed}},
+                    namespace,
+                )
+        except Exception:
+            continue
+        candidates = [value for value in namespace.values() if isinstance(value, list)]
+        for line in captured.getvalue().splitlines():
+            try:
+                value = ast.literal_eval(line.strip())
+            except (SyntaxError, ValueError):
+                continue
+            if isinstance(value, list):
+                candidates.append(value)
+        if any(
+            candidate == list(reversed(original))
+            for original in initial_lists for candidate in candidates
+        ):
+            return True
+    return False
+
+
+def run_cell(
+    manifest: dict, scenario: dict, config: str, repetition: int, timeout: int,
+    provenance: dict | None = None, seed: int | None = None, run_id: str | None = None,
+) -> dict:
+    run_id = run_id or f"{scenario['scenario_id']}-{config}-r{repetition}-{uuid.uuid4().hex[:8]}"
     run_root = RESULTS_ROOT / run_id
     canonical_config, active_skills = resolve_configuration(manifest, config)
     fixture = EVAL_ROOT / scenario["fixture"]
@@ -713,7 +877,9 @@ def run_cell(manifest: dict, scenario: dict, config: str, repetition: int, timeo
                 else "agent_response.txt"
             )
             (run_root / response_path).write_text(output, encoding="utf-8")
-        assertions = check_assertions(scenario, work, output, validation_exit, modified)
+        assertions = check_assertions(
+            scenario, work, output, validation_exit, modified, parsed["tool_calls"]
+        )
         activation = activation_evidence(parsed, active_skills)
         observed_skill_reads = sorted(
             name for name, item in activation.items()
@@ -769,12 +935,15 @@ def run_cell(manifest: dict, scenario: dict, config: str, repetition: int, timeo
     )
     xml_forbidden_patterns = scenario.get("xml_forbidden_patterns")
     record = {
-        "schema_version": 1,
+        "schema_version": 2,
+        **(provenance or {}),
         "run_id": run_id,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "scenario_id": scenario["scenario_id"],
         "configuration": config,
         "resolved_configuration": canonical_config,
+        "repetition": repetition,
+        "random_seed": seed,
         "isolated_skills": active_skills,
         "observed_skill_reads": observed_skill_reads,
         "activation_evidence": activation,
@@ -835,11 +1004,11 @@ def run_cell(manifest: dict, scenario: dict, config: str, repetition: int, timeo
             else sanitize_diagnostic(process["stderr"])
         ),
     }
-    (run_root / "result.json").write_text(json.dumps(record, indent=2), encoding="utf-8")
+    atomic_write_json(run_root / "result.json", record)
     return record
 
 
-def run_isolation_canary(timeout: int) -> dict:
+def run_isolation_canary(timeout: int, provenance: dict | None = None) -> dict:
     """Prove one allowed read and denial of synthetic evaluator-only files."""
     RESULTS_ROOT.mkdir(parents=True, exist_ok=True)
     nonce = uuid.uuid4().hex
@@ -959,6 +1128,7 @@ def run_isolation_canary(timeout: int) -> dict:
     else:
         result = "FAIL"
     return {
+        **(provenance or {}),
         "result": result,
         "process_returncode": process["returncode"],
         "positive_control": {
@@ -980,13 +1150,67 @@ def run_isolation_canary(timeout: int) -> dict:
     }
 
 
-def isolation_not_executed(control_run_id: str, reason: str) -> dict:
+def isolation_not_executed(provenance: dict, reason: str) -> dict:
     return {
+        **provenance,
         "result": "NOT_EXECUTED",
-        "control_run_id": control_run_id,
         "reason": reason,
         "canary_exposed": False,
         "timed_out": False,
+    }
+
+
+def incomplete_cell_record(
+    provenance: dict, scenario: dict, config: str, repetition: int, seed: int,
+    run_id: str, error: BaseException,
+) -> dict:
+    """Create a correlated terminal record when a cell cannot finalize normally."""
+    record = {
+        "schema_version": 2,
+        **provenance,
+        "run_id": run_id,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "scenario_id": scenario["scenario_id"],
+        "configuration": config,
+        "repetition": repetition,
+        "random_seed": seed,
+        "result": "INCOMPLETE",
+        "error_classification": type(error).__name__,
+        "error_summary": sanitize_diagnostic(str(error)),
+    }
+    run_root = RESULTS_ROOT / run_id
+    run_root.mkdir(parents=True, exist_ok=True)
+    atomic_write_json(run_root / "result.json", record)
+    return record
+
+
+def build_summary(
+    provenance: dict, mode: str, seed: int, repetitions: int,
+    planned_total: int, records: list[dict], completion_state: str,
+    error_classification: str | None = None,
+) -> dict:
+    completed = [record for record in records if record.get("result") != "INCOMPLETE"]
+    pass_count = sum(record.get("result") == "PASS" for record in records)
+    result = (
+        "INCOMPLETE" if completion_state != "COMPLETE"
+        else "PASS" if pass_count == planned_total else "FAIL"
+    )
+    return {
+        "schema_version": 2,
+        **provenance,
+        "mode": mode,
+        "random_seed": seed,
+        "repetitions": repetitions,
+        "completion_state": completion_state,
+        "result": result,
+        "planned_total": planned_total,
+        "run_order": [record["run_id"] for record in records],
+        "last_completed_cell": completed[-1]["run_id"] if completed else None,
+        "last_attempted_cell": records[-1]["run_id"] if records else None,
+        "error_classification": error_classification,
+        "pass_count": pass_count,
+        "total_count": len(records),
+        "results": records,
     }
 
 
@@ -1029,18 +1253,18 @@ def main() -> int:
         }, indent=2))
         return 0
     RESULTS_ROOT.mkdir(parents=True, exist_ok=True)
-    control_run_id = uuid.uuid4().hex
-    health = run_child_health_probe(args.control_timeout)
-    health["control_run_id"] = control_run_id
+    try:
+        provenance = evaluation_provenance(manifest, environment)
+    except (KeyError, OSError, RuntimeError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 2
+    control_run_id = provenance["control_run_id"]
+    health = run_child_health_probe(args.control_timeout, provenance)
     health["runtime_fingerprint"] = runtime_fingerprint
-    (RESULTS_ROOT / "latest-child-health.json").write_text(
-        json.dumps(health, indent=2), encoding="utf-8"
-    )
+    atomic_write_json(RESULTS_ROOT / "latest-child-health.json", health)
     if health["result"] != "PASS":
-        isolation = isolation_not_executed(control_run_id, "CHILD_HEALTH_BLOCKED")
-        (RESULTS_ROOT / "latest-isolation-preflight.json").write_text(
-            json.dumps(isolation, indent=2), encoding="utf-8"
-        )
+        isolation = isolation_not_executed(provenance, "CHILD_HEALTH_BLOCKED")
+        atomic_write_json(RESULTS_ROOT / "latest-isolation-preflight.json", isolation)
         print(json.dumps({
             "control_run_id": control_run_id,
             "child_health": health,
@@ -1049,10 +1273,8 @@ def main() -> int:
         }, indent=2))
         return 2
     if args.child_health_only:
-        isolation = isolation_not_executed(control_run_id, "CHILD_HEALTH_ONLY")
-        (RESULTS_ROOT / "latest-isolation-preflight.json").write_text(
-            json.dumps(isolation, indent=2), encoding="utf-8"
-        )
+        isolation = isolation_not_executed(provenance, "CHILD_HEALTH_ONLY")
+        atomic_write_json(RESULTS_ROOT / "latest-isolation-preflight.json", isolation)
         print(json.dumps({
             "control_run_id": control_run_id,
             "child_health": health,
@@ -1060,11 +1282,8 @@ def main() -> int:
             "pilot": "NOT_RUN",
         }, indent=2))
         return 0
-    canary = run_isolation_canary(args.control_timeout)
-    canary["control_run_id"] = control_run_id
-    (RESULTS_ROOT / "latest-isolation-preflight.json").write_text(
-        json.dumps(canary, indent=2), encoding="utf-8"
-    )
+    canary = run_isolation_canary(args.control_timeout, provenance)
+    atomic_write_json(RESULTS_ROOT / "latest-isolation-preflight.json", canary)
     if canary["result"] != "PASS":
         print(json.dumps({"isolation_canary": canary}, indent=2))
         return 2
@@ -1090,22 +1309,53 @@ def main() -> int:
     ]
     random.Random(seed).shuffle(cells)
     RESULTS_ROOT.mkdir(parents=True, exist_ok=True)
-    records = [run_cell(manifest, *cell, args.timeout) for cell in cells]
-    summary = {
-        "schema_version": 1,
-        "mode": args.mode,
-        "random_seed": seed,
-        "repetitions": repetitions,
-        "run_order": [record["run_id"] for record in records],
-        "pass_count": sum(r["result"] == "PASS" for r in records),
-        "total_count": len(records),
-        "results": records,
-    }
-    (RESULTS_ROOT / "latest-summary.json").write_text(
-        json.dumps(summary, indent=2), encoding="utf-8"
+    records = []
+    summary = build_summary(
+        provenance, args.mode, seed, repetitions, len(cells), records, "INCOMPLETE"
     )
+    atomic_write_json(RESULTS_ROOT / "latest-summary.json", summary)
+    for scenario, config, repetition in cells:
+        run_id = f"{scenario['scenario_id']}-{config}-r{repetition}-{uuid.uuid4().hex[:8]}"
+        try:
+            record = run_cell(
+                manifest, scenario, config, repetition, args.timeout,
+                provenance, seed, run_id,
+            )
+        except (Exception, KeyboardInterrupt) as error:
+            record = incomplete_cell_record(
+                provenance, scenario, config, repetition, seed, run_id, error
+            )
+            records.append(record)
+            summary = build_summary(
+                provenance, args.mode, seed, repetitions, len(cells), records,
+                "INCOMPLETE", type(error).__name__,
+            )
+            atomic_write_json(RESULTS_ROOT / "latest-summary.json", summary)
+            break
+        records.append(record)
+        summary = build_summary(
+            provenance, args.mode, seed, repetitions, len(cells), records, "INCOMPLETE"
+        )
+        atomic_write_json(RESULTS_ROOT / "latest-summary.json", summary)
+    else:
+        correlation = correlation_status(
+            provenance["evaluation_run_id"], [health, canary, *records]
+        )
+        if correlation["result"] == "VERIFIED":
+            summary = build_summary(
+                provenance, args.mode, seed, repetitions, len(cells), records, "COMPLETE"
+            )
+        else:
+            summary = build_summary(
+                provenance, args.mode, seed, repetitions, len(cells), records,
+                "INCOMPLETE", correlation["reason"],
+            )
+        summary["correlation"] = correlation
+        atomic_write_json(RESULTS_ROOT / "latest-summary.json", summary)
     print(json.dumps({k: summary[k] for k in ("mode", "random_seed", "pass_count", "total_count")}, indent=2))
-    return 0 if summary["pass_count"] == summary["total_count"] else 1
+    if summary["completion_state"] != "COMPLETE":
+        return 2
+    return 0 if summary["result"] == "PASS" else 1
 
 
 if __name__ == "__main__":

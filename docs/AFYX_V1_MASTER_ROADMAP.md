@@ -2592,3 +2592,53 @@ or structured checks while preserving negative-routing exclusion. Protected
 rubrics and holdouts were not imported into the developer boundary. Formal A1/B1
 remains blocked until provenance is repaired and the affected DEVELOPMENT cases
 are rerun once.
+
+### 2026-10-14 — AFYX-283D.3 evaluation provenance closure
+
+Status: **ENGINEERING CORRECTION IMPLEMENTED / DEVELOPMENT PILOT NOT RERUN /
+FORMAL A1-B1 BLOCKED**.
+
+The D.2 records confirmed an evidence-integrity defect: fresh child-health and
+isolation controls shared `control_run_id` `718a0a8d0aff49f6b6a9a6d28ad71f5f`,
+but no scenario `result.json` stored that identity. The records therefore remain
+historical, substantively reviewable evidence whose control-to-cell provenance
+is explicitly **UNVERIFIED**; they are not retroactively promoted.
+
+The Phase 3A harness now creates one `evaluation_run_id` before child health and
+uses the same value as `control_run_id`. It passes the immutable correlation
+context through function arguments into child health, isolation, every cell,
+and the aggregate summary. The context records exact repository revision,
+benchmark-subject commit, frozen-environment path and SHA-256; each cell also
+records scenario, resolved configuration, repetition, and seed. This shared
+UUID proves record correlation only, not cryptographic attestation. A mixed run
+is rejected and a legacy record without the ID remains `UNVERIFIED`.
+
+Control, cell, and summary JSON publication now uses a same-directory temporary
+file plus `os.replace`, with temporary cleanup on success or failure. The
+summary starts as `INCOMPLETE`, records the last completed and attempted cells,
+and becomes `COMPLETE` only after every planned cell finalizes and all control
+and cell identities match. A pre-finalization exception creates a correlated
+`INCOMPLETE` cell with a bounded error classification and cannot leave an
+apparently complete summary.
+
+The Negative Routing prompt and forbidden-skill boundary are unchanged. Its
+brittle `output_contains('[::-1]')` assertion is replaced by a bounded,
+AST-whitelisted Python semantic check. It accepts slicing, `list(reversed(...))`,
+and in-place `list.reverse()` when execution yields the actual reversed fixture,
+rejects incorrect, irrelevant, and merely hard-coded alternatives, and requires
+zero tool calls in addition to zero Expert, Efficient Coding, Odoo Engineering,
+or Prompt Master reads.
+
+No Expert v0.1.0 source changed. Existing activation evidence supports a future
+ERP composition correction, not a conclusion that the harness missed a read:
+the ERP scenario observably loaded Odoo Engineering only. The smallest
+remediation hypothesis is to clarify discovery ownership so Expert orchestrates
+genuinely cross-disciplinary requirements, risk, architecture, and acceptance
+work, while Odoo Engineering owns Odoo-version-specific ORM, company, and
+transaction facts. Acceptance requires the unchanged cross-disciplinary ERP
+scenario to observably load both skills with bounded Expert disclosure, while a
+narrow Odoo question continues to route to Odoo Engineering without forcing
+Expert. That hypothesis is preparation only and needs a separately authorized
+source change and fresh DEVELOPMENT rerun. The earlier seven-reference Case A
+progressive-disclosure defect remains open. No model evaluation or formal A1/B1
+was run in D.3.

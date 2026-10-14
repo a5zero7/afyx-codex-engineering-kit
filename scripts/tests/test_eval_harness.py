@@ -24,6 +24,18 @@ freeze = importlib.import_module("freeze")
 
 
 class EvaluationHarnessTests(unittest.TestCase):
+    @staticmethod
+    def provenance(run_id: str = "evaluation-unit") -> dict:
+        return {
+            "evaluation_run_id": run_id,
+            "control_run_id": run_id,
+            "control_run_id_relationship": "same_as_evaluation_run_id",
+            "correlation_guarantee": "shared run correlation only; not cryptographic attestation",
+            "source_revision": "a" * 40,
+            "benchmark_subject_commit": "b" * 40,
+            "environment_fingerprint": {"path": "environment.json", "sha256": "c" * 64},
+        }
+
     def test_formal_aliases_and_expert_configurations_preserve_existing_configs(self) -> None:
         manifest = run.load_json(ROOT / "evals" / "manifest.json")
         self.assertEqual(
@@ -170,10 +182,15 @@ class EvaluationHarnessTests(unittest.TestCase):
             with mock.patch.object(
                 run, "evaluated_workspace", wraps=traced_workspace
             ) as workspace_factory:
-                record = run.run_cell(manifest, scenario, "A0", 1, 30)
-                canary = run.run_isolation_canary(30)
+                provenance = self.provenance()
+                record = run.run_cell(
+                    manifest, scenario, "A0", 1, 30, provenance, 3102026
+                )
+                canary = run.run_isolation_canary(30, provenance)
         self.assertEqual(record["result"], "PASS")
         self.assertEqual(canary["result"], "PASS")
+        self.assertEqual(record["evaluation_run_id"], canary["evaluation_run_id"])
+        self.assertEqual(record["random_seed"], 3102026)
         self.assertTrue(canary["positive_control"]["attempt_observed"])
         self.assertTrue(canary["positive_control"]["read_succeeded"])
         self.assertEqual(workspace_factory.call_count, 2)
@@ -517,7 +534,8 @@ class EvaluationHarnessTests(unittest.TestCase):
             ), mock.patch.object(
                 run, "verify_runtime_fingerprint", return_value={"actual_version": "0.162.1"}
             ), mock.patch.object(
-                run, "run_child_health_probe", return_value=blocked_health
+                run, "run_child_health_probe",
+                side_effect=lambda timeout, provenance: {**provenance, **blocked_health},
             ), mock.patch.object(
                 run, "run_isolation_canary"
             ) as canary, mock.patch.object(
@@ -535,6 +553,139 @@ class EvaluationHarnessTests(unittest.TestCase):
         self.assertEqual(health["control_run_id"], isolation["control_run_id"])
         self.assertEqual(isolation["result"], "NOT_EXECUTED")
         self.assertEqual(isolation["reason"], "CHILD_HEALTH_BLOCKED")
+
+    def test_provenance_correlation_rejects_mixed_and_unverified_legacy_records(self) -> None:
+        expected = "evaluation-current"
+        verified = run.correlation_status(expected, [
+            {"evaluation_run_id": expected}, {"evaluation_run_id": expected},
+        ])
+        self.assertEqual(verified["result"], "VERIFIED")
+        mismatched = run.correlation_status(expected, [
+            {"evaluation_run_id": expected}, {"evaluation_run_id": "another-run"},
+        ])
+        self.assertEqual(mismatched["result"], "REJECTED")
+        self.assertEqual(mismatched["reason"], "EVALUATION_RUN_ID_MISMATCH")
+        historical = run.correlation_status(expected, [{"schema_version": 1}])
+        self.assertEqual(historical["result"], "UNVERIFIED")
+        self.assertEqual(historical["reason"], "MISSING_EVALUATION_RUN_ID")
+
+    def test_atomic_json_publish_replaces_complete_document_and_cleans_temps(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            target = root / "record.json"
+            target.write_text('{"state":"old"}', encoding="utf-8")
+            run.atomic_write_json(target, {"state": "complete"})
+            self.assertEqual(json.loads(target.read_text(encoding="utf-8")), {
+                "state": "complete",
+            })
+            self.assertEqual(list(root.glob(".record.json.*.tmp")), [])
+
+            with mock.patch.object(run.os, "replace", side_effect=OSError("replace blocked")):
+                with self.assertRaisesRegex(OSError, "replace blocked"):
+                    run.atomic_write_json(target, {"state": "partial"})
+            self.assertEqual(json.loads(target.read_text(encoding="utf-8")), {
+                "state": "complete",
+            })
+            self.assertEqual(list(root.glob(".record.json.*.tmp")), [])
+
+    def test_negative_routing_accepts_equivalent_reversal_and_rejects_wrong_answer(self) -> None:
+        in_place = """```python
+numbers = [1, 2, 3]
+numbers.reverse()
+print(numbers)
+```"""
+        slicing = """```python
+numbers = [1, 2, 3]
+reversed_numbers = numbers[::-1]
+print(reversed_numbers)
+```"""
+        built_in = """```python
+numbers = [1, 2, 3]
+reversed_numbers = list(reversed(numbers))
+print(reversed_numbers)
+```"""
+        wrong = """```python
+numbers = [1, 2, 3]
+print(numbers)
+```"""
+        hard_coded = """```python
+numbers = [1, 2, 3]
+answer = [3, 2, 1]
+print(answer)
+```"""
+        irrelevant = "Use the reverse method."
+        self.assertTrue(run.python_list_reversal_is_correct(in_place))
+        self.assertTrue(run.python_list_reversal_is_correct(slicing))
+        self.assertTrue(run.python_list_reversal_is_correct(built_in))
+        self.assertFalse(run.python_list_reversal_is_correct(wrong))
+        self.assertFalse(run.python_list_reversal_is_correct(hard_coded))
+        self.assertFalse(run.python_list_reversal_is_correct(irrelevant))
+
+        scenario = {
+            "expected_assertions": [
+                {"type": "python_list_reversal", "value": True},
+                {"type": "max_tool_calls", "value": 0},
+            ],
+            "output_kind": "advisory", "forbidden_patterns": [],
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            checks = run.check_assertions(
+                scenario, Path(temporary), in_place, None, [], tool_calls=1
+            )
+        self.assertTrue(checks[0]["passed"])
+        self.assertFalse(checks[1]["passed"])
+
+    def test_interrupted_cell_is_correlated_and_summary_never_complete(self) -> None:
+        provenance = self.provenance("evaluation-interrupted")
+        health = {**provenance, "result": "PASS"}
+        isolation = {**provenance, "result": "PASS"}
+        with tempfile.TemporaryDirectory() as results, mock.patch.object(
+            run, "RESULTS_ROOT", Path(results)
+        ), mock.patch.object(
+            run, "verify_frozen_environment"
+        ), mock.patch.object(
+            run, "verify_runtime_fingerprint", return_value={"actual_version": "0.162.1"}
+        ), mock.patch.object(
+            run, "evaluation_provenance", return_value=provenance
+        ), mock.patch.object(
+            run, "run_child_health_probe", return_value=health
+        ), mock.patch.object(
+            run, "run_isolation_canary", return_value=isolation
+        ), mock.patch.object(
+            run, "run_cell", side_effect=RuntimeError("synthetic cell interruption")
+        ), mock.patch.object(
+            sys, "argv", ["run.py", "--mode", "pilot", "--scenario", "pilot-expert-architecture-001"]
+        ), mock.patch("builtins.print"):
+            self.assertEqual(run.main(), 2)
+            summary = json.loads(
+                (Path(results) / "latest-summary.json").read_text(encoding="utf-8")
+            )
+            cell = summary["results"][0]
+            stored = json.loads(
+                (Path(results) / cell["run_id"] / "result.json").read_text(encoding="utf-8")
+            )
+        self.assertEqual(summary["completion_state"], "INCOMPLETE")
+        self.assertEqual(summary["result"], "INCOMPLETE")
+        self.assertIsNone(summary["last_completed_cell"])
+        self.assertEqual(summary["last_attempted_cell"], cell["run_id"])
+        self.assertEqual(summary["error_classification"], "RuntimeError")
+        self.assertEqual(cell["result"], "INCOMPLETE")
+        self.assertEqual(stored["evaluation_run_id"], provenance["evaluation_run_id"])
+
+    def test_negative_route_manifest_prompt_and_skill_exclusions_remain_intact(self) -> None:
+        manifest = run.load_json(ROOT / "evals" / "manifest.json")
+        scenario = next(
+            item for item in manifest["scenarios"]
+            if item["scenario_id"] == "pilot-expert-negative-routing-001"
+        )
+        self.assertEqual(
+            scenario["user_prompt"],
+            "How do I reverse a Python list? Give one concise example.",
+        )
+        self.assertEqual(set(scenario["forbidden_skill_reads"]), set(run.AFYX_SKILLS))
+        self.assertIn(
+            {"type": "max_tool_calls", "value": 0}, scenario["expected_assertions"]
+        )
 
     def test_pilot_defaults_to_one_repetition_contract(self) -> None:
         source = (ROOT / "evals" / "harness" / "run.py").read_text(encoding="utf-8")

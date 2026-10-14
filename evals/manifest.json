@@ -182,7 +182,8 @@
       "required_skill_reads": [],
       "forbidden_skill_reads": ["afyx-engineering-expert", "efficient-coding", "odoo-engineering", "prompt-master"],
       "expected_assertions": [
-        {"type": "output_contains", "value": "[::-1]"}
+        {"type": "python_list_reversal", "value": true},
+        {"type": "max_tool_calls", "value": 0}
       ],
       "forbidden_patterns": ["architecture", "threat model", "acceptance criteria"],
       "validation_command": null,
