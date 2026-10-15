@@ -257,6 +257,13 @@ Bounded owner/evaluator handoff:
 Until that conclusion exists, the candidate is not frozen as review-passed,
 T07 is blocked, and this evidence has no Alpha or release implication.
 
+T06.R0 environment assessment is recorded in
+[AFYX_T06_R0_EVALUATOR_READINESS.md](AFYX_T06_R0_EVALUATOR_READINESS.md).
+The current same-principal Windows/Codex arrangement is `BLOCKED`: no distinct
+trusted-evaluator identity exists, so mandatory cross-principal denial controls
+were not executed. This is an environment verdict only, not a D.6 candidate
+verdict.
+
 ## Jira comment drafts — not posted
 
 ### AFYX-279
