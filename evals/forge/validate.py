@@ -41,8 +41,17 @@ def load_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def canonical_content(path: Path) -> bytes:
+    content = path.read_bytes()
+    try:
+        text = content.decode("utf-8")
+    except UnicodeDecodeError:
+        return content
+    return text.replace("\r\n", "\n").replace("\r", "\n").encode("utf-8")
+
+
 def file_sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    return hashlib.sha256(canonical_content(path)).hexdigest()
 
 
 def directory_sha256(root: Path) -> str:
@@ -55,7 +64,7 @@ def directory_sha256(root: Path) -> str:
         relative = path.relative_to(root).as_posix().encode("utf-8")
         digest.update(relative)
         digest.update(b"\0")
-        digest.update(path.read_bytes())
+        digest.update(canonical_content(path))
         digest.update(b"\0")
     return digest.hexdigest()
 

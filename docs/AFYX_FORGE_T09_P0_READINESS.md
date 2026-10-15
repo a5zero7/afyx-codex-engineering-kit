@@ -38,6 +38,8 @@ B2 therefore remains **UNRESOLVED**. No historical summary, Prompt Master source
 
 B5 is an original, compact derivative of the public A3 behavior contract. Prompt Master was used only as authoring guidance for the Codex-targeted directive; no external or unavailable prompt text was copied into it.
 
+File and tree identities use normalized project-relative POSIX paths and canonical UTF-8/LF content, so Git checkout line-ending policy cannot change an otherwise identical candidate fingerprint.
+
 All executable identities must be reverified and bound into one approved campaign fingerprint immediately before the first cell. An intentional byte, loading-order, or activation-rule change creates a new candidate identity.
 
 ## P0.4 — Proposed campaign environment

@@ -4,12 +4,14 @@
   "status": "PREPARATION_COMPLETE_BENCHMARK_EXECUTION_BLOCKED",
   "a0_contract": {
     "path": "docs/AFYX_FORGE_A0_A3_CONTRACT.md",
-    "sha256": "93be670b9184e3ae6f61ebb2ee42329e4fe13ac01e821a668a5d7d8bd1db39a4"
+    "sha256": "93be670b9184e3ae6f61ebb2ee42329e4fe13ac01e821a668a5d7d8bd1db39a4",
+    "identity_algorithm": "sha256 of UTF-8 content normalized to LF"
   },
   "environment": {
     "path": "evals/forge/environment.proposed.json",
     "sha256": "69a1a228794f3ebb49714c6fd94fd0b0991a3018e48f259c423dfea48cd7adb5",
-    "approval": "OWNER_APPROVAL_REQUIRED"
+    "approval": "OWNER_APPROVAL_REQUIRED",
+    "identity_algorithm": "sha256 of UTF-8 content normalized to LF"
   },
   "candidate_order": ["B0", "B1", "B2", "B3", "B4", "B5"],
   "candidates": {
@@ -28,7 +30,7 @@
       "definition": "Efficient Coding 1.2.0",
       "readiness": "PREPARED_EXECUTABLE_NOT_RUN",
       "content_identity": "deab6d987eb8af8ad2ab312f7ed9facb3be1cbda20622eeeaedc80a1db0829a4",
-      "identity_algorithm": "sorted POSIX-relative path and content SHA-256",
+      "identity_algorithm": "sorted POSIX-relative path and LF-normalized UTF-8 content SHA-256",
       "source": "skills/efficient-coding",
       "composition_order": ["efficient-coding"],
       "dependencies": [],
@@ -83,7 +85,7 @@
       "definition": "independent Afyx-native evaluation directive",
       "readiness": "PREPARED_EVALUATION_ONLY_NOT_RUN",
       "content_identity": "0b4e610c6772fa03dcce3d7f49e7a427bd97bded6abc2b1719f0e9a1b1e8cb58",
-      "identity_algorithm": "sorted POSIX-relative path and content SHA-256",
+      "identity_algorithm": "sorted POSIX-relative path and LF-normalized UTF-8 content SHA-256",
       "source": "evals/forge/candidates/B5",
       "composition_order": ["B5/AGENTS.md"],
       "dependencies": ["A3 behavior contract"],
@@ -96,7 +98,7 @@
   "public_fixture": {
     "path": "evals/forge/fixtures/public-engineering",
     "tree_sha256": "02947fd6e29d0517cc5e0d768aa91ea3ec88b483aed42d7fc3a853bd3f12720e",
-    "identity_algorithm": "sorted POSIX-relative path and content SHA-256",
+    "identity_algorithm": "sorted POSIX-relative path and LF-normalized UTF-8 content SHA-256",
     "synthetic": true,
     "customer_data": false
   },

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import copy
 import importlib.util
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -34,6 +35,21 @@ class ForgeReadinessTests(unittest.TestCase):
             forge.discovery_order_sha256(self.manifest),
             self.manifest["discovery"]["cell_order_sha256"],
         )
+
+    def test_content_identity_is_stable_across_text_line_endings(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="afyx-forge-hash-") as temporary:
+            root = Path(temporary)
+            lf = root / "lf"
+            crlf = root / "crlf"
+            lf.mkdir()
+            crlf.mkdir()
+            (lf / "entry.txt").write_bytes(b"first\nsecond\n")
+            (crlf / "entry.txt").write_bytes(b"first\r\nsecond\r\n")
+            self.assertEqual(
+                forge.file_sha256(lf / "entry.txt"),
+                forge.file_sha256(crlf / "entry.txt"),
+            )
+            self.assertEqual(forge.directory_sha256(lf), forge.directory_sha256(crlf))
 
     def test_pristine_public_fixtures_have_expected_failing_baselines(self) -> None:
         self.assertEqual(forge.validate_pristine_fixtures(self.manifest), [])
