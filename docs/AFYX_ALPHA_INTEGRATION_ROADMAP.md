@@ -9,6 +9,12 @@ Identity ledger: [AFYX_ALPHA_BASELINES.json](AFYX_ALPHA_BASELINES.json)
 
 This plan makes Graph, Afyx Engineering Expert, and Forge work executable against one vocabulary. It does not promote an artifact, activate Technical Alpha, run a benchmark, or change Jira status.
 
+### Workspace boundary (applies to T01-T12)
+
+`D:\Project\workspace\afyx-codex-engineering-kit` is the canonical and exclusive development repository. All source changes, fixes, benchmarks, development tests, documentation, versioning, commits, builds, and release preparation for T01-T12 originate there.
+
+`D:\Project\afyx-alpha` is an installation/update acceptance environment only. It may be used for clean installation, upgrade to a newly produced candidate, installed identity/provenance verification, and post-install smoke or acceptance checks. It must not be used to develop or patch source, commit changes, run source benchmarks, build artifacts, or prepare releases. A defect found there is reproduced and fixed in the canonical repository, rebuilt from that repository, and only then reinstalled or updated in the Alpha environment for acceptance. This filesystem boundary does not alter any task scope, dependency, acceptance gate, or historical evidence below.
+
 - `main` remains canonical integration. `dev` is ordinary engineering and starts at verified T02 final source `ad1560dd930ccde94b0dadaa7b42d804be55714f`. `alpha` is reviewed Technical Alpha stabilization and starts at the existing `release/alpha-0.1` baseline `018dce0a31f927f2dc200c7be0bc8b71a8a3535c`. The historical branches remain preserved.
 - Promotion flows `dev` -> reviewed `alpha` promotion -> accepted `main` integration. This is documented policy only: GitHub reports `main` and `release/alpha-0.1` as unprotected, so reviews and non-force integration remain operational gates rather than enforced branch protection.
 - AFYX-248 owns IJP Odoo 10/17 Windows acceptance. AFYX-269 owns Adit's macOS pilot. Neither is closed here.

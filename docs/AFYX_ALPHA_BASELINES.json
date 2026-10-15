@@ -2,6 +2,24 @@
   "schema_version": 1,
   "observed_at": "2026-10-15T00:00:00+07:00",
   "purpose": "T01 identity ledger; observations are not promotion or installation claims",
+  "workspace_boundary": {
+    "canonical_development_repository": "D:\\Project\\workspace\\afyx-codex-engineering-kit",
+    "alpha_acceptance_environment": "D:\\Project\\afyx-alpha",
+    "applies_to": "T01-T12",
+    "alpha_allowed_uses": [
+      "clean_installation",
+      "candidate_update",
+      "installed_identity_and_provenance_verification",
+      "post_install_smoke_and_acceptance"
+    ],
+    "alpha_prohibited_uses": [
+      "source_development_or_patching",
+      "commits",
+      "source_benchmarks",
+      "builds_or_release_preparation"
+    ],
+    "defect_feedback_loop": "REPRODUCE_FIX_BUILD_IN_CANONICAL_REPOSITORY_THEN_REINSTALL_OR_UPDATE_IN_ALPHA_ENVIRONMENT"
+  },
   "development_source": {
     "branch": "afyx/native-phase5f-parser-grammar",
     "revision": "cdce74c7b75fae94ca99966bb80451afdb766e60",

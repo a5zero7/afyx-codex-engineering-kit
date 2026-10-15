@@ -13,6 +13,8 @@ Headroom tidak diperlukan untuk memasang skill. Jika digunakan, pasang terlebih 
 
 ## Alur aman
 
+Untuk pengujian Alpha internal, `D:\Project\workspace\afyx-codex-engineering-kit` adalah satu-satunya repository pengembangan dan sumber build/candidate. `D:\Project\afyx-alpha` hanya boleh menjadi target acceptance untuk clean install, update, verifikasi identitas terpasang, dan smoke/post-install checks; jangan mengubah source, commit, benchmark source, membangun artifact, atau menyiapkan release dari direktori tersebut. Defect yang ditemukan di environment Alpha harus direproduksi dan diperbaiki di repository kanonis, lalu candidate baru dibangun di sana sebelum diuji ulang melalui install/update.
+
 1. Jalankan `./install.ps1 -ValidateOnly` atau `./install.sh --validate-only` untuk melihat status tanpa membuat perubahan.
 2. Jalankan `./install.ps1 -WhatIf` atau `./install.sh --dry-run` untuk melihat perubahan yang direncanakan.
 3. Jalankan installer platform Anda untuk memasang jika target belum ada.

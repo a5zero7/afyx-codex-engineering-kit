@@ -26,6 +26,8 @@ Next boundary: **Technical Alpha activation decision; Technical Alpha is not act
 Last merged Phase 5F major checkpoint: **PR #57 — Utility Runtime + UI Runtime**  
 Phase 5E merge baseline: `48b6078ed37349e405213258819fa5225bcdb3fb`
 
+Workspace boundary: `D:\Project\workspace\afyx-codex-engineering-kit` is the canonical and exclusive development repository for implementation, source changes, fixes, benchmarks, development tests, documentation, versioning, commits, builds, and release preparation. `D:\Project\afyx-alpha` is restricted to clean-install, update, installed-identity, and post-install smoke/acceptance testing. Any defect observed there must be reproduced and fixed in the canonical repository, rebuilt there, and then reinstalled or updated for acceptance. This rule applies to T01-T12 without changing their scope, gates, or recorded history; the detailed contract is in the Alpha integration roadmap.
+
 This document is the forward-looking execution contract for Afyx Code
 Engineering Kit. Historical closure evidence remains in
 `AFYX_INDEPENDENCE_PLAN.md`; it is evidence, not authority for creating new
