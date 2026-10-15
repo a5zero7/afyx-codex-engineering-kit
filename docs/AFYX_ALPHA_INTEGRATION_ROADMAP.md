@@ -156,19 +156,80 @@ Candidate identity remains pending until the scoped promotion is reviewed and me
 
 No new candidate artifact exists in T03 preparation. The T02 archive is a local development package, not a distribution candidate; therefore archive digests, retained downloads, isolated candidate installation, upgrade/rollback, and T04/T05 handoff are `NOT PERFORMED`. The local Node 26 Windows full-suite failure remains a supported-runtime compatibility risk: cleanup `EPERM` and missing Unix `which` are environment-specific in isolated evidence, while load-sensitive timeouts are not fully dispositioned. Node 24 is the cross-platform CI baseline; the published Node floor remains `>=22.5.0`. Candidate approval requires explicit Node 26 disposition rather than narrowing support or calling the local suite PASS.
 
+## T03.1 workspace hygiene and evidence preservation
+
+The active repository was verified on `dev` at `84a122f01fc15a58b07b9939960b3c7167dfc430`, equal to `origin/dev`. Before cleanup, the only tracked modification was generated `evals/results/latest-summary.json`; no staged or untracked file existed. The modified file was valid Expert v0.1.1 DEVELOPMENT evidence with schema 2, evaluation/control run `384826dee91d45f0a3388d5d276407ae`, five PASS cells, and SHA-256 `f14f5473107d7b85fc924cd0571ec55f6f60bf3574b91acf39c2f779e4857eaa`. This remains D.5 input only, not D.6 or formal A1/B1 acceptance.
+
+The summary, correlated child-health/isolation controls, and five cell directories were copied through temporary staging into an owner-controlled evaluator archive outside the repository and developer/evaluated workspace roots. The archive contains 25 files / 252,383 bytes, including each available `result.json`, `events.jsonl`, `agent_response.txt`, and `stderr.log`; source-to-copy and final read-back hashes pass. Its inventory manifest SHA-256 is `799d34b5934928606954b6fb19b3f8b834e010224a558c85cdfcd527dd48e926`. ACL inheritance is disabled and only the owner and Windows SYSTEM retain access. Separate generated-prompt files were not available and that limitation is recorded in the private manifest. No raw response, transcript, canary, rubric, holdout, or private path is committed here.
+
+After archive verification, only generated `latest-summary.json` was restored to its HEAD blob `08ce65dbfb651beaef00760848a269ed2b9b7201`. The historical tracked smoke schema 1 remains intact. Ignored run outputs remain locally available and were not deleted. Git cleanliness therefore does not imply that evaluation/runtime state is absent. Longer term, keep a deterministic tracked smoke fixture separate from an ignored/generated `latest` pointer, and preserve approved immutable run snapshots by run ID; changing that harness/output policy requires its own regression validation.
+
+### Canonical branch classification
+
+| Branch | Classification | Observed revision and relationship |
+|---|---|---|
+| `main` | CANONICAL_INTEGRATION | `5349c4a`; ancestor of `dev` |
+| `dev` | ACTIVE_DEVELOPMENT | `84a122f`; 145 commits ahead of `main` at observation |
+| `alpha` | ACTIVE_STABILIZATION_BLOCKED | `018dce0`; identical to legacy Alpha baseline |
+| `afyx/afyx-279-alpha-security-promotion` | ACTIVE_REVIEW_PR_59 | `0ca928d`; four commits ahead of legacy Alpha |
+| `release/alpha-0.1` | LEGACY_PRESERVED | `018dce0`; retained while PR #59 is open |
+| `afyx/native-phase5f-parser-grammar` | LEGACY_PRESERVED | `ad1560d`; direct ancestor of `dev` |
+
+No historical ref is deleted, renamed, rebased, force-pushed, retargeted, or merged. Redundant legacy refs may be considered for deletion only after PR #59 is resolved, every unique commit/release reference is accounted for, and the owner explicitly approves deletion.
+
+### Environment Readiness & Closure Contract
+
+Before every task:
+
+1. Verify repository root, branch, HEAD/upstream equality, remotes/worktrees, runtime versions, and applicable fingerprints.
+2. Enumerate and classify staged, tracked, untracked, ignored, runtime, and evaluation state; a clean Git status is not proof of a clean environment.
+3. Resolve task-owned state or quarantine external/user-owned state with recorded provenance. Never use blanket add, clean, reset, or stash.
+4. Confirm dependencies, authorization gates, and rollback before mutation.
+
+After every task:
+
+1. Validate the smallest affected scope and material regressions; inspect the final diff and side effects.
+2. Commit and non-force push only task-owned files, then verify local HEAD equals upstream.
+3. Verify required CI against the exact final SHA and read back GitHub/Jira writes rather than assuming success.
+4. Record source, artifact, environment, runtime, and evaluation identities separately; update roadmap/Jira only from actual evidence.
+
+Release work must use an isolated, verified-clean worktree/runtime. The active development worktree is not a release environment merely because `git status` is clean.
+
+### Protection audit and proposal
+
+GitHub reports `protected=false` for `main`, `alpha`, and `dev`; repository rulesets are empty. The authenticated API did not expose an account-plan capability value, so plan-specific enforcement remains `NOT VERIFIED`. Actual check-run names are only `linux`, `windows`, and `macos` under both `CI` and `Afyx Graph Build`. Requiring those ambiguous contexts directly could allow one workflow to be mistaken for the other.
+
+Proposed, not enforced: prohibit force-push and deletion on all three branches; require reviewed pull requests plus separately identifiable applicable CI and Graph Build checks on `main` and `alpha`; permit routine non-force development on `dev` with CI and review for security/release-impacting changes. Before activation, use required-workflow rules if supported or rename job contexts so CI and Graph Build are unambiguous, confirm the repository plan and release-workflow permissions, and verify that the current contributor and PR #59 remain operable.
+
+### Master-task stage map after T03.1
+
+- T01–T02: completed engineering/documentation evidence in `dev` history.
+- T03: governance prepared; immutable Graph promotion remains BLOCKED.
+- T04/T05: installed Windows/macOS acceptance remains blocked until an approved artifact exists.
+- T06: Expert D.6 substantive DEVELOPMENT review remains open; preserved D.5 evidence is input only.
+- T07: formal A1/B1 remains blocked by T06.
+- T08–T11: Forge Track A sequence remains unchanged; A8 GO is required before A9.
+- T12: combined Kit integration acceptance remains blocked by component acceptance.
+
 ## Jira comment drafts — not posted
 
 ### AFYX-279
 
 > T03 preparation established `dev` at T02 final source `ad1560dd930ccde94b0dadaa7b42d804be55714f` and `alpha` at legacy stabilization baseline `018dce0a31f927f2dc200c7be0bc8b71a8a3535c`; historical branches remain unchanged. PR #59 is OPEN, mergeable/CLEAN, and its recorded 3-OS checks pass, but no review decision is recorded. The scoped promotion manifest includes the accepted AFYX-280 prerequisites, AFYX-282 extraction-v28 inventory changes, and T02 allowlist fix while excluding Expert, Forge, and other development-only paths. No candidate SHA or archive digest exists yet. Status: PREPARED / PROMOTION BLOCKED pending PR #59 approval, verified Alpha synchronization, scoped promotion review, exact-source CI, retained six-target artifacts, inner-archive SHA-256 verification, isolated acceptance, and Node 26 compatibility disposition. No merge, release, install, or Jira status change was performed.
 
+> T03.1 standardized the active development workspace on `dev` without changing the Alpha baseline or PR #59. `main`, `alpha`, and `dev` are not protected and no ruleset exists; protection recommendations remain proposed because actual check names collide across CI and Graph Build. Historical branches are classified `LEGACY_PRESERVED`, not deleted. The worktree was cleaned only after D.5 evidence was archived and verified. Promotion status remains BLOCKED.
+
 ### AFYX-248
 
 > T02 is complete: exact-head Graph Build 38700997957 passed Windows/Linux/macOS at `ad1560dd930ccde94b0dadaa7b42d804be55714f`, with AST and exact inventory agreeing on 9/3/3 and tiny-repository MCP advertising Inventory plus Explore. T03 branch governance and a bounded Graph-only promotion manifest are prepared, but promotion is blocked by unresolved PR #59 review and no candidate artifact has been created. T04/T05 remain blocked; no IJP/Adit install or acceptance was performed. The local Node 26 full-suite failure remains explicitly recorded as a supported-runtime compatibility risk pending disposition.
 
+> T03.1 preserved the T02/T03 development baseline while separating clean Git state from ignored runtime/evaluation state. No Graph candidate, install, PR merge, or T04/T05 acceptance occurred. `dev` is synchronized and the release worktree isolation contract is documented.
+
 ### AFYX-283
 
 > T01.1 preserves Expert v0.1.1 identity separately from historical v0.1.0. AFYX-283 is externally reported In Progress. T06 owns D.6 substantive review and candidate freeze; T07 owns controlled A1/B1 acceptance and cannot start before T06. The reported D.5 5/5 evidence, isolation contract, hard quality gates, and progressive-disclosure regression target remain unchanged. No evaluation was run and no status was changed.
+
+> T03.1 archived Expert v0.1.1 DEVELOPMENT D.5 run `384826dee91d45f0a3388d5d276407ae` outside the repository under owner-only ACL before restoring generated `latest-summary.json` to the historical schema-1 HEAD blob. The archive contains 25 correlated control/raw files with verified source/final hashes; manifest SHA-256 is `799d34b5934928606954b6fb19b3f8b834e010224a558c85cdfcd527dd48e926`. Separate generated-prompt files were unavailable and are recorded as a limitation. This is D.5 input only; D.6 remains open and formal A1/B1 remains blocked. No raw evaluator material was committed.
 
 ### AFYX-12
 

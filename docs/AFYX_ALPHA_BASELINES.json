@@ -133,6 +133,61 @@
     },
     "promotion_status": "PREPARED_PROMOTION_BLOCKED"
   },
+  "t03_1_workspace_hygiene": {
+    "observed_at": "2026-10-15",
+    "starting_revision": "84a122f01fc15a58b07b9939960b3c7167dfc430",
+    "active_branch": "dev",
+    "environment_observation": {
+      "git": "2.55.0.windows.5",
+      "node": "26.8.1",
+      "npm": "11.19.0",
+      "python": "3.10.11",
+      "powershell": "7.6.6",
+      "codex_cli": "0.162.1",
+      "expert_v0_1_1_directory_content_sha256": "06d947c595f164ed1ad94e8ef97aa412a3ec7559c5f79cb467f0ec1ad488095c",
+      "mxc_environment_sha256": "6203b5dd2f016fade8b04c1d2fd02be5ed8bf24763d1a4404e6931cbb4447c6c"
+    },
+    "expert_d5": {
+      "evaluation_run_id": "384826dee91d45f0a3388d5d276407ae",
+      "summary_schema_version": 2,
+      "summary_sha256": "f14f5473107d7b85fc924cd0571ec55f6f60bf3574b91acf39c2f779e4857eaa",
+      "scenario_count": 5,
+      "reported_result": "PASS",
+      "classification": "DEVELOPMENT_D5_INPUT_NOT_D6_OR_FORMAL_A1_B1"
+    },
+    "evidence_archive": {
+      "location_class": "OWNER_CONTROLLED_LOCALAPPDATA_OUTSIDE_REPOSITORY_NOT_COMMITTED",
+      "file_count": 25,
+      "bytes": 252383,
+      "manifest_sha256": "799d34b5934928606954b6fb19b3f8b834e010224a558c85cdfcd527dd48e926",
+      "source_and_final_readback": "PASS",
+      "acl": "INHERITANCE_DISABLED_OWNER_AND_SYSTEM_ONLY",
+      "separate_generated_prompt_files": "NOT_AVAILABLE_RECORDED_LIMITATION",
+      "raw_material_published": false
+    },
+    "latest_summary_disposition": {
+      "restored_head_blob": "08ce65dbfb651beaef00760848a269ed2b9b7201",
+      "restored_schema_version": 1,
+      "generated_evidence_preserved_before_restore": true
+    },
+    "branch_roles": {
+      "main": "CANONICAL_INTEGRATION",
+      "dev": "ACTIVE_DEVELOPMENT",
+      "alpha": "ACTIVE_STABILIZATION_BLOCKED",
+      "afyx/afyx-279-alpha-security-promotion": "ACTIVE_REVIEW_PR_59",
+      "release/alpha-0.1": "LEGACY_PRESERVED",
+      "afyx/native-phase5f-parser-grammar": "LEGACY_PRESERVED"
+    },
+    "github_protection": {
+      "main": false,
+      "alpha": false,
+      "dev": false,
+      "rulesets": 0,
+      "plan_capability": "NOT_VERIFIED",
+      "changes_applied": false
+    },
+    "promotion_status": "BLOCKED_UNCHANGED"
+  },
   "expert": {
     "historical_v0_1_0": {
       "version": "0.1.0",

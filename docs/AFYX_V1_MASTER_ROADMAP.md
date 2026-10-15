@@ -6,8 +6,8 @@ Contract revision: **2026-10-15**
 v1 scope policy: **FROZEN — Phase 1 through Phase 11**  
 Post-v1 policy: **PLANNED EXPANSION — not a v1 release blocker**
 
-Current work: **T03 Graph candidate promotion preparation; AFYX-248 remains in progress**
-Task: T03 branch governance and reviewable Graph promotion manifest; `AFYX-279` remains externally reported In Review
+Current work: **T03.1 workspace hygiene and branch-governance closure; AFYX-248 remains in progress**
+Task: T03.1 evidence preservation, clean development baseline, and environment readiness; `AFYX-279` remains externally reported In Review
 Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`  
 Active implementation branch: `dev` (created from verified T02 final source `ad1560dd930ccde94b0dadaa7b42d804be55714f`)
 Historical engineering branch preserved: `afyx/native-phase5f-parser-grammar`
