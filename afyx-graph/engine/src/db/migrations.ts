@@ -13,7 +13,7 @@
 import { SqliteDatabase } from './sqlite-adapter';
 
 /** The schema version this build writes and expects. */
-export const CURRENT_SCHEMA_VERSION = 9;
+export const CURRENT_SCHEMA_VERSION = 10;
 
 /** One schema step from `version - 1` to `version`. */
 interface Migration {
@@ -111,6 +111,20 @@ const MIGRATIONS: Migration[] = [
         db.exec('ALTER TABLE files ADD COLUMN generated INTEGER NOT NULL DEFAULT 0');
       }
       db.exec('CREATE INDEX IF NOT EXISTS idx_files_generated ON files(path) WHERE generated = 1');
+    },
+  },
+  {
+    version: 10,
+    description: 'Add files.indexing_level for metadata/content/structural catalog depth',
+    up: (db) => {
+      if (!columnsOf(db, 'files').has('indexing_level')) {
+        // v9 could leave successful-looking zero-node rows that were only
+        // incomplete extraction markers (#1541). Remove those once before the
+        // explicit v10 catalog contract makes zero-node structural files valid.
+        db.exec("DELETE FROM files WHERE node_count = 0 AND language NOT IN ('yaml', 'twig', 'properties') AND (errors IS NULL OR errors = '[]')");
+        db.exec("ALTER TABLE files ADD COLUMN indexing_level TEXT NOT NULL DEFAULT 'structural' CHECK (indexing_level IN ('metadata', 'content', 'structural'))");
+      }
+      db.exec("UPDATE files SET indexing_level = 'metadata' WHERE language IN ('yaml', 'twig', 'properties') AND node_count = 0");
     },
   },
 ];

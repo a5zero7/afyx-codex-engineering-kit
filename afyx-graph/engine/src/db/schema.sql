@@ -72,6 +72,8 @@ CREATE TABLE IF NOT EXISTS files (
     modified_at INTEGER NOT NULL,
     indexed_at INTEGER NOT NULL,
     node_count INTEGER DEFAULT 0,
+    indexing_level TEXT NOT NULL DEFAULT 'structural'
+      CHECK (indexing_level IN ('metadata', 'content', 'structural')),
     errors TEXT, -- JSON array
     generated INTEGER NOT NULL DEFAULT 0
 );

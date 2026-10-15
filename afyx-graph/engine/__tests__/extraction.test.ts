@@ -221,7 +221,13 @@ class ENGINE_API UNetConnectionRepControl : public UObject
 
   it('should return unknown for unsupported extensions', () => {
     expect(detectLanguage('styles.css')).toBe('unknown');
-    expect(detectLanguage('data.json')).toBe('unknown');
+  });
+
+  it('should catalog Markdown and generic JSON without changing Shopify JSON routing', () => {
+    expect(detectLanguage('README.md')).toBe('markdown');
+    expect(detectLanguage('guide.markdown')).toBe('markdown');
+    expect(detectLanguage('data.json')).toBe('json');
+    expect(detectLanguage('templates/product.json')).toBe('liquid');
   });
 });
 

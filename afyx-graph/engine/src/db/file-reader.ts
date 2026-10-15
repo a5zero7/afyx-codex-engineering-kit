@@ -11,7 +11,7 @@ import { isGeneratedFile } from '../extraction/generated-detection';
 import { chunked, placeholders, QuerySession } from './query-session';
 import { rowToFileRecord, rowToNode, type FileRow, type NodeRow } from './row-mappers';
 
-const FILE_COLUMNS = 'path, content_hash, language, size, modified_at, indexed_at, node_count, errors, generated';
+const FILE_COLUMNS = 'path, content_hash, language, size, modified_at, indexed_at, node_count, indexing_level, errors, generated';
 
 const FILE_QUERY = {
   byPath: `SELECT ${FILE_COLUMNS} FROM files WHERE path = ?`,

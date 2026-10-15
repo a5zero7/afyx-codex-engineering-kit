@@ -18,6 +18,12 @@ export interface IndexAccounting {
   discovered: number;
   eligible: number;
   indexed: number;
+  /** Null for indexes built before universal catalog accounting. */
+  metadataIndexed: number | null;
+  /** Null for old indexes; currently zero because full-text content is not indexed. */
+  contentIndexed: number | null;
+  /** Null for indexes built before universal catalog accounting. */
+  structurallyIndexed: number | null;
   skipped: number;
   unsupported: number;
   failed: number;

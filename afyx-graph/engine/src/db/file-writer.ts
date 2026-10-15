@@ -8,8 +8,8 @@ import type { NodeWriter } from './node-writer';
 import type { WriteSession } from './write-session';
 
 const UPSERT_SQL = `
-  INSERT INTO files (path, content_hash, language, size, modified_at, indexed_at, node_count, errors, generated)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  INSERT INTO files (path, content_hash, language, size, modified_at, indexed_at, node_count, indexing_level, errors, generated)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT(path) DO UPDATE SET
     content_hash = excluded.content_hash,
     language = excluded.language,
@@ -17,6 +17,7 @@ const UPSERT_SQL = `
     modified_at = excluded.modified_at,
     indexed_at = excluded.indexed_at,
     node_count = excluded.node_count,
+    indexing_level = excluded.indexing_level,
     errors = excluded.errors,
     generated = excluded.generated
 `;
@@ -41,6 +42,7 @@ export class FileWriter {
       file.modifiedAt,
       file.indexedAt,
       file.nodeCount,
+      file.indexingLevel ?? 'structural',
       file.errors ? JSON.stringify(file.errors) : null,
       file.generated ? 1 : 0
     );

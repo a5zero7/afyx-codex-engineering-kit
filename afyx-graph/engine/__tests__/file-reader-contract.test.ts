@@ -14,6 +14,7 @@ const file = (filePath: string, overrides: Partial<FileRecord> = {}): FileRecord
   modifiedAt: 10,
   indexedAt: 100,
   nodeCount: 1,
+  indexingLevel: 'structural',
   ...overrides,
 });
 
@@ -68,6 +69,7 @@ describe('persisted file catalog and index-state reader contract', () => {
       modifiedAt: 15,
       indexedAt: 300,
       nodeCount: 7,
+        indexingLevel: 'structural',
       generated: true,
       errors: [{ message: 'parse warning', filePath: 'SRC/Case.ts', severity: 'warning', code: 'parse_error' }],
     }));
@@ -87,6 +89,19 @@ describe('persisted file catalog and index-state reader contract', () => {
     expect(query.getAllFilePaths()).toEqual(['SRC/Case.ts', 'a-first.ts', 'z-last.ts']);
     expect(query.getAllFiles().map((record) => record.path)).toEqual(['SRC/Case.ts', 'a-first.ts', 'z-last.ts']);
   });
+
+    it('round-trips catalog indexing depth', () => {
+      query.upsertFile(file('README.md', {
+        language: 'markdown',
+        nodeCount: 0,
+        indexingLevel: 'metadata',
+      }));
+
+      expect(query.getFileByPath('README.md')?.indexingLevel).toBe('metadata');
+      expect(query.getAllFiles().map((record) => [record.path, record.indexingLevel])).toEqual([
+        ['README.md', 'metadata'],
+      ]);
+    });
 
   it('owns index revision, capped newest-first change lists, and hash staleness', () => {
     query.upsertFile(file('a.ts', { contentHash: 'same', indexedAt: 100 }));

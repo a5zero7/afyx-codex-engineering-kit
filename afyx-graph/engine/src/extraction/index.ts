@@ -100,6 +100,12 @@ export interface IndexResult {
   filesSeen?: number;
   /** Supported files admitted to the parse pipeline. */
   filesEligible?: number;
+  /** Files persisted as path/hash/size metadata without content or structural facts. */
+  filesMetadataIndexed?: number;
+  /** Files whose prose/content is searchable. Zero until a bounded content index exists. */
+  filesContentIndexed?: number;
+  /** Files processed through the structural extraction contract, including valid zero-symbol files. */
+  filesStructurallyIndexed?: number;
   /**
    * Files the scan saw but has no grammar for, tallied by extension. Only the
    * degenerate case needs it: a project of unsupported files otherwise looks
@@ -1879,6 +1885,9 @@ export class ExtractionOrchestrator {
     let filesErrored = 0;
     let filesRetried = 0;
     let filesRecovered = 0;
+    let filesMetadataIndexed = 0;
+    let filesContentIndexed = 0;
+    let filesStructurallyIndexed = 0;
     let totalNodes = 0;
     let totalEdges = 0;
 
@@ -2095,19 +2104,24 @@ export class ExtractionOrchestrator {
 
       if (nodeCount > 0) {
         filesIndexed++;
+        filesStructurallyIndexed++;
         totalNodes += nodeCount;
         totalEdges += edgeCount;
       } else if (result.errors.some((e) => e.severity === 'error')) {
         filesErrored++;
       } else {
-        // Files with no symbols but no errors (yaml, twig, properties) are
+        // Successful zero-symbol files still have a truthful catalog level:
         // tracked at the file level — count them as indexed so the CLI doesn't
         // misleadingly report "No files found to index".
         const lang = extractorRegistry.languageFor(filePath, content);
-        if (isFileLevelOnlyLanguage(lang)) {
-          filesIndexed++;
-        } else {
+        if (result.errors.some((error) => error.code === 'size_exceeded')) {
           filesSkipped++;
+        } else if (isFileLevelOnlyLanguage(lang)) {
+          filesIndexed++;
+          filesMetadataIndexed++;
+        } else {
+          filesIndexed++;
+          filesStructurallyIndexed++;
         }
       }
 
@@ -2297,6 +2311,9 @@ export class ExtractionOrchestrator {
         filesDiscovered: total,
         filesSeen: total + unsupportedCount(),
         filesEligible: total,
+        filesMetadataIndexed,
+        filesContentIndexed,
+        filesStructurallyIndexed,
         filesRetried,
         filesRecovered,
         filesFailedAfterRetry: Math.max(0, filesRetried - filesRecovered),
@@ -2375,6 +2392,8 @@ export class ExtractionOrchestrator {
           if (idx >= 0) errors.splice(idx, 1);
           filesErrored--;
           filesIndexed++;
+          if (result.nodes.length === 0 && isFileLevelOnlyLanguage(language)) filesMetadataIndexed++;
+          else filesStructurallyIndexed++;
           filesRecovered++;
           totalNodes += result.nodes.length;
           totalEdges += result.edges.length;
@@ -2433,6 +2452,8 @@ export class ExtractionOrchestrator {
             errEntry.message = `Indexed from comment-stripped source after repeated parse failures (symbols may be incomplete until the file is re-indexed): ${errEntry.message}`;
             filesErrored--;
             filesIndexed++;
+            if (result.nodes.length === 0 && isFileLevelOnlyLanguage(language)) filesMetadataIndexed++;
+            else filesStructurallyIndexed++;
             filesRecovered++;
             totalNodes += result.nodes.length;
             totalEdges += result.edges.length;
@@ -2453,6 +2474,9 @@ export class ExtractionOrchestrator {
       filesDiscovered: total,
       filesSeen: total + unsupportedCount(),
       filesEligible: total,
+      filesMetadataIndexed,
+      filesContentIndexed,
+      filesStructurallyIndexed,
       filesRetried,
       filesRecovered,
       filesFailedAfterRetry: Math.max(0, filesRetried - filesRecovered),

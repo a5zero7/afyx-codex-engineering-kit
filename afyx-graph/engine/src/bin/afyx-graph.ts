@@ -950,6 +950,13 @@ program
           `${formatNumber(accounting.failed)} failed; retries ` +
           `${formatNumber(accounting.retry.recoveredFiles)}/${formatNumber(accounting.retry.attemptedFiles)} recovered`
         );
+        if (accounting.metadataIndexed !== null) {
+          console.log(
+            `  Catalog depth: ${formatNumber(accounting.metadataIndexed)} metadata-indexed, ` +
+            `${formatNumber(accounting.contentIndexed ?? 0)} content-indexed, ` +
+            `${formatNumber(accounting.structurallyIndexed ?? 0)} structurally indexed.`
+          );
+        }
         console.log('  Ignored paths are not enumerated (ignored count: unknown).');
       }
       console.log();
