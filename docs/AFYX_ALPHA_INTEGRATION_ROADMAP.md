@@ -18,30 +18,30 @@ This plan makes Graph, Afyx Engineering Expert, and Forge work executable agains
 - Forge Track A is scheduled into the current Alpha development cycle. Its identity and A0-A12 gates are unchanged. This scheduling exception does not add Forge to the frozen v1 release requirements and does not auto-complete Technical Alpha, Alpha, Private Beta, or Stable.
 - Holdouts, rubrics, canaries, and ground truth stay evaluator-only outside both developer and evaluated-agent roots. Only sanitized development evidence belongs in this repository.
 
-Jira was not directly available during T01. Issue status assertions below are therefore repository-backed observations or explicitly `NOT VERIFIED`; no Jira comment was posted.
+Jira was not directly available to this Codex session. The user supplied a separately verified snapshot dated 2026-10-15: AFYX-12 `To Do`, AFYX-248 `In Progress`, AFYX-269 `To Do`, AFYX-279 `In Review`, AFYX-282 `Done`, and AFYX-283 `In Progress`. This is attributed external evidence, not a live Jira verification or status change by this session; no Jira comment was posted.
 
-## Twelve planning groups
+## Twelve master tasks
 
-These are planning groups, not twelve new Jira issues and not predictions of PASS.
+These are the twelve approved master-task identities. They reuse existing Jira issues, create no new issues, and do not predict PASS.
 
-| # | Planning group | Reused Jira | Dependency / exit | State |
+| Task | Deliverable | Reused Jira | Dependency / exit | Planning state |
 |---|---|---|---|---|
-| 1 | T01 scope, identity, and acceptance contract | AFYX-248 | This document and identity ledger validated | COMPLETE (documentation) |
-| 2 | Graph installed-runtime provenance | AFYX-248 | Exact executable/artifact SHA, manifest digest, platform, extraction/index version | OPEN |
-| 3 | Graph first reproducible inventory case | AFYX-248; AFYX-282 evidence | Group 2; Git/direct-source ground truth and fresh index | OPEN (T02 handoff) |
-| 4 | Graph layer correctness and freshness | AFYX-248; AFYX-282 | Discovery, extraction, persistence, catch-up/restart, failures accounted separately | OPEN |
-| 5 | Graph ON/OFF acceptance experiment | AFYX-248; AFYX-269 on macOS | Groups 2-4; frozen public cases and correlated evidence | PROVISIONAL |
-| 6 | Expert candidate provenance | AFYX-283 | v0.1.1 fingerprint and v0.1.0 history remain distinct | COMPLETE (identity only) |
-| 7 | Expert D.6 substantive evidence review | AFYX-283 | Fresh D.5 records with matching run correlation and independent evaluator | OPEN / Jira status NOT VERIFIED |
-| 8 | Expert formal A1/B1 comparison | AFYX-283 | Group 7; frozen rubric, sampling, budget, holdout boundary | BLOCKED by Group 7 and thresholds |
-| 9 | Forge A0 evaluation freeze | AFYX-12 | Public tasks, protected holdouts, scoring, budget, fingerprints approved | PLANNED / Jira state NOT VERIFIED |
-| 10 | Forge A1-A4 harvest, matrix, refinement, candidates | AFYX-12 | Group 9; B0-B5 identities immutable per campaign | PLANNED |
-| 11 | Forge A5-A8 harness, quality, efficiency, decision | AFYX-12 | Group 10; independent evidence and predeclared decision rule | PLANNED |
-| 12 | Forge A9-A12 implementation, adaptive directive, dogfood, stable | AFYX-12 | A8 explicitly selects architecture; later maturity gates pass | PLANNED |
+| T01 | Scope, baseline, evaluation contract | AFYX-248 / AFYX-283 / AFYX-12 | This document and ledger validated | COMPLETE (documentation only) |
+| T02 | Graph case reproduction and correctness closure | AFYX-248; reuse AFYX-280–282; AFYX-265/278 where relevant | Source-grounded disposable reproduction; correctness and layer accounting close | READY, NOT STARTED |
+| T03 | Graph candidate promotion and artifact identity | AFYX-279; separate Graph promotion tracking | After T02 PASS; immutable source/artifact identity and promotion review | BLOCKED by T02 |
+| T04 | Installed-artifact IJP Windows acceptance and durability | AFYX-252/253/254 | After T03; exact installed artifact on AFYX-248 Windows scope | BLOCKED by T03 |
+| T05 | Adit native macOS pilot acceptance | AFYX-269; related child issues | After T03; compatible native artifact and tester consent | BLOCKED by T03; AFYX-269 externally reported To Do |
+| T06 | Expert D.6 substantive review and candidate freeze | AFYX-283 | Fresh, correlated D.5 evidence; independent substantive review | OPEN; AFYX-283 externally reported In Progress |
+| T07 | Expert controlled A1/B1 acceptance | AFYX-283; related AFYX-67/68 | After T06; frozen candidate, rubric, isolation, sampling, and budget | BLOCKED by T06 |
+| T08 | Forge A0–A3 capability and contract work | AFYX-88–91 / AFYX-171–176 | Evaluation freeze before capability harvest/matrix/refinement | PLANNED |
+| T09 | Forge A4–A8 candidate evaluation and architecture decision | AFYX-92–96 / AFYX-177–183 | After T08; immutable B0–B5 candidates and predeclared decision rule | BLOCKED by T08 |
+| T10 | Forge A9–A10 implementation and adaptive modes | AFYX-97/98 / AFYX-184–186 | Only after T09 records an explicit GO at A8 | BLOCKED by T09 GO |
+| T11 | Forge A11–A12 dogfood and final acceptance | AFYX-99/100 / AFYX-187/188 | After T10; dogfood and stable-contract gates | BLOCKED by T10 |
+| T12 | Combined artifact and integration acceptance | AFYX-248 / AFYX-269 / AFYX-283 / AFYX-12 | After T04, T05, T07, and T11 PASS | BLOCKED by component acceptance |
 
-AFYX-279 remains the security-promotion issue and is not repurposed as a Graph, Expert, or Forge acceptance group. Current Jira details for AFYX-12 and linked tickets require Jira-side confirmation.
+PR #59 remains the AFYX-279 security promotion and does not prove Graph inventory inclusion. T03 must track Graph promotion separately without creating a duplicate issue. Jira status for child issues not present in the supplied snapshot remains `NOT VERIFIED`.
 
-Forge gate coverage is explicit: A0 evaluation freeze; A1 capability harvest; A2 capability matrix; A3 deduplication/refinement; A4 B0-B5 candidate construction; A5 benchmark harness; A6 quality gate; A7 efficiency gate; A8 evidence-driven architecture decision; A9 implementation; A10 adaptive directive; A11 dogfood/optimization; A12 stable contract. Groups 9-12 preserve this order and do not skip a gate.
+Forge gate coverage is explicit: A0 evaluation freeze; A1 capability harvest; A2 capability matrix; A3 deduplication/refinement; A4 B0-B5 candidate construction; A5 benchmark harness; A6 quality gate; A7 efficiency gate; A8 evidence-driven architecture decision; A9 implementation; A10 adaptive directive; A11 dogfood/optimization; A12 stable contract. T08–T11 preserve this order and do not skip a gate. T12 is combined Kit integration acceptance, not Forge stable acceptance.
 
 ## Identity interpretation
 
@@ -104,26 +104,26 @@ Blockers: D.6 has not been independently verified by T01, the historical seven-r
 | Regression tolerance | **PROPOSED:** no hard-gate loss versus the best legitimate baseline. Numeric token/time tolerance is `NOT APPROVED` until A0 measures variance |
 | Evidence | Public task/fixture hashes, evaluator-only holdout IDs, candidate hashes, environment fingerprint, run correlation, test output, file diff, skill/tool reads, provider tokens, elapsed time, failures/exclusions |
 
-Pre-benchmark blockers: AFYX-12 status is not verified, A0 task/rubric freeze has not occurred, B2 content identity is not recorded here, B4/B5 do not exist, and the proposed 36-cell matrix conflicts with the current 27-run ceiling. No Forge evaluation or implementation is ready from T01 alone.
+Pre-benchmark blockers: AFYX-12 is externally reported `To Do`, A0 task/rubric freeze has not occurred, B2 content identity is not recorded here, B4/B5 do not exist, and the proposed 36-cell matrix conflicts with the current 27-run ceiling. No Forge evaluation or implementation is ready from T01 alone.
 
 ## T02 bounded Graph handoff
 
-First case: reproduce the nine-file Odoo-17-style `_inherit = 'sale.order'` exact-inventory case in an owned disposable Git repository using the installed candidate artifact—never a client repository.
+First case: reproduce the nine-declaration Odoo-17-style `_inherit = 'sale.order'` exact-inventory case in an owned disposable Git repository using an identified development build—never an installed user runtime or client repository. The reference build must record its exact source revision, archive/build digest, package version, platform, and extraction version; `a5112a36f76a1f0168e3a85900ffe33d34ebcb08` is the T01 closure baseline, not permission to assume an unrecorded binary matches it.
 
-Collect: (1) Git revision and direct-source/independent Python-AST ground truth, including ignored and negative declarations; (2) archive digest, release manifest, embedded revision, platform, CLI version, and sanitized runtime path; (3) index extraction version, timestamps/state, and discovered/eligible/indexed/skipped/unsupported/failed accounting; (4) initial and limited exact inventory, ranked limit/truncation, incremental create/modify/delete/rename, catch-up, restart, and reconciliation; (5) correlated stdout/stderr/exit status and fixture immutability.
+Collect: (1) fixture Git revision and direct-source/independent Python-AST ground truth, including ignored and negative declarations; (2) development-build digest, embedded source revision, platform, package/CLI version, extraction version, and sanitized runtime path; (3) index timestamps/state and discovered/eligible/indexed/skipped/unsupported/failed accounting; (4) initial and limited exact inventory, ranked limit/truncation, incremental create/modify/delete/rename, catch-up, restart, and reconciliation; (5) correlated stdout/stderr/exit status and fixture immutability. Record any installed artifact identity as a separate observation; it is not the T02 execution subject.
 
-Acceptance: Git/AST and exact inventory agree on all nine supported declarations and locations; ignored/negative/dynamic cases have documented dispositions; limited pages say incomplete; catch-up and restart converge without stale rows; every diagnostic is accounted for; ranked results are not treated as exhaustive inventory. Installed-artifact provenance and extraction-v28 freshness must be `MATCH`. Missing identity or freshness evidence is `BLOCKED`, not PASS.
+Acceptance: Git/AST and exact inventory agree on all nine supported declarations and locations; ignored/negative/dynamic cases have documented dispositions; limited pages say incomplete; catch-up and restart converge without stale rows; every diagnostic is accounted for; ranked results are not treated as exhaustive inventory; development-build provenance and index freshness match the recorded T02 baseline. Installed extraction-v28 acceptance belongs after T03 in T04/T05 and is not a prerequisite for T03 promotion review.
 
 ## Jira comment drafts — not posted
 
 ### AFYX-248
 
-> T01 reconciled the Alpha plan at development revision `cdce74c7...`. AFYX-248 remains the Windows IJP acceptance umbrella; AFYX-269 remains the separate macOS pilot. Graph AFYX-282/Knowledge Catalog engineering results are reused but do not prove the installed artifact. The next bounded gate is T02 installed-artifact provenance plus the owned nine-declaration exact-inventory case. No benchmark, install, runtime mutation, status change, or client-repository mutation occurred.
+> T01.1 corrects the twelve master-task identities without changing the accepted baselines or contracts. AFYX-248 remains externally reported In Progress; AFYX-269 remains the separate macOS task, externally reported To Do. T02 is source-grounded correctness on an owned nine-declaration fixture and identified development build. Graph promotion is T03; installed Windows/macOS acceptance is T04/T05. No benchmark, install, promotion, status change, or client-repository mutation occurred.
 
 ### AFYX-283
 
-> T01 records Expert v0.1.1 candidate identity (`8df29c3...`, content SHA-256 `06d947c...`) separately from historical v0.1.0. D.5 5/5 is retained as reported evidence; D.6 substantive review and formal A1/B1 remain separate, provisional gates. The contract preserves independent evaluator isolation, correlated evidence, four hard quality gates, negative routing, ERP composition ownership, and the seven-reference regression target. No evaluation was run and no status was changed.
+> T01.1 preserves Expert v0.1.1 identity separately from historical v0.1.0. AFYX-283 is externally reported In Progress. T06 owns D.6 substantive review and candidate freeze; T07 owns controlled A1/B1 acceptance and cannot start before T06. The reported D.5 5/5 evidence, isolation contract, hard quality gates, and progressive-disclosure regression target remain unchanged. No evaluation was run and no status was changed.
 
 ### AFYX-12
 
-> T01 schedules Forge Track A into the current Alpha development cycle without making it a frozen-v1 blocker or changing A0-A12. The B0-B5 contract is provisional: A0 is not frozen, Jira state is not independently verified, B2 identity is missing, B4/B5 do not exist, and the proposed 36-cell matrix needs an approved budget. No Forge benchmark, implementation, promotion, or status change occurred.
+> T01.1 preserves Forge Track A in the current Alpha development cycle without making it a frozen-v1 blocker. AFYX-12 is externally reported To Do. T08 owns A0–A3, T09 owns A4–A8, T10 owns A9–A10 only after an A8 GO, and T11 owns A11–A12. T12 is combined integration acceptance. The B0–B5 contract remains provisional; no Forge benchmark, implementation, promotion, or status change occurred.

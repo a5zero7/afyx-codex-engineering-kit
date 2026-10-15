@@ -8,6 +8,24 @@
     "upstream_revision": "cdce74c7b75fae94ca99966bb80451afdb766e60",
     "verification": "VERIFIED_LOCAL_GIT"
   },
+  "t01_documentation_closure": {
+    "revision": "a5112a36f76a1f0168e3a85900ffe33d34ebcb08",
+    "committed_at": "2026-10-15T14:06:33+07:00",
+    "verification": "VERIFIED_LOCAL_GIT",
+    "note": "Documentation closure only; does not replace the historical development-source observation."
+  },
+  "jira_snapshot": {
+    "observed_at": "2026-10-15",
+    "provenance": "EXTERNALLY_SUPPLIED_BY_USER_NOT_LIVE_VERIFIED_BY_THIS_CODEX_SESSION",
+    "issues": {
+      "AFYX-12": "To Do",
+      "AFYX-248": "In Progress",
+      "AFYX-269": "To Do",
+      "AFYX-279": "In Review",
+      "AFYX-282": "Done",
+      "AFYX-283": "In Progress"
+    }
+  },
   "accepted_distribution_candidate": {
     "channel": "technical-alpha",
     "source_revision": "a431ba9ad5fae7bd06329f1fc6e42f1ba503f6dd",
@@ -64,7 +82,8 @@
     }
   },
   "forge": {
-    "jira": "AFYX-12_CURRENT_STATE_NOT_VERIFIED",
+    "jira": "AFYX-12",
+    "jira_status_evidence": "EXTERNALLY_SUPPLIED_TO_DO_2026-10-15",
     "track": "A",
     "gates": "A0-A12",
     "candidate_definitions": {
