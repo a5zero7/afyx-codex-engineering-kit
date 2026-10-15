@@ -60,6 +60,34 @@
     "knowledge_catalog_graph_build_run": "https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/38357255978",
     "installed_artifact_acceptance_for_extraction_v28": "NOT_VERIFIED"
   },
+  "t02_correctness_closure": {
+    "starting_revision": "df310f23e519ab22f5b3f3c183f9a8d350c13c74",
+    "implementation_revision": "7fe932892c06fb9aae873bafb686de0ff05be330",
+    "package_version": "1.0.0",
+    "extraction_version": 28,
+    "development_package": {
+      "filename": "a5zero7-afyx-graph-1.0.0.tgz",
+      "size_bytes": 2263791,
+      "unpacked_size_bytes": 9301747,
+      "file_count": 1377,
+      "sha256": "56fc427324ea085aa61697c542a2f42c9c0bd4dc0c4f74b6025e4fe7f75d919d",
+      "cli_sha256": "0bd19746ce165a317accd5b6d125155c9b64f0aac88a8325973883062f655456",
+      "verification": "LOCAL_DEVELOPMENT_BUILD_ONLY_NOT_PROMOTED"
+    },
+    "synthetic_ground_truth": {
+      "supported_declarations": 9,
+      "files": 3,
+      "modules": 3,
+      "dynamic_unresolved": 1,
+      "indexed_files": 4,
+      "skipped": 0,
+      "unsupported": 0,
+      "failed": 0
+    },
+    "installed_artifact_acceptance": "NOT_PERFORMED_T04_T05",
+    "promotion": "NOT_PERFORMED_T03",
+    "exact_final_head_ci": "PENDING_AT_DOCUMENTATION_COMMIT"
+  },
   "expert": {
     "historical_v0_1_0": {
       "version": "0.1.0",

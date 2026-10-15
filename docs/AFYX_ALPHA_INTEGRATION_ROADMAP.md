@@ -27,8 +27,8 @@ These are the twelve approved master-task identities. They reuse existing Jira i
 | Task | Deliverable | Reused Jira | Dependency / exit | Planning state |
 |---|---|---|---|---|
 | T01 | Scope, baseline, evaluation contract | AFYX-248 / AFYX-283 / AFYX-12 | This document and ledger validated | COMPLETE (documentation only) |
-| T02 | Graph case reproduction and correctness closure | AFYX-248; reuse AFYX-280–282; AFYX-265/278 where relevant | Source-grounded disposable reproduction; correctness and layer accounting close | READY, NOT STARTED |
-| T03 | Graph candidate promotion and artifact identity | AFYX-279; separate Graph promotion tracking | After T02 PASS; immutable source/artifact identity and promotion review | BLOCKED by T02 |
+| T02 | Graph case reproduction and correctness closure | AFYX-248; reuse AFYX-280–282; AFYX-265/278 where relevant | Source-grounded disposable reproduction; correctness and layer accounting close | LOCAL PASS; exact-final-head CI pending |
+| T03 | Graph candidate promotion and artifact identity | AFYX-279; separate Graph promotion tracking | After T02 PASS; immutable source/artifact identity and promotion review | BLOCKED until T02 final CI |
 | T04 | Installed-artifact IJP Windows acceptance and durability | AFYX-252/253/254 | After T03; exact installed artifact on AFYX-248 Windows scope | BLOCKED by T03 |
 | T05 | Adit native macOS pilot acceptance | AFYX-269; related child issues | After T03; compatible native artifact and tester consent | BLOCKED by T03; AFYX-269 externally reported To Do |
 | T06 | Expert D.6 substantive review and candidate freeze | AFYX-283 | Fresh, correlated D.5 evidence; independent substantive review | OPEN; AFYX-283 externally reported In Progress |
@@ -106,19 +106,34 @@ Blockers: D.6 has not been independently verified by T01, the historical seven-r
 
 Pre-benchmark blockers: AFYX-12 is externally reported `To Do`, A0 task/rubric freeze has not occurred, B2 content identity is not recorded here, B4/B5 do not exist, and the proposed 36-cell matrix conflicts with the current 27-run ceiling. No Forge evaluation or implementation is ready from T01 alone.
 
-## T02 bounded Graph handoff
+## T02 correctness closure and bounded T03 handoff
 
-First case: reproduce the nine-declaration Odoo-17-style `_inherit = 'sale.order'` exact-inventory case in an owned disposable Git repository using an identified development build—never an installed user runtime or client repository. The reference build must record its exact source revision, archive/build digest, package version, platform, and extraction version; `a5112a36f76a1f0168e3a85900ffe33d34ebcb08` is the T01 closure baseline, not permission to assume an unrecorded binary matches it.
+T02 used an owned, Git-tracked disposable Odoo-style fixture and an identified development build from implementation revision `7fe932892c06fb9aae873bafb686de0ff05be330`. The package is Afyx Graph `1.0.0`, extraction version 28; its temporary npm package SHA-256 is `56fc427324ea085aa61697c542a2f42c9c0bd4dc0c4f74b6025e4fe7f75d919d` and built CLI SHA-256 is `0bd19746ce165a317accd5b6d125155c9b64f0aac88a8325973883062f655456`. These identify a local development build only; no artifact was promoted or installed.
 
-Collect: (1) fixture Git revision and direct-source/independent Python-AST ground truth, including ignored and negative declarations; (2) development-build digest, embedded source revision, platform, package/CLI version, extraction version, and sanitized runtime path; (3) index timestamps/state and discovered/eligible/indexed/skipped/unsupported/failed accounting; (4) initial and limited exact inventory, ranked limit/truncation, incremental create/modify/delete/rename, catch-up, restart, and reconciliation; (5) correlated stdout/stderr/exit status and fixture immutability. Record any installed artifact identity as a separate observation; it is not the T02 execution subject.
+| Layer | Expected | Actual | Verdict |
+|---|---|---|---|
+| Discovery/scanning | Three scoped target files indexed; ignored/virtualenv excluded; sibling outside query scope may remain indexed | 4 discovered/eligible/indexed, 0 skipped/unsupported/failed; three target files plus one tracked sibling; ignored and `.venv` absent | PASS |
+| Extraction | Nine supported scalar/list/tuple `_inherit` matches; `_name`, `sale.order.line`, comments/strings excluded; one dynamic expression unresolved | Independent Python AST and Graph agree on 9 declarations across 3 files/modules and one dynamic unresolved expression | PASS |
+| Persistence | Exact paths, repeated class identity, line spans, module names survive storage | All nine rows and lines match AST ground truth; duplicate `SharedName` remains file-qualified | PASS |
+| Freshness | Complete extraction-v28 index, current tracked tree, no pending change after reconciliation | `COMPLETE`, built/current extraction 28, `FRESH`, 0 pending after reconciliation, 0 pending references | PASS |
+| Ranked retrieval | `limit=4` is a bounded relevance page, not inventory | Four rows shown with explicit truncation; full source population remains indexed | PASS |
+| Exact inventory | Full query reports 9/3/3; limited query reports totals and incompleteness | Full CLI and actual MCP report 9 declarations, 3 files, 3 modules, complete coverage; limit 4 reports 5 remaining | PASS |
 
-Acceptance: Git/AST and exact inventory agree on all nine supported declarations and locations; ignored/negative/dynamic cases have documented dispositions; limited pages say incomplete; catch-up and restart converge without stale rows; every diagnostic is accounted for; ranked results are not treated as exhaustive inventory; development-build provenance and index freshness match the recorded T02 baseline. Installed extraction-v28 acceptance belongs after T03 in T04/T05 and is not a prerequisite for T03 promotion review.
+The historical nine-versus-four observation is reproduced as a retrieval-mode difference: ranked search at limit four returns four rows, while exact inventory over the same complete index returns all nine. It is not a remaining discovery, extraction, or persistence loss. The 45-versus-approximately-eight report has the same bounded-ranked-page explanation; the existing 45-declaration regression remains reused verified functionality.
+
+One product defect remained. AFYX-282 made `afyx_graph_inventory` a default correctness route, but the older `<500`-file MCP tool filter retained only navigation tools and silently removed inventory after project initialization. The default actual MCP session therefore advertised only `afyx_graph_explore` on the small acceptance fixture. The minimal fix retains inventory in that filter; actual MCP now advertises `afyx_graph_inventory` plus `afyx_graph_explore`, and the inventory call returns the exact 9/3/3 result. No extraction, ranking, schema, index, or parser behavior changed, so extraction version remains 28.
+
+Existing incremental coverage is reused and rerun: add raises 9→10, delete restores 9, rename moves stored paths without duplicates, modify produces 8 then restores 9, catch-up gates the query, and reopen preserves 9. A separate disposable reconciliation also removed a transient probe file and returned the index to 4 files, 35 nodes, 31 edges, and zero pending changes.
+
+Local validation: focused inventory/routing 29/29 PASS; expanded sync/freshness selection 101/101 PASS; clean TypeScript/UI build PASS; semantic extraction-v28 additive contract and six-fixture historical baseline PASS; CLI/MCP smoke 21/21 PASS; identity, component, independence, and artifact-identity checks PASS. The full local Node 26 Windows suite is FAIL because of pre-existing/environmental TEMP cleanup `EPERM`, a Windows `which` fixture, and load-sensitive timeouts; isolated T02 and representative sync cases pass. Exact-final-head Node 24 Windows/Linux/macOS Graph Build remains the T02 closure authority and is recorded externally to avoid a self-referential documentation commit.
+
+T03 may start only after exact-final-head Graph Build passes. Its input is the accepted source revision, local build identity above, nine-declaration evidence, MCP exposure regression, validation record, and an independently generated candidate manifest plus per-platform archive digests. Installed Windows/macOS acceptance remains T04/T05 and was not performed here.
 
 ## Jira comment drafts — not posted
 
 ### AFYX-248
 
-> T01.1 corrects the twelve master-task identities without changing the accepted baselines or contracts. AFYX-248 remains externally reported In Progress; AFYX-269 remains the separate macOS task, externally reported To Do. T02 is source-grounded correctness on an owned nine-declaration fixture and identified development build. Graph promotion is T03; installed Windows/macOS acceptance is T04/T05. No benchmark, install, promotion, status change, or client-repository mutation occurred.
+> T02 reproduced the historical nine-versus-four shape as ranked `limit=4` versus exact inventory `9`, not failed indexing. Independent AST and Graph agree on nine supported `_inherit = 'sale.order'` declarations across three files/modules; extraction v28 is complete/fresh with 4 indexed files and zero failed/skipped/unsupported. A real defect was fixed: the legacy tiny-repo MCP filter hid the AFYX-282 inventory tool. Revision `7fe932892c06fb9aae873bafb686de0ff05be330` retains inventory and actual MCP returns the exact 9/3/3 result. Focused 29/29 and sync/freshness 101/101 pass; build, semantic 6/6, smoke 21/21, identity/component/independence pass. Local full Node 26 remains FAIL on known Windows cleanup/`which`/load-sensitive categories; exact-final-head Node 24 3OS Graph Build is the final gate. No install, promotion, Jira update, or client-repository mutation occurred.
 
 ### AFYX-283
 
