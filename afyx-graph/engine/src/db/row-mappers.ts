@@ -3,7 +3,7 @@
  * engine uses. Every reader shares these so a column's meaning is decided in one place.
  */
 
-import type { Edge, EdgeKind, FileRecord, Language, Node, NodeKind, UnresolvedReference } from '../types';
+import type { Edge, EdgeKind, FileIndexingLevel, FileRecord, Language, Node, NodeKind, UnresolvedReference } from '../types';
 import { safeJsonParse } from '../utils';
 
 export interface NodeRow {
@@ -49,6 +49,8 @@ export interface FileRow {
   modified_at: number;
   indexed_at: number;
   node_count: number;
+  /** Absent only on a stale pre-v10 prepared statement. */
+  indexing_level?: string | null;
   errors: string | null;
   /** Absent on pre-v9 rows read through a stale prepared statement. */
   generated?: number | null;
@@ -114,6 +116,9 @@ export function rowToEdge(row: EdgeRow): Edge {
 }
 
 export function rowToFileRecord(row: FileRow): FileRecord {
+  const indexingLevel = row.indexing_level === 'metadata' || row.indexing_level === 'content'
+    ? row.indexing_level
+    : 'structural';
   return {
     path: row.path,
     contentHash: row.content_hash,
@@ -122,6 +127,7 @@ export function rowToFileRecord(row: FileRow): FileRecord {
     modifiedAt: row.modified_at,
     indexedAt: row.indexed_at,
     nodeCount: row.node_count,
+    indexingLevel: indexingLevel as FileIndexingLevel,
     errors: decodedJson(row.errors),
     generated: enabled(row.generated ?? 0),
   };

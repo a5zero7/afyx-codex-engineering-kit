@@ -113,6 +113,9 @@ export function executeInventoryTool(source: InventoryToolSource, request: Inven
   );
   if (accounting) {
     lines.push(`- Last full index: ${accounting.indexed} indexed, ${accounting.skipped} skipped, ${accounting.unsupported} unsupported, ${accounting.failed} failed`);
+    if (accounting.metadataIndexed !== null) {
+      lines.push(`- Catalog depth: ${accounting.metadataIndexed} metadata-indexed, ${accounting.contentIndexed ?? 0} content-indexed, ${accounting.structurallyIndexed ?? 0} structurally indexed`);
+    }
     if (accounting.skippedReasons && Object.keys(accounting.skippedReasons).length > 0) {
       lines.push(`- Skipped reasons: ${Object.entries(accounting.skippedReasons).map(([reason, count]) => `${reason}=${count}`).join(', ')}`);
     }

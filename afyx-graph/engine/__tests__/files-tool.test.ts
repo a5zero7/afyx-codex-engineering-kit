@@ -11,7 +11,7 @@ const FILES: FilesToolFile[] = [
   { path: 'src/deep/a.test.ts', language: 'typescript', nodeCount: 2 },
   { path: 'src-utils/helper.ts', language: 'typescript', nodeCount: 4 },
   { path: 'web/App.tsx', language: 'tsx', nodeCount: 5 },
-  { path: 'docs/a+b.md', language: 'markdown', nodeCount: 0 },
+  { path: 'docs/a+b.md', language: 'markdown', nodeCount: 0, indexingLevel: 'metadata' },
 ];
 
 function fixture(files: FilesToolFile[] = FILES) {
@@ -135,13 +135,14 @@ describe('MCP Files adapter', () => {
 
   it('enables metadata unless the value is literal false', () => {
     const omitted = fixture();
-    expect(text(omitted.source, { format: 'flat' })).toContain('(typescript, 1 symbols)');
+    expect(text(omitted.source, { format: 'flat' })).toContain('(typescript, structural-indexed, 1 symbols)');
+    expect(text(omitted.source, { format: 'flat' })).toContain('(markdown, metadata-indexed, 0 symbols)');
 
     const disabled = fixture();
     expect(text(disabled.source, { format: 'flat', includeMetadata: false })).not.toContain('symbols)');
 
     const unusual = fixture();
-    expect(text(unusual.source, { format: 'flat', includeMetadata: 0 })).toContain('(typescript, 1 symbols)');
+    expect(text(unusual.source, { format: 'flat', includeMetadata: 0 })).toContain('(typescript, structural-indexed, 1 symbols)');
   });
 
   it('preserves maxDepth lower/upper clamps and rendering levels', () => {
@@ -173,8 +174,8 @@ describe('MCP Files adapter', () => {
     ]);
     expect(text(source, { format: 'flat' })).toBe(
       '**Files (2)**\n\n' +
-      '- a.ts (typescript, 2 symbols)\n' +
-      '- z.ts (typescript, 1 symbols)',
+      '- a.ts (typescript, structural-indexed, 2 symbols)\n' +
+      '- z.ts (typescript, structural-indexed, 1 symbols)',
     );
   });
 
@@ -187,9 +188,9 @@ describe('MCP Files adapter', () => {
     ]);
     expect(text(source, { format: 'grouped' })).toBe(
       '**Files by Language (4 total)**\n\n' +
-      '**typescript (2)**\n- a.ts (2 symbols)\n- z.ts (1 symbols)\n\n' +
-      '**python (1)**\n- b.py (3 symbols)\n\n' +
-      '**rust (1)**\n- c.rs (4 symbols)\n',
+      '**typescript (2)**\n- a.ts (structural-indexed, 2 symbols)\n- z.ts (structural-indexed, 1 symbols)\n\n' +
+      '**python (1)**\n- b.py (structural-indexed, 3 symbols)\n\n' +
+      '**rust (1)**\n- c.rs (structural-indexed, 4 symbols)\n',
     );
   });
 
@@ -201,8 +202,8 @@ describe('MCP Files adapter', () => {
     ]);
     expect(text(source, { format: 'tree' })).toBe(
       '**Project Structure (3 files)**\n\n' +
-      '├── src\n│   ├── a.ts (typescript, 3 symbols)\n│   └── b.ts (typescript, 2 symbols)\n' +
-      '└── z.ts (typescript, 1 symbols)',
+      '├── src\n│   ├── a.ts (typescript, structural-indexed, 3 symbols)\n│   └── b.ts (typescript, structural-indexed, 2 symbols)\n' +
+      '└── z.ts (typescript, structural-indexed, 1 symbols)',
     );
   });
 

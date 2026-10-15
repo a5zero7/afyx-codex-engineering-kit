@@ -816,8 +816,8 @@ describe('GET /api/source', () => {
   });
 
   it('404s a file that exists but is not indexed', async () => {
-    fs.writeFileSync(path.join(projectRoot, 'notes.md'), '# not indexed\n');
-    const { status, body } = await getStatusAndJson('/api/source?file=notes.md');
+    fs.writeFileSync(path.join(projectRoot, 'notes.unsupported'), 'not indexed\n');
+    const { status, body } = await getStatusAndJson('/api/source?file=notes.unsupported');
     expect(status).toBe(404);
     expect(body.code).toBe('not-found');
     expect(body.hint).toContain('index');

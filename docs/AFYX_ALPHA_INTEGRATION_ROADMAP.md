@@ -264,6 +264,49 @@ trusted-evaluator identity exists, so mandatory cross-principal denial controls
 were not executed. This is an environment verdict only, not a D.6 candidate
 verdict.
 
+## Graph coverage audit and universal file catalog foundation
+
+The development-index observation at source baseline
+`100b66d88c903812f063ea4c6149e5af88b0ea89` reported 1,032 discovered, 872
+eligible/indexed, 160 unsupported, and zero failed files. The top unsupported
+extensions were Markdown 81, JSON 42, PowerShell 18, shell 10, and PowerShell
+module 3. The installed runtime was Afyx Graph 1.0.0 at source revision
+`5277bea70a46dcc7046a53cc4d3f8c8470462ff0`, extraction version 28, with
+publisher authenticity `UNVERIFIED`; it was observed only and was not changed.
+
+The audit confirmed unsupported files were removed at extension admission before
+the `files` table, so the table conflated structural indexing with catalog
+membership. The bounded correction admits generic Markdown and JSON as
+metadata-only catalog entries and persists an explicit `metadata`, `content`, or
+`structural` indexing level. Markdown/JSON content is not put into nodes, edges,
+FTS, or symbol search. Shopify template/section JSON retains Liquid extraction;
+PowerShell and shell native extraction remains follow-up scope. Schema v10 adds
+only the file-depth column; structural extraction remains version 28 because no
+parser fact contract changed.
+
+Security and scope stay fail-closed: ignore rules run before admission, ignored
+path counts/names remain unenumerated, and evaluator-like ignored directories do
+not enter the catalog. A disposable regression covers full indexing,
+add/modify/delete/rename, scoped catch-up, restart/persistence, deterministic
+accounting, unsupported PowerShell/shell, and absence of metadata content from
+search. Candidate promotion, installed-runtime replacement, Expert evaluation,
+PR #59, and Alpha branches are outside this change.
+
+The final source-build audit used a separate `.afyx-graph-catalog-audit` state
+directory and left the active index/runtime unchanged. It measured 1,034
+discovered, 997 eligible/indexed, 127 metadata-indexed (82 Markdown, 42 JSON,
+3 YAML), 0 content-indexed, 870 structurally indexed, 0 skipped, 37 unsupported,
+and 0 failed. The two-file discovery increase from the 1,032 observation is the
+subsequent roadmap document plus this task's new regression file; it is not a
+forced match to the earlier 995/1,032 projection. Remaining unsupported files
+are PowerShell 18, shell 10, PowerShell module 3, CSS 2, Go module 2, HTML 1,
+and SQL 1. Timings on Windows/Node 26.8.1 were scan 467 ms, parse/store 3,345 ms,
+resolution/link 6,246 ms, maintenance 120 ms, total 11,455 ms (12.239 s CLI
+wall time). A deterministic 2,000-file reconciliation micro-benchmark recorded
+medians of 3.992 ms no-op, 4.051 ms modify, 3.165 ms add, 4.609 ms delete, and
+2.554 ms rename; these are descriptive measurements, not a cross-version speed
+claim.
+
 ## Jira comment drafts — not posted
 
 ### AFYX-279

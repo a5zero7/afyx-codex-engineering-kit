@@ -11,6 +11,12 @@ import { LANGUAGES, Language } from '../types';
  * File extension to Language mapping
  */
 export const EXTENSION_MAP: Record<string, Language> = {
+  // Universal file catalog entries. These are metadata-only: no Markdown/JSON
+  // prose or values enter structural nodes or FTS. Shopify template JSON keeps
+  // its existing Liquid route through isShopifyLiquidJson() below.
+  '.md': 'markdown',
+  '.markdown': 'markdown',
+  '.json': 'json',
   '.ts': 'typescript',
   '.tsx': 'tsx',
   // ESM/CJS TypeScript module extensions — parsed as TS (no JSX). (#366)
@@ -293,7 +299,8 @@ export function isLanguageSupported(language: Language): boolean {
  * indexed rather than skipped, so it must stay in sync with that branch.
  */
 export function isFileLevelOnlyLanguage(language: Language): boolean {
-  return language === 'yaml' || language === 'twig' || language === 'properties';
+  return language === 'yaml' || language === 'twig' || language === 'properties' ||
+    language === 'markdown' || language === 'json';
 }
 
 /**
@@ -348,6 +355,8 @@ export function getLanguageDisplayName(language: Language): string {
     vbnet: 'Visual Basic .NET',
     erlang: 'Erlang',
     terraform: 'Terraform',
+    markdown: 'Markdown',
+    json: 'JSON',
     arkts: 'ArkTS',
     unknown: 'Unknown',
   };
