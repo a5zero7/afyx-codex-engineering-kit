@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "observed_at": "2026-10-15T00:00:00+07:00",
+  "purpose": "T01 identity ledger; observations are not promotion or installation claims",
+  "development_source": {
+    "branch": "afyx/native-phase5f-parser-grammar",
+    "revision": "cdce74c7b75fae94ca99966bb80451afdb766e60",
+    "upstream_revision": "cdce74c7b75fae94ca99966bb80451afdb766e60",
+    "verification": "VERIFIED_LOCAL_GIT"
+  },
+  "accepted_distribution_candidate": {
+    "channel": "technical-alpha",
+    "source_revision": "a431ba9ad5fae7bd06329f1fc6e42f1ba503f6dd",
+    "source_committed_at": "2026-10-11T18:09:40+07:00",
+    "artifact_digests": "NOT_VERIFIED",
+    "publisher_authenticity": "NOT_VERIFIED",
+    "verification": "SOURCE_IDENTITY_RECORDED_ARTIFACT_IDENTITY_INCOMPLETE",
+    "note": "PR #59 is an open security promotion and does not prove inclusion of AFYX-282 inventory changes."
+  },
+  "pilot_runtimes": {
+    "windows_afyx_248": {
+      "last_observed_source_revision": "5b6ab08d98717fd436ecf23b6a7c91b864e61f03",
+      "last_observed_at": "2026-10-11T16:15:52+07:00",
+      "current_revision": "NOT_VERIFIED",
+      "index_extraction_version": "NOT_VERIFIED",
+      "index_freshness": "NOT_VERIFIED",
+      "verification": "HISTORICAL_OBSERVATION_ONLY"
+    },
+    "macos_afyx_269": {
+      "current_revision": "NOT_VERIFIED",
+      "index_extraction_version": "NOT_VERIFIED",
+      "index_freshness": "NOT_VERIFIED",
+      "verification": "NOT_VERIFIED"
+    }
+  },
+  "graph": {
+    "source_package_version": "1.0.0",
+    "source_extraction_version": 28,
+    "source_revision": "cdce74c7b75fae94ca99966bb80451afdb766e60",
+    "afyx_282_graph_build_run": "https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/38324265023",
+    "knowledge_catalog_implementation": "8837ea98aa63a4c93a2c15c599f82148ad3320b0",
+    "knowledge_catalog_graph_build_run": "https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/38357255978",
+    "installed_artifact_acceptance_for_extraction_v28": "NOT_VERIFIED"
+  },
+  "expert": {
+    "historical_v0_1_0": {
+      "version": "0.1.0",
+      "content_sha256": "69f85c93dbab28fb11460b0a9a2bbc38dbcf9c04f02747af7199ba84077334db",
+      "tree_sha256": "9ebefe30bf9c7f73b101a53542b3cb09c993cfe9a4d565d15afc5834465569b7",
+      "verification": "HISTORICAL_FROZEN"
+    },
+    "candidate_v0_1_1": {
+      "version": "0.1.1",
+      "subject_revision": "8df29c3f9e31aa4661cc1e7d6f80328096e3f1ce",
+      "closure_revision": "cdce74c7b75fae94ca99966bb80451afdb766e60",
+      "content_sha256": "06d947c595f164ed1ad94e8ef97aa412a3ec7559c5f79cb467f0ec1ad488095c",
+      "tree_sha256": "40cfa1f8b4fe3743a7eca81f8e4eb76c879d7adcd650c33b5611b0a2775ea138",
+      "environment": "evals/environment-expert-v0.1.1-codex-0.162.1-mxc.json",
+      "environment_sha256": "6203b5dd2f016fade8b04c1d2fd02be5ed8bf24763d1a4404e6931cbb4447c6c",
+      "engineering_ci": "https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/38499899438",
+      "d5_automated_result": "REPORTED_PASS_5_OF_5_NOT_REVERIFIED_BY_T01",
+      "d6_substantive_review": "NOT_VERIFIED",
+      "formal_a1_b1": "NOT_RUN"
+    }
+  },
+  "forge": {
+    "jira": "AFYX-12_CURRENT_STATE_NOT_VERIFIED",
+    "track": "A",
+    "gates": "A0-A12",
+    "candidate_definitions": {
+      "B0": "no directive",
+      "B1": "Efficient Coding 1.2.0",
+      "B2": "independent master prompt",
+      "B3": "Efficient Coding 1.2.0 plus independent master prompt",
+      "B4": "refined convergence candidate",
+      "B5": "Afyx Forge native candidate"
+    },
+    "frozen_harness_configuration": "NOT_VERIFIED",
+    "candidate_identity": "NOT_CREATED",
+    "verification": "DEFINITIONS_ONLY"
+  }
+}

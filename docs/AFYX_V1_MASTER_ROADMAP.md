@@ -2,14 +2,16 @@
 
 Status: **Phase 5 complete**
 Canonical since: **2026-10-03**  
-Contract revision: **2026-10-11**
+Contract revision: **2026-10-15**
 v1 scope policy: **FROZEN — Phase 1 through Phase 11**  
 Post-v1 policy: **PLANNED EXPANSION — not a v1 release blocker**
 
-Current work: **Repository knowledge catalog acceptance and scoped coverage refinement; AFYX-248 remains in progress**
-Task: repository knowledge catalog acceptance; `AFYX-248` remains in progress
+Current work: **Alpha integration planning across Graph, Expert, and Forge; AFYX-248 remains in progress**
+Task: T01 Alpha scope/baseline/acceptance reconciliation; `AFYX-248` remains in progress
 Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`  
 Active implementation branch: `afyx/native-phase5f-parser-grammar`  
+T01 observed development checkpoint: `cdce74c7b75fae94ca99966bb80451afdb766e60`
+Alpha integration contract: [`AFYX_ALPHA_INTEGRATION_ROADMAP.md`](AFYX_ALPHA_INTEGRATION_ROADMAP.md)
 Latest verified Phase 5F implementation checkpoint: `62621a0639f42db0eaac69ef087436d851cdba88`  
 Latest verified Phase 5F semantic-freeze checkpoint: `6fd0296b22844eef62b86a395b861ebb51193dc5`  
 Latest verified Phase 5F performance-baseline checkpoint: `1f671dabc8af5bf8f8088dc6e947e48834cafdc3`  
@@ -1704,7 +1706,15 @@ support have created a more representative production workload.
 
 ## Track A — Afyx Forge
 
-Afyx Forge is post-v1. It must not become a blocker for the stable v1 release.
+Scheduling note (2026-10-15): Track A is now permitted to proceed during the
+current Alpha development cycle under the reviewable contract in
+[`AFYX_ALPHA_INTEGRATION_ROADMAP.md`](AFYX_ALPHA_INTEGRATION_ROADMAP.md).
+This changes scheduling only: Forge retains A0-A12, is not added to the frozen
+v1 release requirements, and cannot by itself close Technical Alpha, Alpha,
+Private Beta, or Stable.
+
+Afyx Forge was originally scheduled post-v1. It must not become a blocker for
+the stable v1 release.
 
 Goal:
 
