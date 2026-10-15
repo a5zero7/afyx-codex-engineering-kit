@@ -6,8 +6,8 @@ Contract revision: **2026-10-15**
 v1 scope policy: **FROZEN — Phase 1 through Phase 11**  
 Post-v1 policy: **PLANNED EXPANSION — not a v1 release blocker**
 
-Current work: **T08 Forge A0-A3 contract foundation; AFYX-12 externally reported To Do**
-Task: evaluation freeze, capability harvest/matrix, and independent native behavior contract; no benchmark, Forge implementation, or Alpha promotion
+Current work: **T09.P0 Forge benchmark readiness; benchmark execution remains blocked**
+Task: candidate identities, public fixture/harness preparation, proposed runtime, isolation and owner-decision register; no model benchmark, A8 GO, Forge production implementation, or Alpha promotion
 Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`  
 Active implementation branch: `dev` (created from verified T02 final source `ad1560dd930ccde94b0dadaa7b42d804be55714f`)
 Historical engineering branch preserved: `afyx/native-phase5f-parser-grammar`
@@ -1795,6 +1795,28 @@ T08 is complete at the contract layer; T09 may prepare A4-A8 only after its
 recorded input, identity, isolation, and budget prerequisites are satisfied.
 No A8 GO, performance improvement, final Forge engine, or v1 release-scope
 change is implied.
+
+### T09.P0 closure — benchmark readiness and candidate identities
+
+Status: **PREPARATION COMPLETE / BENCHMARK EXECUTION BLOCKED**.
+
+The canonical readiness record is
+[`AFYX_FORGE_T09_P0_READINESS.md`](AFYX_FORGE_T09_P0_READINESS.md), with
+the executable public preparation under `evals/forge/`. B0 and B1 have
+verified configurations; B5 has an independent evaluation-only directive
+derived from the A3 contract. B2 has no authorized executable artifact,
+therefore B3 remains blocked and B4 is not constructed. None of these states
+is a production Forge architecture decision.
+
+Six public synthetic scenarios cover the frozen categories. Their pristine
+baseline behavior, path containment, content hashes, deterministic 36-cell
+order, negative B2 substitution, and candidate tamper detection are validated
+without a model call. The proposed campaign runtime is not owner-approved,
+Forge-specific evaluator isolation was not independently executed, the
+evaluator-only bundle is not frozen, and the 36-cell budget is not approved.
+T09 benchmark execution and A8 therefore remain blocked. The frozen v1 release
+requirements, Expert evidence, Graph behavior, and Alpha environment are
+unchanged.
 
 ## Track B — Platform Generalization
 

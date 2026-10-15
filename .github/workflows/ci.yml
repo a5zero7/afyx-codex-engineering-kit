@@ -39,6 +39,8 @@ jobs:
         run: |
           python -m py_compile evals/harness/*.py
           python evals/harness/validate.py
+          python -m py_compile evals/forge/validate.py
+          python evals/forge/validate.py --check-fixtures
       - name: Zero-token skill routing validation
         run: python evals/harness/routing.py
       - name: Deterministic tests (component contract, project detector, doctor, routing guard)
@@ -88,6 +90,8 @@ jobs:
           python scripts/validate-afyx-graph.py
           python scripts/validate-components.py
           python scripts/audit-legacy-identity.py
+          python -m py_compile evals/forge/validate.py
+          python evals/forge/validate.py --check-fixtures
       - name: Usage Tracker deterministic tests
         shell: pwsh
         run: ./tools/codex-usage/tests/run-tests.ps1
@@ -138,6 +142,8 @@ jobs:
         run: |
           export PATH="/bin:$PATH"
           python3 scripts/validate-components.py
+          python3 -m py_compile evals/forge/validate.py
+          python3 evals/forge/validate.py --check-fixtures
           python3 scripts/tests/test_components.py
           python3 scripts/tests/test_lifecycle.py
           python3 scripts/tests/test_skill_lifecycle_security.py
