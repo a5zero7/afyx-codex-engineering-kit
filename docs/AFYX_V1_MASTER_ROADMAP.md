@@ -6,8 +6,8 @@ Contract revision: **2026-10-15**
 v1 scope policy: **FROZEN — Phase 1 through Phase 11**  
 Post-v1 policy: **PLANNED EXPANSION — not a v1 release blocker**
 
-Current work: **T03.1 workspace hygiene and branch-governance closure; AFYX-248 remains in progress**
-Task: T03.1 evidence preservation, clean development baseline, and environment readiness; `AFYX-279` remains externally reported In Review
+Current work: **T08 Forge A0-A3 contract foundation; AFYX-12 externally reported To Do**
+Task: evaluation freeze, capability harvest/matrix, and independent native behavior contract; no benchmark, Forge implementation, or Alpha promotion
 Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`  
 Active implementation branch: `dev` (created from verified T02 final source `ad1560dd930ccde94b0dadaa7b42d804be55714f`)
 Historical engineering branch preserved: `afyx/native-phase5f-parser-grammar`
@@ -1770,6 +1770,31 @@ Canonical phases:
 
 Odoo Engineering remains a separate domain skill and is not folded into Forge
 merely to reduce component count.
+
+### T08 closure — A0-A3 contract foundation
+
+T08 freezes the Forge evaluation method and decision rules without executing
+the B0-B5 campaign or selecting an implementation architecture. The canonical
+contract is [`AFYX_FORGE_A0_A3_CONTRACT.md`](AFYX_FORGE_A0_A3_CONTRACT.md),
+with machine-readable identities in
+[`AFYX_FORGE_A0_A3_BASELINE.json`](AFYX_FORGE_A0_A3_BASELINE.json).
+
+Efficient Coding 1.2.0 has a verified repository identity and deterministic
+contract evidence. Historical Prompt Master evidence is limited to one
+identity-bound prompt-authoring smoke and is not treated as the Independent
+Master Prompt or as general engineering-quality evidence. The Independent
+Master Prompt itself has no authorized bytes, provenance, or digest in the
+canonical repository, so B2/B3 construction remains blocked. B4/B5 have not
+been constructed.
+
+The six-category by six-candidate discovery stratum is frozen at 36 cells.
+It is a separate Forge campaign rather than an extension of the Expert
+27-run ceiling, but the Forge budget is not approved. Exact campaign runtime
+identity and independently enforced evaluator isolation also remain blockers.
+T08 is complete at the contract layer; T09 may prepare A4-A8 only after its
+recorded input, identity, isolation, and budget prerequisites are satisfied.
+No A8 GO, performance improvement, final Forge engine, or v1 release-scope
+change is implied.
 
 ## Track B — Platform Generalization
 

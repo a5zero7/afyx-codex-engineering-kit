@@ -40,8 +40,8 @@ These are the twelve approved master-task identities. They reuse existing Jira i
 | T05 | Adit native macOS pilot acceptance | AFYX-269; related child issues | After T03; compatible native artifact and tester consent | BLOCKED by T03; AFYX-269 externally reported To Do |
 | T06 | Expert D.6 substantive review and candidate freeze | AFYX-283 | Fresh, correlated D.5 evidence; independent substantive review | BLOCKED; review prepared, substantive review not executed |
 | T07 | Expert controlled A1/B1 acceptance | AFYX-283; related AFYX-67/68 | After T06; frozen candidate, rubric, isolation, sampling, and budget | BLOCKED by T06 |
-| T08 | Forge A0–A3 capability and contract work | AFYX-88–91 / AFYX-171–176 | Evaluation freeze before capability harvest/matrix/refinement | PLANNED |
-| T09 | Forge A4–A8 candidate evaluation and architecture decision | AFYX-92–96 / AFYX-177–183 | After T08; immutable B0–B5 candidates and predeclared decision rule | BLOCKED by T08 |
+| T08 | Forge A0–A3 capability and contract work | AFYX-88–91 / AFYX-171–176 | Evaluation freeze before capability harvest/matrix/refinement | COMPLETE (contract only); no benchmark or implementation |
+| T09 | Forge A4–A8 candidate evaluation and architecture decision | AFYX-92–96 / AFYX-177–183 | After T08; immutable B0–B5 candidates and predeclared decision rule | CONTRACT READY; execution blockers remain |
 | T10 | Forge A9–A10 implementation and adaptive modes | AFYX-97/98 / AFYX-184–186 | Only after T09 records an explicit GO at A8 | BLOCKED by T09 GO |
 | T11 | Forge A11–A12 dogfood and final acceptance | AFYX-99/100 / AFYX-187/188 | After T10; dogfood and stable-contract gates | BLOCKED by T10 |
 | T12 | Combined artifact and integration acceptance | AFYX-248 / AFYX-269 / AFYX-283 / AFYX-12 | After T04, T05, T07, and T11 PASS | BLOCKED by component acceptance |
@@ -99,19 +99,13 @@ Expert aliases are `A0=N`, `A1=CORE`, `B0=X`, and `B1=CORE_X`. This B1 means Cor
 
 Blockers: D.6 has not been independently verified by T01, the historical seven-reference disclosure defect remains a regression target, and formal repetition/efficiency thresholds are not approved. The reported D.5 5/5 result cannot substitute for D.6 or A1/B1.
 
-### Forge B0-B5 — PROVISIONAL / A0 NOT FROZEN
+### Forge B0-B5 — A0-A3 CONTRACT FROZEN / EXECUTION BLOCKED
 
-| Field | Contract |
-|---|---|
-| Public categories | Known-file bug; unknown-defect diagnosis; cross-module change; security-sensitive change; data/reliability change; negative/simple task |
-| Candidates | B0 no directive; B1 Efficient Coding 1.2.0; B2 independent master prompt; B3 B1+B2; B4 refined convergence; B5 native Forge |
-| Sampling | **PROPOSED DISCOVERY:** one fresh repetition of six categories per candidate (36 cells). This exceeds the current 27-run Expert ceiling, so Forge must approve a separate budget or reduce a predeclared stratified set before A0 freezes |
-| Budget | Identical model/provider/reasoning/tool permissions and task budgets; bounded retries; candidate fingerprints immutable within a campaign |
-| Hard acceptance | **PROPOSED:** correctness/security regressions = 0; all task validation passes; no unauthorized scope expansion; provenance complete. B4/B5 meet quality before efficiency ranking |
-| Regression tolerance | **PROPOSED:** no hard-gate loss versus the best legitimate baseline. Numeric token/time tolerance is `NOT APPROVED` until A0 measures variance |
-| Evidence | Public task/fixture hashes, evaluator-only holdout IDs, candidate hashes, environment fingerprint, run correlation, test output, file diff, skill/tool reads, provider tokens, elapsed time, failures/exclusions |
+The authoritative T08 specification, capability inventory/matrix, independent native behavior contract, and T09 prerequisites are in [AFYX_FORGE_A0_A3_CONTRACT.md](AFYX_FORGE_A0_A3_CONTRACT.md); its machine-readable identities and states are in [AFYX_FORGE_A0_A3_BASELINE.json](AFYX_FORGE_A0_A3_BASELINE.json).
 
-Pre-benchmark blockers: AFYX-12 is externally reported `To Do`, A0 task/rubric freeze has not occurred, B2 content identity is not recorded here, B4/B5 do not exist, and the proposed 36-cell matrix conflicts with the current 27-run ceiling. No Forge evaluation or implementation is ready from T01 alone.
+A0 freezes six public categories against B0-B5 as a 36-cell, one-repetition discovery stratum. The Expert 27-run ceiling does not apply to this separate Forge campaign. The 36-cell Forge budget remains unapproved, and discovery `n=1` cannot establish comparative superiority. Correctness, task fidelity, evidence quality, and security are ordered hard gates; efficiency is evaluated only after they pass, with provider metrics recorded only when actually available.
+
+Efficient Coding 1.2.0 has a verified source identity. The owner-authorized Independent Master Prompt is absent from the canonical repository and has no verified bytes, provenance, or digest, so B2/B3 remain blocked. B4/B5 are A4 construction work and do not exist. Exact campaign runtime identity and independent evaluator isolation also remain unresolved. T08 is complete as an A0-A3 contract foundation; T09 is **CONTRACT READY / EXECUTION BLOCKED**, A8 has no GO decision, and no Forge performance or architecture claim is made.
 
 ## T02 correctness closure and bounded T03 handoff
 

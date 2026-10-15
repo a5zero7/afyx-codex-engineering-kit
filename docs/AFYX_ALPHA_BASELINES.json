@@ -253,6 +253,10 @@
     "jira_status_evidence": "EXTERNALLY_SUPPLIED_TO_DO_2026-10-15",
     "track": "A",
     "gates": "A0-A12",
+    "a0_a3_contract": "docs/AFYX_FORGE_A0_A3_CONTRACT.md",
+    "a0_a3_baseline": "docs/AFYX_FORGE_A0_A3_BASELINE.json",
+    "a0_a3_source_revision": "9333616035e71f63f30c4ebcabf13354f91b2399",
+    "a0_a3_status": "CONTRACT_COMPLETE_T09_EXECUTION_BLOCKED",
     "candidate_definitions": {
       "B0": "no directive",
       "B1": "Efficient Coding 1.2.0",
@@ -261,8 +265,12 @@
       "B4": "refined convergence candidate",
       "B5": "Afyx Forge native candidate"
     },
-    "frozen_harness_configuration": "NOT_VERIFIED",
+    "independent_master_prompt_identity": "UNRESOLVED_NOT_PRESENT_IN_CANONICAL_REPOSITORY",
+    "discovery_cells": 36,
+    "forge_budget_approval": "NOT_APPROVED",
+    "frozen_harness_configuration": "BLOCKED_OWNER_RUNTIME_SELECTION_REQUIRED",
+    "evaluator_isolation": "BLOCKED_NOT_INDEPENDENTLY_DEMONSTRATED_FOR_FORGE",
     "candidate_identity": "NOT_CREATED",
-    "verification": "DEFINITIONS_ONLY"
+    "verification": "A0_A3_CONTRACT_ONLY_NO_BENCHMARK_NO_A8_DECISION"
   }
 }
