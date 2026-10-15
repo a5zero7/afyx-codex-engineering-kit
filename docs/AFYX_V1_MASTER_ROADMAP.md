@@ -2698,3 +2698,29 @@ contracts do not prove actual model routing. Expert v0.1.1 remains a candidate
 until a fresh independent-host DEVELOPMENT run with D.3 provenance observes
 the intended composition and bounded disclosure. The historical Case A
 seven-reference regression remains open; no pilot or formal A1/B1 was run here.
+
+### 2026-10-15 — T06 Expert D.6 substantive-review preparation
+
+Status: **BLOCKED — REVIEW PREPARED / SUBSTANTIVE REVIEW NOT EXECUTED**.
+
+Developer-side preparation correlated Expert `0.1.1` subject revision
+`8df29c3f9e31aa4661cc1e7d6f80328096e3f1ce`, content SHA-256
+`06d947c595f164ed1ad94e8ef97aa412a3ec7559c5f79cb467f0ec1ad488095c`,
+MXC environment SHA-256
+`6203b5dd2f016fade8b04c1d2fd02be5ed8bf24763d1a4404e6931cbb4447c6c`,
+D.5 run `384826dee91d45f0a3388d5d276407ae`, and archive-manifest SHA-256
+`799d34b5934928606954b6fb19b3f8b834e010224a558c85cdfcd527dd48e926`.
+The five D.5 records retain automated PASS and observed routing/operational
+counters, but no sanitized independent-review verdict was available. The
+developer session did not open owner-only raw responses, events, rubrics,
+canaries, or holdouts and did not act as the substantive evaluator.
+
+ERP/Odoo observably selected Expert plus Odoo Engineering, and Negative Routing
+selected no skill and used no tools. Those facts do not prove substantive
+correctness, task fidelity, evidence quality, or security. The historical Case
+A seven-reference progressive-disclosure defect remains `OPEN`; narrow Odoo-only
+exclusion is `NOT TESTED`. Candidate source and historical v0.1.0/v0.1.1
+fingerprints remain unchanged. T07 formal A1/B1 is blocked until an independent
+owner-controlled evaluator returns a sanitized, identity-bound `KEEP`, `REVISE`,
+or `REJECT` conclusion. No model run, candidate freeze, Alpha promotion, release,
+or Jira status change occurred.

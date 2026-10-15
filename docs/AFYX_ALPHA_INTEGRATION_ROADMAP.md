@@ -15,7 +15,7 @@ This plan makes Graph, Afyx Engineering Expert, and Forge work executable agains
 - The accepted candidate, branch HEAD, source revision, installed executable, and persisted index are distinct identities. A claim about one never proves another.
 - PR [#59](https://github.com/a5zero7/afyx-codex-engineering-kit/pull/59) is open, targets `release/alpha-0.1`, and promotes AFYX-266 security work from head `0ca928da5e4b6f3ce170d954fed31d50319da2bb`. Its recorded checks passed, but it predates AFYX-282 and does not prove Graph inventory inclusion.
 - Graph engineering acceptance for AFYX-282 and Knowledge Catalog is reusable, but installed-artifact acceptance for extraction v28 is still unverified.
-- Expert D.5 is recorded as a reported automated 5/5 PASS. D.6 substantive review and formal A1/B1 remain independent gates.
+- Expert D.5 is recorded as a reported automated 5/5 PASS. T06 preparation found no sanitized independent-review verdict, so D.6 is `BLOCKED — REVIEW PREPARED / SUBSTANTIVE REVIEW NOT EXECUTED`; formal A1/B1 remains blocked.
 - Forge Track A is scheduled into the current Alpha development cycle. Its identity and A0-A12 gates are unchanged. This scheduling exception does not add Forge to the frozen v1 release requirements and does not auto-complete Technical Alpha, Alpha, Private Beta, or Stable.
 - Holdouts, rubrics, canaries, and ground truth stay evaluator-only outside both developer and evaluated-agent roots. Only sanitized development evidence belongs in this repository.
 
@@ -32,7 +32,7 @@ These are the twelve approved master-task identities. They reuse existing Jira i
 | T03 | Graph candidate promotion and artifact identity | AFYX-279; separate Graph promotion tracking | After T02 PASS; immutable source/artifact identity and promotion review | PREPARED; promotion blocked by unresolved PR #59 review |
 | T04 | Installed-artifact IJP Windows acceptance and durability | AFYX-252/253/254 | After T03; exact installed artifact on AFYX-248 Windows scope | BLOCKED by T03 |
 | T05 | Adit native macOS pilot acceptance | AFYX-269; related child issues | After T03; compatible native artifact and tester consent | BLOCKED by T03; AFYX-269 externally reported To Do |
-| T06 | Expert D.6 substantive review and candidate freeze | AFYX-283 | Fresh, correlated D.5 evidence; independent substantive review | OPEN; AFYX-283 externally reported In Progress |
+| T06 | Expert D.6 substantive review and candidate freeze | AFYX-283 | Fresh, correlated D.5 evidence; independent substantive review | BLOCKED; review prepared, substantive review not executed |
 | T07 | Expert controlled A1/B1 acceptance | AFYX-283; related AFYX-67/68 | After T06; frozen candidate, rubric, isolation, sampling, and budget | BLOCKED by T06 |
 | T08 | Forge A0–A3 capability and contract work | AFYX-88–91 / AFYX-171–176 | Evaluation freeze before capability harvest/matrix/refinement | PLANNED |
 | T09 | Forge A4–A8 candidate evaluation and architecture decision | AFYX-92–96 / AFYX-177–183 | After T08; immutable B0–B5 candidates and predeclared decision rule | BLOCKED by T08 |
@@ -206,10 +206,56 @@ Proposed, not enforced: prohibit force-push and deletion on all three branches; 
 - T01–T02: completed engineering/documentation evidence in `dev` history.
 - T03: governance prepared; immutable Graph promotion remains BLOCKED.
 - T04/T05: installed Windows/macOS acceptance remains blocked until an approved artifact exists.
-- T06: Expert D.6 substantive DEVELOPMENT review remains open; preserved D.5 evidence is input only.
+- T06: developer-side D.6 preparation is complete, but substantive review is blocked because no sanitized independent-review verdict is available; preserved D.5 evidence is input only.
 - T07: formal A1/B1 remains blocked by T06.
 - T08–T11: Forge Track A sequence remains unchanged; A8 GO is required before A9.
 - T12: combined Kit integration acceptance remains blocked by component acceptance.
+
+## T06 Expert D.6 review preparation
+
+Decision: **BLOCKED — REVIEW PREPARED / SUBSTANTIVE REVIEW NOT EXECUTED**.
+This is not `KEEP`, `REVISE`, or `REJECT`: the developer session verified the
+candidate and D.5 provenance but did not cross the owner/evaluator trust
+boundary. No Expert source, frozen evidence, evaluator-only material, or
+candidate identity changed.
+
+The reviewed identity is Expert `0.1.1`, subject revision
+`8df29c3f9e31aa4661cc1e7d6f80328096e3f1ce`, directory-content SHA-256
+`06d947c595f164ed1ad94e8ef97aa412a3ec7559c5f79cb467f0ec1ad488095c`,
+MXC environment SHA-256
+`6203b5dd2f016fade8b04c1d2fd02be5ed8bf24763d1a4404e6931cbb4447c6c`,
+D.5 run `384826dee91d45f0a3388d5d276407ae`, and archived-evidence manifest
+SHA-256 `799d34b5934928606954b6fb19b3f8b834e010224a558c85cdfcd527dd48e926`.
+The archive remains owner-only and was not opened by the developer session.
+
+| Scenario | Observable D.5 evidence | Provider counters (input / cached / output / reasoning) | Wall time / reads | D.6 verdict |
+|---|---|---:|---:|---|
+| Architecture | Expert observed; automated PASS | 51,621 / 44,032 / 3,764 / 433 | 80.971 s / 5 | SUBSTANTIVE REVIEW BLOCKED |
+| Database/Reliability | Expert observed; automated PASS | 51,568 / 40,192 / 2,614 / 483 | 62.614 s / 5 | SUBSTANTIVE REVIEW BLOCKED |
+| ERP/Odoo | Expert + Odoo Engineering observed; automated PASS | 72,632 / 59,136 / 4,195 / 1,602 | 80.918 s / 3 | SUBSTANTIVE REVIEW BLOCKED |
+| Negative Routing | no skill and no tool call observed; automated PASS | 15,511 / 11,520 / 36 / 0 | 6.271 s / 0 | SUBSTANTIVE REVIEW BLOCKED |
+| Security | Expert observed; automated PASS | 51,670 / 44,032 / 3,057 / 332 | 69.070 s / 5 | SUBSTANTIVE REVIEW BLOCKED |
+
+All five records report first-pass success, return code 0, no timeout, cleanup
+success, unchanged canonical fixture, and zero wrong-version API findings.
+These operational results do not establish substantive correctness, task
+fidelity, evidence quality, unsupported-claim absence, domain/reference
+appropriateness, or security. Total-token and monetary-cost values were not
+available and are not inferred. Separate generated-prompt files were not
+archived, limiting exact prompt-to-response review. The historical Case A
+seven-reference progressive-disclosure defect remains `OPEN`; the narrow
+Odoo-only exclusion is `NOT TESTED` by these five records.
+
+Bounded owner/evaluator handoff:
+
+1. The owner invokes an independent evaluator outside developer and evaluated-agent roots.
+2. The evaluator receives read-only access to the owner-controlled D.5 archive and public candidate source, while rubrics, canaries, and holdouts remain evaluator-only.
+3. The evaluator assesses each scenario independently for correctness, task fidelity, evidence quality, and security, including routing, domain/reference/workflow selection, unsupported claims, progressive disclosure, and recorded tool failures.
+4. The evaluator emits only a sanitized, signed or hashed conclusion tied to the identities above; raw responses, events, rubrics, holdouts, and private paths remain unpublished.
+5. The conclusion records `KEEP`, `REVISE`, or `REJECT` with provenance. Narrow Odoo exclusion remains `NOT TESTED` unless a separately authorized evaluation covers it.
+
+Until that conclusion exists, the candidate is not frozen as review-passed,
+T07 is blocked, and this evidence has no Alpha or release implication.
 
 ## Jira comment drafts — not posted
 
@@ -230,6 +276,8 @@ Proposed, not enforced: prohibit force-push and deletion on all three branches; 
 > T01.1 preserves Expert v0.1.1 identity separately from historical v0.1.0. AFYX-283 is externally reported In Progress. T06 owns D.6 substantive review and candidate freeze; T07 owns controlled A1/B1 acceptance and cannot start before T06. The reported D.5 5/5 evidence, isolation contract, hard quality gates, and progressive-disclosure regression target remain unchanged. No evaluation was run and no status was changed.
 
 > T03.1 archived Expert v0.1.1 DEVELOPMENT D.5 run `384826dee91d45f0a3388d5d276407ae` outside the repository under owner-only ACL before restoring generated `latest-summary.json` to the historical schema-1 HEAD blob. The archive contains 25 correlated control/raw files with verified source/final hashes; manifest SHA-256 is `799d34b5934928606954b6fb19b3f8b834e010224a558c85cdfcd527dd48e926`. Separate generated-prompt files were unavailable and are recorded as a limitation. This is D.5 input only; D.6 remains open and formal A1/B1 remains blocked. No raw evaluator material was committed.
+
+> T06 developer-side preparation verified Expert v0.1.1 identity, MXC fingerprint, D.5 run correlation, and sanitized per-scenario routing/operational counters. No sanitized independent evaluator verdict exists, and the owner-only archive was not opened by the developer session. Decision: BLOCKED — REVIEW PREPARED / SUBSTANTIVE REVIEW NOT EXECUTED. ERP/Odoo observably loaded Expert + Odoo Engineering and Negative Routing loaded no skill/tool, but all five substantive scenario verdicts remain blocked. Historical seven-reference progressive-disclosure is OPEN; narrow Odoo-only exclusion is NOT TESTED. Candidate source and fingerprints are unchanged; no model run or formal A1/B1 occurred. T07 remains blocked pending an independently produced sanitized KEEP/REVISE/REJECT conclusion.
 
 ### AFYX-12
 

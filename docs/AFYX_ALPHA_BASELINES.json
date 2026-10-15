@@ -188,6 +188,27 @@
     },
     "promotion_status": "BLOCKED_UNCHANGED"
   },
+  "t06_expert_d6_review": {
+    "observed_at": "2026-10-15",
+    "decision": "BLOCKED_REVIEW_PREPARED_SUBSTANTIVE_REVIEW_NOT_EXECUTED",
+    "provenance": "DEVELOPER_PREPARATION_ONLY_NO_SANITIZED_INDEPENDENT_REVIEW_VERDICT",
+    "candidate_version": "0.1.1",
+    "subject_revision": "8df29c3f9e31aa4661cc1e7d6f80328096e3f1ce",
+    "content_sha256": "06d947c595f164ed1ad94e8ef97aa412a3ec7559c5f79cb467f0ec1ad488095c",
+    "environment_sha256": "6203b5dd2f016fade8b04c1d2fd02be5ed8bf24763d1a4404e6931cbb4447c6c",
+    "evaluation_run_id": "384826dee91d45f0a3388d5d276407ae",
+    "archive_manifest_sha256": "799d34b5934928606954b6fb19b3f8b834e010224a558c85cdfcd527dd48e926",
+    "scenario_count": 5,
+    "automated_d5_result": "REPORTED_PASS_5_OF_5",
+    "substantive_scenario_verdict": "BLOCKED_ALL_FIVE",
+    "erp_odoo_routing": "EXPERT_AND_ODOO_ENGINEERING_OBSERVED",
+    "negative_routing": "NO_SKILL_NO_TOOL_OBSERVED",
+    "narrow_odoo_exclusion": "NOT_TESTED",
+    "historical_seven_reference_regression": "OPEN",
+    "generated_prompt_files": "NOT_ARCHIVED_RECORDED_LIMITATION",
+    "formal_a1_b1": "BLOCKED_BY_T06",
+    "source_changed": false
+  },
   "expert": {
     "historical_v0_1_0": {
       "version": "0.1.0",
@@ -205,7 +226,7 @@
       "environment_sha256": "6203b5dd2f016fade8b04c1d2fd02be5ed8bf24763d1a4404e6931cbb4447c6c",
       "engineering_ci": "https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/38499899438",
       "d5_automated_result": "REPORTED_PASS_5_OF_5_NOT_REVERIFIED_BY_T01",
-      "d6_substantive_review": "NOT_VERIFIED",
+      "d6_substantive_review": "BLOCKED_REVIEW_PREPARED_SUBSTANTIVE_REVIEW_NOT_EXECUTED",
       "formal_a1_b1": "NOT_RUN"
     }
   },
