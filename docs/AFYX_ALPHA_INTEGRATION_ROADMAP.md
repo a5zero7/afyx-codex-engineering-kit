@@ -9,7 +9,8 @@ Identity ledger: [AFYX_ALPHA_BASELINES.json](AFYX_ALPHA_BASELINES.json)
 
 This plan makes Graph, Afyx Engineering Expert, and Forge work executable against one vocabulary. It does not promote an artifact, activate Technical Alpha, run a benchmark, or change Jira status.
 
-- `main` remains canonical integration; `afyx/native-phase5f-parser-grammar` remains ongoing engineering; `release/alpha-0.1` remains stabilization-only.
+- `main` remains canonical integration. `dev` is ordinary engineering and starts at verified T02 final source `ad1560dd930ccde94b0dadaa7b42d804be55714f`. `alpha` is reviewed Technical Alpha stabilization and starts at the existing `release/alpha-0.1` baseline `018dce0a31f927f2dc200c7be0bc8b71a8a3535c`. The historical branches remain preserved.
+- Promotion flows `dev` -> reviewed `alpha` promotion -> accepted `main` integration. This is documented policy only: GitHub reports `main` and `release/alpha-0.1` as unprotected, so reviews and non-force integration remain operational gates rather than enforced branch protection.
 - AFYX-248 owns IJP Odoo 10/17 Windows acceptance. AFYX-269 owns Adit's macOS pilot. Neither is closed here.
 - The accepted candidate, branch HEAD, source revision, installed executable, and persisted index are distinct identities. A claim about one never proves another.
 - PR [#59](https://github.com/a5zero7/afyx-codex-engineering-kit/pull/59) is open, targets `release/alpha-0.1`, and promotes AFYX-266 security work from head `0ca928da5e4b6f3ce170d954fed31d50319da2bb`. Its recorded checks passed, but it predates AFYX-282 and does not prove Graph inventory inclusion.
@@ -27,8 +28,8 @@ These are the twelve approved master-task identities. They reuse existing Jira i
 | Task | Deliverable | Reused Jira | Dependency / exit | Planning state |
 |---|---|---|---|---|
 | T01 | Scope, baseline, evaluation contract | AFYX-248 / AFYX-283 / AFYX-12 | This document and ledger validated | COMPLETE (documentation only) |
-| T02 | Graph case reproduction and correctness closure | AFYX-248; reuse AFYX-280–282; AFYX-265/278 where relevant | Source-grounded disposable reproduction; correctness and layer accounting close | LOCAL PASS; exact-final-head CI pending |
-| T03 | Graph candidate promotion and artifact identity | AFYX-279; separate Graph promotion tracking | After T02 PASS; immutable source/artifact identity and promotion review | BLOCKED until T02 final CI |
+| T02 | Graph case reproduction and correctness closure | AFYX-248; reuse AFYX-280–282; AFYX-265/278 where relevant | Source-grounded disposable reproduction; correctness and layer accounting close | PASS; exact-head Graph Build 38700997957 succeeded on 3 OS |
+| T03 | Graph candidate promotion and artifact identity | AFYX-279; separate Graph promotion tracking | After T02 PASS; immutable source/artifact identity and promotion review | PREPARED; promotion blocked by unresolved PR #59 review |
 | T04 | Installed-artifact IJP Windows acceptance and durability | AFYX-252/253/254 | After T03; exact installed artifact on AFYX-248 Windows scope | BLOCKED by T03 |
 | T05 | Adit native macOS pilot acceptance | AFYX-269; related child issues | After T03; compatible native artifact and tester consent | BLOCKED by T03; AFYX-269 externally reported To Do |
 | T06 | Expert D.6 substantive review and candidate freeze | AFYX-283 | Fresh, correlated D.5 evidence; independent substantive review | OPEN; AFYX-283 externally reported In Progress |
@@ -127,13 +128,43 @@ Existing incremental coverage is reused and rerun: add raises 9→10, delete res
 
 Local validation: focused inventory/routing 29/29 PASS; expanded sync/freshness selection 101/101 PASS; clean TypeScript/UI build PASS; semantic extraction-v28 additive contract and six-fixture historical baseline PASS; CLI/MCP smoke 21/21 PASS; identity, component, independence, and artifact-identity checks PASS. The full local Node 26 Windows suite is FAIL because of pre-existing/environmental TEMP cleanup `EPERM`, a Windows `which` fixture, and load-sensitive timeouts; isolated T02 and representative sync cases pass. Exact-final-head Node 24 Windows/Linux/macOS Graph Build remains the T02 closure authority and is recorded externally to avoid a self-referential documentation commit.
 
-T03 may start only after exact-final-head Graph Build passes. Its input is the accepted source revision, local build identity above, nine-declaration evidence, MCP exposure regression, validation record, and an independently generated candidate manifest plus per-platform archive digests. Installed Windows/macOS acceptance remains T04/T05 and was not performed here.
+T02 closed at source/documentation HEAD `ad1560dd930ccde94b0dadaa7b42d804be55714f`. Exact-head [Graph Build 38700997957](https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/38700997957) passed on Windows, Linux, and macOS. Its input to T03 is the accepted source revision, local build identity above, nine-declaration evidence, MCP exposure regression, and validation record. Installed Windows/macOS acceptance remains T04/T05 and was not performed here.
+
+## T03 branch governance and promotion manifest
+
+Observed branch topology on 2026-10-15:
+
+| Role | Branch | Starting revision | Actual enforcement |
+|---|---|---|---|
+| Canonical integration | `main` | `5349c4a184e539f0ac0752d895ff3262c6326e29` | GitHub branch protection NOT CONFIGURED |
+| Technical Alpha stabilization | `alpha` | `018dce0a31f927f2dc200c7be0bc8b71a8a3535c` | Policy documented; GitHub protection NOT CONFIGURED |
+| Ordinary engineering | `dev` | `ad1560dd930ccde94b0dadaa7b42d804be55714f` | Tracks `origin/dev`; review required before Alpha promotion |
+
+Historical refs `afyx/native-phase5f-parser-grammar`, `release/alpha-0.1`, and `afyx/afyx-279-alpha-security-promotion` are retained unchanged. PR [#59](https://github.com/a5zero7/afyx-codex-engineering-kit/pull/59) remains open against legacy `release/alpha-0.1`: it is mergeable/CLEAN and its recorded Windows/Linux/macOS CI and Graph Build checks pass, but no review decision is recorded. It must be approved and merged by its existing process before `alpha` is synchronized by verified non-force integration. T03 does not merge or retarget it.
+
+The reviewable promotion is layered rather than a merge of all `dev`:
+
+1. Preserve frozen candidate source `a431ba9ad5fae7bd06329f1fc6e42f1ba503f6dd` as historical rollback evidence.
+2. Complete PR #59 security review and integrate its four commits (`5c5a4a5`, `637bdae`, `923cf1c`, `0ca928d`) into legacy Alpha through the existing review.
+3. Synchronize the approved legacy Alpha result into `alpha` without rewriting history.
+4. Create a Graph-only promotion from that exact security baseline. Include accepted AFYX-280 bounded-search prerequisites (`4572dc2`, `e508732`), AFYX-282/extraction-v28 inventory and acceptance (`d728a20`, `c16ff5c`, `ef8777a`, `0a9615d`, `2e81388`, `8837ea9`), and T02 MCP allowlist correction (`7fe9328`). Review the resulting patch rather than relying on commit ancestry alone.
+5. Exclude Expert, Forge, evaluation harness, unrelated skill/installer changes, and all other development-only files. A direct PR #59-head-to-`dev` comparison contains 106 changed paths, including 75 non-Graph paths outside the bounded release/documentation/workflow scope, so merging all of `dev` is prohibited.
+
+General CI now runs on pushes to `main`, `dev`, and `alpha`, and on pull requests to `main` or `alpha`. Graph Build runs path-filtered pushes to those three branches and path-filtered pull requests to `main` or `alpha`; it remains manually dispatchable. The stable Graph Release workflow is unchanged and must not be used for this Technical Alpha candidate.
+
+Candidate identity remains pending until the scoped promotion is reviewed and merged. The required matrix is six inner archives—`win32-x64`, `win32-arm64`, `linux-x64`, `linux-arm64`, `darwin-x64`, and `darwin-arm64`—each tied to the same exact `alpha` source SHA, package/product `1.0.0`, channel `technical-alpha`, Node `>=22.5.0`, extraction version 28, embedded revision, release manifest, and inner-archive SHA-256. GitHub wrapper ZIP digests are not accepted as archive identities. Publisher authenticity remains `NOT VERIFIED` unless independent attestation is established.
+
+No new candidate artifact exists in T03 preparation. The T02 archive is a local development package, not a distribution candidate; therefore archive digests, retained downloads, isolated candidate installation, upgrade/rollback, and T04/T05 handoff are `NOT PERFORMED`. The local Node 26 Windows full-suite failure remains a supported-runtime compatibility risk: cleanup `EPERM` and missing Unix `which` are environment-specific in isolated evidence, while load-sensitive timeouts are not fully dispositioned. Node 24 is the cross-platform CI baseline; the published Node floor remains `>=22.5.0`. Candidate approval requires explicit Node 26 disposition rather than narrowing support or calling the local suite PASS.
 
 ## Jira comment drafts — not posted
 
+### AFYX-279
+
+> T03 preparation established `dev` at T02 final source `ad1560dd930ccde94b0dadaa7b42d804be55714f` and `alpha` at legacy stabilization baseline `018dce0a31f927f2dc200c7be0bc8b71a8a3535c`; historical branches remain unchanged. PR #59 is OPEN, mergeable/CLEAN, and its recorded 3-OS checks pass, but no review decision is recorded. The scoped promotion manifest includes the accepted AFYX-280 prerequisites, AFYX-282 extraction-v28 inventory changes, and T02 allowlist fix while excluding Expert, Forge, and other development-only paths. No candidate SHA or archive digest exists yet. Status: PREPARED / PROMOTION BLOCKED pending PR #59 approval, verified Alpha synchronization, scoped promotion review, exact-source CI, retained six-target artifacts, inner-archive SHA-256 verification, isolated acceptance, and Node 26 compatibility disposition. No merge, release, install, or Jira status change was performed.
+
 ### AFYX-248
 
-> T02 reproduced the historical nine-versus-four shape as ranked `limit=4` versus exact inventory `9`, not failed indexing. Independent AST and Graph agree on nine supported `_inherit = 'sale.order'` declarations across three files/modules; extraction v28 is complete/fresh with 4 indexed files and zero failed/skipped/unsupported. A real defect was fixed: the legacy tiny-repo MCP filter hid the AFYX-282 inventory tool. Revision `7fe932892c06fb9aae873bafb686de0ff05be330` retains inventory and actual MCP returns the exact 9/3/3 result. Focused 29/29 and sync/freshness 101/101 pass; build, semantic 6/6, smoke 21/21, identity/component/independence pass. Local full Node 26 remains FAIL on known Windows cleanup/`which`/load-sensitive categories; exact-final-head Node 24 3OS Graph Build is the final gate. No install, promotion, Jira update, or client-repository mutation occurred.
+> T02 is complete: exact-head Graph Build 38700997957 passed Windows/Linux/macOS at `ad1560dd930ccde94b0dadaa7b42d804be55714f`, with AST and exact inventory agreeing on 9/3/3 and tiny-repository MCP advertising Inventory plus Explore. T03 branch governance and a bounded Graph-only promotion manifest are prepared, but promotion is blocked by unresolved PR #59 review and no candidate artifact has been created. T04/T05 remain blocked; no IJP/Adit install or acceptance was performed. The local Node 26 full-suite failure remains explicitly recorded as a supported-runtime compatibility risk pending disposition.
 
 ### AFYX-283
 

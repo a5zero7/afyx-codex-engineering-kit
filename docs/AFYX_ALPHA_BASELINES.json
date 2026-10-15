@@ -86,7 +86,52 @@
     },
     "installed_artifact_acceptance": "NOT_PERFORMED_T04_T05",
     "promotion": "NOT_PERFORMED_T03",
-    "exact_final_head_ci": "PENDING_AT_DOCUMENTATION_COMMIT"
+    "exact_final_head_ci": "https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/38700997957"
+  },
+  "t03_promotion_preparation": {
+    "observed_at": "2026-10-15",
+    "main": {
+      "branch": "main",
+      "revision": "5349c4a184e539f0ac0752d895ff3262c6326e29",
+      "branch_protection": "NOT_CONFIGURED"
+    },
+    "development": {
+      "branch": "dev",
+      "starting_revision": "ad1560dd930ccde94b0dadaa7b42d804be55714f",
+      "tracks": "origin/dev"
+    },
+    "alpha": {
+      "branch": "alpha",
+      "starting_revision": "018dce0a31f927f2dc200c7be0bc8b71a8a3535c",
+      "source_branch": "release/alpha-0.1",
+      "branch_protection": "NOT_CONFIGURED"
+    },
+    "security_gate": {
+      "pull_request": "https://github.com/a5zero7/afyx-codex-engineering-kit/pull/59",
+      "head_revision": "0ca928da5e4b6f3ce170d954fed31d50319da2bb",
+      "state": "OPEN_MERGEABLE_CHECKS_PASS_REVIEW_NOT_RECORDED"
+    },
+    "candidate": {
+      "status": "NOT_CREATED_PROMOTION_BLOCKED",
+      "package_version": "1.0.0",
+      "channel": "technical-alpha",
+      "node_compatibility": ">=22.5.0",
+      "ci_tested_node": "24",
+      "extraction_version": 28,
+      "targets": [
+        "win32-x64",
+        "win32-arm64",
+        "linux-x64",
+        "linux-arm64",
+        "darwin-x64",
+        "darwin-arm64"
+      ],
+      "source_revision": "NOT_CREATED",
+      "archive_sha256": "NOT_CREATED",
+      "publisher_authenticity": "NOT_VERIFIED",
+      "installed_acceptance": "NOT_PERFORMED_T04_T05"
+    },
+    "promotion_status": "PREPARED_PROMOTION_BLOCKED"
   },
   "expert": {
     "historical_v0_1_0": {

@@ -7,8 +7,16 @@ name: Afyx Graph Build
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main, dev, alpha]
+    paths:
+      - 'afyx-graph/**'
+      - 'scripts/install-afyx-graph.*'
+      - 'scripts/validate-afyx-graph.py'
+      - 'scripts/audit-legacy-identity.py'
+      - '.github/workflows/graph-build.yml'
   pull_request:
-    branches: [main]
+    branches: [main, alpha]
     paths:
       - 'afyx-graph/**'
       - 'scripts/install-afyx-graph.*'

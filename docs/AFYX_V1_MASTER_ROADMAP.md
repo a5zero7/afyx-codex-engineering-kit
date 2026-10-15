@@ -6,10 +6,11 @@ Contract revision: **2026-10-15**
 v1 scope policy: **FROZEN — Phase 1 through Phase 11**  
 Post-v1 policy: **PLANNED EXPANSION — not a v1 release blocker**
 
-Current work: **Alpha integration planning across Graph, Expert, and Forge; AFYX-248 remains in progress**
-Task: T01 Alpha scope/baseline/acceptance reconciliation; `AFYX-248` remains in progress
+Current work: **T03 Graph candidate promotion preparation; AFYX-248 remains in progress**
+Task: T03 branch governance and reviewable Graph promotion manifest; `AFYX-279` remains externally reported In Review
 Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`  
-Active implementation branch: `afyx/native-phase5f-parser-grammar`  
+Active implementation branch: `dev` (created from verified T02 final source `ad1560dd930ccde94b0dadaa7b42d804be55714f`)
+Historical engineering branch preserved: `afyx/native-phase5f-parser-grammar`
 T01 observed development checkpoint: `cdce74c7b75fae94ca99966bb80451afdb766e60`
 Alpha integration contract: [`AFYX_ALPHA_INTEGRATION_ROADMAP.md`](AFYX_ALPHA_INTEGRATION_ROADMAP.md)
 Latest verified Phase 5F implementation checkpoint: `62621a0639f42db0eaac69ef087436d851cdba88`  
