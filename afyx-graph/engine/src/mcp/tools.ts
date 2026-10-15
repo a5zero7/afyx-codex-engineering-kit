@@ -818,10 +818,9 @@ export class ToolHandler {
       const budget = getExploreBudget(stats.fileCount);
 
       // Tiny-repo tool gating: on projects under TINY_REPO_FILE_THRESHOLD
-      // files, only expose the core trio (search, node, explore) — one
-      // below even the 4-tool default: at this scale callers, too, reduces
-      // to one grep. (Historical note: the audit below ran when context and
-      // trace still existed; its "5 core tools" are today's trio.)
+      // files, retain exact inventory alongside the navigation tools. Exact
+      // declaration enumeration is a distinct correctness route, not optional
+      // ranked-navigation overhead.
       //
       // n=2 audits ruled out cutting below 5 tools:
       // - 3-tool gate (search + context + trace): cost regressed on
@@ -842,6 +841,7 @@ export class ToolHandler {
       // so it deserves the same gating.
       const TINY_REPO_FILE_THRESHOLD = 500;
       const TINY_REPO_CORE_TOOLS = new Set([
+        'afyx_graph_inventory',
         'afyx_graph_explore',
         'afyx_graph_search',
         'afyx_graph_node',

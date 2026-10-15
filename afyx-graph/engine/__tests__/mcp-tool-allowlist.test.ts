@@ -26,6 +26,14 @@ describe('AFYX_GRAPH_MCP_TOOLS allowlist', () => {
     expect(listed()).toEqual(['afyx_graph_explore', 'afyx_graph_inventory']);
   });
 
+  it('keeps exact inventory visible after tiny-repository tool gating', () => {
+    delete process.env[ENV];
+    const tiny = { getStats: () => ({ fileCount: 12 }) } as unknown as
+      NonNullable<ConstructorParameters<typeof ToolHandler>[0]>;
+    expect(new ToolHandler(tiny).getTools().map((tool) => tool.name).sort())
+      .toEqual(['afyx_graph_explore', 'afyx_graph_inventory']);
+  });
+
   it('re-enables an unlisted tool via the allowlist (impact)', () => {
     process.env[ENV] = 'explore,impact';
     expect(listed()).toEqual(['afyx_graph_explore', 'afyx_graph_impact']);
