@@ -20,7 +20,8 @@ The controller copies the canonical public fixture and exact selected candidate 
 ## Public interfaces
 
 - Input is schema version 1 from the E1 handoff and must match one exact manifest cell.
-- `RestrictedProcessLauncher.launch(LaunchRequest)` must return the observed restricted identity, exit state, bounded output, timeout, owned-process-tree termination, provider-reported token values when available, tool-call count, and retry count.
+- `LaunchRequest` supplies the controller's forbidden-output markers to the injected launcher. `RestrictedProcessLauncher.launch(LaunchRequest)` returns the observed restricted identity, exit state, bounded output, timeout, owned-process-tree termination, provider-reported token values when available, tool-call count, and retry count.
+- `ProcessOutcome` must explicitly report per-stream upstream capture truncation (`stdout_upstream_truncated` / `stderr_upstream_truncated`). If an upstream stream is truncated, `*_stream_scan_complete` and `*_stream_forbidden_marker` attest whether its complete byte stream was scanned by the independently reviewed launcher. Missing/invalid metadata or an unseen, unverified suffix fails closed with `upstream_output_unverified` and `sanitization: FAIL`. A detected marker fails with `unsafe_output_marker`. The controller's published `evidence.*_truncated` only describes its own digest-preview capture limit; it is **not** an upstream completeness guarantee. The owner must verify that the actual launcher's scan and truncation attestations reflect observed streams; synthetic/fake assertions alone do not establish this.
 - `ArtifactValidator.validate(...)` must be implemented so validation also executes inside the restricted boundary. It returns a command exit status and at least one content check; the trusted controller must never execute agent-modified source as owner/evaluator.
 - Output contains every canonical `result_schema.required_fields` entry plus public candidate/environment identities, mutation inventory, lifecycle state, bounded evidence metadata, and sanitization status. All four private quality gates remain `NOT_TESTED` until the independent evaluator applies its private rubric.
 
@@ -30,7 +31,7 @@ The public implementation rejects malformed or extra schema fields, unknown cell
 
 ## Deterministic developer validation
 
-Synthetic tests cover successful materialization and cleanup plus malformed input, fingerprint drift, traversal/reparse rejection, restricted-identity mismatch, timeout, unexpected termination, incomplete process-tree cleanup, cleanup failure, forbidden output markers, unauthorized mutations, retry-policy drift, raw-output publication rejection, and exit-zero with incorrect content. They make no model/provider call and use no private material.
+Synthetic tests cover successful materialization and cleanup plus malformed input, fingerprint drift, traversal/reparse rejection, restricted-identity mismatch, timeout, unexpected termination, incomplete process-tree cleanup, cleanup failure, forbidden output markers (including past the controller publication limit), missing/invalid upstream capture metadata, unverified truncated suffix, verified bounded streaming-scan attestations, unsafe nested public metadata, unauthorized mutations, retry-policy drift, raw-output publication rejection, and exit-zero with incorrect content. They make no model/provider call and use no private material. Developer-reported local validation on source commit `e1eea70cb5a1a3163c38673fb536a5516026c6dc`: controller `24/24`, Forge focused `36/36`, deterministic repository `163/163` PASS; remote GitHub CI has no reported checks for that commit and is **NOT VERIFIED**.
 
 Commands:
 
@@ -49,7 +50,7 @@ Before any privileged or model execution, the owner/independent evaluator must:
 
 1. review this exact source revision independently and implement the launcher and validator outside developer control;
 2. bind them to the approved native-Windows restricted identity without forwarding owner/evaluator credentials, profiles, WSL, shared mounts, undeclared MCP endpoints, or private storage;
-3. ensure model and validation processes, including agent-modified code, run only inside the restricted boundary with bounded timeout and owned-process-tree cleanup;
+3. ensure model and validation processes, including agent-modified code, run only inside the restricted boundary with bounded timeout and owned-process-tree cleanup; independently verify the launcher's per-stream bounded capture, complete streaming scan and upstream truncation metadata, including adversarial unseen-suffix cases;
 4. repeat positive and adversarial synthetic acceptance through the actual controller and preserve raw evidence privately;
 5. publish only a sanitized integrity-verifiable attestation, then obtain each remaining owner approval separately.
 
