@@ -6,8 +6,8 @@ Contract revision: **2026-10-15**
 v1 scope policy: **FROZEN — Phase 1 through Phase 11**  
 Post-v1 policy: **PLANNED EXPANSION — not a v1 release blocker**
 
-Current work: **T09.E1.5 Forge secure evaluator handoff preparation; campaign remains blocked**
-Task: public trust-boundary, per-cell lifecycle, sanitized evidence, and owner handoff contract; no model benchmark, A8 GO, Forge production implementation, or Alpha promotion
+Current work: **AFYX-286 Forge public trusted-controller contract; campaign remains blocked**
+Task: synthetic-only manifest/schema validation, disposable materialization, restricted-launch interface, bounded evidence and cleanup; no privileged deployment, model benchmark, A8 GO, or Alpha promotion
 Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`  
 Active implementation branch: `dev` (created from verified T02 final source `ad1560dd930ccde94b0dadaa7b42d804be55714f`)
 Historical engineering branch preserved: `afyx/native-phase5f-parser-grammar`
