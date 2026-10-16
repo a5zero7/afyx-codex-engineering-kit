@@ -148,6 +148,24 @@ class ForgeReadinessTests(unittest.TestCase):
             forge.validate_manifest(tampered),
         )
 
+    def test_public_handoff_is_fingerprinted_sanitized_and_blocked(self) -> None:
+        handoff = self.manifest["public_handoff"]
+        path = ROOT / handoff["path"]
+        self.assertEqual(forge.file_sha256(path), handoff["sha256"])
+        self.assertEqual(handoff["benchmark_cells_executed"], 0)
+        text = path.read_text(encoding="utf-8").lower()
+        for forbidden in forge.PUBLIC_HANDOFF_FORBIDDEN:
+            self.assertNotIn(forbidden.lower(), text)
+
+        tampered = copy.deepcopy(self.manifest)
+        tampered["public_handoff"]["sha256"] = "0" * 64
+        tampered["public_handoff"]["status"] = "AUTHORIZED"
+        tampered["public_handoff"]["benchmark_cells_executed"] = 1
+        violations = forge.validate_manifest(tampered)
+        self.assertIn("public handoff SHA-256 mismatch", violations)
+        self.assertIn("public handoff must remain campaign-blocked", violations)
+        self.assertIn("public handoff cannot record benchmark execution", violations)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -137,3 +137,7 @@ The candidate matrix is now deterministic:
 Canonical LF-normalized fingerprints, ordered B3 composition, disposable materialization, activation contracts, candidate differentiation, fixture integrity, path containment, and public-material contamination checks are machine enforced. B2 and B4 contain no transplanted Prompt Master source, unavailable original B2 text, evaluator-only content, or third-party implementation dependency.
 
 Route B authority did not approve runtime selection, evaluator arrangement or isolation, the evaluator-only bundle, either budget, final execution, A8, product implementation, or release changes. The fail-closed campaign check therefore remains expected to exit `2`. Status: **CANDIDATE MATRIX COMPLETE / CAMPAIGN AUTHORIZATION BLOCKED**.
+
+## T09.E1.5 checkpoint — secure evaluator handoff
+
+The public [T09.E1 secure handoff contract](AFYX_FORGE_T09_E1_SECURE_HANDOFF.md) now defines the independently controlled trust boundary, Windows-only per-cell lifecycle, public input/result schemas, sanitation, fail-closed security checks, cleanup, and precise owner handoff. The manifest binds its LF-normalized SHA-256. No private evaluator artifact, runner, credential, canary value, scoring material, or protected path is stored here. B0-B5, fixture and cell-order identities are unchanged; zero benchmark cells were run. WSL and the owner's personal Ubuntu are explicitly excluded from formal evaluated-agent execution. All seven campaign blockers remain; status is **CAMPAIGN BLOCKED**.

@@ -6,8 +6,8 @@ Contract revision: **2026-10-15**
 v1 scope policy: **FROZEN — Phase 1 through Phase 11**  
 Post-v1 policy: **PLANNED EXPANSION — not a v1 release blocker**
 
-Current work: **T09.P2A Forge Route B candidate construction; campaign authorization remains blocked**
-Task: controlled A0 amendment plus deterministic B2/B3/B4 identities; no model benchmark, A8 GO, Forge production implementation, or Alpha promotion
+Current work: **T09.E1.5 Forge secure evaluator handoff preparation; campaign remains blocked**
+Task: public trust-boundary, per-cell lifecycle, sanitized evidence, and owner handoff contract; no model benchmark, A8 GO, Forge production implementation, or Alpha promotion
 Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`  
 Active implementation branch: `dev` (created from verified T02 final source `ad1560dd930ccde94b0dadaa7b42d804be55714f`)
 Historical engineering branch preserved: `afyx/native-phase5f-parser-grammar`
@@ -1841,6 +1841,16 @@ materialization. All six slots are prepared but unexecuted. Runtime, isolation,
 independent evaluator, evaluator-only bundle, 36-cell and confirmation budgets,
 and final execution authorization remain blocked. No benchmark, A8 decision,
 product implementation, Prompt Master removal, or release-scope change occurred.
+
+### T09.E1.5 checkpoint — public secure handoff prepared
+
+[AFYX_FORGE_T09_E1_SECURE_HANDOFF.md](AFYX_FORGE_T09_E1_SECURE_HANDOFF.md)
+defines developer/evaluator/evaluated-agent boundaries, Windows-only per-cell
+lifecycle, sanitized public schemas, fail-closed isolation checks, cleanup, and
+owner handoff. The manifest fingerprints this public contract; B0-B5 identities,
+fixture, 36-cell order, budgets, and authorization state are unchanged. WSL and
+the owner's personal Ubuntu are excluded from formal execution. Status remains
+**CAMPAIGN BLOCKED** pending all seven external gates.
 
 ## Track B — Platform Generalization
 

@@ -105,6 +105,11 @@ PRIVATE_MARKERS = (
     "canary_value",
     "expected_answer",
 )
+PUBLIC_HANDOFF_FORBIDDEN = (
+    "D:\\AfyxEvaluatorPrivate",
+    "E1_CANARY.txt",
+    "S-1-5-21-",
+)
 
 
 def load_json(path: Path) -> dict:
@@ -217,6 +222,22 @@ def validate_manifest(manifest: dict) -> list[str]:
             violations.append("owner decision register must contain exact P1 approvals")
         if any(value != "NOT_APPROVED" for value in decisions.values()):
             violations.append("owner decisions cannot be approved by preparation")
+
+    handoff = manifest.get("public_handoff", {})
+    handoff_path = repository_path(handoff.get("path", ""), violations, "public_handoff")
+    if not handoff_path or not handoff_path.is_file():
+        violations.append("public handoff contract is missing")
+    else:
+        if file_sha256(handoff_path) != handoff.get("sha256"):
+            violations.append("public handoff SHA-256 mismatch")
+        handoff_text = handoff_path.read_text(encoding="utf-8")
+        for forbidden in PUBLIC_HANDOFF_FORBIDDEN:
+            if forbidden.lower() in handoff_text.lower():
+                violations.append(f"public handoff exposes forbidden identifier: {forbidden}")
+    if handoff.get("status") != "PUBLIC_CONTRACT_PREPARED_CAMPAIGN_BLOCKED":
+        violations.append("public handoff must remain campaign-blocked")
+    if handoff.get("benchmark_cells_executed") != 0:
+        violations.append("public handoff cannot record benchmark execution")
 
     if candidates:
         if {
