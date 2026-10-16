@@ -10,7 +10,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from evals.forge import controller
+from evals.forge import controller, validate as forge_validate
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -99,6 +99,26 @@ class PublicControllerTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
+
+    def test_streaming_hash_matches_authoritative_canonical_content(self) -> None:
+        cases = {
+            "utf8-lf": "alpha\nβeta\n".encode("utf-8"),
+            "utf8-crlf": b"alpha\r\nbeta\r\n",
+            "isolated-cr": b"alpha\rbeta\r",
+            "mixed-endings": b"alpha\r\nbeta\rgamma\ndelta",
+            "chunk-boundary-crlf": (b"a" * (64 * 1024 - 1)) + b"\r\nz",
+            "chunk-boundary-cr": (b"a" * (64 * 1024 - 1)) + b"\rz",
+            "invalid-utf8-raw-fallback": b"alpha\xff\r\nbeta\r",
+        }
+        for name, content in cases.items():
+            with self.subTest(case=name):
+                path = self.workspace_parent / f"{name}.bin"
+                path.write_bytes(content)
+                digest, size = controller._stream_file_sha256(
+                    path, normalize_lf=True
+                )
+                self.assertEqual(digest, forge_validate.file_sha256(path))
+                self.assertEqual(size, len(content))
 
     def input(self, candidate_id: str = "B0", scenario_index: int = 0) -> dict:
         scenario = self.manifest["scenarios"][scenario_index]

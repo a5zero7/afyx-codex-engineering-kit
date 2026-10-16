@@ -8,6 +8,7 @@ of the launcher and artifact-validator protocols after independent review.
 
 from __future__ import annotations
 
+import codecs
 import hashlib
 import json
 import math
@@ -254,7 +255,10 @@ def _stream_file_sha256(
     deadline: float | None = None,
     normalize_lf: bool = False,
 ) -> tuple[str, int]:
-    digest = hashlib.sha256()
+    raw_digest = hashlib.sha256()
+    canonical_digest = hashlib.sha256()
+    utf8_decoder = codecs.getincrementaldecoder("utf-8")(errors="strict")
+    valid_utf8 = True
     size = 0
     pending_cr = False
     with path.open("rb") as stream:
@@ -268,17 +272,34 @@ def _stream_file_sha256(
                 raise ContractViolation(
                     "workspace_file_size_limit", "workspace file size limit exceeded"
                 )
+            raw_digest.update(chunk)
             if normalize_lf:
+                if valid_utf8:
+                    try:
+                        utf8_decoder.decode(chunk, final=False)
+                    except UnicodeDecodeError:
+                        valid_utf8 = False
                 if pending_cr:
-                    chunk = b"\r" + chunk
+                    canonical_digest.update(b"\n")
+                    if chunk.startswith(b"\n"):
+                        chunk = chunk[1:]
                     pending_cr = False
                 if chunk.endswith(b"\r"):
                     chunk = chunk[:-1]
                     pending_cr = True
-                chunk = chunk.replace(b"\r\n", b"\n")
-            digest.update(chunk)
+                canonical_digest.update(
+                    chunk.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+                )
+            else:
+                canonical_digest.update(chunk)
+    if normalize_lf and valid_utf8:
+        try:
+            utf8_decoder.decode(b"", final=True)
+        except UnicodeDecodeError:
+            valid_utf8 = False
     if pending_cr:
-        digest.update(b"\r")
+        canonical_digest.update(b"\n")
+    digest = canonical_digest if not normalize_lf or valid_utf8 else raw_digest
     return digest.hexdigest(), size
 
 
