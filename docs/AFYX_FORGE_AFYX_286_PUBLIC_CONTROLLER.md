@@ -1,6 +1,10 @@
 # AFYX-286 public trusted-controller contract
 
-Status: **PUBLIC SYNTHETIC IMPLEMENTATION READY / OWNER INTEGRATION BLOCKED**
+Status:
+
+- **PUBLIC IMPLEMENTATION READY**
+- **OWNER INTEGRATION PENDING**
+- **FORMAL CAMPAIGN BLOCKED — 0/36**
 
 This record covers only the independently reviewable developer-side contract. It implements no privileged controller, provider client, Windows account integration, Task Scheduler deployment, private evaluator bundle, rubric, holdout, scoring, or benchmark execution. The authoritative trust boundary and schemas remain [T09.E1 secure evaluator handoff](AFYX_FORGE_T09_E1_SECURE_HANDOFF.md); this document does not introduce a competing campaign contract.
 
@@ -16,6 +20,8 @@ Public baseline: `63f528e24ed0b4b0217b8db3666ed8b7dd06bebd`. Jira: [AFYX-286](ht
 4. `PublicController` records bounded output digests and sizes, actual file mutations, artifact checks, identity/timeout/process-tree status, sanitization, and correlated cleanup. Raw stdout, stderr, transcript, prompt, credentials, and private evidence are not public result fields.
 
 The controller copies the canonical public fixture and exact selected candidate into a fresh workspace, rechecks content after copying, snapshots bytes before and after the injected launcher, and rejects mutations outside `allowed_file_scope`. `DigestArtifactValidator` performs deterministic LF-normalized content validation for synthetic artifacts; a process exit code of zero without matching content still fails.
+
+Canonical artifact hashing is parity-tested against the authoritative `evals/forge/validate.py` `canonical_content()` / `file_sha256()` contract for LF, CRLF, isolated CR, mixed endings, chunk-boundary line endings, and invalid UTF-8 raw-byte fallback. The implementation remains streaming and bounded; it does not require whole-file buffering.
 
 ## Public interfaces
 
@@ -33,7 +39,9 @@ The public implementation rejects malformed or extra schema fields, unknown cell
 
 ## Deterministic developer validation
 
-Synthetic tests cover successful materialization and cleanup plus malformed input, fingerprint drift, traversal/reparse rejection, restricted-identity mismatch, timeout, unexpected termination, incomplete process-tree cleanup, cleanup failure, forbidden output markers (including past the controller publication limit), missing/invalid upstream capture metadata, unverified truncated suffix, verified bounded streaming-scan attestations, unsafe nested public metadata, unauthorized mutations, retry-policy drift, raw-output publication rejection, and exit-zero with incorrect content. They make no model/provider call and use no private material. Developer-reported local validation on source commit `e1eea70cb5a1a3163c38673fb536a5516026c6dc`: controller `24/24`, Forge focused `36/36`, deterministic repository `163/163` PASS; remote GitHub CI has no reported checks for that commit and is **NOT VERIFIED**.
+Synthetic tests cover successful materialization and cleanup plus malformed input, fingerprint drift, traversal/reparse rejection, restricted-identity mismatch, timeout, unexpected termination, incomplete process-tree cleanup, cleanup failure, forbidden output markers (including past the controller publication limit), missing/invalid upstream capture metadata, unverified truncated suffix, verified bounded streaming-scan attestations, unsafe nested public metadata, unauthorized mutations, retry-policy drift, raw-output publication rejection, exit-zero with incorrect content, bounded inventory failures, and canonical-hash parity. They make no model/provider call and use no private material.
+
+Developer-reported local validation on final public implementation source commit `e4d4c5d6067a06720cc9349982dbce885ca83e37`: controller `29/29`, Forge focused/readiness `41/41`, deterministic repository `168/168` PASS; static manifest and fixture/materialization validation, Python compilation, `git diff --check`, and frozen manifest/candidate/fixture identity comparison also PASS. The zero-model CI workflow now includes pull requests targeting `dev`; remote CI remains a separately observed requirement and must not be inferred from local results.
 
 Commands:
 
@@ -47,6 +55,16 @@ python -m py_compile evals/forge/controller.py scripts/tests/test_forge_controll
 ## Security limitations and owner-only handoff
 
 This code does not prove Windows OS isolation, credential containment, WSL exclusion, network policy, Task Scheduler suitability, actual restricted-token launch, or process-tree termination. Fakes prove contract handling only. The seven campaign authorization gates remain unresolved and the benchmark remains `0/36`.
+
+The unresolved authorization gates are:
+
+1. `OWNER_APPROVED_RUNTIME_CONFIGURATION`
+2. `INDEPENDENTLY_ENFORCED_EVALUATOR_ISOLATION`
+3. `EXPLICIT_36_CELL_BUDGET_APPROVAL`
+4. `EXPLICIT_CONFIRMATION_BUDGET_APPROVAL`
+5. `INDEPENDENT_EVALUATOR_ARRANGEMENT_APPROVAL`
+6. `FINAL_CAMPAIGN_EXECUTION_APPROVAL`
+7. `EVALUATOR_ONLY_BUNDLE_FREEZE`
 
 Before any privileged or model execution, the owner/independent evaluator must:
 
