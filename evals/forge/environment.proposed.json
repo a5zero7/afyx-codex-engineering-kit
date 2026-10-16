@@ -46,9 +46,9 @@
   "candidate_activation": {
     "B0": "no repository-local directive or Afyx skill",
     "B1": "copy exact Efficient Coding 1.2.0 to repository-local .agents/skills/efficient-coding",
-    "B2": "blocked until authorized prompt injection mechanism and content are frozen",
-    "B3": "B1 skill materialization followed by exact B2 prompt injection",
-    "B4": "blocked until convergence candidate exists",
+    "B2": "copy exact Afyx Independent Engineering Baseline 0.1.0 to evaluated workspace root AGENTS.md",
+    "B3": "materialize exact B1 skill first, then exact Route B B2 root instruction",
+    "B4": "copy exact Afyx Forge Refined Convergence Candidate 0.1.0 to evaluated workspace root AGENTS.md",
     "B5": "copy exact evaluation-only candidate to evaluated workspace root AGENTS.md"
   },
   "isolation": {

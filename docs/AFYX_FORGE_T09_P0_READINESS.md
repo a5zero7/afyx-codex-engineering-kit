@@ -2,6 +2,7 @@
 
 Status: **T09.P0 PREPARATION COMPLETE / BENCHMARK EXECUTION BLOCKED**
 T09.P1 checkpoint: **PREPARATION COMPLETE / EXTERNAL GATES BLOCKED**
+T09.P2A checkpoint: **CANDIDATE MATRIX COMPLETE / CAMPAIGN AUTHORIZATION BLOCKED**
 
 Starting revision: `b2c1d1016b2a1401a651e2b539e9a029ee0606c5`
 
@@ -117,3 +118,22 @@ The proposed runtime matches the observed developer host for Codex CLI 0.162.1, 
 `python evals/forge/validate.py --campaign-ready` is the machine-enforced authorization check. It exits `2` while any campaign prerequisite remains unresolved. The current gate rejects execution for nine recorded reasons: B2/B3 authorization, B4 identity, runtime approval, independently enforced isolation, 36-cell budget approval, evaluator-arrangement approval, final-execution approval, evaluator-bundle freeze, and the incomplete B0-B5 fingerprint set. Campaign identity, campaign source revision, environment fingerprint, evaluator identity, and private-bundle digest remain deliberately `null`; benchmark execution remains `false`.
 
 T09.P1 therefore closes only as **PREPARATION COMPLETE / EXTERNAL GATES BLOCKED**. The next executable action belongs to the owner and independent evaluator: supply authorized B2 evidence, approve the proposed runtime/evaluator arrangement and budgets, then return sanitized isolation and bundle-manifest evidence. No model cell, Alpha promotion, A8 decision, or production Forge implementation was performed.
+
+## T09.P2A checkpoint — controlled Route B candidate completion
+
+The owner explicitly selected Route B on 2026-10-16. The original Independent Master Prompt remains historically `UNRESOLVED`; it was not recovered, replaced, or relabeled. Amendment `A0-ROUTE-B-2026-10-16` instead authorizes a distinct Afyx-owned baseline, **Afyx Independent Engineering Baseline 0.1.0**, derived only from the public A0-A3 behavior requirements and valid Afyx specifications.
+
+The candidate matrix is now deterministic:
+
+| Candidate | Identity | Result |
+|---|---|---|
+| B0 | `b43d351e73d703787e7da80d47c945f76e60094159cccfc3cf6052af8b15e64f` | PREPARED / NOT RUN |
+| B1 | `deab6d987eb8af8ad2ab312f7ed9facb3be1cbda20622eeeaedc80a1db0829a4` | PREPARED / NOT RUN |
+| B2 | `06ada73c05824b014a1ff0aa3ab801115cbd4cd4625f4ab1dc9538bf21fe413e` | PREPARED / NOT RUN; Route B baseline |
+| B3 | `884eaacf98c4f80d83e5b84a2216f5253db91f7e9930c869fa0fe3248ae9234d` | PREPARED / NOT RUN; exact B1 then B2 composition |
+| B4 | `ecb1d698956cd490fc65cb6d1abf085ff123053ddeae043add45c74703f2f452` | PREPARED / NOT RUN; refined convergence |
+| B5 | `0b4e610c6772fa03dcce3d7f49e7a427bd97bded6abc2b1719f0e9a1b1e8cb58` | PREPARED / NOT RUN; evaluation-only native candidate |
+
+Canonical LF-normalized fingerprints, ordered B3 composition, disposable materialization, activation contracts, candidate differentiation, fixture integrity, path containment, and public-material contamination checks are machine enforced. B2 and B4 contain no transplanted Prompt Master source, unavailable original B2 text, evaluator-only content, or third-party implementation dependency.
+
+Route B authority did not approve runtime selection, evaluator arrangement or isolation, the evaluator-only bundle, either budget, final execution, A8, product implementation, or release changes. The fail-closed campaign check therefore remains expected to exit `2`. Status: **CANDIDATE MATRIX COMPLETE / CAMPAIGN AUTHORIZATION BLOCKED**.

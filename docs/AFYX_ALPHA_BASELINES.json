@@ -271,21 +271,30 @@
     "t09_p1_status": "PREPARATION_COMPLETE_EXTERNAL_GATES_BLOCKED",
     "t09_p1_materialization": "B0_B1_B5_DETERMINISTIC_PASS",
     "t09_p1_campaign_gate": "FAIL_CLOSED_NINE_EXTERNAL_BLOCKERS",
+    "t09_p2a_status": "CANDIDATE_MATRIX_COMPLETE_CAMPAIGN_AUTHORIZATION_BLOCKED",
+    "t09_p2a_amendment": "A0-ROUTE-B-2026-10-16",
+    "t09_p2a_materialization": "B0_B1_B2_B3_B4_B5_DETERMINISTIC_PASS",
+    "t09_p2a_campaign_gate": "FAIL_CLOSED_SEVEN_EXTERNAL_BLOCKERS",
     "campaign_authorization": "NOT_GRANTED",
     "candidate_definitions": {
       "B0": "no directive",
       "B1": "Efficient Coding 1.2.0",
-      "B2": "independent master prompt",
-      "B3": "Efficient Coding 1.2.0 plus independent master prompt",
-      "B4": "refined convergence candidate",
+      "B2": "Afyx Independent Engineering Baseline 0.1.0 under Route B amendment",
+      "B3": "exact Efficient Coding 1.2.0 plus exact Route B B2",
+      "B4": "Afyx Forge Refined Convergence Candidate 0.1.0",
       "B5": "Afyx Forge native candidate"
     },
     "independent_master_prompt_identity": "UNRESOLVED_NOT_PRESENT_IN_CANONICAL_REPOSITORY",
+    "route_b_candidate_identities": {
+      "B2": "06ada73c05824b014a1ff0aa3ab801115cbd4cd4625f4ab1dc9538bf21fe413e",
+      "B3": "884eaacf98c4f80d83e5b84a2216f5253db91f7e9930c869fa0fe3248ae9234d",
+      "B4": "ecb1d698956cd490fc65cb6d1abf085ff123053ddeae043add45c74703f2f452"
+    },
     "discovery_cells": 36,
     "forge_budget_approval": "NOT_APPROVED",
     "frozen_harness_configuration": "PROPOSED_OWNER_APPROVAL_REQUIRED",
     "evaluator_isolation": "BLOCKED_NOT_INDEPENDENTLY_DEMONSTRATED_FOR_FORGE",
-    "candidate_identity": "PARTIAL_B0_B1_B5_PREPARED_B2_B3_B4_BLOCKED",
-    "verification": "T09_P0_DETERMINISTIC_PREPARATION_ONLY_NO_MODEL_BENCHMARK_NO_A8_DECISION"
+    "candidate_identity": "COMPLETE_B0_B5_PREPARED_NOT_RUN",
+    "verification": "T09_P2A_DETERMINISTIC_CANDIDATE_CONSTRUCTION_ONLY_NO_MODEL_BENCHMARK_NO_A8_DECISION"
   }
 }

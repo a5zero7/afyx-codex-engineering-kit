@@ -5,6 +5,17 @@
   "frozen_at": "2026-10-16",
   "source_revision": "9333616035e71f63f30c4ebcabf13354f91b2399",
   "status": "CONTRACT_COMPLETE_T09_EXECUTION_BLOCKED",
+  "amendments": [
+    {
+      "amendment_id": "A0-ROUTE-B-2026-10-16",
+      "date": "2026-10-16",
+      "authorization": "EXPLICIT_OWNER_ROUTE_B",
+      "change": "Use the newly authored Afyx Independent Engineering Baseline 0.1.0 for candidate slot B2 and construct dependent B3/B4 identities.",
+      "historical_original_b2": "UNRESOLVED_NOT_REPLACED_OR_RELABELED",
+      "benchmark_authorized": false,
+      "a8_go": false
+    }
+  ],
   "source_inputs": {
     "efficient_coding": {
       "version": "1.2.0",
@@ -59,16 +70,17 @@
       "campaign_identity": "NOT_CREATED"
     },
     "B2": {
-      "definition": "owner-authorized independent master prompt",
-      "identity": "BLOCKED_INPUT_UNAVAILABLE"
+      "definition": "Afyx Independent Engineering Baseline 0.1.0 under controlled Route B amendment",
+      "identity": "06ada73c05824b014a1ff0aa3ab801115cbd4cd4625f4ab1dc9538bf21fe413e",
+      "historical_original_b2": "UNRESOLVED_NOT_RELABELED"
     },
     "B3": {
-      "definition": "B1 plus B2 with deterministic composition order",
-      "identity": "BLOCKED_BY_B2"
+      "definition": "exact B1 plus exact Route B B2 with deterministic composition order",
+      "identity": "884eaacf98c4f80d83e5b84a2216f5253db91f7e9930c869fa0fe3248ae9234d"
     },
     "B4": {
-      "definition": "refined convergence candidate",
-      "identity": "NOT_CONSTRUCTED_A4"
+      "definition": "Afyx Forge Refined Convergence Candidate 0.1.0",
+      "identity": "ecb1d698956cd490fc65cb6d1abf085ff123053ddeae043add45c74703f2f452"
     },
     "B5": {
       "definition": "independent Afyx-native Forge candidate",
@@ -127,14 +139,15 @@
     "A3": "COMPLETE_ARCHITECTURE_NOT_SELECTED"
   },
   "t09_handoff": {
-    "readiness": "CONTRACT_READY_EXECUTION_BLOCKED",
+    "readiness": "CANDIDATE_MATRIX_COMPLETE_CAMPAIGN_AUTHORIZATION_BLOCKED",
     "blockers": [
-      "INDEPENDENT_MASTER_PROMPT_IDENTITY",
-      "B0_B5_EXECUTABLE_IDENTITIES",
       "OWNER_APPROVED_RUNTIME_FINGERPRINT",
       "INDEPENDENT_EVALUATOR_ISOLATION",
       "FORGE_36_CELL_BUDGET_APPROVAL",
-      "PUBLIC_AND_PRIVATE_EVALUATION_MATERIAL_FREEZE"
+      "CONFIRMATION_BUDGET_APPROVAL",
+      "INDEPENDENT_EVALUATOR_ARRANGEMENT_APPROVAL",
+      "EVALUATOR_ONLY_BUNDLE_FREEZE",
+      "FINAL_CAMPAIGN_EXECUTION_APPROVAL"
     ]
   },
   "jira": {

@@ -54,7 +54,7 @@ class ForgeReadinessTests(unittest.TestCase):
     def test_pristine_public_fixtures_have_expected_failing_baselines(self) -> None:
         self.assertEqual(forge.validate_pristine_fixtures(self.manifest), [])
 
-    def test_prepared_candidates_materialize_with_exact_identities(self) -> None:
+    def test_all_candidates_materialize_with_exact_identities(self) -> None:
         self.assertEqual(forge.validate_candidate_materialization(self.manifest), [])
 
     def test_campaign_authorization_gate_fails_closed(self) -> None:
@@ -67,7 +67,7 @@ class ForgeReadinessTests(unittest.TestCase):
         tampered["campaign_gate"]["benchmark_execution"] = True
         violations = forge.validate_manifest(tampered)
         self.assertIn("campaign execution cannot be self-authorized", violations)
-        self.assertIn("T09.P1 must not execute the benchmark", violations)
+        self.assertIn("T09.P2A must not execute the benchmark", violations)
 
     def test_candidate_identity_tamper_is_rejected(self) -> None:
         tampered = copy.deepcopy(self.manifest)
@@ -77,19 +77,75 @@ class ForgeReadinessTests(unittest.TestCase):
             forge.validate_manifest(tampered),
         )
 
-    def test_guessed_b2_and_fixture_traversal_are_rejected(self) -> None:
+    def test_route_b_history_composition_and_fixture_traversal_are_enforced(self) -> None:
         tampered = copy.deepcopy(self.manifest)
-        tampered["candidates"]["B2"]["source"] = "guessed.txt"
-        tampered["candidates"]["B2"]["content_identity"] = "1" * 64
+        tampered["a0_amendment"]["historical_b2"]["replacement_claim"] = True
+        tampered["candidates"]["B2"]["historical_original_b2_status"] = "REPLACED"
+        tampered["candidates"]["B3"]["composition_order"] = ["B2", "B1"]
         tampered["candidates"]["B1"]["materialization"]["destination"] = "../outside"
         tampered["scenarios"][0]["allowed_file_scope"] = ["../outside.py"]
         violations = forge.validate_manifest(tampered)
-        self.assertIn("B2 must remain blocked without guessed content", violations)
+        self.assertIn("controlled A0 Route B amendment contract mismatch", violations)
+        self.assertIn("Route B B2 identity/history contract mismatch", violations)
+        self.assertIn("B3 composition order must be B1 then B2", violations)
         self.assertIn("candidate B1 materialization contract mismatch", violations)
         self.assertTrue(any("escapes fixture" in item for item in violations))
         self.assertIn(
             "candidate B1 materialization escapes workspace",
             forge.validate_candidate_materialization(tampered),
+        )
+
+    def test_b3_ordered_identity_and_candidate_differentiation_are_enforced(self) -> None:
+        candidates = self.manifest["candidates"]
+        expected = forge.ordered_composition_sha256(
+            [(candidate_id, candidates[candidate_id]["content_identity"]) for candidate_id in ("B1", "B2")]
+        )
+        self.assertEqual(candidates["B3"]["content_identity"], expected)
+        identities = [candidates[candidate_id]["content_identity"] for candidate_id in forge.EXPECTED_CANDIDATES]
+        self.assertEqual(len(identities), len(set(identities)))
+
+        tampered = copy.deepcopy(self.manifest)
+        tampered["candidates"]["B3"]["content_identity"] = forge.ordered_composition_sha256(
+            [(candidate_id, candidates[candidate_id]["content_identity"]) for candidate_id in ("B2", "B1")]
+        )
+        self.assertIn(
+            "B3 ordered composition identity mismatch",
+            forge.validate_manifest(tampered),
+        )
+
+    def test_route_b_sources_have_bounded_dependencies_and_no_private_markers(self) -> None:
+        self.assertEqual(
+            self.manifest["candidates"]["B2"]["dependencies"],
+            ["public A0-A3 behavior contract"],
+        )
+        self.assertEqual(
+            self.manifest["candidates"]["B4"]["dependencies"],
+            ["B1", "B2", "A3 behavior contract"],
+        )
+        for candidate_id in ("B2", "B4"):
+            source = ROOT / self.manifest["candidates"][candidate_id]["source"]
+            content = "\n".join(
+                path.read_text(encoding="utf-8").lower()
+                for path in source.rglob("*")
+                if path.is_file()
+            )
+            for marker in forge.PRIVATE_MARKERS:
+                self.assertNotIn(marker, content)
+
+    def test_candidate_roles_and_activation_contracts_are_distinct_and_enforced(self) -> None:
+        candidates = self.manifest["candidates"]
+        roles = {
+            candidate_id: candidates[candidate_id]["comparison_role"]
+            for candidate_id in forge.EXPECTED_CANDIDATES
+        }
+        self.assertEqual(roles, forge.EXPECTED_COMPARISON_ROLES)
+        self.assertEqual(len(roles), len(set(roles.values())))
+
+        tampered = copy.deepcopy(self.manifest)
+        tampered["candidates"]["B2"]["activation"] = "manual untracked injection"
+        self.assertIn(
+            "candidate activation contract mismatch",
+            forge.validate_manifest(tampered),
         )
 
 

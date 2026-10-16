@@ -1,22 +1,43 @@
 {
-  "schema_version": 1,
-  "task": "T09.P0",
-  "status": "PREPARATION_COMPLETE_BENCHMARK_EXECUTION_BLOCKED",
+  "schema_version": 2,
+  "task": "T09.P2A",
+  "status": "CANDIDATE_MATRIX_COMPLETE_CAMPAIGN_AUTHORIZATION_BLOCKED",
   "a0_contract": {
     "path": "docs/AFYX_FORGE_A0_A3_CONTRACT.md",
-    "sha256": "93be670b9184e3ae6f61ebb2ee42329e4fe13ac01e821a668a5d7d8bd1db39a4",
+    "sha256": "1b3d21a13bac1cb10fefdbf8d3ae049aca4722bb261aecfa57d306342f0afa4c",
     "identity_algorithm": "sha256 of UTF-8 content normalized to LF"
   },
   "environment": {
     "path": "evals/forge/environment.proposed.json",
-    "sha256": "0ec293c272eef1bddc44e7878a7a1d5e7926b2b0b0dfc03c506b6024f0f1ae76",
+    "sha256": "63bc0a5ee147840a43e6d881daefec8c435fbef40f806bfbbeb1b45f8371654c",
     "approval": "OWNER_APPROVAL_REQUIRED",
     "identity_algorithm": "sha256 of UTF-8 content normalized to LF"
+  },
+  "a0_amendment": {
+    "amendment_id": "A0-ROUTE-B-2026-10-16",
+    "decision": "CONTROLLED_B2_BASELINE_REVISION",
+    "authorization": "EXPLICIT_OWNER_ROUTE_B",
+    "authorization_date": "2026-10-16",
+    "scope": "construct a new independent B2 baseline and dependent B3/B4 candidates; deterministic validation only",
+    "historical_b2": {
+      "definition": "owner-authorized original Independent Master Prompt",
+      "identity": "UNRESOLVED_INPUT_UNAVAILABLE",
+      "replacement_claim": false
+    },
+    "excluded_authority": [
+      "model benchmark execution",
+      "evaluator self-approval",
+      "runtime or budget approval",
+      "A8 GO",
+      "Prompt Master removal",
+      "release scope changes"
+    ]
   },
   "candidate_order": ["B0", "B1", "B2", "B3", "B4", "B5"],
   "candidates": {
     "B0": {
       "definition": "no additional engineering directive",
+      "comparison_role": "host_baseline_without_additional_directive",
       "readiness": "PREPARED_EXECUTABLE_NOT_RUN",
       "content_identity": "b43d351e73d703787e7da80d47c945f76e60094159cccfc3cf6052af8b15e64f",
       "identity_algorithm": "sha256 of UTF-8 AFYX_FORGE_B0_NO_ADDITIONAL_DIRECTIVE newline",
@@ -32,6 +53,7 @@
     },
     "B1": {
       "definition": "Efficient Coding 1.2.0",
+      "comparison_role": "focused_existing_engineering_workflow",
       "readiness": "PREPARED_EXECUTABLE_NOT_RUN",
       "content_identity": "deab6d987eb8af8ad2ab312f7ed9facb3be1cbda20622eeeaedc80a1db0829a4",
       "identity_algorithm": "sorted POSIX-relative path and LF-normalized UTF-8 content SHA-256",
@@ -48,51 +70,72 @@
       }
     },
     "B2": {
-      "definition": "owner-authorized Independent Master Prompt",
-      "readiness": "BLOCKED_INPUT_AND_AUTHORIZATION_UNRESOLVED",
-      "content_identity": null,
-      "identity_algorithm": null,
-      "source": null,
-      "composition_order": ["independent-master-prompt"],
-      "dependencies": [],
-      "activation": "UNRESOLVED",
-      "entry_point": null,
-      "missing_prerequisites": [
-        "authorized exact content",
-        "source location and revision",
-        "ownership and provenance",
-        "license or usage disposition",
-        "owner evaluation authorization",
-        "immutable snapshot and SHA-256",
-        "approved injection mechanism"
-      ]
+      "definition": "Afyx Independent Engineering Baseline 0.1.0",
+      "comparison_role": "independent_route_b_task_contract",
+      "version": "0.1.0",
+      "readiness": "PREPARED_EXECUTABLE_NOT_RUN",
+      "content_identity": "06ada73c05824b014a1ff0aa3ab801115cbd4cd4625f4ab1dc9538bf21fe413e",
+      "identity_algorithm": "sorted POSIX-relative path and LF-normalized UTF-8 content SHA-256",
+      "source": "evals/forge/candidates/B2",
+      "composition_order": ["B2/AGENTS.md"],
+      "dependencies": ["public A0-A3 behavior contract"],
+      "activation": "repository instruction automatically loaded by Codex host",
+      "entry_point": "copy candidates/B2/AGENTS.md to evaluated workspace root AGENTS.md",
+      "materialization": {
+        "kind": "copy_tree_contents",
+        "source": "evals/forge/candidates/B2",
+        "destination": ".",
+        "identity_root": "."
+      },
+      "provenance": "independently authored Afyx-owned Route B baseline from public A0-A3 behavior requirements; no original B2, Prompt Master source, or third-party implementation transplanted",
+      "license_usage": "Afyx-owned evaluation material authorized by owner for T09.P2A candidate construction and later separately authorized evaluation",
+      "historical_original_b2_status": "UNRESOLVED_NOT_RELABELED"
     },
     "B3": {
-      "definition": "exact B1 plus exact B2 composition",
-      "readiness": "BLOCKED_BY_B2",
-      "content_identity": null,
-      "identity_algorithm": "sha256 of ordered B1 and B2 identities after B2 freeze",
+      "definition": "exact Efficient Coding 1.2.0 plus exact Afyx Independent Engineering Baseline 0.1.0",
+      "comparison_role": "additive_skill_then_task_contract",
+      "readiness": "PREPARED_EXECUTABLE_NOT_RUN",
+      "content_identity": "884eaacf98c4f80d83e5b84a2216f5253db91f7e9930c869fa0fe3248ae9234d",
+      "identity_algorithm": "sha256 of ordered component labels and identities: B1 NUL hash LF, then B2 NUL hash LF",
       "source": null,
       "composition_order": ["B1", "B2"],
       "dependencies": ["B1", "B2"],
-      "activation": "materialize B1 before injecting B2",
-      "entry_point": null,
-      "missing_prerequisites": ["B2 executable identity"]
+      "activation": "materialize B1 first, then B2; observe B1 skill read when routed and root B2 instruction loading",
+      "entry_point": "workspace root B2 AGENTS.md plus .agents/skills/efficient-coding/SKILL.md",
+      "materialization": {
+        "kind": "ordered_composition",
+        "components": ["B1", "B2"],
+        "component_verification": {
+          "B1": {"kind": "tree_identity", "path": ".agents/skills/efficient-coding"},
+          "B2": {"kind": "overlay_identity", "path": "."}
+        }
+      },
+      "provenance": "deterministic composition of exact B1 and Route B B2 identities; no merged or rewritten source"
     },
     "B4": {
-      "definition": "refined convergence candidate",
-      "readiness": "BLOCKED_BY_B2_AND_NOT_CONSTRUCTED",
-      "content_identity": null,
-      "identity_algorithm": null,
-      "source": null,
-      "composition_order": [],
+      "definition": "Afyx Forge Refined Convergence Candidate 0.1.0",
+      "comparison_role": "deduplicated_refined_convergence",
+      "version": "0.1.0",
+      "readiness": "PREPARED_EVALUATION_ONLY_NOT_RUN",
+      "content_identity": "ecb1d698956cd490fc65cb6d1abf085ff123053ddeae043add45c74703f2f452",
+      "identity_algorithm": "sorted POSIX-relative path and LF-normalized UTF-8 content SHA-256",
+      "source": "evals/forge/candidates/B4",
+      "composition_order": ["B4/AGENTS.md"],
       "dependencies": ["B1", "B2", "A3 behavior contract"],
-      "activation": "UNRESOLVED",
-      "entry_point": null,
-      "missing_prerequisites": ["B2 review", "evidence-backed convergence construction"]
+      "activation": "repository instruction automatically loaded by Codex host",
+      "entry_point": "copy candidates/B4/AGENTS.md to evaluated workspace root AGENTS.md",
+      "materialization": {
+        "kind": "copy_tree_contents",
+        "source": "evals/forge/candidates/B4",
+        "destination": ".",
+        "identity_root": "."
+      },
+      "provenance": "original Afyx convergence of reviewed B1, Route B B2, and A3 behavior contracts; duplicated instructions removed without upstream source transplantation",
+      "product_status": "evaluation candidate; not production Forge and not A8-approved architecture"
     },
     "B5": {
       "definition": "independent Afyx-native evaluation directive",
+      "comparison_role": "independent_a3_native_behavior_contract",
       "readiness": "PREPARED_EVALUATION_ONLY_NOT_RUN",
       "content_identity": "0b4e610c6772fa03dcce3d7f49e7a427bd97bded6abc2b1719f0e9a1b1e8cb58",
       "identity_algorithm": "sorted POSIX-relative path and LF-normalized UTF-8 content SHA-256",
@@ -269,26 +312,24 @@
     "monetary_cost": "provider reported only; otherwise NOT AVAILABLE"
   },
   "campaign_gate": {
-    "status": "PREPARATION_COMPLETE_EXTERNAL_GATES_BLOCKED",
+    "status": "CANDIDATE_MATRIX_COMPLETE_CAMPAIGN_AUTHORIZATION_BLOCKED",
     "campaign_identity": null,
     "campaign_source_revision": null,
     "environment_fingerprint": null,
     "evaluator_identity": null,
     "private_bundle_manifest_sha256": null,
     "isolation_acceptance": "NOT_TESTED",
-    "candidate_matrix_frozen": false,
+    "candidate_matrix_frozen": true,
     "execution_authorization": "NOT_GRANTED",
     "benchmark_execution": false
   },
   "benchmark_execution_blockers": [
-    "B2_B3_IDENTITY_AND_AUTHORIZATION",
-    "B4_EXECUTABLE_IDENTITY",
     "OWNER_APPROVED_RUNTIME_CONFIGURATION",
     "INDEPENDENTLY_ENFORCED_EVALUATOR_ISOLATION",
     "EXPLICIT_36_CELL_BUDGET_APPROVAL",
+    "EXPLICIT_CONFIRMATION_BUDGET_APPROVAL",
     "INDEPENDENT_EVALUATOR_ARRANGEMENT_APPROVAL",
     "FINAL_CAMPAIGN_EXECUTION_APPROVAL",
-    "EVALUATOR_ONLY_BUNDLE_FREEZE",
-    "ALL_B0_B5_EXECUTABLE_FINGERPRINTS"
+    "EVALUATOR_ONLY_BUNDLE_FREEZE"
   ]
 }

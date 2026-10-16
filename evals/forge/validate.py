@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate Forge T09.P0 public preparation without running model cells."""
+"""Validate Forge T09.P2A candidates without running model cells."""
 
 from __future__ import annotations
 
@@ -28,6 +28,22 @@ EXPECTED_CATEGORIES = [
     "negative_simple_task",
 ]
 HARD_GATES = ["correctness", "task_fidelity", "evidence_quality", "security"]
+EXPECTED_COMPARISON_ROLES = {
+    "B0": "host_baseline_without_additional_directive",
+    "B1": "focused_existing_engineering_workflow",
+    "B2": "independent_route_b_task_contract",
+    "B3": "additive_skill_then_task_contract",
+    "B4": "deduplicated_refined_convergence",
+    "B5": "independent_a3_native_behavior_contract",
+}
+EXPECTED_ACTIVATION = {
+    "B0": "none",
+    "B1": "implicit host skill routing; successful SKILL.md read must be observed",
+    "B2": "repository instruction automatically loaded by Codex host",
+    "B3": "materialize B1 first, then B2; observe B1 skill read when routed and root B2 instruction loading",
+    "B4": "repository instruction automatically loaded by Codex host",
+    "B5": "repository instruction automatically loaded by Codex host",
+}
 REQUIRED_OWNER_DECISIONS = {
     "runtime_configuration",
     "forge_36_cell_budget",
@@ -46,6 +62,26 @@ EXPECTED_MATERIALIZATION = {
         "destination": ".agents/skills/efficient-coding",
         "identity_root": ".agents/skills/efficient-coding",
     },
+    "B2": {
+        "kind": "copy_tree_contents",
+        "source": "evals/forge/candidates/B2",
+        "destination": ".",
+        "identity_root": ".",
+    },
+    "B3": {
+        "kind": "ordered_composition",
+        "components": ["B1", "B2"],
+        "component_verification": {
+            "B1": {"kind": "tree_identity", "path": ".agents/skills/efficient-coding"},
+            "B2": {"kind": "overlay_identity", "path": "."},
+        },
+    },
+    "B4": {
+        "kind": "copy_tree_contents",
+        "source": "evals/forge/candidates/B4",
+        "destination": ".",
+        "identity_root": ".",
+    },
     "B5": {
         "kind": "copy_tree_contents",
         "source": "evals/forge/candidates/B5",
@@ -54,15 +90,13 @@ EXPECTED_MATERIALIZATION = {
     },
 }
 EXPECTED_CAMPAIGN_BLOCKERS = [
-    "B2_B3_IDENTITY_AND_AUTHORIZATION",
-    "B4_EXECUTABLE_IDENTITY",
     "OWNER_APPROVED_RUNTIME_CONFIGURATION",
     "INDEPENDENTLY_ENFORCED_EVALUATOR_ISOLATION",
     "EXPLICIT_36_CELL_BUDGET_APPROVAL",
+    "EXPLICIT_CONFIRMATION_BUDGET_APPROVAL",
     "INDEPENDENT_EVALUATOR_ARRANGEMENT_APPROVAL",
     "FINAL_CAMPAIGN_EXECUTION_APPROVAL",
     "EVALUATOR_ONLY_BUNDLE_FREEZE",
-    "ALL_B0_B5_EXECUTABLE_FINGERPRINTS",
 ]
 PRIVATE_MARKERS = (
     "evaluator_rubric",
@@ -105,6 +139,14 @@ def directory_sha256(root: Path) -> str:
     return digest.hexdigest()
 
 
+def ordered_composition_sha256(components: list[tuple[str, str]]) -> str:
+    payload = b"".join(
+        label.encode("utf-8") + b"\0" + identity.encode("ascii") + b"\n"
+        for label, identity in components
+    )
+    return hashlib.sha256(payload).hexdigest()
+
+
 def repository_path(value: str, violations: list[str], label: str) -> Path | None:
     path = (REPO_ROOT / value).resolve()
     try:
@@ -132,10 +174,19 @@ def discovery_order_sha256(manifest: dict) -> str:
 
 def validate_manifest(manifest: dict) -> list[str]:
     violations: list[str] = []
-    if manifest.get("schema_version") != 1 or manifest.get("task") != "T09.P0":
+    if manifest.get("schema_version") != 2 or manifest.get("task") != "T09.P2A":
         violations.append("manifest schema_version/task mismatch")
     if manifest.get("candidate_order") != EXPECTED_CANDIDATES:
         violations.append("candidate_order must be exact B0-B5")
+    amendment = manifest.get("a0_amendment", {})
+    if (
+        amendment.get("amendment_id") != "A0-ROUTE-B-2026-10-16"
+        or amendment.get("authorization") != "EXPLICIT_OWNER_ROUTE_B"
+        or amendment.get("historical_b2", {}).get("identity")
+        != "UNRESOLVED_INPUT_UNAVAILABLE"
+        or amendment.get("historical_b2", {}).get("replacement_claim") is not False
+    ):
+        violations.append("controlled A0 Route B amendment contract mismatch")
 
     candidates = manifest.get("candidates")
     if not isinstance(candidates, dict) or list(candidates) != EXPECTED_CANDIDATES:
@@ -168,6 +219,16 @@ def validate_manifest(manifest: dict) -> list[str]:
             violations.append("owner decisions cannot be approved by preparation")
 
     if candidates:
+        if {
+            candidate_id: candidates[candidate_id].get("comparison_role")
+            for candidate_id in EXPECTED_CANDIDATES
+        } != EXPECTED_COMPARISON_ROLES:
+            violations.append("candidate comparison-role contract mismatch")
+        if {
+            candidate_id: candidates[candidate_id].get("activation")
+            for candidate_id in EXPECTED_CANDIDATES
+        } != EXPECTED_ACTIVATION:
+            violations.append("candidate activation contract mismatch")
         b0 = candidates["B0"]
         expected_b0 = hashlib.sha256(
             b"AFYX_FORGE_B0_NO_ADDITIONAL_DIRECTIVE\n"
@@ -175,7 +236,7 @@ def validate_manifest(manifest: dict) -> list[str]:
         if b0.get("content_identity") != expected_b0 or b0.get("source") is not None:
             violations.append("B0 empty-directive identity mismatch")
 
-        for candidate_id in ("B1", "B5"):
+        for candidate_id in ("B1", "B2", "B4", "B5"):
             candidate = candidates[candidate_id]
             source = repository_path(
                 candidate.get("source", ""), violations, f"candidate {candidate_id}"
@@ -193,15 +254,26 @@ def validate_manifest(manifest: dict) -> list[str]:
 
         b2 = candidates["B2"]
         if (
-            b2.get("readiness") != "BLOCKED_INPUT_AND_AUTHORIZATION_UNRESOLVED"
-            or b2.get("content_identity") is not None
-            or b2.get("source") is not None
+            b2.get("definition") != "Afyx Independent Engineering Baseline 0.1.0"
+            or b2.get("historical_original_b2_status") != "UNRESOLVED_NOT_RELABELED"
+            or b2.get("readiness") != "PREPARED_EXECUTABLE_NOT_RUN"
+            or b2.get("dependencies") != ["public A0-A3 behavior contract"]
         ):
-            violations.append("B2 must remain blocked without guessed content")
+            violations.append("Route B B2 identity/history contract mismatch")
         if candidates["B3"].get("composition_order") != ["B1", "B2"]:
             violations.append("B3 composition order must be B1 then B2")
-        if candidates["B4"].get("readiness") != "BLOCKED_BY_B2_AND_NOT_CONSTRUCTED":
-            violations.append("B4 cannot be represented as constructed before B2 review")
+        expected_b3 = ordered_composition_sha256(
+            [(candidate_id, candidates[candidate_id]["content_identity"]) for candidate_id in ("B1", "B2")]
+        )
+        if candidates["B3"].get("content_identity") != expected_b3:
+            violations.append("B3 ordered composition identity mismatch")
+        identities = [candidates[candidate_id].get("content_identity") for candidate_id in EXPECTED_CANDIDATES]
+        if len(identities) != len(set(identities)):
+            violations.append("candidate identities must be distinct")
+        if candidates["B4"].get("readiness") != "PREPARED_EVALUATION_ONLY_NOT_RUN":
+            violations.append("B4 readiness contract mismatch")
+        if candidates["B4"].get("dependencies") != ["B1", "B2", "A3 behavior contract"]:
+            violations.append("B4 dependency contract mismatch")
         if candidates["B5"].get("product_status") != (
             "evaluation prototype; not production Forge and not A8-approved architecture"
         ):
@@ -256,7 +328,7 @@ def validate_manifest(manifest: dict) -> list[str]:
     if discovery.get("expected_cells") != expected_cells:
         violations.append("discovery expected_cells must be 36")
     if discovery.get("execution_authorized") is not False:
-        violations.append("T09.P0 must not authorize benchmark execution")
+        violations.append("T09.P2A must not authorize benchmark execution")
     if discovery.get("budget") != "NOT_APPROVED":
         violations.append("Forge discovery budget must remain NOT_APPROVED")
     cells = discovery_cells(manifest) if scenarios else []
@@ -272,7 +344,7 @@ def validate_manifest(manifest: dict) -> list[str]:
         violations.append("evaluator hard-gate order mismatch")
 
     campaign = manifest.get("campaign_gate", {})
-    if campaign.get("status") != "PREPARATION_COMPLETE_EXTERNAL_GATES_BLOCKED":
+    if campaign.get("status") != "CANDIDATE_MATRIX_COMPLETE_CAMPAIGN_AUTHORIZATION_BLOCKED":
         violations.append("campaign gate must remain external-gates-blocked")
     for key in (
         "campaign_identity",
@@ -285,17 +357,19 @@ def validate_manifest(manifest: dict) -> list[str]:
             violations.append(f"blocked campaign cannot freeze {key}")
     if campaign.get("isolation_acceptance") != "NOT_TESTED":
         violations.append("independent Forge isolation must remain NOT_TESTED")
-    if campaign.get("candidate_matrix_frozen") is not False:
-        violations.append("partial candidate matrix cannot be marked frozen")
+    if campaign.get("candidate_matrix_frozen") is not True:
+        violations.append("complete candidate matrix must be marked frozen")
     if campaign.get("execution_authorization") != "NOT_GRANTED":
         violations.append("campaign execution cannot be self-authorized")
     if campaign.get("benchmark_execution") is not False:
-        violations.append("T09.P1 must not execute the benchmark")
+        violations.append("T09.P2A must not execute the benchmark")
     if manifest.get("benchmark_execution_blockers") != EXPECTED_CAMPAIGN_BLOCKERS:
         violations.append("campaign blocker register mismatch")
 
     for relative in (
-        "evals/forge/candidates/B5/AGENTS.md",
+        "evals/forge/candidates/B2",
+        "evals/forge/candidates/B4",
+        "evals/forge/candidates/B5",
         "evals/forge/fixtures/public-engineering",
     ):
         path = REPO_ROOT / relative
@@ -313,7 +387,7 @@ def validate_manifest(manifest: dict) -> list[str]:
 
 def validate_candidate_materialization(manifest: dict) -> list[str]:
     violations: list[str] = []
-    for candidate_id in ("B0", "B1", "B5"):
+    for candidate_id in EXPECTED_CANDIDATES:
         candidate = manifest["candidates"][candidate_id]
         contract = candidate["materialization"]
         with tempfile.TemporaryDirectory(prefix=f"afyx-forge-{candidate_id.lower()}-") as temporary:
@@ -324,6 +398,54 @@ def validate_candidate_materialization(manifest: dict) -> list[str]:
                         violations.append(
                             f"candidate {candidate_id} unexpected material: {relative}"
                         )
+                continue
+
+            if contract["kind"] == "ordered_composition":
+                for component_id in contract["components"]:
+                    component = manifest["candidates"][component_id]
+                    component_contract = component["materialization"]
+                    source = repository_path(
+                        component_contract["source"], violations,
+                        f"candidate {candidate_id} component {component_id}",
+                    )
+                    destination = (workspace / component_contract["destination"]).resolve()
+                    if not source or not source.is_dir():
+                        violations.append(
+                            f"candidate {candidate_id} component {component_id} source is missing"
+                        )
+                        continue
+                    try:
+                        destination.relative_to(workspace)
+                    except ValueError:
+                        violations.append(
+                            f"candidate {candidate_id} component {component_id} escapes workspace"
+                        )
+                        continue
+                    if component_contract["kind"] == "copy_tree":
+                        destination.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copytree(source, destination)
+                    elif component_contract["kind"] == "copy_tree_contents":
+                        shutil.copytree(source, destination, dirs_exist_ok=True)
+                    else:
+                        violations.append(
+                            f"candidate {candidate_id} component {component_id} kind is unsupported"
+                        )
+                b1_root = (
+                    workspace / contract["component_verification"]["B1"]["path"]
+                ).resolve()
+                if directory_sha256(b1_root) != manifest["candidates"]["B1"]["content_identity"]:
+                    violations.append("candidate B3 materialized B1 identity mismatch")
+                b2_source = REPO_ROOT / manifest["candidates"]["B2"]["source"]
+                for source_file in (path for path in b2_source.rglob("*") if path.is_file()):
+                    destination_file = workspace / source_file.relative_to(b2_source)
+                    if not destination_file.is_file() or canonical_content(destination_file) != canonical_content(source_file):
+                        violations.append("candidate B3 materialized B2 content mismatch")
+                        break
+                expected = ordered_composition_sha256(
+                    [(item, manifest["candidates"][item]["content_identity"]) for item in contract["components"]]
+                )
+                if expected != candidate["content_identity"]:
+                    violations.append("candidate B3 materialized composition identity mismatch")
                 continue
 
             source = repository_path(
@@ -425,7 +547,7 @@ def main() -> int:
     fixture_state = "checked" if args.check_fixtures else "not-run"
     print(
         "Forge readiness validation: PASS "
-        f"(prepared candidates 3/6; 36 cells; fixtures/materialization={fixture_state}; "
+        f"(prepared candidates 6/6; 36 cells; fixtures/materialization={fixture_state}; "
         "benchmark execution BLOCKED)"
     )
     return 0

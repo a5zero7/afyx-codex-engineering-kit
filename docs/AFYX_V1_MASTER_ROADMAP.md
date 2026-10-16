@@ -6,8 +6,8 @@ Contract revision: **2026-10-15**
 v1 scope policy: **FROZEN — Phase 1 through Phase 11**  
 Post-v1 policy: **PLANNED EXPANSION — not a v1 release blocker**
 
-Current work: **T09.P1 Forge campaign authorization preparation; external gates remain blocked**
-Task: deterministic candidate materialization and fail-closed authorization gate; no model benchmark, A8 GO, Forge production implementation, or Alpha promotion
+Current work: **T09.P2A Forge Route B candidate construction; campaign authorization remains blocked**
+Task: controlled A0 amendment plus deterministic B2/B3/B4 identities; no model benchmark, A8 GO, Forge production implementation, or Alpha promotion
 Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`  
 Active implementation branch: `dev` (created from verified T02 final source `ad1560dd930ccde94b0dadaa7b42d804be55714f`)
 Historical engineering branch preserved: `afyx/native-phase5f-parser-grammar`
@@ -1830,6 +1830,17 @@ manifest, or owner approval was supplied. B3/B4 and the complete candidate
 matrix remain unfrozen; campaign/source/environment/evaluator identities remain
 unset. Status is **PREPARATION COMPLETE / EXTERNAL GATES BLOCKED**. A8 has no GO
 decision and no model cell was executed.
+
+### T09.P2A checkpoint — Route B candidate matrix complete
+
+Owner authorization dated 2026-10-16 created controlled amendment
+`A0-ROUTE-B-2026-10-16`. Historical original B2 remains unresolved and was
+not relabeled. New Afyx-owned B2 0.1.0, ordered B3 (`B1` then `B2`), and
+refined B4 0.1.0 now have canonical identities and deterministic disposable
+materialization. All six slots are prepared but unexecuted. Runtime, isolation,
+independent evaluator, evaluator-only bundle, 36-cell and confirmation budgets,
+and final execution authorization remain blocked. No benchmark, A8 decision,
+product implementation, Prompt Master removal, or release-scope change occurred.
 
 ## Track B — Platform Generalization
 

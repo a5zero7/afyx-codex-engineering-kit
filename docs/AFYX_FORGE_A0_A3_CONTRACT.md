@@ -2,6 +2,8 @@
 
 Status: **T08 ENGINEERING CONTRACT COMPLETE; T09 EXECUTION BLOCKED BY INPUT, ENVIRONMENT, ISOLATION, AND BUDGET PREREQUISITES**
 
+T09.P2A amendment: **ROUTE B CANDIDATE MATRIX COMPLETE; CAMPAIGN AUTHORIZATION BLOCKED**
+
 Frozen from development source: `9333616035e71f63f30c4ebcabf13354f91b2399`
 Machine-readable ledger: [AFYX_FORGE_A0_A3_BASELINE.json](AFYX_FORGE_A0_A3_BASELINE.json)
 Parent plan: [AFYX_ALPHA_INTEGRATION_ROADMAP.md](AFYX_ALPHA_INTEGRATION_ROADMAP.md)
@@ -149,6 +151,22 @@ T08 supplies a traceable methodology, capability inventory/matrix, and independe
 6. public fixtures/assertions and evaluator-only materials are frozen under the A0 contamination rules.
 
 T09 readiness is therefore **CONTRACT READY / EXECUTION BLOCKED**. A8 has no GO decision, and no Forge architecture or performance improvement is claimed.
+
+## A0 amendment A0-ROUTE-B-2026-10-16
+
+On 2026-10-16 the owner explicitly selected Route B and authorized a controlled A0 amendment: create a new independent B2 benchmark baseline from the public A0-A3 behavior contract and valid Afyx specifications, then construct B3/B4 and validate them deterministically. This authority does not include model execution, evaluator self-approval, runtime or budget approval, A8 GO, Prompt Master removal, or release-scope change.
+
+The original B2 definition in the frozen A0 record remains **UNRESOLVED** because its executable bytes, provenance, and identity were never available. The Route B baseline is not that prompt and does not replace or relabel its history.
+
+| Slot | Amended executable definition | Canonical identity | Provenance and role |
+|---|---|---|---|
+| B2 | Afyx Independent Engineering Baseline 0.1.0 | `06ada73c05824b014a1ff0aa3ab801115cbd4cd4625f4ab1dc9538bf21fe413e` | Newly authored Afyx-owned directive derived from the public behavior contract; no Prompt Master source, original B2 text, or third-party implementation copied |
+| B3 | Exact B1 followed by exact Route B B2 | `884eaacf98c4f80d83e5b84a2216f5253db91f7e9930c869fa0fe3248ae9234d` | Ordered composition identity; B1 remains a separately loaded skill and B2 remains the root instruction |
+| B4 | Afyx Forge Refined Convergence Candidate 0.1.0 | `ecb1d698956cd490fc65cb6d1abf085ff123053ddeae043add45c74703f2f452` | Original compact convergence of the reviewed B1/B2/A3 contracts; duplicated ceremony and context loading removed while preserving the four hard gates and adaptive effort |
+
+The six-slot/36-cell method remains valid: B0 is no directive, B1 is the existing focused workflow, B2 is the independent Route B task directive, B3 tests additive composition, B4 tests refined convergence, and B5 tests the independently derived A3-native directive. B3 composition is deterministically B1 then B2. B4 is a standalone root directive and is byte-distinct from B2/B3/B5. These identities are construction evidence only; their quality or efficiency remains unmeasured until a separately authorized campaign.
+
+All B0-B5 public candidate identities can now be materialized in disposable workspaces. Campaign execution remains blocked by the unapproved runtime, independently enforced evaluator isolation, independent evaluator arrangement, evaluator-only bundle freeze, 36-cell budget, confirmation budget, and final execution authorization. A8 remains **NO GO DECISION**.
 
 ## Jira disposition
 
