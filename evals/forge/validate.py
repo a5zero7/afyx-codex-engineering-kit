@@ -28,6 +28,42 @@ EXPECTED_CATEGORIES = [
     "negative_simple_task",
 ]
 HARD_GATES = ["correctness", "task_fidelity", "evidence_quality", "security"]
+REQUIRED_OWNER_DECISIONS = {
+    "runtime_configuration",
+    "forge_36_cell_budget",
+    "confirmation_budget",
+    "independent_evaluator_arrangement",
+    "final_campaign_execution",
+}
+EXPECTED_MATERIALIZATION = {
+    "B0": {
+        "kind": "empty_workspace",
+        "must_be_absent": ["AGENTS.md", ".agents/skills/efficient-coding"],
+    },
+    "B1": {
+        "kind": "copy_tree",
+        "source": "skills/efficient-coding",
+        "destination": ".agents/skills/efficient-coding",
+        "identity_root": ".agents/skills/efficient-coding",
+    },
+    "B5": {
+        "kind": "copy_tree_contents",
+        "source": "evals/forge/candidates/B5",
+        "destination": ".",
+        "identity_root": ".",
+    },
+}
+EXPECTED_CAMPAIGN_BLOCKERS = [
+    "B2_B3_IDENTITY_AND_AUTHORIZATION",
+    "B4_EXECUTABLE_IDENTITY",
+    "OWNER_APPROVED_RUNTIME_CONFIGURATION",
+    "INDEPENDENTLY_ENFORCED_EVALUATOR_ISOLATION",
+    "EXPLICIT_36_CELL_BUDGET_APPROVAL",
+    "INDEPENDENT_EVALUATOR_ARRANGEMENT_APPROVAL",
+    "FINAL_CAMPAIGN_EXECUTION_APPROVAL",
+    "EVALUATOR_ONLY_BUNDLE_FREEZE",
+    "ALL_B0_B5_EXECUTABLE_FINGERPRINTS",
+]
 PRIVATE_MARKERS = (
     "evaluator_rubric",
     "private_holdout",
@@ -126,6 +162,8 @@ def validate_manifest(manifest: dict) -> list[str]:
         if proposal.get("campaign_source_revision") is not None:
             violations.append("unapproved campaign_source_revision must remain null")
         decisions = proposal.get("owner_decisions", {})
+        if set(decisions) != REQUIRED_OWNER_DECISIONS:
+            violations.append("owner decision register must contain exact P1 approvals")
         if any(value != "NOT_APPROVED" for value in decisions.values()):
             violations.append("owner decisions cannot be approved by preparation")
 
@@ -146,6 +184,12 @@ def validate_manifest(manifest: dict) -> list[str]:
                 violations.append(f"candidate {candidate_id} source is missing")
             elif directory_sha256(source) != candidate.get("content_identity"):
                 violations.append(f"candidate {candidate_id} content identity mismatch")
+
+        for candidate_id, expected in EXPECTED_MATERIALIZATION.items():
+            if candidates[candidate_id].get("materialization") != expected:
+                violations.append(
+                    f"candidate {candidate_id} materialization contract mismatch"
+                )
 
         b2 = candidates["B2"]
         if (
@@ -227,6 +271,29 @@ def validate_manifest(manifest: dict) -> list[str]:
     if evaluator.get("hard_gates_in_order") != HARD_GATES:
         violations.append("evaluator hard-gate order mismatch")
 
+    campaign = manifest.get("campaign_gate", {})
+    if campaign.get("status") != "PREPARATION_COMPLETE_EXTERNAL_GATES_BLOCKED":
+        violations.append("campaign gate must remain external-gates-blocked")
+    for key in (
+        "campaign_identity",
+        "campaign_source_revision",
+        "environment_fingerprint",
+        "evaluator_identity",
+        "private_bundle_manifest_sha256",
+    ):
+        if campaign.get(key) is not None:
+            violations.append(f"blocked campaign cannot freeze {key}")
+    if campaign.get("isolation_acceptance") != "NOT_TESTED":
+        violations.append("independent Forge isolation must remain NOT_TESTED")
+    if campaign.get("candidate_matrix_frozen") is not False:
+        violations.append("partial candidate matrix cannot be marked frozen")
+    if campaign.get("execution_authorization") != "NOT_GRANTED":
+        violations.append("campaign execution cannot be self-authorized")
+    if campaign.get("benchmark_execution") is not False:
+        violations.append("T09.P1 must not execute the benchmark")
+    if manifest.get("benchmark_execution_blockers") != EXPECTED_CAMPAIGN_BLOCKERS:
+        violations.append("campaign blocker register mismatch")
+
     for relative in (
         "evals/forge/candidates/B5/AGENTS.md",
         "evals/forge/fixtures/public-engineering",
@@ -242,6 +309,52 @@ def validate_manifest(manifest: dict) -> list[str]:
                         f"{file_path.relative_to(REPO_ROOT).as_posix()}"
                     )
     return violations
+
+
+def validate_candidate_materialization(manifest: dict) -> list[str]:
+    violations: list[str] = []
+    for candidate_id in ("B0", "B1", "B5"):
+        candidate = manifest["candidates"][candidate_id]
+        contract = candidate["materialization"]
+        with tempfile.TemporaryDirectory(prefix=f"afyx-forge-{candidate_id.lower()}-") as temporary:
+            workspace = Path(temporary).resolve()
+            if contract["kind"] == "empty_workspace":
+                for relative in contract["must_be_absent"]:
+                    if (workspace / relative).exists():
+                        violations.append(
+                            f"candidate {candidate_id} unexpected material: {relative}"
+                        )
+                continue
+
+            source = repository_path(
+                contract["source"], violations, f"candidate {candidate_id} materialization"
+            )
+            destination = (workspace / contract["destination"]).resolve()
+            identity_root = (workspace / contract["identity_root"]).resolve()
+            try:
+                destination.relative_to(workspace)
+                identity_root.relative_to(workspace)
+            except ValueError:
+                violations.append(f"candidate {candidate_id} materialization escapes workspace")
+                continue
+            if not source or not source.is_dir():
+                violations.append(f"candidate {candidate_id} materialization source is missing")
+                continue
+            if contract["kind"] == "copy_tree":
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copytree(source, destination)
+            elif contract["kind"] == "copy_tree_contents":
+                shutil.copytree(source, destination, dirs_exist_ok=True)
+            else:
+                violations.append(f"candidate {candidate_id} materialization kind is unsupported")
+                continue
+            if directory_sha256(identity_root) != candidate["content_identity"]:
+                violations.append(f"candidate {candidate_id} materialized identity mismatch")
+    return violations
+
+
+def campaign_blockers(manifest: dict) -> list[str]:
+    return list(manifest.get("benchmark_execution_blockers", []))
 
 
 def validate_pristine_fixtures(manifest: dict) -> list[str]:
@@ -284,6 +397,11 @@ def main() -> int:
         help="run deterministic pristine baseline validations; never runs a model",
     )
     parser.add_argument("--print-order-digest", action="store_true")
+    parser.add_argument(
+        "--campaign-ready",
+        action="store_true",
+        help="fail closed unless every campaign blocker has been resolved",
+    )
     args = parser.parse_args()
     manifest = load_json(MANIFEST_PATH)
     if args.print_order_digest:
@@ -292,15 +410,22 @@ def main() -> int:
     violations = validate_manifest(copy.deepcopy(manifest))
     if args.check_fixtures:
         violations.extend(validate_pristine_fixtures(manifest))
+        violations.extend(validate_candidate_materialization(manifest))
     if violations:
         print(f"Forge readiness validation failed ({len(violations)} violation(s)):")
         for violation in violations:
             print(f"- {violation}")
         return 1
+    blockers = campaign_blockers(manifest)
+    if args.campaign_ready and blockers:
+        print(f"Forge campaign authorization: BLOCKED ({len(blockers)} gate(s)):")
+        for blocker in blockers:
+            print(f"- {blocker}")
+        return 2
     fixture_state = "checked" if args.check_fixtures else "not-run"
     print(
         "Forge readiness validation: PASS "
-        f"(prepared candidates 3/6; 36 cells; fixtures={fixture_state}; "
+        f"(prepared candidates 3/6; 36 cells; fixtures/materialization={fixture_state}; "
         "benchmark execution BLOCKED)"
     )
     return 0

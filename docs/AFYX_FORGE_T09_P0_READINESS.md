@@ -1,6 +1,7 @@
 # Afyx Forge T09.P0 Benchmark Readiness
 
-Status: **PREPARATION COMPLETE / BENCHMARK EXECUTION BLOCKED**
+Status: **T09.P0 PREPARATION COMPLETE / BENCHMARK EXECUTION BLOCKED**
+T09.P1 checkpoint: **PREPARATION COMPLETE / EXTERNAL GATES BLOCKED**
 
 Starting revision: `b2c1d1016b2a1401a651e2b539e9a029ee0606c5`
 
@@ -98,11 +99,21 @@ Benchmark execution remains blocked until an authorized owner/evaluator supplies
 5. explicit 36-cell and confirmation budgets;
 6. evaluator-only bundle identities and freeze confirmation outside both agent roots.
 
-After these inputs exist, the next task is **T09.P1 — Candidate Freeze, Independent Isolation Acceptance, and Campaign Authorization**. It must first run:
+The P0 handoff designated **T09.P1 — Candidate Freeze, Independent Isolation Acceptance, and Campaign Authorization** and required these checks first:
 
 ```text
 python evals/forge/validate.py --check-fixtures
 python scripts/tests/test_forge_readiness.py
 ```
 
-Then it binds the approved repository/environment/evaluator identities, verifies the actual host controls, and stops for authorization. Only a subsequent authorized T09 benchmark execution may run the 36 cells. A8 remains blocked until independently evaluated results pass the frozen decision rule.
+P1 was expected to bind approved repository/environment/evaluator identities, verify actual host controls, and stop for authorization. The checkpoint below records the work that was possible with the inputs actually supplied. Only a subsequent authorized T09 benchmark execution may run the 36 cells. A8 remains blocked until independently evaluated results pass the frozen decision rule.
+
+## T09.P1 checkpoint — fail-closed campaign gate
+
+No new owner-authorized B2 artifact accompanied T09.P1, and the tracked repository still contains no executable Independent Master Prompt. B2 therefore remains `UNRESOLVED`; B3 cannot be composed, and B4 cannot be reviewed as a genuine B1+B2 convergence candidate. B0, B1, and B5 now include deterministic materialization contracts. Disposable-workspace checks reproduce the exact B1 and B5 identities and verify that B0 contains neither directive.
+
+The proposed runtime matches the observed developer host for Codex CLI 0.162.1, Python 3.10.11, Node 26.8.1, and PowerShell 7.6.6. This is static feasibility evidence only: the evaluation permission profile, independent evaluator identity, and private storage boundary were not available for actual acceptance. Independent isolation remains **NOT TESTED**.
+
+`python evals/forge/validate.py --campaign-ready` is the machine-enforced authorization check. It exits `2` while any campaign prerequisite remains unresolved. The current gate rejects execution for nine recorded reasons: B2/B3 authorization, B4 identity, runtime approval, independently enforced isolation, 36-cell budget approval, evaluator-arrangement approval, final-execution approval, evaluator-bundle freeze, and the incomplete B0-B5 fingerprint set. Campaign identity, campaign source revision, environment fingerprint, evaluator identity, and private-bundle digest remain deliberately `null`; benchmark execution remains `false`.
+
+T09.P1 therefore closes only as **PREPARATION COMPLETE / EXTERNAL GATES BLOCKED**. The next executable action belongs to the owner and independent evaluator: supply authorized B2 evidence, approve the proposed runtime/evaluator arrangement and budgets, then return sanitized isolation and bundle-manifest evidence. No model cell, Alpha promotion, A8 decision, or production Forge implementation was performed.

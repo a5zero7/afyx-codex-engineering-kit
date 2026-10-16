@@ -6,8 +6,8 @@ Contract revision: **2026-10-15**
 v1 scope policy: **FROZEN — Phase 1 through Phase 11**  
 Post-v1 policy: **PLANNED EXPANSION — not a v1 release blocker**
 
-Current work: **T09.P0 Forge benchmark readiness; benchmark execution remains blocked**
-Task: candidate identities, public fixture/harness preparation, proposed runtime, isolation and owner-decision register; no model benchmark, A8 GO, Forge production implementation, or Alpha promotion
+Current work: **T09.P1 Forge campaign authorization preparation; external gates remain blocked**
+Task: deterministic candidate materialization and fail-closed authorization gate; no model benchmark, A8 GO, Forge production implementation, or Alpha promotion
 Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`  
 Active implementation branch: `dev` (created from verified T02 final source `ad1560dd930ccde94b0dadaa7b42d804be55714f`)
 Historical engineering branch preserved: `afyx/native-phase5f-parser-grammar`
@@ -1817,6 +1817,19 @@ evaluator-only bundle is not frozen, and the 36-cell budget is not approved.
 T09 benchmark execution and A8 therefore remain blocked. The frozen v1 release
 requirements, Expert evidence, Graph behavior, and Alpha environment are
 unchanged.
+
+### T09.P1 checkpoint — external gates blocked
+
+T09.P1 reverified the P0 identities and six-scenario/36-cell ordering, then added
+deterministic materialization checks for B0, B1, and B5. A machine-readable
+campaign gate now exits nonzero while any prerequisite remains unresolved, so a
+passing public readiness validation cannot be mistaken for campaign authority.
+
+No authorized B2 source, independent evaluator environment, private-bundle
+manifest, or owner approval was supplied. B3/B4 and the complete candidate
+matrix remain unfrozen; campaign/source/environment/evaluator identities remain
+unset. Status is **PREPARATION COMPLETE / EXTERNAL GATES BLOCKED**. A8 has no GO
+decision and no model cell was executed.
 
 ## Track B — Platform Generalization
 

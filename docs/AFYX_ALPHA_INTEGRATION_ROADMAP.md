@@ -43,7 +43,7 @@ These are the twelve approved master-task identities. They reuse existing Jira i
 | T06 | Expert D.6 substantive review and candidate freeze | AFYX-283 | Fresh, correlated D.5 evidence; independent substantive review | BLOCKED; review prepared, substantive review not executed |
 | T07 | Expert controlled A1/B1 acceptance | AFYX-283; related AFYX-67/68 | After T06; frozen candidate, rubric, isolation, sampling, and budget | BLOCKED by T06 |
 | T08 | Forge A0–A3 capability and contract work | AFYX-88–91 / AFYX-171–176 | Evaluation freeze before capability harvest/matrix/refinement | COMPLETE (contract only); no benchmark or implementation |
-| T09 | Forge A4–A8 candidate evaluation and architecture decision | AFYX-92–96 / AFYX-177–183 | After T08; immutable B0–B5 candidates and predeclared decision rule | P0 PREPARATION COMPLETE; benchmark execution blocked |
+| T09 | Forge A4–A8 candidate evaluation and architecture decision | AFYX-92–96 / AFYX-177–183 | After T08; immutable B0–B5 candidates and predeclared decision rule | P1 PREPARATION COMPLETE; external gates blocked |
 | T10 | Forge A9–A10 implementation and adaptive modes | AFYX-97/98 / AFYX-184–186 | Only after T09 records an explicit GO at A8 | BLOCKED by T09 GO |
 | T11 | Forge A11–A12 dogfood and final acceptance | AFYX-99/100 / AFYX-187/188 | After T10; dogfood and stable-contract gates | BLOCKED by T10 |
 | T12 | Combined artifact and integration acceptance | AFYX-248 / AFYX-269 / AFYX-283 / AFYX-12 | After T04, T05, T07, and T11 PASS | BLOCKED by component acceptance |
@@ -110,6 +110,8 @@ A0 freezes six public categories against B0-B5 as a 36-cell, one-repetition disc
 Efficient Coding 1.2.0 has a verified source identity. The owner-authorized Independent Master Prompt is absent from the canonical repository and has no verified bytes, provenance, or digest, so B2/B3 remain blocked. B4/B5 are A4 construction work and do not exist. Exact campaign runtime identity and independent evaluator isolation also remain unresolved. T08 is complete as an A0-A3 contract foundation; T09 is **CONTRACT READY / EXECUTION BLOCKED**, A8 has no GO decision, and no Forge performance or architecture claim is made.
 
 T09.P0 readiness is recorded in [AFYX_FORGE_T09_P0_READINESS.md](AFYX_FORGE_T09_P0_READINESS.md). B0, B1, and an evaluation-only B5 directive now have deterministic public identities; B2/B3 remain blocked by the missing authorized Independent Master Prompt, and B4 remains unconstructed. Six public synthetic fixtures and the 36-cell manifest validate deterministically without model calls. The proposed runtime still requires owner approval, Forge isolation is not independently verified, the evaluator bundle is not frozen, and the 36-cell budget remains unapproved. Status is **T09.P0 PREPARATION COMPLETE / BENCHMARK EXECUTION BLOCKED**.
+
+T09.P1 adds deterministic disposable-workspace materialization for B0, B1, and B5 plus a fail-closed campaign authorization command. No new B2 or independently enforced evaluator environment was supplied, and none of the five runtime/budget/evaluator/execution approvals was granted. B3/B4 and the complete campaign fingerprint therefore remain unavailable. Status is **T09.P1 PREPARATION COMPLETE / EXTERNAL GATES BLOCKED**; T09 model execution and A8 remain blocked.
 
 ## T02 correctness closure and bounded T03 handoff
 

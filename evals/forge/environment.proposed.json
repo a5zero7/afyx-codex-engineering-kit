@@ -61,6 +61,8 @@
   "owner_decisions": {
     "runtime_configuration": "NOT_APPROVED",
     "forge_36_cell_budget": "NOT_APPROVED",
-    "confirmation_budget": "NOT_APPROVED"
+    "confirmation_budget": "NOT_APPROVED",
+    "independent_evaluator_arrangement": "NOT_APPROVED",
+    "final_campaign_execution": "NOT_APPROVED"
   }
 }

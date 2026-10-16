@@ -54,6 +54,21 @@ class ForgeReadinessTests(unittest.TestCase):
     def test_pristine_public_fixtures_have_expected_failing_baselines(self) -> None:
         self.assertEqual(forge.validate_pristine_fixtures(self.manifest), [])
 
+    def test_prepared_candidates_materialize_with_exact_identities(self) -> None:
+        self.assertEqual(forge.validate_candidate_materialization(self.manifest), [])
+
+    def test_campaign_authorization_gate_fails_closed(self) -> None:
+        self.assertEqual(
+            forge.campaign_blockers(self.manifest),
+            forge.EXPECTED_CAMPAIGN_BLOCKERS,
+        )
+        tampered = copy.deepcopy(self.manifest)
+        tampered["campaign_gate"]["execution_authorization"] = "APPROVED"
+        tampered["campaign_gate"]["benchmark_execution"] = True
+        violations = forge.validate_manifest(tampered)
+        self.assertIn("campaign execution cannot be self-authorized", violations)
+        self.assertIn("T09.P1 must not execute the benchmark", violations)
+
     def test_candidate_identity_tamper_is_rejected(self) -> None:
         tampered = copy.deepcopy(self.manifest)
         tampered["candidates"]["B5"]["content_identity"] = "0" * 64
@@ -66,10 +81,16 @@ class ForgeReadinessTests(unittest.TestCase):
         tampered = copy.deepcopy(self.manifest)
         tampered["candidates"]["B2"]["source"] = "guessed.txt"
         tampered["candidates"]["B2"]["content_identity"] = "1" * 64
+        tampered["candidates"]["B1"]["materialization"]["destination"] = "../outside"
         tampered["scenarios"][0]["allowed_file_scope"] = ["../outside.py"]
         violations = forge.validate_manifest(tampered)
         self.assertIn("B2 must remain blocked without guessed content", violations)
+        self.assertIn("candidate B1 materialization contract mismatch", violations)
         self.assertTrue(any("escapes fixture" in item for item in violations))
+        self.assertIn(
+            "candidate B1 materialization escapes workspace",
+            forge.validate_candidate_materialization(tampered),
+        )
 
 
 if __name__ == "__main__":

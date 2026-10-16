@@ -268,6 +268,10 @@
     "t09_p0_manifest": "evals/forge/manifest.json",
     "t09_p0_environment": "evals/forge/environment.proposed.json",
     "t09_p0_status": "PREPARATION_COMPLETE_BENCHMARK_EXECUTION_BLOCKED",
+    "t09_p1_status": "PREPARATION_COMPLETE_EXTERNAL_GATES_BLOCKED",
+    "t09_p1_materialization": "B0_B1_B5_DETERMINISTIC_PASS",
+    "t09_p1_campaign_gate": "FAIL_CLOSED_NINE_EXTERNAL_BLOCKERS",
+    "campaign_authorization": "NOT_GRANTED",
     "candidate_definitions": {
       "B0": "no directive",
       "B1": "Efficient Coding 1.2.0",
