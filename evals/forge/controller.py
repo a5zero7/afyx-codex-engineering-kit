@@ -702,4 +702,3 @@ class PublicController:
 
 def load_public_manifest(path: Path = forge_validate.MANIFEST_PATH) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
-
