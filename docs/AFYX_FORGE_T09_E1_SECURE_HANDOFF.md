@@ -1,7 +1,9 @@
 # Afyx Forge T09.E1 Secure Evaluator Handoff
 
-Status: **PUBLIC CONTRACT PREPARED / CAMPAIGN BLOCKED**  
-Date: 2026-10-16  
+Status: **PUBLIC CONTRACT PREPARED / CAMPAIGN BLOCKED**
+
+Date: 2026-10-16
+
 Scope: public-side execution and evidence contract only; zero benchmark cells executed.
 
 This document binds the public handoff required before an owner may authorize the Forge B0-B5 campaign. It contains no evaluator credentials, protected paths, canary values, private rubric, ground truth, scoring rules, holdout content, or evaluator-only evidence.
