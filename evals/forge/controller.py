@@ -115,6 +115,7 @@ PUBLIC_FAILURE_CODES = {
     "retry_policy",
     "timeout",
     "unexpected_process_termination",
+    "upstream_output_unverified",
     "unsafe_output_marker",
     "unsafe_path",
     "unsafe_reparse",
@@ -162,6 +163,7 @@ class LaunchRequest:
     workspace: Path
     user_prompt: str
     timeout_seconds: int
+    forbidden_output_markers: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -170,6 +172,12 @@ class ProcessOutcome:
     exit_code: int | None
     stdout: str = ""
     stderr: str = ""
+    stdout_upstream_truncated: bool | None = None
+    stderr_upstream_truncated: bool | None = None
+    stdout_stream_scan_complete: bool | None = None
+    stderr_stream_scan_complete: bool | None = None
+    stdout_stream_forbidden_marker: bool | None = None
+    stderr_stream_forbidden_marker: bool | None = None
     timed_out: bool = False
     process_tree_terminated: bool = True
     provider_tokens: Mapping[str, int] | str = "NOT_AVAILABLE"
@@ -681,21 +689,41 @@ class PublicController:
         assert_safe_tree(work)
         return _snapshot(work)
 
-    def _evidence(self, outcome: ProcessOutcome) -> tuple[dict[str, Any], bool]:
+    @staticmethod
+    def _upstream_coverage(outcome: ProcessOutcome, label: str) -> tuple[bool, bool]:
+        truncated = getattr(outcome, f"{label}_upstream_truncated")
+        scan_complete = getattr(outcome, f"{label}_stream_scan_complete")
+        marker_found = getattr(outcome, f"{label}_stream_forbidden_marker")
+        if type(truncated) is not bool:
+            return False, False
+        if not truncated:
+            return (scan_complete is None and marker_found is None), False
+        if type(scan_complete) is not bool or type(marker_found) is not bool:
+            return False, False
+        return scan_complete, marker_found
+
+    def _evidence(
+        self, outcome: ProcessOutcome
+    ) -> tuple[dict[str, Any], bool, bool]:
         evidence: dict[str, Any] = {}
-        safe = True
+        marker_found = False
+        upstream_verified = True
         for label, value in (("stdout", outcome.stdout), ("stderr", outcome.stderr)):
             encoded = value.encode("utf-8", errors="replace")
             bounded = encoded[: self.max_capture_bytes]
             # Publication stays bounded, but the fail-closed marker check covers
             # the complete captured stream so a suffix cannot bypass sanitization.
             text = value.casefold()
-            marker_found = any(marker in text for marker in self.forbidden_output_markers)
-            safe = safe and not marker_found
+            captured_marker = any(
+                marker in text for marker in self.forbidden_output_markers
+            )
+            stream_verified, unseen_marker = self._upstream_coverage(outcome, label)
+            marker_found = marker_found or captured_marker or unseen_marker
+            upstream_verified = upstream_verified and stream_verified
             evidence[f"{label}_bytes"] = len(encoded)
             evidence[f"{label}_sha256"] = _sha256_bytes(bounded)
             evidence[f"{label}_truncated"] = len(encoded) > len(bounded)
-        return evidence, safe
+        return evidence, marker_found, upstream_verified
 
     def run(self, payload: Any) -> dict[str, Any]:
         cell = validate_cell_input(
@@ -724,16 +752,20 @@ class PublicController:
                 workspace=lease.work,
                 user_prompt=cell.user_prompt,
                 timeout_seconds=cell.timeout_seconds,
+                forbidden_output_markers=self.forbidden_output_markers,
             )
             try:
                 outcome = self.launcher.launch(request)
             except Exception:
                 failure_codes.append("launcher_failure")
             if outcome is not None:
-                evidence, output_safe = self._evidence(outcome)
-                if not output_safe:
+                evidence, marker_found, upstream_verified = self._evidence(outcome)
+                if marker_found:
                     sanitization = "FAIL"
                     failure_codes.append("unsafe_output_marker")
+                if not upstream_verified:
+                    sanitization = "FAIL"
+                    failure_codes.append("upstream_output_unverified")
                 if outcome.identity.casefold() != self.expected_restricted_identity:
                     failure_codes.append("identity_mismatch")
                 if outcome.retry_count != 0:

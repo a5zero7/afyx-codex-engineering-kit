@@ -24,6 +24,14 @@ CORRECT_CONTENT = (
 CORRECT_DIGEST = hashlib.sha256(CORRECT_CONTENT.encode("utf-8")).hexdigest()
 
 
+def complete_outcome(**kwargs) -> controller.ProcessOutcome:
+    return controller.ProcessOutcome(
+        stdout_upstream_truncated=False,
+        stderr_upstream_truncated=False,
+        **kwargs,
+    )
+
+
 class FakeLauncher:
     def __init__(
         self,
@@ -33,7 +41,7 @@ class FakeLauncher:
         extra_file: bool = False,
         error: Exception | None = None,
     ) -> None:
-        self.outcome = outcome or controller.ProcessOutcome(
+        self.outcome = outcome or complete_outcome(
             identity=RESTRICTED_IDENTITY,
             exit_code=0,
             stdout="synthetic completion",
@@ -133,6 +141,10 @@ class PublicControllerTests(unittest.TestCase):
         self.assertEqual(result["retry_count"], 0)
         self.assertEqual(result["hard_gate_results"]["correctness"], "NOT_TESTED")
         self.assertNotIn("stdout", result)
+        self.assertEqual(
+            launcher.requests[0].forbidden_output_markers,
+            controller.DEFAULT_FORBIDDEN_OUTPUT_MARKERS,
+        )
         self.assertFalse(any(self.workspace_parent.iterdir()))
 
     def test_all_frozen_candidates_materialize_without_contamination(self) -> None:
@@ -146,7 +158,7 @@ class PublicControllerTests(unittest.TestCase):
     def test_advisory_cell_preserves_null_command_and_zero_mutation(self) -> None:
         launcher = FakeLauncher(
             content=None,
-            outcome=controller.ProcessOutcome(
+            outcome=complete_outcome(
                 identity=RESTRICTED_IDENTITY,
                 exit_code=0,
                 tool_calls=0,
@@ -189,13 +201,15 @@ class PublicControllerTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, "unsafe_reparse")
 
     def test_identity_mismatch_fails_result(self) -> None:
-        outcome = controller.ProcessOutcome(identity=r"SYNTHETIC\unexpected_identity", exit_code=0)
+        outcome = complete_outcome(
+            identity=r"SYNTHETIC\unexpected_identity", exit_code=0
+        )
         result = self.make_controller(FakeLauncher(outcome=outcome)).run(self.input())
         self.assertEqual(result["result"], "FAIL")
         self.assertIn("identity_mismatch", result["validation_outcomes"]["failure_codes"])
 
     def test_timeout_and_owned_process_tree_status_are_recorded(self) -> None:
-        outcome = controller.ProcessOutcome(
+        outcome = complete_outcome(
             identity=RESTRICTED_IDENTITY,
             exit_code=None,
             timed_out=True,
@@ -209,7 +223,7 @@ class PublicControllerTests(unittest.TestCase):
         )
 
     def test_unexpected_process_termination_fails(self) -> None:
-        outcome = controller.ProcessOutcome(identity=RESTRICTED_IDENTITY, exit_code=None)
+        outcome = complete_outcome(identity=RESTRICTED_IDENTITY, exit_code=None)
         result = self.make_controller(FakeLauncher(outcome=outcome)).run(self.input())
         self.assertIn(
             "unexpected_process_termination", result["validation_outcomes"]["failure_codes"]
@@ -222,7 +236,7 @@ class PublicControllerTests(unittest.TestCase):
         self.assertIn("cleanup_failed", result["validation_outcomes"]["failure_codes"])
 
     def test_unsafe_output_marker_is_not_published(self) -> None:
-        outcome = controller.ProcessOutcome(
+        outcome = complete_outcome(
             identity=RESTRICTED_IDENTITY,
             exit_code=0,
             stdout="Authorization: Bearer synthetic-secret",
@@ -233,7 +247,7 @@ class PublicControllerTests(unittest.TestCase):
         self.assertNotIn("synthetic-secret", str(result))
 
     def test_unsafe_output_marker_beyond_capture_limit_fails_closed(self) -> None:
-        outcome = controller.ProcessOutcome(
+        outcome = complete_outcome(
             identity=RESTRICTED_IDENTITY,
             exit_code=0,
             stdout=("x" * 70_000) + " Authorization: Bearer synthetic-secret",
@@ -243,6 +257,78 @@ class PublicControllerTests(unittest.TestCase):
         self.assertTrue(result["evidence"]["stdout_truncated"])
         self.assertIn("unsafe_output_marker", result["validation_outcomes"]["failure_codes"])
         self.assertNotIn("synthetic-secret", str(result))
+
+    def test_upstream_truncation_without_complete_suffix_scan_fails_closed(self) -> None:
+        outcome = controller.ProcessOutcome(
+            identity=RESTRICTED_IDENTITY,
+            exit_code=0,
+            stdout="clean-prefix-only",
+            stdout_upstream_truncated=True,
+            stderr_upstream_truncated=False,
+        )
+        result = self.make_controller(FakeLauncher(outcome=outcome)).run(self.input())
+        self.assertEqual(result["result"], "FAIL")
+        self.assertEqual(result["sanitization"], "FAIL")
+        self.assertIn(
+            "upstream_output_unverified",
+            result["validation_outcomes"]["failure_codes"],
+        )
+        self.assertFalse(result["evidence"]["stdout_truncated"])
+        self.assertNotIn("clean-prefix-only", str(result))
+
+    def test_invalid_or_missing_upstream_capture_metadata_fails_closed(self) -> None:
+        cases = (
+            controller.ProcessOutcome(identity=RESTRICTED_IDENTITY, exit_code=0),
+            controller.ProcessOutcome(
+                identity=RESTRICTED_IDENTITY,
+                exit_code=0,
+                stdout_upstream_truncated="invalid",
+                stderr_upstream_truncated=False,
+            ),
+        )
+        for outcome in cases:
+            with self.subTest(metadata=outcome.stdout_upstream_truncated):
+                result = self.make_controller(FakeLauncher(outcome=outcome)).run(
+                    self.input()
+                )
+                self.assertEqual(result["sanitization"], "FAIL")
+                self.assertIn(
+                    "upstream_output_unverified",
+                    result["validation_outcomes"]["failure_codes"],
+                )
+
+    def test_verified_bounded_upstream_scan_does_not_require_full_buffering(self) -> None:
+        outcome = controller.ProcessOutcome(
+            identity=RESTRICTED_IDENTITY,
+            exit_code=0,
+            stdout="bounded-clean-prefix",
+            stdout_upstream_truncated=True,
+            stderr_upstream_truncated=False,
+            stdout_stream_scan_complete=True,
+            stdout_stream_forbidden_marker=False,
+        )
+        result = self.make_controller(FakeLauncher(outcome=outcome)).run(self.input())
+        self.assertEqual(result["result"], "PASS")
+        self.assertEqual(result["sanitization"], "PASS")
+        self.assertFalse(result["evidence"]["stdout_truncated"])
+        self.assertNotIn("bounded-clean-prefix", str(result))
+
+    def test_verified_upstream_scan_marker_fails_without_publishing_content(self) -> None:
+        outcome = controller.ProcessOutcome(
+            identity=RESTRICTED_IDENTITY,
+            exit_code=0,
+            stdout="bounded-clean-prefix",
+            stdout_upstream_truncated=True,
+            stderr_upstream_truncated=False,
+            stdout_stream_scan_complete=True,
+            stdout_stream_forbidden_marker=True,
+        )
+        result = self.make_controller(FakeLauncher(outcome=outcome)).run(self.input())
+        self.assertEqual(result["sanitization"], "FAIL")
+        self.assertIn(
+            "unsafe_output_marker", result["validation_outcomes"]["failure_codes"]
+        )
+        self.assertNotIn("bounded-clean-prefix", str(result))
 
     def test_exit_zero_with_incorrect_artifact_fails(self) -> None:
         result = self.make_controller(
@@ -264,7 +350,7 @@ class PublicControllerTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, "retry_policy")
 
     def test_observed_retry_is_reported_as_failure(self) -> None:
-        outcome = controller.ProcessOutcome(
+        outcome = complete_outcome(
             identity=RESTRICTED_IDENTITY,
             exit_code=0,
             retry_count=1,
@@ -323,7 +409,7 @@ class PublicControllerTests(unittest.TestCase):
                 self.assertEqual(caught.exception.code, "result_schema")
 
     def test_injected_adapters_cannot_publish_private_capable_metadata(self) -> None:
-        outcome = controller.ProcessOutcome(
+        outcome = complete_outcome(
             identity=RESTRICTED_IDENTITY,
             exit_code=0,
             provider_tokens={"input": {"private": "synthetic-secret"}},
