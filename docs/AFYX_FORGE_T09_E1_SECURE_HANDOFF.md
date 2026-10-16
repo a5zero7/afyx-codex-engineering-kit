@@ -135,6 +135,10 @@ The trusted evaluator independently reviews and owns its runner, private bundle,
 
 Before the first cell, the owner separately reviews the evaluator arrangement, synthetic-control attestation, bundle manifest digest, runtime/network fingerprint, 36-cell budget, confirmation policy/budget, immutable campaign envelope, and final execution decision. This document grants none of those approvals.
 
+## Engineering Expert integration boundary
+
+This handoff does not change Afyx Engineering Expert or its existing thirteen-domain and six-workflow architecture. Progressive disclosure and cross-skill routing remain future integration-acceptance concerns: later authorized evaluation must verify selective reference/workflow loading and bounded composition without changing the frozen Forge candidates or using this security handoff as evidence of model-routing quality. No new skill, domain, workflow, or routing rule is introduced here.
+
 ## Owner handoff and remaining blockers
 
 1. Have the trusted evaluator review this public contract and independently implement/review the private runner; do not run repository or agent-generated scripts as owner.

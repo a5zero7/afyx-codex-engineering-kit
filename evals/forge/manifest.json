@@ -15,7 +15,7 @@
   },
   "public_handoff": {
     "path": "docs/AFYX_FORGE_T09_E1_SECURE_HANDOFF.md",
-    "sha256": "5bc4dbb88c851d597dbc2a61d45f16536bbe81e9891d18f31b8e3f8657aa20cc",
+    "sha256": "95f03694c093db48d41cfa90642469ab138689b4e120b7ba5dbbbc1cd98233b1",
     "identity_algorithm": "sha256 of UTF-8 content normalized to LF",
     "status": "PUBLIC_CONTRACT_PREPARED_CAMPAIGN_BLOCKED",
     "benchmark_cells_executed": 0
