@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -26,6 +27,9 @@ from evals.forge import validate as forge_validate
 
 HEX_SHA256 = re.compile(r"^[0-9a-f]{64}$")
 SAFE_CORRELATION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+SAFE_METADATA_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$")
+MAX_PUBLIC_METADATA_ITEMS = 256
+MAX_PUBLIC_COUNTER = 2**63 - 1
 TOP_LEVEL_INPUT_FIELDS = {
     "schema_version",
     "evaluation_run_id",
@@ -83,6 +87,40 @@ DEFAULT_FORBIDDEN_OUTPUT_MARKERS = tuple(
     "private_holdout",
     "scoring_key",
 )
+VALIDATION_OUTCOME_FIELDS = {"command_exit_code", "content_checks", "failure_codes"}
+LIFECYCLE_FIELDS = {
+    "workspace_created",
+    "process_tree_terminated",
+    "cleanup_correlated",
+}
+EVIDENCE_FIELDS = {
+    f"{stream}_{suffix}"
+    for stream in ("stdout", "stderr")
+    for suffix in ("bytes", "sha256", "truncated")
+}
+PUBLIC_FAILURE_CODES = {
+    "advisory_validation_command_forbidden",
+    "artifact_mismatch",
+    "artifact_validation_failed",
+    "artifact_validator_failure",
+    "cleanup_failed",
+    "controller_failure",
+    "file_scope_violation",
+    "fingerprint_mismatch",
+    "identity_mismatch",
+    "launcher_failure",
+    "materialization_conflict",
+    "process_exit_nonzero",
+    "process_tree_not_terminated",
+    "retry_policy",
+    "timeout",
+    "unexpected_process_termination",
+    "unsafe_output_marker",
+    "unsafe_path",
+    "unsafe_reparse",
+    "unsafe_source",
+    "validation_exit_mismatch",
+}
 
 
 class ContractViolation(ValueError):
@@ -483,7 +521,11 @@ def validate_public_result(result: Mapping[str, Any], manifest: Mapping[str, Any
     if RAW_OUTPUT_FIELDS & set(result):
         raise ContractViolation("result_schema", "raw private-capable output is not publishable")
     retry_count = result.get("retry_count")
-    if type(retry_count) is not int or retry_count < 0:
+    if (
+        type(retry_count) is not int
+        or retry_count < 0
+        or retry_count > MAX_PUBLIC_COUNTER
+    ):
         raise ContractViolation("result_schema", "public retry count is invalid")
     if result.get("candidate_id") not in manifest["candidate_order"]:
         raise ContractViolation("result_schema", "public result candidate is not frozen")
@@ -513,6 +555,86 @@ def validate_public_result(result: Mapping[str, Any], manifest: Mapping[str, Any
         raise ContractViolation("result_schema", "public lifecycle state is invalid")
     if result.get("sanitization") not in {"PASS", "FAIL"}:
         raise ContractViolation("result_schema", "public sanitization state is invalid")
+    for field in ("tool_calls", "repeated_reads"):
+        value = result.get(field)
+        if type(value) is not int or not 0 <= value <= MAX_PUBLIC_COUNTER:
+            raise ContractViolation("result_schema", f"public {field} is invalid")
+    wall_time = result.get("wall_time_seconds")
+    if (
+        type(wall_time) not in {int, float}
+        or not math.isfinite(wall_time)
+        or wall_time < 0
+        or wall_time > 86_400
+    ):
+        raise ContractViolation("result_schema", "public wall time is invalid")
+    if type(result.get("first_pass_success")) is not bool:
+        raise ContractViolation("result_schema", "public first-pass state is invalid")
+
+    tokens = result.get("provider_tokens")
+    if tokens != "NOT_AVAILABLE":
+        if not isinstance(tokens, dict) or not 1 <= len(tokens) <= 16:
+            raise ContractViolation("result_schema", "public provider tokens are invalid")
+        for key, value in tokens.items():
+            if (
+                not isinstance(key, str)
+                or not SAFE_METADATA_KEY.fullmatch(key)
+                or any(marker in key.casefold() for marker in DEFAULT_FORBIDDEN_OUTPUT_MARKERS)
+                or type(value) is not int
+                or not 0 <= value <= MAX_PUBLIC_COUNTER
+            ):
+                raise ContractViolation("result_schema", "public provider token metadata is unsafe")
+
+    outcomes = result.get("validation_outcomes")
+    if not isinstance(outcomes, dict) or set(outcomes) != VALIDATION_OUTCOME_FIELDS:
+        raise ContractViolation("result_schema", "public validation outcomes are invalid")
+    exit_code = outcomes["command_exit_code"]
+    if exit_code is not None and (
+        type(exit_code) is not int or not -(2**31) <= exit_code < 2**31
+    ):
+        raise ContractViolation("result_schema", "public validation exit code is invalid")
+    checks = outcomes["content_checks"]
+    if not isinstance(checks, dict) or not 1 <= len(checks) <= MAX_PUBLIC_METADATA_ITEMS:
+        raise ContractViolation("result_schema", "public content checks are invalid")
+    for key, value in checks.items():
+        if (
+            not isinstance(key, str)
+            or not SAFE_METADATA_KEY.fullmatch(key)
+            or any(marker in key.casefold() for marker in DEFAULT_FORBIDDEN_OUTPUT_MARKERS)
+            or type(value) is not bool
+        ):
+            raise ContractViolation("result_schema", "public content-check metadata is unsafe")
+    failure_codes = outcomes["failure_codes"]
+    if (
+        not isinstance(failure_codes, list)
+        or len(failure_codes) > len(PUBLIC_FAILURE_CODES)
+        or len(failure_codes) != len(set(failure_codes))
+        or any(code not in PUBLIC_FAILURE_CODES for code in failure_codes)
+    ):
+        raise ContractViolation("result_schema", "public failure codes are invalid")
+
+    lifecycle = result.get("lifecycle")
+    if (
+        not isinstance(lifecycle, dict)
+        or set(lifecycle) != LIFECYCLE_FIELDS
+        or any(type(value) is not bool for value in lifecycle.values())
+    ):
+        raise ContractViolation("result_schema", "public lifecycle metadata is invalid")
+    evidence = result.get("evidence")
+    if not isinstance(evidence, dict) or set(evidence) not in (set(), EVIDENCE_FIELDS):
+        raise ContractViolation("result_schema", "public evidence metadata is invalid")
+    if evidence:
+        for stream in ("stdout", "stderr"):
+            size = evidence[f"{stream}_bytes"]
+            digest = evidence[f"{stream}_sha256"]
+            truncated = evidence[f"{stream}_truncated"]
+            if (
+                type(size) is not int
+                or not 0 <= size <= MAX_PUBLIC_COUNTER
+                or not isinstance(digest, str)
+                or not HEX_SHA256.fullmatch(digest)
+                or type(truncated) is not bool
+            ):
+                raise ContractViolation("result_schema", "public evidence values are invalid")
 
 
 class PublicController:
@@ -565,7 +687,9 @@ class PublicController:
         for label, value in (("stdout", outcome.stdout), ("stderr", outcome.stderr)):
             encoded = value.encode("utf-8", errors="replace")
             bounded = encoded[: self.max_capture_bytes]
-            text = bounded.decode("utf-8", errors="replace").casefold()
+            # Publication stays bounded, but the fail-closed marker check covers
+            # the complete captured stream so a suffix cannot bypass sanitization.
+            text = value.casefold()
             marker_found = any(marker in text for marker in self.forbidden_output_markers)
             safe = safe and not marker_found
             evidence[f"{label}_bytes"] = len(encoded)

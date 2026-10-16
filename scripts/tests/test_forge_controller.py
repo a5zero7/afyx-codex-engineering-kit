@@ -15,7 +15,7 @@ from evals.forge import controller
 
 ROOT = Path(__file__).resolve().parents[2]
 ENVIRONMENT_FINGERPRINT = "a" * 64
-RESTRICTED_IDENTITY = r"AFIF\afyx_eval_agent"
+RESTRICTED_IDENTITY = r"SYNTHETIC\restricted_agent"
 CORRECT_CONTENT = (
     "def clamp(value: int, lower: int, upper: int) -> int:\n"
     "    \"\"\"Return value constrained to the inclusive lower/upper bounds.\"\"\"\n"
@@ -59,6 +59,14 @@ class FakeLauncher:
 class FailedCleanupManager(controller.DisposableWorkspaceManager):
     def cleanup(self, lease: controller.WorkspaceLease) -> bool:
         return False
+
+
+class PrivateCapableArtifactValidator:
+    def validate(self, request, outcome, files_modified):
+        return controller.ArtifactValidation(
+            command_exit_code=0,
+            content_checks={"artifact": {"private": "synthetic-secret"}},
+        )
 
 
 class PublicControllerTests(unittest.TestCase):
@@ -181,7 +189,7 @@ class PublicControllerTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, "unsafe_reparse")
 
     def test_identity_mismatch_fails_result(self) -> None:
-        outcome = controller.ProcessOutcome(identity=r"AFIF\owner", exit_code=0)
+        outcome = controller.ProcessOutcome(identity=r"SYNTHETIC\unexpected_identity", exit_code=0)
         result = self.make_controller(FakeLauncher(outcome=outcome)).run(self.input())
         self.assertEqual(result["result"], "FAIL")
         self.assertIn("identity_mismatch", result["validation_outcomes"]["failure_codes"])
@@ -224,6 +232,18 @@ class PublicControllerTests(unittest.TestCase):
         self.assertIn("unsafe_output_marker", result["validation_outcomes"]["failure_codes"])
         self.assertNotIn("synthetic-secret", str(result))
 
+    def test_unsafe_output_marker_beyond_capture_limit_fails_closed(self) -> None:
+        outcome = controller.ProcessOutcome(
+            identity=RESTRICTED_IDENTITY,
+            exit_code=0,
+            stdout=("x" * 70_000) + " Authorization: Bearer synthetic-secret",
+        )
+        result = self.make_controller(FakeLauncher(outcome=outcome)).run(self.input())
+        self.assertEqual(result["sanitization"], "FAIL")
+        self.assertTrue(result["evidence"]["stdout_truncated"])
+        self.assertIn("unsafe_output_marker", result["validation_outcomes"]["failure_codes"])
+        self.assertNotIn("synthetic-secret", str(result))
+
     def test_exit_zero_with_incorrect_artifact_fails(self) -> None:
         result = self.make_controller(
             FakeLauncher(content="def clamp(*args):\n    return 999\n")
@@ -259,6 +279,66 @@ class PublicControllerTests(unittest.TestCase):
         with self.assertRaises(controller.ContractViolation) as caught:
             controller.validate_public_result(result, self.manifest)
         self.assertEqual(caught.exception.code, "result_schema")
+
+    def test_public_result_rejects_private_capable_nested_adapter_values(self) -> None:
+        mutations = (
+            ("provider_tokens", {"input": {"private": "synthetic-secret"}}),
+            ("provider_tokens", {f"metric-{index}": 1 for index in range(17)}),
+            (
+                "validation_outcomes",
+                {
+                    "command_exit_code": 0,
+                    "content_checks": {"artifact": "synthetic-secret"},
+                    "failure_codes": [],
+                },
+            ),
+            (
+                "validation_outcomes",
+                {
+                    "command_exit_code": 0,
+                    "content_checks": {
+                        f"check-{index}": True
+                        for index in range(controller.MAX_PUBLIC_METADATA_ITEMS + 1)
+                    },
+                    "failure_codes": [],
+                },
+            ),
+            (
+                "lifecycle",
+                {
+                    "workspace_created": True,
+                    "process_tree_terminated": True,
+                    "cleanup_correlated": {"private": "synthetic-secret"},
+                },
+            ),
+            ("evidence", {"private": "synthetic-secret"}),
+        )
+        baseline = self.make_controller(FakeLauncher()).run(self.input())
+        for field, value in mutations:
+            with self.subTest(field=field, value_type=type(value).__name__):
+                result = copy.deepcopy(baseline)
+                result[field] = value
+                with self.assertRaises(controller.ContractViolation) as caught:
+                    controller.validate_public_result(result, self.manifest)
+                self.assertEqual(caught.exception.code, "result_schema")
+
+    def test_injected_adapters_cannot_publish_private_capable_metadata(self) -> None:
+        outcome = controller.ProcessOutcome(
+            identity=RESTRICTED_IDENTITY,
+            exit_code=0,
+            provider_tokens={"input": {"private": "synthetic-secret"}},
+        )
+        cases = (
+            (FakeLauncher(outcome=outcome), None),
+            (FakeLauncher(), PrivateCapableArtifactValidator()),
+        )
+        for launcher, validator in cases:
+            with self.subTest(adapter=type(validator or launcher).__name__):
+                with self.assertRaises(controller.ContractViolation) as caught:
+                    self.make_controller(launcher, validator=validator).run(self.input())
+                self.assertEqual(caught.exception.code, "result_schema")
+                self.assertNotIn("synthetic-secret", str(caught.exception))
+                self.assertFalse(any(self.workspace_parent.iterdir()))
 
 
 if __name__ == "__main__":
