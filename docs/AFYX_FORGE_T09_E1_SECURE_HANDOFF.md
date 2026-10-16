@@ -55,9 +55,10 @@ The controller constructs one canonical JSON input per cell from frozen public m
   "scenario": {
     "id": "public scenario identifier",
     "category": "frozen category",
+    "user_prompt": "exact frozen public scenario prompt",
     "fixture_sha256": "frozen public fixture fingerprint",
-    "allowed_file_scope": ["public relative paths"],
-    "validation_command": ["public bounded command"]
+    "allowed_file_scope": [],
+    "validation_command": null
   },
   "environment_sha256": "owner-approved runtime fingerprint",
   "limits": {
@@ -67,7 +68,7 @@ The controller constructs one canonical JSON input per cell from frozen public m
 }
 ```
 
-Only public scenario text, fixture files, candidate material, allowed relative paths, and approved limits enter the evaluated workspace. The private rubric, answers, scoring logic, holdouts, canary, evaluator paths, credentials, and owner environment details must never appear in the input, workspace, process environment, tool descriptions, logs, or transcript.
+Only the exact manifest `user_prompt`, public fixture files, candidate material, allowed relative paths, and approved limits enter the evaluated workspace. Coding scenarios carry their exact manifest command array; advisory scenarios preserve `validation_command: null` and do not invent a command. The private rubric, answers, scoring logic, holdouts, canary, evaluator paths, credentials, and owner environment details must never appear in the input, workspace, process environment, tool descriptions, logs, or transcript.
 
 ## Per-cell lifecycle
 
@@ -76,7 +77,7 @@ Only public scenario text, fixture files, candidate material, allowed relative p
 3. **Materialize:** copy the exact public fixture and candidate in the frozen order; rehash inside the workspace; deny undeclared files and inherited credentials.
 4. **Preflight:** prove the expected non-admin identity, Windows-only runtime, permitted workspace read/write, evaluator-storage denial, absent WSL route, bounded tools, and sanitized environment.
 5. **Execute:** the trusted controller launches one bounded child process as the restricted identity. It never launches the cell as owner/trusted evaluator and never evaluates generated code in a privileged process.
-6. **Validate:** run only the declared public validation command. Collect exit status, bounded stdout/stderr, mutation inventory, tool events, provider-reported usage, timeout, and process-cleanup evidence.
+6. **Validate:** when `validation_command` is non-null, run only that declared public command; advisory cells run no invented validation command. Collect exit status when applicable, bounded stdout/stderr, mutation inventory, tool events, provider-reported usage, timeout, and process-cleanup evidence.
 7. **Evaluate privately:** the trusted evaluator applies private hard-gate and scoring material outside the workspace and outside developer/evaluated-agent visibility.
 8. **Sanitize:** emit only the public result schema below. Scan output for credentials, private paths, canary markers, rubric/holdout fragments, prompts, and unexpected source content before release.
 9. **Clean:** terminate the owned process tree, verify no orphan or persistent handle, and delete only the correlated disposable workspace. Record cleanup outcome; never delete evaluator material or unrelated processes.
@@ -93,7 +94,7 @@ Timeout, crash, identity drift, stale/missing correlation, unexpected ACL access
   "cell_id": "frozen cell ID",
   "candidate_id": "B0-B5",
   "scenario_id": "public scenario ID",
-  "candidate_sha256": "verified fingerprint",
+  "candidate_fingerprint": "verified fingerprint",
   "fixture_fingerprint": "verified fingerprint",
   "environment_fingerprint": "approved fingerprint",
   "hard_gate_results": {
@@ -102,10 +103,15 @@ Timeout, crash, identity drift, stale/missing correlation, unexpected ACL access
     "evidence_quality": "PASS|FAIL|BLOCKED|NOT_TESTED",
     "security": "PASS|FAIL|BLOCKED|NOT_TESTED"
   },
+  "result": "PASS|FAIL|BLOCKED|NOT_TESTED",
   "provider_tokens": "provider values or NOT_AVAILABLE",
+  "wall_time_seconds": 0.0,
   "tool_calls": "sanitized counts",
+  "repeated_reads": 0,
   "retry_count": 0,
+  "first_pass_success": false,
   "validation_outcomes": "public checks and exit states",
+  "files_modified": [],
   "timeout": false,
   "cleanup": "PASS|FAIL",
   "exclusion_reason": null,

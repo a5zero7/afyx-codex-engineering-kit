@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import copy
 import importlib.util
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -156,6 +157,25 @@ class ForgeReadinessTests(unittest.TestCase):
         text = path.read_text(encoding="utf-8").lower()
         for forbidden in forge.PUBLIC_HANDOFF_FORBIDDEN:
             self.assertNotIn(forbidden.lower(), text)
+
+        input_contract = json.loads(
+            text.split("## public cell input contract", 1)[1]
+            .split("```json", 1)[1]
+            .split("```", 1)[0]
+        )
+        self.assertIn("user_prompt", input_contract["scenario"])
+        self.assertIsNone(input_contract["scenario"]["validation_command"])
+
+        result_contract = json.loads(
+            text.split("## sanitized public result contract", 1)[1]
+            .split("```json", 1)[1]
+            .split("```", 1)[0]
+        )
+        self.assertTrue(
+            set(self.manifest["result_schema"]["required_fields"])
+            .issubset(result_contract)
+        )
+        self.assertNotIn("candidate_sha256", result_contract)
 
         tampered = copy.deepcopy(self.manifest)
         tampered["public_handoff"]["sha256"] = "0" * 64
