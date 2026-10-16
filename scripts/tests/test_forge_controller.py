@@ -39,6 +39,7 @@ class FakeLauncher:
         outcome: controller.ProcessOutcome | None = None,
         content: str | None = CORRECT_CONTENT,
         extra_file: bool = False,
+        extra_files: dict[str, str] | None = None,
         error: Exception | None = None,
     ) -> None:
         self.outcome = outcome or complete_outcome(
@@ -50,6 +51,7 @@ class FakeLauncher:
         )
         self.content = content
         self.extra_file = extra_file
+        self.extra_files = extra_files or {}
         self.error = error
         self.requests: list[controller.LaunchRequest] = []
 
@@ -61,6 +63,10 @@ class FakeLauncher:
             (request.workspace / "known_math.py").write_text(self.content, encoding="utf-8")
         if self.extra_file:
             (request.workspace / "unexpected.py").write_text("x = 1\n", encoding="utf-8")
+        for relative, value in self.extra_files.items():
+            target = request.workspace / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(value, encoding="utf-8")
         return self.outcome
 
 
@@ -74,6 +80,14 @@ class PrivateCapableArtifactValidator:
         return controller.ArtifactValidation(
             command_exit_code=0,
             content_checks={"artifact": {"private": "synthetic-secret"}},
+        )
+
+
+class SecretKeyArtifactValidator:
+    def validate(self, request, outcome, files_modified):
+        return controller.ArtifactValidation(
+            command_exit_code=0,
+            content_checks={"opaqueSecret7x9": True},
         )
 
 
@@ -117,6 +131,7 @@ class PublicControllerTests(unittest.TestCase):
         *,
         workspace_manager: controller.DisposableWorkspaceManager | None = None,
         validator: controller.ArtifactValidator | None = None,
+        **controller_options,
     ) -> controller.PublicController:
         return controller.PublicController(
             manifest=self.manifest,
@@ -130,6 +145,7 @@ class PublicControllerTests(unittest.TestCase):
             ),
             expected_environment_fingerprint=ENVIRONMENT_FINGERPRINT,
             expected_restricted_identity=RESTRICTED_IDENTITY,
+            **controller_options,
         )
 
     def test_positive_cell_materializes_validates_and_cleans(self) -> None:
@@ -221,6 +237,20 @@ class PublicControllerTests(unittest.TestCase):
         self.assertIn(
             "process_tree_not_terminated", result["validation_outcomes"]["failure_codes"]
         )
+
+    def test_launcher_exception_fails_sanitization_and_preserves_cleanup(self) -> None:
+        result = self.make_controller(
+            FakeLauncher(error=RuntimeError("synthetic launcher failure"))
+        ).run(self.input())
+        self.assertEqual(result["result"], "FAIL")
+        self.assertEqual(result["sanitization"], "FAIL")
+        self.assertEqual(result["cleanup"], "PASS")
+        self.assertIn("launcher_failure", result["validation_outcomes"]["failure_codes"])
+        self.assertIn(
+            "upstream_output_unverified",
+            result["validation_outcomes"]["failure_codes"],
+        )
+        self.assertEqual(result["evidence"], {})
 
     def test_unexpected_process_termination_fails(self) -> None:
         outcome = complete_outcome(identity=RESTRICTED_IDENTITY, exit_code=None)
@@ -341,6 +371,62 @@ class PublicControllerTests(unittest.TestCase):
     def test_unexpected_file_mutation_fails_scope(self) -> None:
         result = self.make_controller(FakeLauncher(extra_file=True)).run(self.input())
         self.assertIn("file_scope_violation", result["validation_outcomes"]["failure_codes"])
+        self.assertNotIn("unexpected.py", result["files_modified"])
+
+    def test_secret_like_unknown_filename_is_not_published(self) -> None:
+        secret_like_name = "opaque-7x9-private-value.py"
+        result = self.make_controller(
+            FakeLauncher(extra_files={secret_like_name: "x = 1\n"})
+        ).run(self.input())
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn("file_scope_violation", result["validation_outcomes"]["failure_codes"])
+        self.assertNotIn(secret_like_name, str(result))
+
+    def test_workspace_inventory_limits_fail_closed_and_cleanup(self) -> None:
+        cases = (
+            (
+                "file-count",
+                FakeLauncher(extra_files={"count-limit.txt": "x"}),
+                {"max_workspace_files": 11},
+                "workspace_file_count_limit",
+            ),
+            (
+                "per-file-size",
+                FakeLauncher(extra_files={"size-limit.txt": "x" * 1_014}),
+                {"max_workspace_file_bytes": 1_013},
+                "workspace_file_size_limit",
+            ),
+            (
+                "aggregate-bytes",
+                FakeLauncher(extra_files={"total-limit.txt": "x" * 1_000}),
+                {"max_workspace_total_bytes": 5_000},
+                "workspace_total_bytes_limit",
+            ),
+        )
+        for name, launcher, options, failure_code in cases:
+            with self.subTest(limit=name):
+                result = self.make_controller(launcher, **options).run(self.input())
+                self.assertEqual(result["result"], "FAIL")
+                self.assertEqual(result["cleanup"], "PASS")
+                self.assertIn(
+                    failure_code, result["validation_outcomes"]["failure_codes"]
+                )
+                self.assertFalse(any(self.workspace_parent.iterdir()))
+
+        ticks = iter(float(value) for value in range(1, 1_000))
+        with mock.patch.object(
+            controller.time, "monotonic", side_effect=lambda: next(ticks)
+        ):
+            result = self.make_controller(
+                FakeLauncher(), inventory_deadline_seconds=2.0
+            ).run(self.input())
+        self.assertEqual(result["result"], "FAIL")
+        self.assertEqual(result["cleanup"], "PASS")
+        self.assertIn(
+            "workspace_inventory_timeout",
+            result["validation_outcomes"]["failure_codes"],
+        )
+        self.assertFalse(any(self.workspace_parent.iterdir()))
 
     def test_retry_policy_is_zero_and_enforced(self) -> None:
         payload = self.input()
@@ -369,6 +455,7 @@ class PublicControllerTests(unittest.TestCase):
     def test_public_result_rejects_private_capable_nested_adapter_values(self) -> None:
         mutations = (
             ("provider_tokens", {"input": {"private": "synthetic-secret"}}),
+            ("provider_tokens", {"opaqueSecret7x9": 1}),
             ("provider_tokens", {f"metric-{index}": 1 for index in range(17)}),
             (
                 "validation_outcomes",
@@ -412,19 +499,39 @@ class PublicControllerTests(unittest.TestCase):
         outcome = complete_outcome(
             identity=RESTRICTED_IDENTITY,
             exit_code=0,
-            provider_tokens={"input": {"private": "synthetic-secret"}},
+            provider_tokens={"opaqueSecret7x9": 1},
         )
         cases = (
-            (FakeLauncher(outcome=outcome), None),
-            (FakeLauncher(), PrivateCapableArtifactValidator()),
+            (FakeLauncher(outcome=outcome), None, "opaqueSecret7x9"),
+            (
+                FakeLauncher(),
+                PrivateCapableArtifactValidator(),
+                "synthetic-secret",
+            ),
         )
-        for launcher, validator in cases:
+        for launcher, validator, private_value in cases:
             with self.subTest(adapter=type(validator or launcher).__name__):
-                with self.assertRaises(controller.ContractViolation) as caught:
-                    self.make_controller(launcher, validator=validator).run(self.input())
-                self.assertEqual(caught.exception.code, "result_schema")
-                self.assertNotIn("synthetic-secret", str(caught.exception))
+                result = self.make_controller(launcher, validator=validator).run(
+                    self.input()
+                )
+                self.assertEqual(result["result"], "FAIL")
+                self.assertNotIn(private_value, str(result))
+                self.assertEqual(
+                    set(result["validation_outcomes"]["content_checks"]),
+                    controller.PUBLIC_CONTENT_CHECK_FIELDS,
+                )
                 self.assertFalse(any(self.workspace_parent.iterdir()))
+
+    def test_adapter_check_names_are_reduced_to_public_aggregate(self) -> None:
+        result = self.make_controller(
+            FakeLauncher(), validator=SecretKeyArtifactValidator()
+        ).run(self.input())
+        self.assertEqual(result["result"], "PASS")
+        self.assertEqual(
+            result["validation_outcomes"]["content_checks"],
+            {"artifact_validation": True},
+        )
+        self.assertNotIn("opaqueSecret7x9", str(result))
 
 
 if __name__ == "__main__":

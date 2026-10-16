@@ -27,9 +27,17 @@ from evals.forge import validate as forge_validate
 
 HEX_SHA256 = re.compile(r"^[0-9a-f]{64}$")
 SAFE_CORRELATION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
-SAFE_METADATA_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$")
 MAX_PUBLIC_METADATA_ITEMS = 256
 MAX_PUBLIC_COUNTER = 2**63 - 1
+MAX_PUBLIC_PATH_CHARS = 1_024
+PUBLIC_PROVIDER_TOKEN_FIELDS = {
+    "cached_input",
+    "input",
+    "output",
+    "reasoning",
+    "total",
+}
+PUBLIC_CONTENT_CHECK_FIELDS = {"artifact_validation"}
 TOP_LEVEL_INPUT_FIELDS = {
     "schema_version",
     "evaluation_run_id",
@@ -112,6 +120,7 @@ PUBLIC_FAILURE_CODES = {
     "materialization_conflict",
     "process_exit_nonzero",
     "process_tree_not_terminated",
+    "public_metadata_rejected",
     "retry_policy",
     "timeout",
     "unexpected_process_termination",
@@ -121,6 +130,11 @@ PUBLIC_FAILURE_CODES = {
     "unsafe_reparse",
     "unsafe_source",
     "validation_exit_mismatch",
+    "workspace_file_count_limit",
+    "workspace_file_size_limit",
+    "workspace_inventory_timeout",
+    "workspace_path_limit",
+    "workspace_total_bytes_limit",
 }
 
 
@@ -153,6 +167,14 @@ class WorkspaceLease:
     correlation_id: str
     root: Path
     work: Path
+
+
+@dataclass(frozen=True)
+class InventoryLimits:
+    max_files: int
+    max_file_bytes: int
+    max_total_bytes: int
+    deadline_seconds: float
 
 
 @dataclass(frozen=True)
@@ -218,8 +240,50 @@ def _sha256_bytes(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
 
 
-def _raw_file_sha256(path: Path) -> str:
-    return _sha256_bytes(path.read_bytes())
+def _check_deadline(deadline: float | None) -> None:
+    if deadline is not None and time.monotonic() >= deadline:
+        raise ContractViolation(
+            "workspace_inventory_timeout", "workspace inventory deadline exceeded"
+        )
+
+
+def _stream_file_sha256(
+    path: Path,
+    *,
+    max_bytes: int | None = None,
+    deadline: float | None = None,
+    normalize_lf: bool = False,
+) -> tuple[str, int]:
+    digest = hashlib.sha256()
+    size = 0
+    pending_cr = False
+    with path.open("rb") as stream:
+        while True:
+            _check_deadline(deadline)
+            chunk = stream.read(64 * 1024)
+            if not chunk:
+                break
+            size += len(chunk)
+            if max_bytes is not None and size > max_bytes:
+                raise ContractViolation(
+                    "workspace_file_size_limit", "workspace file size limit exceeded"
+                )
+            if normalize_lf:
+                if pending_cr:
+                    chunk = b"\r" + chunk
+                    pending_cr = False
+                if chunk.endswith(b"\r"):
+                    chunk = chunk[:-1]
+                    pending_cr = True
+                chunk = chunk.replace(b"\r\n", b"\n")
+            digest.update(chunk)
+    if pending_cr:
+        digest.update(b"\r")
+    return digest.hexdigest(), size
+
+
+def _raw_file_sha256(path: Path, *, normalize_lf: bool = False) -> str:
+    return _stream_file_sha256(path, normalize_lf=normalize_lf)[0]
 
 
 def _require_object(value: Any, fields: set[str], label: str) -> dict[str, Any]:
@@ -246,7 +310,13 @@ def _require_sha256(value: Any, label: str) -> str:
 def normalize_relative_path(value: Any) -> str:
     """Return one canonical POSIX relative path or fail closed."""
 
-    if not isinstance(value, str) or not value or "\x00" in value or "\\" in value:
+    if (
+        not isinstance(value, str)
+        or not value
+        or len(value) > MAX_PUBLIC_PATH_CHARS
+        or "\x00" in value
+        or "\\" in value
+    ):
         raise ContractViolation("unsafe_path", "allowed path is not canonical POSIX-relative")
     posix = PurePosixPath(value)
     windows = PureWindowsPath(value)
@@ -349,13 +419,55 @@ def _materialize_candidate(
     _verify_copy(source, destination)
 
 
-def _snapshot(root: Path) -> dict[str, str]:
-    assert_safe_tree(root)
-    return {
-        path.relative_to(root).as_posix(): _raw_file_sha256(path)
-        for path in sorted(root.rglob("*"), key=lambda item: item.relative_to(root).as_posix())
-        if path.is_file()
-    }
+def _snapshot(root: Path, limits: InventoryLimits) -> dict[str, str]:
+    assert_safe_ancestry(root)
+    deadline = time.monotonic() + limits.deadline_seconds
+    inventory: dict[str, str] = {}
+    total_bytes = 0
+    visited_entries = 0
+    pending = [root]
+    while pending:
+        _check_deadline(deadline)
+        current = pending.pop()
+        with os.scandir(current) as entries:
+            for entry in entries:
+                _check_deadline(deadline)
+                visited_entries += 1
+                if visited_entries > limits.max_files:
+                    raise ContractViolation(
+                        "workspace_file_count_limit",
+                        "workspace file-count limit exceeded",
+                    )
+                path = Path(entry.path)
+                if _is_reparse(path):
+                    raise ContractViolation(
+                        "unsafe_reparse", "workspace contains a link/reparse point"
+                    )
+                if entry.is_dir(follow_symlinks=False):
+                    pending.append(path)
+                    continue
+                if not entry.is_file(follow_symlinks=False):
+                    raise ContractViolation(
+                        "unsafe_source", "workspace contains a non-regular entry"
+                    )
+                relative = path.relative_to(root).as_posix()
+                if len(relative) > MAX_PUBLIC_PATH_CHARS:
+                    raise ContractViolation(
+                        "workspace_path_limit", "workspace path limit exceeded"
+                    )
+                digest, size = _stream_file_sha256(
+                    path,
+                    max_bytes=limits.max_file_bytes,
+                    deadline=deadline,
+                )
+                total_bytes += size
+                if total_bytes > limits.max_total_bytes:
+                    raise ContractViolation(
+                        "workspace_total_bytes_limit",
+                        "workspace aggregate-byte limit exceeded",
+                    )
+                inventory[relative] = digest
+    return inventory
 
 
 def _changed_files(before: Mapping[str, str], after: Mapping[str, str]) -> list[str]:
@@ -513,11 +625,50 @@ class DigestArtifactValidator:
         for relative, expected in self.expected_sha256.items():
             target = request.workspace / relative
             checks[f"sha256:{relative}"] = (
-                target.is_file() and forge_validate.file_sha256(target) == expected
+                target.is_file()
+                and _raw_file_sha256(target, normalize_lf=True) == expected
             )
         if not self.expected_sha256:
             checks["no_files_modified"] = not files_modified
         return ArtifactValidation(self.command_exit_code, checks)
+
+
+def _public_provider_tokens(value: Any) -> tuple[dict[str, int] | str, bool]:
+    if value == "NOT_AVAILABLE":
+        return "NOT_AVAILABLE", True
+    if not isinstance(value, dict) or not 1 <= len(value) <= len(
+        PUBLIC_PROVIDER_TOKEN_FIELDS
+    ):
+        return "NOT_AVAILABLE", False
+    if not set(value).issubset(PUBLIC_PROVIDER_TOKEN_FIELDS):
+        return "NOT_AVAILABLE", False
+    if any(
+        type(count) is not int or not 0 <= count <= MAX_PUBLIC_COUNTER
+        for count in value.values()
+    ):
+        return "NOT_AVAILABLE", False
+    return {key: value[key] for key in sorted(value)}, True
+
+
+def _artifact_validation_well_formed(value: Any) -> bool:
+    if not isinstance(value, ArtifactValidation):
+        return False
+    if value.command_exit_code is not None and (
+        type(value.command_exit_code) is not int
+        or not -(2**31) <= value.command_exit_code < 2**31
+    ):
+        return False
+    checks = value.content_checks
+    return (
+        isinstance(checks, Mapping)
+        and 1 <= len(checks) <= MAX_PUBLIC_METADATA_ITEMS
+        and all(
+            isinstance(key, str)
+            and len(key) <= MAX_PUBLIC_PATH_CHARS
+            and type(check) is bool
+            for key, check in checks.items()
+        )
+    )
 
 
 def validate_public_result(result: Mapping[str, Any], manifest: Mapping[str, Any]) -> None:
@@ -555,10 +706,22 @@ def validate_public_result(result: Mapping[str, Any], manifest: Mapping[str, Any
         for verdict in hard_gates.values()
     ):
         raise ContractViolation("result_schema", "public hard-gate verdict is invalid")
-    if not isinstance(result.get("files_modified"), list):
+    files_modified = result.get("files_modified")
+    if not isinstance(files_modified, list):
         raise ContractViolation("result_schema", "files_modified must be a public list")
-    for relative in result["files_modified"]:
+    allowed_files = {
         normalize_relative_path(relative)
+        for relative in scenarios[result["scenario_id"]]["allowed_file_scope"]
+    }
+    if (
+        len(files_modified) > len(allowed_files)
+        or files_modified != sorted(set(files_modified))
+        or any(
+            normalize_relative_path(relative) not in allowed_files
+            for relative in files_modified
+        )
+    ):
+        raise ContractViolation("result_schema", "public file inventory is not allowlisted")
     if type(result.get("timeout")) is not bool or result.get("cleanup") not in {"PASS", "FAIL"}:
         raise ContractViolation("result_schema", "public lifecycle state is invalid")
     if result.get("sanitization") not in {"PASS", "FAIL"}:
@@ -580,14 +743,15 @@ def validate_public_result(result: Mapping[str, Any], manifest: Mapping[str, Any
 
     tokens = result.get("provider_tokens")
     if tokens != "NOT_AVAILABLE":
-        if not isinstance(tokens, dict) or not 1 <= len(tokens) <= 16:
+        if (
+            not isinstance(tokens, dict)
+            or not 1 <= len(tokens) <= len(PUBLIC_PROVIDER_TOKEN_FIELDS)
+            or not set(tokens).issubset(PUBLIC_PROVIDER_TOKEN_FIELDS)
+        ):
             raise ContractViolation("result_schema", "public provider tokens are invalid")
         for key, value in tokens.items():
             if (
-                not isinstance(key, str)
-                or not SAFE_METADATA_KEY.fullmatch(key)
-                or any(marker in key.casefold() for marker in DEFAULT_FORBIDDEN_OUTPUT_MARKERS)
-                or type(value) is not int
+                type(value) is not int
                 or not 0 <= value <= MAX_PUBLIC_COUNTER
             ):
                 raise ContractViolation("result_schema", "public provider token metadata is unsafe")
@@ -601,16 +765,10 @@ def validate_public_result(result: Mapping[str, Any], manifest: Mapping[str, Any
     ):
         raise ContractViolation("result_schema", "public validation exit code is invalid")
     checks = outcomes["content_checks"]
-    if not isinstance(checks, dict) or not 1 <= len(checks) <= MAX_PUBLIC_METADATA_ITEMS:
+    if not isinstance(checks, dict) or set(checks) != PUBLIC_CONTENT_CHECK_FIELDS:
         raise ContractViolation("result_schema", "public content checks are invalid")
-    for key, value in checks.items():
-        if (
-            not isinstance(key, str)
-            or not SAFE_METADATA_KEY.fullmatch(key)
-            or any(marker in key.casefold() for marker in DEFAULT_FORBIDDEN_OUTPUT_MARKERS)
-            or type(value) is not bool
-        ):
-            raise ContractViolation("result_schema", "public content-check metadata is unsafe")
+    if type(checks["artifact_validation"]) is not bool:
+        raise ContractViolation("result_schema", "public content-check metadata is unsafe")
     failure_codes = outcomes["failure_codes"]
     if (
         not isinstance(failure_codes, list)
@@ -660,6 +818,10 @@ class PublicController:
         expected_restricted_identity: str,
         max_timeout_seconds: int = 600,
         max_capture_bytes: int = 65_536,
+        max_workspace_files: int = 4_096,
+        max_workspace_file_bytes: int = 16 * 1024 * 1024,
+        max_workspace_total_bytes: int = 128 * 1024 * 1024,
+        inventory_deadline_seconds: float = 30.0,
         forbidden_output_markers: Sequence[str] = DEFAULT_FORBIDDEN_OUTPUT_MARKERS,
     ) -> None:
         self.manifest = manifest
@@ -675,6 +837,29 @@ class PublicController:
         self.expected_restricted_identity = expected_restricted_identity.casefold()
         self.max_timeout_seconds = max_timeout_seconds
         self.max_capture_bytes = max_capture_bytes
+        numeric_limits = (
+            max_workspace_files,
+            max_workspace_file_bytes,
+            max_workspace_total_bytes,
+        )
+        if any(type(value) is not int or value <= 0 for value in numeric_limits):
+            raise ContractViolation(
+                "manifest_invalid", "workspace limits must be positive integers"
+            )
+        if (
+            type(inventory_deadline_seconds) not in {int, float}
+            or not math.isfinite(inventory_deadline_seconds)
+            or inventory_deadline_seconds <= 0
+        ):
+            raise ContractViolation(
+                "manifest_invalid", "inventory deadline must be positive"
+            )
+        self.inventory_limits = InventoryLimits(
+            max_files=max_workspace_files,
+            max_file_bytes=max_workspace_file_bytes,
+            max_total_bytes=max_workspace_total_bytes,
+            deadline_seconds=float(inventory_deadline_seconds),
+        )
         self.forbidden_output_markers = tuple(marker.casefold() for marker in forbidden_output_markers)
 
     def _materialize(self, cell: ValidatedCell, work: Path) -> dict[str, str]:
@@ -687,7 +872,7 @@ class PublicController:
         _verify_copy(fixture_source, work)
         _materialize_candidate(self.manifest, cell.candidate_id, self.repository_root, work)
         assert_safe_tree(work)
-        return _snapshot(work)
+        return _snapshot(work, self.inventory_limits)
 
     @staticmethod
     def _upstream_coverage(outcome: ProcessOutcome, label: str) -> tuple[bool, bool]:
@@ -738,9 +923,18 @@ class PublicController:
         outcome: ProcessOutcome | None = None
         validation = ArtifactValidation(None, {"not_executed": False})
         files_modified: list[str] = []
+        public_files_modified: list[str] = []
+        public_provider_tokens: dict[str, int] | str = "NOT_AVAILABLE"
+        public_tool_calls = 0
+        public_retry_count = 0
+        public_timeout = False
+        public_process_tree_terminated = False
+        public_content_checks = {"artifact_validation": False}
+        inventory_complete = False
+        validation_complete = False
         failure_codes: list[str] = []
         evidence: dict[str, Any] = {}
-        sanitization = "PASS"
+        sanitization = "FAIL"
         cleanup = "FAIL"
         try:
             lease = self.workspace_manager.create(cell.evaluation_run_id)
@@ -758,50 +952,99 @@ class PublicController:
                 outcome = self.launcher.launch(request)
             except Exception:
                 failure_codes.append("launcher_failure")
+                failure_codes.append("upstream_output_unverified")
             if outcome is not None:
                 evidence, marker_found, upstream_verified = self._evidence(outcome)
+                if not marker_found and upstream_verified:
+                    sanitization = "PASS"
                 if marker_found:
                     sanitization = "FAIL"
                     failure_codes.append("unsafe_output_marker")
                 if not upstream_verified:
                     sanitization = "FAIL"
                     failure_codes.append("upstream_output_unverified")
+                public_provider_tokens, provider_metadata_safe = _public_provider_tokens(
+                    outcome.provider_tokens
+                )
+                if not provider_metadata_safe:
+                    failure_codes.append("public_metadata_rejected")
+                if (
+                    type(outcome.tool_calls) is int
+                    and 0 <= outcome.tool_calls <= MAX_PUBLIC_COUNTER
+                ):
+                    public_tool_calls = outcome.tool_calls
+                else:
+                    failure_codes.append("public_metadata_rejected")
+                if (
+                    type(outcome.retry_count) is int
+                    and 0 <= outcome.retry_count <= MAX_PUBLIC_COUNTER
+                ):
+                    public_retry_count = outcome.retry_count
+                else:
+                    failure_codes.append("public_metadata_rejected")
+                    failure_codes.append("retry_policy")
+                if type(outcome.timed_out) is bool:
+                    public_timeout = outcome.timed_out
+                else:
+                    public_timeout = True
+                    failure_codes.append("public_metadata_rejected")
+                if type(outcome.process_tree_terminated) is bool:
+                    public_process_tree_terminated = outcome.process_tree_terminated
+                else:
+                    failure_codes.append("public_metadata_rejected")
                 if outcome.identity.casefold() != self.expected_restricted_identity:
                     failure_codes.append("identity_mismatch")
-                if outcome.retry_count != 0:
+                if public_retry_count != 0:
                     failure_codes.append("retry_policy")
-                if outcome.timed_out:
+                if public_timeout:
                     failure_codes.append("timeout")
                 elif outcome.exit_code is None:
                     failure_codes.append("unexpected_process_termination")
                 elif outcome.exit_code != 0:
                     failure_codes.append("process_exit_nonzero")
-                if not outcome.process_tree_terminated:
+                if not public_process_tree_terminated:
                     failure_codes.append("process_tree_not_terminated")
                 try:
-                    after = _snapshot(lease.work)
+                    after = _snapshot(lease.work, self.inventory_limits)
                     files_modified = _changed_files(before, after)
+                    inventory_complete = True
                 except ContractViolation as error:
                     failure_codes.append(error.code)
-                unsafe_mutations = sorted(set(files_modified) - set(cell.allowed_file_scope))
+                unsafe_mutations = sorted(
+                    set(files_modified) - set(cell.allowed_file_scope)
+                )
                 if unsafe_mutations:
                     failure_codes.append("file_scope_violation")
+                public_files_modified = sorted(
+                    set(files_modified).intersection(cell.allowed_file_scope)
+                )
+                if not inventory_complete:
+                    raise ContractViolation(
+                        "artifact_validation_failed",
+                        "artifact validation skipped after inventory failure",
+                    )
                 try:
-                    validation = self.artifact_validator.validate(
+                    candidate_validation = self.artifact_validator.validate(
                         request, outcome, files_modified
                     )
+                    if not _artifact_validation_well_formed(candidate_validation):
+                        raise TypeError("invalid artifact validation metadata")
+                    validation = candidate_validation
+                    validation_complete = True
+                    public_content_checks["artifact_validation"] = validation.passed
                 except Exception:
                     failure_codes.append("artifact_validator_failure")
-                if cell.validation_command is not None:
+                if validation_complete and cell.validation_command is not None:
                     scenario = next(
-                        item for item in self.manifest["scenarios"]
+                        item
+                        for item in self.manifest["scenarios"]
                         if item["scenario_id"] == cell.scenario_id
                     )
                     if validation.command_exit_code != scenario["target_validation_exit"]:
                         failure_codes.append("validation_exit_mismatch")
-                elif validation.command_exit_code is not None:
+                elif validation_complete and validation.command_exit_code is not None:
                     failure_codes.append("advisory_validation_command_forbidden")
-                if not validation.passed:
+                if not validation_complete or not validation.passed:
                     failure_codes.append("artifact_validation_failed")
         except ContractViolation as error:
             failure_codes.append(error.code)
@@ -829,25 +1072,25 @@ class PublicController:
                 gate: "NOT_TESTED" for gate in forge_validate.HARD_GATES
             },
             "result": "PASS" if passed else "FAIL",
-            "provider_tokens": outcome.provider_tokens if outcome else "NOT_AVAILABLE",
+            "provider_tokens": public_provider_tokens,
             "wall_time_seconds": round(time.monotonic() - started, 6),
-            "tool_calls": outcome.tool_calls if outcome else 0,
+            "tool_calls": public_tool_calls,
             "repeated_reads": 0,
-            "retry_count": outcome.retry_count if outcome else 0,
+            "retry_count": public_retry_count,
             "first_pass_success": passed,
             "validation_outcomes": {
                 "command_exit_code": validation.command_exit_code,
-                "content_checks": dict(validation.content_checks),
+                "content_checks": public_content_checks,
                 "failure_codes": failure_codes,
             },
-            "files_modified": files_modified,
-            "timeout": outcome.timed_out if outcome else False,
+            "files_modified": public_files_modified,
+            "timeout": public_timeout,
             "cleanup": cleanup,
             "exclusion_reason": None if passed else ",".join(failure_codes),
             "sanitization": sanitization,
             "lifecycle": {
                 "workspace_created": lease is not None,
-                "process_tree_terminated": outcome.process_tree_terminated if outcome else False,
+                "process_tree_terminated": public_process_tree_terminated,
                 "cleanup_correlated": cleanup == "PASS",
             },
             "evidence": evidence,
