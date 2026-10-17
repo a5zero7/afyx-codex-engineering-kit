@@ -350,20 +350,42 @@ class DockerCliRuntime:
             raise ContainerPolicyViolation("container executable path is invalid")
         self.executable = str(executable_path)
 
-    def _control(self, arguments: Sequence[str]) -> int | None:
+    def _control(
+        self, arguments: Sequence[str]
+    ) -> subprocess.CompletedProcess[bytes] | None:
         try:
             result = subprocess.run(
                 (self.executable, *arguments),
                 stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 check=False,
                 timeout=10,
                 env={"PATH": os.environ.get("PATH", "/usr/bin:/bin")},
             )
         except (OSError, subprocess.TimeoutExpired):
             return None
-        return result.returncode
+        return result
+
+    @staticmethod
+    def _inspection_confirms_absence(
+        inspection: subprocess.CompletedProcess[bytes] | None, name: str
+    ) -> bool:
+        if (
+            inspection is None
+            or inspection.returncode == 0
+            or inspection.stdout != b""
+            or not isinstance(inspection.stderr, bytes)
+        ):
+            return False
+        try:
+            message = inspection.stderr.decode("utf-8", errors="strict").strip()
+        except UnicodeDecodeError:
+            return False
+        return message in {
+            f"Error: No such object: {name}",
+            f"Error response from daemon: No such container: {name}",
+        }
 
     def execute(
         self, policy: ContainerIsolationPolicy, timeout_seconds: int
@@ -393,7 +415,9 @@ class DockerCliRuntime:
         removal = self._control(("rm", "--force", name))
         inspection = self._control(("inspect", name))
         cleanup_observed = (
-            removal == 0 and inspection is not None and inspection != 0
+            removal is not None
+            and removal.returncode == 0
+            and self._inspection_confirms_absence(inspection, name)
         )
         return ContainerExecution(
             exit_code=process.returncode,

@@ -67,8 +67,10 @@ The supported policy requires:
   executable boundary;
 - fixed workdir `/workspace`, `HOME=/nonexistent`, and
   `PATH=/usr/bin:/bin`;
-- named-container removal followed by a negative inspect observation before
-  reporting the workload terminated; the name is derived from the fresh
+- named-container removal followed by an inspect result that explicitly names
+  that container as not found before reporting the workload terminated;
+  daemon, authorization, malformed-output, timeout, and other inconclusive
+  inspection failures remain fail-closed. The name is derived from the fresh
   evidence-session correlation, image, and disposable workspace.
 
 The seccomp profile defaults to `SCMP_ACT_ERRNO` and allowlists only the
@@ -95,8 +97,10 @@ Policy validation rejects:
 
 The Docker backend uses argv-only `subprocess` calls. On timeout it requests
 container kill through an explicit absolute Docker executable path, bounds its
-wait, force-removes the named container, and checks that subsequent inspection
-fails. Failure to observe removal reports
+wait, force-removes the named container, and requires a subsequent inspection
+to return a recognized not-found result for that exact name. Any other nonzero
+inspection result does not prove absence. Failure to conclusively observe
+removal reports
 `process_tree_terminated=False`; the existing controller then fails closed.
 
 ## Validation evidence
@@ -109,15 +113,16 @@ Command:
 python -m unittest scripts.tests.test_forge_wsl_container -v
 ```
 
-Result: `11/11 PASS`.
+Result: `13/13 PASS`.
 
 The tests cover exact shell-free command construction, digest pinning,
 privilege/network/root-filesystem/capability drift, extra and Docker-socket
 mounts, workspace containment, resource bounds, seccomp identity and forbidden
 syscalls, controller outcome mapping, timeout bounds, incomplete capture, and
 incomplete termination/cleanup. The optional Docker backend is mocked to prove
-that removal plus a negative inspect observation are both required before it
-reports cleanup and whole-workload termination.
+that removal plus an exact, container-bound not-found inspection are both
+required before it reports cleanup and whole-workload termination; daemon,
+authorization, and unknown inspection failures remain inconclusive.
 
 Python compilation, document reference checks, frozen-scope inspection, and
 `git diff --check` are required at closure. T09.E4 tests and the accepted

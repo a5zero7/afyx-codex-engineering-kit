@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
 import tempfile
 import unittest
 from dataclasses import replace
@@ -203,15 +204,18 @@ class WslContainerPolicyTests(unittest.TestCase):
 
     @mock.patch("evals.forge.wsl_container.subprocess.run")
     @mock.patch("evals.forge.wsl_container.subprocess.Popen")
-    def test_docker_backend_requires_remove_and_negative_inspect(
+    def test_docker_backend_accepts_confirmed_container_absence(
         self, popen: mock.Mock, run: mock.Mock
     ) -> None:
         process = popen.return_value
         process.communicate.return_value = (b"stdout", b"stderr")
         process.returncode = 0
+        name = wsl_container._container_name(self.policy())
         run.side_effect = (
-            mock.Mock(returncode=0),
-            mock.Mock(returncode=1),
+            subprocess.CompletedProcess((), 0, b"", b""),
+            subprocess.CompletedProcess(
+                (), 1, b"", f"Error: No such object: {name}\n".encode()
+            ),
         )
         result = wsl_container.DockerCliRuntime().execute(self.policy(), 30)
         self.assertTrue(result.workload_terminated)
@@ -220,6 +224,33 @@ class WslContainerPolicyTests(unittest.TestCase):
         self.assertIsInstance(popen.call_args.args[0], tuple)
         self.assertEqual(run.call_args_list[0].args[0][1:3], ("rm", "--force"))
         self.assertEqual(run.call_args_list[1].args[0][1], "inspect")
+
+    @mock.patch("evals.forge.wsl_container.subprocess.run")
+    @mock.patch("evals.forge.wsl_container.subprocess.Popen")
+    def test_docker_backend_rejects_inconclusive_inspection(
+        self, popen: mock.Mock, run: mock.Mock
+    ) -> None:
+        process = popen.return_value
+        process.communicate.return_value = (b"stdout", b"stderr")
+        process.returncode = 0
+        for error in (
+            b"permission denied\n",
+            b"Cannot connect to the Docker daemon\n",
+            b"unexpected inspection failure\n",
+        ):
+            with self.subTest(error=error):
+                run.reset_mock()
+                run.side_effect = (
+                    subprocess.CompletedProcess((), 0, b"", b""),
+                    subprocess.CompletedProcess((), 1, b"", error),
+                )
+                result = wsl_container.DockerCliRuntime().execute(
+                    self.policy(), 30
+                )
+                self.assertFalse(result.workload_terminated)
+                self.assertFalse(result.cleanup_observed)
+
+    def test_forbidden_seccomp_syscall_is_rejected(self) -> None:
         unsafe_profile = Path(self.temporary.name) / "unsafe-seccomp.json"
         unsafe_profile.write_text(
             json.dumps(
