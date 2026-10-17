@@ -36,7 +36,15 @@ Receipt acceptance requires exact type, schema, stage, correlation, frozen
 fingerprints, canonical digest, fixed scope, and independent verification. A
 mapping or boolean such as `success=true` is not a receipt. Missing, stale,
 mismatched, partial, unverified, or failed finalization therefore cannot yield
-`PASS`.
+`PASS`. Verifier success has the strict return contract `None`; any other
+return value is an invalid receipt verification and fails closed.
+
+The retention-required public result is schema version 2. Version 1 remains
+explicitly interpretable only through an opt-in historical compatibility path,
+which classifies it as `HISTORICAL_ONLY`; it is rejected by default and cannot
+qualify for current acceptance. Version 2 is classified as `CURRENT_SCHEMA`
+and requires verified readiness and finalization for `PASS`. This public schema
+transition does not change the frozen campaign manifest or authorize execution.
 
 ## Public output and failures
 
@@ -66,6 +74,22 @@ and evaluated-agent access, and adversarially test interruption and recovery.
 The controller's bounded stdout/stderr digests remain sanitized publication
 metadata; they are not proof that complete originals were durably archived.
 
+Owner review must prove four separate properties without treating one as a
+substitute for another:
+
+1. public receipt metadata integrity: bounded public fields and canonical
+   receipt digests match the declared controller binding;
+2. private original-artifact integrity: retained originals are complete and
+   their private integrity records are verified outside the public repository;
+3. independent verifier authenticity and anti-replay persistence: the verifier
+   is independently controlled and durably remembers challenges/session state;
+4. actual archive durability and recovery: interruption, retention, restore,
+   and recovery are demonstrated in the owner-controlled runtime.
+
+Developer-side fake recorders and verifiers test only the public interface and
+failure semantics. They are not evidence of owner-runtime acceptance for any
+of these four properties.
+
 Historical D1–D3 FAIL and all previously reported BLOCKED/INCONCLUSIVE states
 remain unchanged. Unrecovered original evidence remains UNLOCATED/NOT VERIFIED.
 No historical synthetic observation is relabeled as formal benchmark evidence.
@@ -80,9 +104,9 @@ prior controller regressions.
 
 Observed developer-side validation for this change:
 
-- controller unit tests: `35/35` PASS;
-- controller plus Forge readiness tests: `47/47` PASS;
-- deterministic repository suite: `174/174` PASS;
+- controller unit tests: `39/39` PASS;
+- controller plus Forge readiness tests: `51/51` PASS;
+- deterministic repository suite: `178/178` PASS;
 - static manifest and fixture/materialization validation: PASS;
 - Python compilation and `git diff --check`: PASS;
 - frozen manifest, B0–B5 candidates, public fixtures, and 36-cell order:

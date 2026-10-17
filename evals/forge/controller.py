@@ -88,6 +88,11 @@ PUBLIC_RESULT_FIELDS = {
     "evidence",
     "evidence_retention",
 }
+HISTORICAL_PUBLIC_RESULT_SCHEMA_VERSION = 1
+CURRENT_PUBLIC_RESULT_SCHEMA_VERSION = 2
+PUBLIC_RESULT_V1_FIELDS = PUBLIC_RESULT_FIELDS - {"evidence_retention"}
+PUBLIC_RESULT_COMPATIBILITY_HISTORICAL = "HISTORICAL_ONLY"
+PUBLIC_RESULT_COMPATIBILITY_CURRENT = "CURRENT_SCHEMA"
 DEFAULT_FORBIDDEN_OUTPUT_MARKERS = tuple(
     marker.lower() for marker in forge_validate.PUBLIC_HANDOFF_FORBIDDEN
 ) + (
@@ -900,8 +905,27 @@ def _artifact_validation_well_formed(value: Any) -> bool:
     )
 
 
-def validate_public_result(result: Mapping[str, Any], manifest: Mapping[str, Any]) -> None:
-    if set(result) != PUBLIC_RESULT_FIELDS:
+def validate_public_result(
+    result: Mapping[str, Any],
+    manifest: Mapping[str, Any],
+    *,
+    allow_historical_v1: bool = False,
+) -> str:
+    schema_version = result.get("schema_version")
+    if schema_version == CURRENT_PUBLIC_RESULT_SCHEMA_VERSION:
+        expected_fields = PUBLIC_RESULT_FIELDS
+        compatibility = PUBLIC_RESULT_COMPATIBILITY_CURRENT
+    elif (
+        schema_version == HISTORICAL_PUBLIC_RESULT_SCHEMA_VERSION
+        and allow_historical_v1
+    ):
+        expected_fields = PUBLIC_RESULT_V1_FIELDS
+        compatibility = PUBLIC_RESULT_COMPATIBILITY_HISTORICAL
+    else:
+        raise ContractViolation(
+            "result_schema", "public result schema version is not accepted"
+        )
+    if set(result) != expected_fields:
         raise ContractViolation("result_schema", "public result fields do not match the schema")
     missing = set(manifest["result_schema"]["required_fields"]) - set(result)
     if missing:
@@ -925,7 +949,7 @@ def validate_public_result(result: Mapping[str, Any], manifest: Mapping[str, Any
         raise ContractViolation("result_schema", "public result scenario is not frozen")
     if result.get("fixture_fingerprint") != manifest["public_fixture"]["tree_sha256"]:
         raise ContractViolation("result_schema", "public result fixture fingerprint mismatch")
-    if result.get("schema_version") != 1 or result.get("result") not in {"PASS", "FAIL"}:
+    if result.get("result") not in {"PASS", "FAIL"}:
         raise ContractViolation("result_schema", "public result state is invalid")
     hard_gates = result.get("hard_gate_results")
     if not isinstance(hard_gates, dict) or set(hard_gates) != set(forge_validate.HARD_GATES):
@@ -1031,6 +1055,9 @@ def validate_public_result(result: Mapping[str, Any], manifest: Mapping[str, Any
             ):
                 raise ContractViolation("result_schema", "public evidence values are invalid")
 
+    if compatibility == PUBLIC_RESULT_COMPATIBILITY_HISTORICAL:
+        return compatibility
+
     retention = result.get("evidence_retention")
     if not isinstance(retention, dict) or set(retention) != EVIDENCE_RETENTION_FIELDS:
         raise ContractViolation("result_schema", "public retention metadata is invalid")
@@ -1059,6 +1086,7 @@ def validate_public_result(result: Mapping[str, Any], manifest: Mapping[str, Any
         raise ContractViolation(
             "result_schema", "successful result lacks verified evidence retention"
         )
+    return compatibility
 
 
 class PublicController:
@@ -1228,9 +1256,11 @@ class PublicController:
                 candidate_readiness_receipt, binding
             )
             try:
-                self.evidence_receipt_verifier.verify_readiness(
+                verification_result = self.evidence_receipt_verifier.verify_readiness(
                     binding, candidate_readiness_receipt
                 )
+                if verification_result is not None:
+                    raise TypeError("invalid readiness verifier return")
             except Exception as error:
                 raise ContractViolation(
                     "evidence_receipt_invalid", "readiness receipt not verified"
@@ -1383,9 +1413,13 @@ class PublicController:
                             candidate_finalization_receipt,
                             finalization_request,
                         )
-                        self.evidence_receipt_verifier.verify_finalization(
-                            finalization_request, finalization_receipt
+                        verification_result = (
+                            self.evidence_receipt_verifier.verify_finalization(
+                                finalization_request, finalization_receipt
+                            )
                         )
+                        if verification_result is not None:
+                            raise TypeError("invalid finalization verifier return")
                     except Exception:
                         failure_codes.append("evidence_receipt_invalid")
                     else:
@@ -1401,7 +1435,7 @@ class PublicController:
         failure_codes = list(dict.fromkeys(failure_codes))
         passed = not failure_codes
         result = {
-            "schema_version": 1,
+            "schema_version": CURRENT_PUBLIC_RESULT_SCHEMA_VERSION,
             "evaluation_run_id": cell.evaluation_run_id,
             "control_run_id": cell.control_run_id,
             "cell_id": cell.cell_id,

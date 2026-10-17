@@ -116,21 +116,27 @@ class FakeEvidenceReceiptVerifier:
         *,
         readiness_error: Exception | None = None,
         finalization_error: Exception | None = None,
+        readiness_return=None,
+        finalization_return=None,
     ) -> None:
         self.readiness_error = readiness_error
         self.finalization_error = finalization_error
+        self.readiness_return = readiness_return
+        self.finalization_return = finalization_return
         self.readiness_receipts: list[controller.ArchiveReadinessReceipt] = []
         self.finalization_receipts: list[controller.EvidenceFinalizationReceipt] = []
 
-    def verify_readiness(self, binding, receipt) -> None:
+    def verify_readiness(self, binding, receipt):
         self.readiness_receipts.append(receipt)
         if self.readiness_error is not None:
             raise self.readiness_error
+        return self.readiness_return
 
-    def verify_finalization(self, request, receipt) -> None:
+    def verify_finalization(self, request, receipt):
         self.finalization_receipts.append(receipt)
         if self.finalization_error is not None:
             raise self.finalization_error
+        return self.finalization_return
 
 
 class FailedCleanupManager(controller.DisposableWorkspaceManager):
@@ -409,6 +415,38 @@ class PublicControllerTests(unittest.TestCase):
             "evidence_receipt_invalid",
             finalization_result["validation_outcomes"]["failure_codes"],
         )
+
+    def test_unexpected_readiness_verifier_return_prevents_launch(self) -> None:
+        for unexpected in (False, True, "synthetic-secret", {"verified": True}, object()):
+            with self.subTest(return_type=type(unexpected).__name__):
+                launcher = FakeLauncher()
+                verifier = FakeEvidenceReceiptVerifier(readiness_return=unexpected)
+                result = self.make_controller(
+                    launcher, receipt_verifier=verifier
+                ).run(self.input())
+                self.assertEqual(result["result"], "FAIL")
+                self.assertEqual(launcher.requests, [])
+                self.assertIn(
+                    "evidence_receipt_invalid",
+                    result["validation_outcomes"]["failure_codes"],
+                )
+                self.assertNotIn("synthetic-secret", str(result))
+
+    def test_unexpected_finalization_verifier_return_prevents_pass(self) -> None:
+        for unexpected in (False, True, "synthetic-secret", {"verified": True}, object()):
+            with self.subTest(return_type=type(unexpected).__name__):
+                verifier = FakeEvidenceReceiptVerifier(finalization_return=unexpected)
+                result = self.make_controller(
+                    FakeLauncher(), receipt_verifier=verifier
+                ).run(self.input())
+                self.assertEqual(result["result"], "FAIL")
+                self.assertTrue(result["evidence_retention"]["archive_ready"])
+                self.assertFalse(result["evidence_retention"]["archive_finalized"])
+                self.assertIn(
+                    "evidence_receipt_invalid",
+                    result["validation_outcomes"]["failure_codes"],
+                )
+                self.assertNotIn("synthetic-secret", str(result))
 
     def test_all_frozen_candidates_materialize_without_contamination(self) -> None:
         for candidate_id in self.manifest["candidate_order"]:
@@ -705,6 +743,50 @@ class PublicControllerTests(unittest.TestCase):
         with self.assertRaises(controller.ContractViolation) as caught:
             controller.validate_public_result(result, self.manifest)
         self.assertEqual(caught.exception.code, "result_schema")
+
+    def test_public_result_schema_transition_is_explicit(self) -> None:
+        current = self.make_controller(FakeLauncher()).run(self.input())
+        self.assertEqual(
+            controller.validate_public_result(current, self.manifest),
+            controller.PUBLIC_RESULT_COMPATIBILITY_CURRENT,
+        )
+
+        historical = copy.deepcopy(current)
+        historical["schema_version"] = 1
+        historical.pop("evidence_retention")
+        with self.assertRaises(controller.ContractViolation):
+            controller.validate_public_result(historical, self.manifest)
+        self.assertEqual(
+            controller.validate_public_result(
+                historical, self.manifest, allow_historical_v1=True
+            ),
+            controller.PUBLIC_RESULT_COMPATIBILITY_HISTORICAL,
+        )
+
+    def test_public_result_schema_rejects_mixed_or_unknown_versions(self) -> None:
+        current = self.make_controller(FakeLauncher()).run(self.input())
+        cases = []
+        mixed_v1 = copy.deepcopy(current)
+        mixed_v1["schema_version"] = 1
+        cases.append((mixed_v1, True))
+        mixed_v2 = copy.deepcopy(current)
+        mixed_v2.pop("evidence_retention")
+        cases.append((mixed_v2, False))
+        unknown = copy.deepcopy(current)
+        unknown["schema_version"] = 3
+        cases.append((unknown, True))
+        for candidate, allow_historical in cases:
+            with self.subTest(
+                version=candidate["schema_version"],
+                allow_historical=allow_historical,
+            ):
+                with self.assertRaises(controller.ContractViolation) as caught:
+                    controller.validate_public_result(
+                        candidate,
+                        self.manifest,
+                        allow_historical_v1=allow_historical,
+                    )
+                self.assertEqual(caught.exception.code, "result_schema")
 
     def test_public_result_rejects_private_capable_nested_adapter_values(self) -> None:
         mutations = (
