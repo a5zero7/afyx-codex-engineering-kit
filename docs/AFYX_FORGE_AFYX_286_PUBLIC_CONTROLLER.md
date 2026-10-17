@@ -10,6 +10,8 @@ This record covers only the independently reviewable developer-side contract. It
 
 Public baseline: `63f528e24ed0b4b0217b8db3666ed8b7dd06bebd`. Jira: [AFYX-286](https://afifbendol.atlassian.net/browse/AFYX-286). Draft [PR #60](https://github.com/a5zero7/afyx-codex-engineering-kit/pull/60) is treated only as owner-reported sanitized synthetic evidence and is not merged or reclassified as independent runtime acceptance.
 
+The fail-closed follow-up contract is documented in [AFYX-285 Forge evidence-retention gate](AFYX_FORGE_AFYX_285_EVIDENCE_RETENTION.md).
+
 ## Public architecture
 
 `evals/forge/controller.py` provides four bounded layers:

@@ -7,6 +7,7 @@ import copy
 import hashlib
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
@@ -68,6 +69,68 @@ class FakeLauncher:
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(value, encoding="utf-8")
         return self.outcome
+
+
+class FakeEvidenceRecorder:
+    def __init__(
+        self,
+        *,
+        prepare_factory=None,
+        finalize_factory=None,
+        prepare_error: Exception | None = None,
+        finalize_error: Exception | None = None,
+    ) -> None:
+        self.prepare_factory = prepare_factory
+        self.finalize_factory = finalize_factory
+        self.prepare_error = prepare_error
+        self.finalize_error = finalize_error
+        self.bindings: list[controller.EvidenceBinding] = []
+        self.finalization_requests: list[controller.EvidenceFinalizationRequest] = []
+
+    def prepare(
+        self, binding: controller.EvidenceBinding
+    ) -> controller.ArchiveReadinessReceipt:
+        self.bindings.append(binding)
+        if self.prepare_error is not None:
+            raise self.prepare_error
+        if self.prepare_factory is not None:
+            return self.prepare_factory(binding)
+        return controller.build_archive_readiness_receipt(
+            binding, "synthetic-evidence-session-001"
+        )
+
+    def finalize(
+        self, request: controller.EvidenceFinalizationRequest
+    ) -> controller.EvidenceFinalizationReceipt:
+        self.finalization_requests.append(request)
+        if self.finalize_error is not None:
+            raise self.finalize_error
+        if self.finalize_factory is not None:
+            return self.finalize_factory(request)
+        return controller.build_evidence_finalization_receipt(request)
+
+
+class FakeEvidenceReceiptVerifier:
+    def __init__(
+        self,
+        *,
+        readiness_error: Exception | None = None,
+        finalization_error: Exception | None = None,
+    ) -> None:
+        self.readiness_error = readiness_error
+        self.finalization_error = finalization_error
+        self.readiness_receipts: list[controller.ArchiveReadinessReceipt] = []
+        self.finalization_receipts: list[controller.EvidenceFinalizationReceipt] = []
+
+    def verify_readiness(self, binding, receipt) -> None:
+        self.readiness_receipts.append(receipt)
+        if self.readiness_error is not None:
+            raise self.readiness_error
+
+    def verify_finalization(self, request, receipt) -> None:
+        self.finalization_receipts.append(receipt)
+        if self.finalization_error is not None:
+            raise self.finalization_error
 
 
 class FailedCleanupManager(controller.DisposableWorkspaceManager):
@@ -151,6 +214,8 @@ class PublicControllerTests(unittest.TestCase):
         *,
         workspace_manager: controller.DisposableWorkspaceManager | None = None,
         validator: controller.ArtifactValidator | None = None,
+        recorder: controller.EvidenceRetentionRecorder | None = None,
+        receipt_verifier: controller.EvidenceReceiptVerifier | None = None,
         **controller_options,
     ) -> controller.PublicController:
         return controller.PublicController(
@@ -163,6 +228,9 @@ class PublicControllerTests(unittest.TestCase):
             or controller.DigestArtifactValidator(
                 {"known_math.py": CORRECT_DIGEST}, command_exit_code=0
             ),
+            evidence_recorder=recorder or FakeEvidenceRecorder(),
+            evidence_receipt_verifier=receipt_verifier
+            or FakeEvidenceReceiptVerifier(),
             expected_environment_fingerprint=ENVIRONMENT_FINGERPRINT,
             expected_restricted_identity=RESTRICTED_IDENTITY,
             **controller_options,
@@ -182,6 +250,165 @@ class PublicControllerTests(unittest.TestCase):
             controller.DEFAULT_FORBIDDEN_OUTPUT_MARKERS,
         )
         self.assertFalse(any(self.workspace_parent.iterdir()))
+
+    def test_evidence_retention_is_verified_before_pass(self) -> None:
+        recorder = FakeEvidenceRecorder()
+        result = self.make_controller(FakeLauncher(), recorder=recorder).run(self.input())
+        self.assertEqual(result["result"], "PASS")
+        self.assertEqual(
+            result["evidence_retention"]["archive_ready"], True
+        )
+        self.assertEqual(
+            result["evidence_retention"]["archive_finalized"], True
+        )
+        self.assertRegex(
+            result["evidence_retention"]["readiness_receipt_sha256"],
+            r"^[0-9a-f]{64}$",
+        )
+        self.assertRegex(
+            result["evidence_retention"]["finalization_receipt_sha256"],
+            r"^[0-9a-f]{64}$",
+        )
+        self.assertEqual(len(recorder.bindings), 1)
+        self.assertEqual(len(recorder.finalization_requests), 1)
+        self.assertNotIn("synthetic-evidence-session-001", str(result))
+
+    def test_archive_readiness_failure_prevents_launch_and_leaks_nothing(self) -> None:
+        launcher = FakeLauncher()
+        recorder = FakeEvidenceRecorder(
+            prepare_error=RuntimeError("private-path synthetic-secret")
+        )
+        result = self.make_controller(launcher, recorder=recorder).run(self.input())
+        self.assertEqual(result["result"], "FAIL")
+        self.assertEqual(launcher.requests, [])
+        self.assertIn(
+            "evidence_archive_not_ready",
+            result["validation_outcomes"]["failure_codes"],
+        )
+        self.assertFalse(result["evidence_retention"]["archive_ready"])
+        self.assertFalse(result["evidence_retention"]["archive_finalized"])
+        self.assertNotIn("private-path", str(result))
+        self.assertNotIn("synthetic-secret", str(result))
+
+    def test_missing_stale_or_malformed_readiness_receipt_prevents_launch(self) -> None:
+        def stale(binding):
+            stale_binding = replace(binding, retention_challenge_id="0" * 32)
+            return controller.build_archive_readiness_receipt(
+                stale_binding, "synthetic-stale-session"
+            )
+
+        def bad_digest(binding):
+            receipt = controller.build_archive_readiness_receipt(
+                binding, "synthetic-bad-digest-session"
+            )
+            return replace(receipt, receipt_sha256="0" * 64)
+
+        def private_path_session(binding):
+            return controller.ArchiveReadinessReceipt(
+                schema_version=1,
+                stage="READY",
+                evidence_session_id=r"C:\private\archive",
+                binding=binding,
+                receipt_sha256="0" * 64,
+            )
+
+        cases = (
+            lambda binding: None,
+            lambda binding: {"success": True},
+            stale,
+            bad_digest,
+            private_path_session,
+        )
+        for factory in cases:
+            with self.subTest(factory=getattr(factory, "__name__", "anonymous")):
+                launcher = FakeLauncher()
+                recorder = FakeEvidenceRecorder(prepare_factory=factory)
+                result = self.make_controller(launcher, recorder=recorder).run(
+                    self.input()
+                )
+                self.assertEqual(result["result"], "FAIL")
+                self.assertEqual(launcher.requests, [])
+                self.assertIn(
+                    "evidence_receipt_invalid",
+                    result["validation_outcomes"]["failure_codes"],
+                )
+
+    def test_failed_or_partial_finalization_cannot_pass(self) -> None:
+        def partial(request):
+            receipt = controller.build_evidence_finalization_receipt(request)
+            return replace(receipt, capture_scope=("raw_stdout",))
+
+        recorders = (
+            FakeEvidenceRecorder(
+                finalize_error=RuntimeError("private finalization detail")
+            ),
+            FakeEvidenceRecorder(finalize_factory=lambda request: None),
+            FakeEvidenceRecorder(finalize_factory=partial),
+        )
+        for recorder in recorders:
+            with self.subTest(recorder=type(recorder).__name__):
+                result = self.make_controller(
+                    FakeLauncher(), recorder=recorder
+                ).run(self.input())
+                self.assertEqual(result["result"], "FAIL")
+                self.assertTrue(result["evidence_retention"]["archive_ready"])
+                self.assertFalse(result["evidence_retention"]["archive_finalized"])
+                self.assertTrue(
+                    {"evidence_archive_finalize_failed", "evidence_receipt_invalid"}
+                    & set(result["validation_outcomes"]["failure_codes"])
+                )
+                self.assertNotIn("private finalization detail", str(result))
+
+    def test_public_retention_metadata_is_strict_and_path_free(self) -> None:
+        result = self.make_controller(FakeLauncher()).run(self.input())
+        for mutation in (
+            {**result["evidence_retention"], "private_path": "synthetic-secret"},
+            {**result["evidence_retention"], "readiness_receipt_sha256": "secret"},
+            {
+                "archive_ready": False,
+                "archive_finalized": False,
+                "readiness_receipt_sha256": None,
+                "finalization_receipt_sha256": None,
+            },
+        ):
+            with self.subTest(fields=sorted(mutation)):
+                candidate = copy.deepcopy(result)
+                candidate["evidence_retention"] = mutation
+                with self.assertRaises(controller.ContractViolation):
+                    controller.validate_public_result(candidate, self.manifest)
+
+    def test_independent_receipt_verification_is_required(self) -> None:
+        launcher = FakeLauncher()
+        readiness_verifier = FakeEvidenceReceiptVerifier(
+            readiness_error=RuntimeError("unverified readiness")
+        )
+        readiness_result = self.make_controller(
+            launcher, receipt_verifier=readiness_verifier
+        ).run(self.input())
+        self.assertEqual(readiness_result["result"], "FAIL")
+        self.assertEqual(launcher.requests, [])
+        self.assertIn(
+            "evidence_receipt_invalid",
+            readiness_result["validation_outcomes"]["failure_codes"],
+        )
+
+        finalization_verifier = FakeEvidenceReceiptVerifier(
+            finalization_error=RuntimeError("unverified finalization")
+        )
+        finalization_result = self.make_controller(
+            FakeLauncher(), receipt_verifier=finalization_verifier
+        ).run(self.input())
+        self.assertEqual(finalization_result["result"], "FAIL")
+        self.assertTrue(
+            finalization_result["evidence_retention"]["archive_ready"]
+        )
+        self.assertFalse(
+            finalization_result["evidence_retention"]["archive_finalized"]
+        )
+        self.assertIn(
+            "evidence_receipt_invalid",
+            finalization_result["validation_outcomes"]["failure_codes"],
+        )
 
     def test_all_frozen_candidates_materialize_without_contamination(self) -> None:
         for candidate_id in self.manifest["candidate_order"]:
@@ -259,8 +486,10 @@ class PublicControllerTests(unittest.TestCase):
         )
 
     def test_launcher_exception_fails_sanitization_and_preserves_cleanup(self) -> None:
+        recorder = FakeEvidenceRecorder()
         result = self.make_controller(
-            FakeLauncher(error=RuntimeError("synthetic launcher failure"))
+            FakeLauncher(error=RuntimeError("synthetic launcher failure")),
+            recorder=recorder,
         ).run(self.input())
         self.assertEqual(result["result"], "FAIL")
         self.assertEqual(result["sanitization"], "FAIL")
@@ -271,6 +500,10 @@ class PublicControllerTests(unittest.TestCase):
             result["validation_outcomes"]["failure_codes"],
         )
         self.assertEqual(result["evidence"], {})
+        self.assertTrue(result["evidence_retention"]["archive_finalized"])
+        self.assertEqual(len(recorder.finalization_requests), 1)
+        self.assertTrue(recorder.finalization_requests[0].launcher_started)
+        self.assertFalse(recorder.finalization_requests[0].outcome_observed)
 
     def test_unexpected_process_termination_fails(self) -> None:
         outcome = complete_outcome(identity=RESTRICTED_IDENTITY, exit_code=None)
@@ -284,6 +517,7 @@ class PublicControllerTests(unittest.TestCase):
         result = self.make_controller(FakeLauncher(), workspace_manager=manager).run(self.input())
         self.assertEqual(result["cleanup"], "FAIL")
         self.assertIn("cleanup_failed", result["validation_outcomes"]["failure_codes"])
+        self.assertTrue(result["evidence_retention"]["archive_finalized"])
 
     def test_unsafe_output_marker_is_not_published(self) -> None:
         outcome = complete_outcome(
