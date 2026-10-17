@@ -117,6 +117,8 @@ T09.P2A records owner-selected Route B through amendment `A0-ROUTE-B-2026-10-16`
 
 T09.E1.5 adds the fingerprinted public [secure evaluator handoff contract](AFYX_FORGE_T09_E1_SECURE_HANDOFF.md): strict developer/evaluator/restricted-agent boundaries, Windows-only per-cell lifecycle, sanitized schemas, negative isolation checks, cleanup, and owner review responsibilities. It excludes WSL and the owner's personal Ubuntu from formal execution and does not alter candidates, discovery order, budgets, or authorization. Status remains **CAMPAIGN BLOCKED**.
 
+AFYX-286 adds the synthetic-only [public trusted-controller contract](AFYX_FORGE_AFYX_286_PUBLIC_CONTROLLER.md): exact manifest-bound input/output validation, safe disposable materialization, restricted-launch and artifact-validation interfaces, bounded evidence, mutation checks, and correlated cleanup. It contains no privileged launcher/provider implementation and does not convert owner-reported PR #60 evidence into independent acceptance. Owner integration, repeated synthetic acceptance, all seven authorization gates, and the formal `0/36` campaign remain blocked.
+
 ## T02 correctness closure and bounded T03 handoff
 
 T02 used an owned, Git-tracked disposable Odoo-style fixture and an identified development build from implementation revision `7fe932892c06fb9aae873bafb686de0ff05be330`. The package is Afyx Graph `1.0.0`, extraction version 28; its temporary npm package SHA-256 is `56fc427324ea085aa61697c542a2f42c9c0bd4dc0c4f74b6025e4fe7f75d919d` and built CLI SHA-256 is `0bd19746ce165a317accd5b6d125155c9b64f0aac88a8325973883062f655456`. These identify a local development build only; no artifact was promoted or installed.
