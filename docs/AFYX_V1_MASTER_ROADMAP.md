@@ -1852,6 +1852,17 @@ fixture, 36-cell order, budgets, and authorization state are unchanged. WSL and
 the owner's personal Ubuntu are excluded from formal execution. Status remains
 **CAMPAIGN BLOCKED** pending all seven external gates.
 
+### T09.E5 checkpoint — WSL formal-runtime amendment proposed
+
+[AFYX_FORGE_T09_E5_WSL_RUNTIME_AMENDMENT.md](AFYX_FORGE_T09_E5_WSL_RUNTIME_AMENDMENT.md)
+records a versioned, unapproved `CONDITIONAL` feasibility proposal. It preserves
+the native-Windows T09.E1 contract as authoritative while specifying the
+split-plane, containerized WSL controls and fresh independent acceptance needed
+before WSL could replace it. PR #63 evidence is reused only within its accepted
+same-user synthetic scope; no runtime was implemented, no accepted tests were
+rerun, and no campaign cell was executed. Status remains **CAMPAIGN BLOCKED —
+0/36**.
+
 ## Track B — Platform Generalization
 
 Goal:
