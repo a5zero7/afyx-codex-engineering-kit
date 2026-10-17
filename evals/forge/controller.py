@@ -86,7 +86,13 @@ PUBLIC_RESULT_FIELDS = {
     "sanitization",
     "lifecycle",
     "evidence",
+    "evidence_retention",
 }
+HISTORICAL_PUBLIC_RESULT_SCHEMA_VERSION = 1
+CURRENT_PUBLIC_RESULT_SCHEMA_VERSION = 2
+PUBLIC_RESULT_V1_FIELDS = PUBLIC_RESULT_FIELDS - {"evidence_retention"}
+PUBLIC_RESULT_COMPATIBILITY_HISTORICAL = "HISTORICAL_ONLY"
+PUBLIC_RESULT_COMPATIBILITY_CURRENT = "CURRENT_SCHEMA"
 DEFAULT_FORBIDDEN_OUTPUT_MARKERS = tuple(
     marker.lower() for marker in forge_validate.PUBLIC_HANDOFF_FORBIDDEN
 ) + (
@@ -107,6 +113,18 @@ EVIDENCE_FIELDS = {
     for stream in ("stdout", "stderr")
     for suffix in ("bytes", "sha256", "truncated")
 }
+EVIDENCE_RETENTION_FIELDS = {
+    "archive_ready",
+    "archive_finalized",
+    "readiness_receipt_sha256",
+    "finalization_receipt_sha256",
+}
+EVIDENCE_CAPTURE_SCOPE = (
+    "process_state",
+    "raw_stderr",
+    "raw_stdout",
+    "workspace_state",
+)
 PUBLIC_FAILURE_CODES = {
     "advisory_validation_command_forbidden",
     "artifact_mismatch",
@@ -114,6 +132,9 @@ PUBLIC_FAILURE_CODES = {
     "artifact_validator_failure",
     "cleanup_failed",
     "controller_failure",
+    "evidence_archive_finalize_failed",
+    "evidence_archive_not_ready",
+    "evidence_receipt_invalid",
     "file_scope_violation",
     "fingerprint_mismatch",
     "identity_mismatch",
@@ -179,6 +200,51 @@ class InventoryLimits:
 
 
 @dataclass(frozen=True)
+class EvidenceBinding:
+    evaluation_run_id: str
+    control_run_id: str
+    cell_id: str
+    candidate_id: str
+    scenario_id: str
+    candidate_fingerprint: str
+    fixture_fingerprint: str
+    environment_fingerprint: str
+    retention_challenge_id: str
+
+
+@dataclass(frozen=True)
+class ArchiveReadinessReceipt:
+    schema_version: int
+    stage: str
+    evidence_session_id: str
+    binding: EvidenceBinding
+    receipt_sha256: str
+
+
+@dataclass(frozen=True)
+class EvidenceFinalizationRequest:
+    binding: EvidenceBinding
+    evidence_session_id: str
+    readiness_receipt_sha256: str
+    terminal_state_sha256: str
+    launcher_started: bool
+    outcome_observed: bool
+    workspace_available: bool
+
+
+@dataclass(frozen=True)
+class EvidenceFinalizationReceipt:
+    schema_version: int
+    stage: str
+    evidence_session_id: str
+    binding: EvidenceBinding
+    readiness_receipt_sha256: str
+    terminal_state_sha256: str
+    capture_scope: tuple[str, ...]
+    receipt_sha256: str
+
+
+@dataclass(frozen=True)
 class LaunchRequest:
     evaluation_run_id: str
     control_run_id: str
@@ -187,6 +253,7 @@ class LaunchRequest:
     user_prompt: str
     timeout_seconds: int
     forbidden_output_markers: tuple[str, ...]
+    evidence_session_id: str
 
 
 @dataclass(frozen=True)
@@ -237,8 +304,154 @@ class ArtifactValidator(Protocol):
         ...
 
 
+class EvidenceRetentionRecorder(Protocol):
+    """Independently owned durable recorder; never implemented with owner privilege here."""
+
+    def prepare(self, binding: EvidenceBinding) -> ArchiveReadinessReceipt:
+        ...
+
+    def finalize(
+        self, request: EvidenceFinalizationRequest
+    ) -> EvidenceFinalizationReceipt:
+        ...
+
+
+class EvidenceReceiptVerifier(Protocol):
+    """Independent receipt verifier; successful verification returns no flag."""
+
+    def verify_readiness(
+        self, binding: EvidenceBinding, receipt: ArchiveReadinessReceipt
+    ) -> None:
+        ...
+
+    def verify_finalization(
+        self,
+        request: EvidenceFinalizationRequest,
+        receipt: EvidenceFinalizationReceipt,
+    ) -> None:
+        ...
+
+
 def _sha256_bytes(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
+
+
+def _canonical_metadata_sha256(value: Any) -> str:
+    encoded = json.dumps(
+        value, ensure_ascii=True, separators=(",", ":"), sort_keys=True
+    ).encode("utf-8")
+    return _sha256_bytes(encoded)
+
+
+def _binding_metadata(binding: EvidenceBinding) -> dict[str, str]:
+    return {
+        "candidate_id": binding.candidate_id,
+        "candidate_fingerprint": binding.candidate_fingerprint,
+        "cell_id": binding.cell_id,
+        "control_run_id": binding.control_run_id,
+        "environment_fingerprint": binding.environment_fingerprint,
+        "evaluation_run_id": binding.evaluation_run_id,
+        "fixture_fingerprint": binding.fixture_fingerprint,
+        "retention_challenge_id": binding.retention_challenge_id,
+        "scenario_id": binding.scenario_id,
+    }
+
+
+def build_archive_readiness_receipt(
+    binding: EvidenceBinding, evidence_session_id: str
+) -> ArchiveReadinessReceipt:
+    _require_correlation(evidence_session_id, "evidence session id")
+    digest = _canonical_metadata_sha256(
+        {
+            "binding": _binding_metadata(binding),
+            "evidence_session_id": evidence_session_id,
+            "schema_version": 1,
+            "stage": "READY",
+        }
+    )
+    return ArchiveReadinessReceipt(
+        schema_version=1,
+        stage="READY",
+        evidence_session_id=evidence_session_id,
+        binding=binding,
+        receipt_sha256=digest,
+    )
+
+
+def build_evidence_finalization_receipt(
+    request: EvidenceFinalizationRequest,
+) -> EvidenceFinalizationReceipt:
+    _require_correlation(request.evidence_session_id, "evidence session id")
+    _require_sha256(request.readiness_receipt_sha256, "readiness receipt digest")
+    _require_sha256(request.terminal_state_sha256, "terminal state digest")
+    payload = {
+        "binding": _binding_metadata(request.binding),
+        "capture_scope": list(EVIDENCE_CAPTURE_SCOPE),
+        "evidence_session_id": request.evidence_session_id,
+        "readiness_receipt_sha256": request.readiness_receipt_sha256,
+        "schema_version": 1,
+        "stage": "FINALIZED",
+        "terminal_state_sha256": request.terminal_state_sha256,
+    }
+    return EvidenceFinalizationReceipt(
+        schema_version=1,
+        stage="FINALIZED",
+        evidence_session_id=request.evidence_session_id,
+        binding=request.binding,
+        readiness_receipt_sha256=request.readiness_receipt_sha256,
+        terminal_state_sha256=request.terminal_state_sha256,
+        capture_scope=EVIDENCE_CAPTURE_SCOPE,
+        receipt_sha256=_canonical_metadata_sha256(payload),
+    )
+
+
+def _validate_archive_readiness_receipt(
+    receipt: Any, binding: EvidenceBinding
+) -> ArchiveReadinessReceipt:
+    if type(receipt) is not ArchiveReadinessReceipt:
+        raise ContractViolation("evidence_receipt_invalid", "readiness receipt type invalid")
+    try:
+        expected = build_archive_readiness_receipt(binding, receipt.evidence_session_id)
+    except ContractViolation as error:
+        raise ContractViolation(
+            "evidence_receipt_invalid", "readiness receipt metadata invalid"
+        ) from error
+    if receipt != expected:
+        raise ContractViolation("evidence_receipt_invalid", "readiness receipt mismatch")
+    return receipt
+
+
+def _validate_evidence_finalization_receipt(
+    receipt: Any, request: EvidenceFinalizationRequest
+) -> EvidenceFinalizationReceipt:
+    if type(receipt) is not EvidenceFinalizationReceipt:
+        raise ContractViolation("evidence_receipt_invalid", "finalization receipt type invalid")
+    try:
+        expected = build_evidence_finalization_receipt(request)
+    except ContractViolation as error:
+        raise ContractViolation(
+            "evidence_receipt_invalid", "finalization receipt metadata invalid"
+        ) from error
+    if receipt != expected:
+        raise ContractViolation("evidence_receipt_invalid", "finalization receipt mismatch")
+    return receipt
+
+
+def _terminal_state_sha256(
+    failure_codes: Sequence[str],
+    *,
+    launcher_started: bool,
+    outcome_observed: bool,
+    workspace_available: bool,
+) -> str:
+    return _canonical_metadata_sha256(
+        {
+            "failure_codes": list(dict.fromkeys(failure_codes)),
+            "launcher_started": launcher_started,
+            "outcome_observed": outcome_observed,
+            "workspace_available": workspace_available,
+        }
+    )
 
 
 def _check_deadline(deadline: float | None) -> None:
@@ -692,8 +905,27 @@ def _artifact_validation_well_formed(value: Any) -> bool:
     )
 
 
-def validate_public_result(result: Mapping[str, Any], manifest: Mapping[str, Any]) -> None:
-    if set(result) != PUBLIC_RESULT_FIELDS:
+def validate_public_result(
+    result: Mapping[str, Any],
+    manifest: Mapping[str, Any],
+    *,
+    allow_historical_v1: bool = False,
+) -> str:
+    schema_version = result.get("schema_version")
+    if schema_version == CURRENT_PUBLIC_RESULT_SCHEMA_VERSION:
+        expected_fields = PUBLIC_RESULT_FIELDS
+        compatibility = PUBLIC_RESULT_COMPATIBILITY_CURRENT
+    elif (
+        schema_version == HISTORICAL_PUBLIC_RESULT_SCHEMA_VERSION
+        and allow_historical_v1
+    ):
+        expected_fields = PUBLIC_RESULT_V1_FIELDS
+        compatibility = PUBLIC_RESULT_COMPATIBILITY_HISTORICAL
+    else:
+        raise ContractViolation(
+            "result_schema", "public result schema version is not accepted"
+        )
+    if set(result) != expected_fields:
         raise ContractViolation("result_schema", "public result fields do not match the schema")
     missing = set(manifest["result_schema"]["required_fields"]) - set(result)
     if missing:
@@ -717,7 +949,7 @@ def validate_public_result(result: Mapping[str, Any], manifest: Mapping[str, Any
         raise ContractViolation("result_schema", "public result scenario is not frozen")
     if result.get("fixture_fingerprint") != manifest["public_fixture"]["tree_sha256"]:
         raise ContractViolation("result_schema", "public result fixture fingerprint mismatch")
-    if result.get("schema_version") != 1 or result.get("result") not in {"PASS", "FAIL"}:
+    if result.get("result") not in {"PASS", "FAIL"}:
         raise ContractViolation("result_schema", "public result state is invalid")
     hard_gates = result.get("hard_gate_results")
     if not isinstance(hard_gates, dict) or set(hard_gates) != set(forge_validate.HARD_GATES):
@@ -823,6 +1055,39 @@ def validate_public_result(result: Mapping[str, Any], manifest: Mapping[str, Any
             ):
                 raise ContractViolation("result_schema", "public evidence values are invalid")
 
+    if compatibility == PUBLIC_RESULT_COMPATIBILITY_HISTORICAL:
+        return compatibility
+
+    retention = result.get("evidence_retention")
+    if not isinstance(retention, dict) or set(retention) != EVIDENCE_RETENTION_FIELDS:
+        raise ContractViolation("result_schema", "public retention metadata is invalid")
+    if (
+        type(retention["archive_ready"]) is not bool
+        or type(retention["archive_finalized"]) is not bool
+    ):
+        raise ContractViolation("result_schema", "public retention state is invalid")
+    for field in ("readiness_receipt_sha256", "finalization_receipt_sha256"):
+        digest = retention[field]
+        if digest is not None and (
+            not isinstance(digest, str) or not HEX_SHA256.fullmatch(digest)
+        ):
+            raise ContractViolation("result_schema", "public retention digest is invalid")
+    if retention["archive_ready"] != (
+        retention["readiness_receipt_sha256"] is not None
+    ) or retention["archive_finalized"] != (
+        retention["finalization_receipt_sha256"] is not None
+    ):
+        raise ContractViolation("result_schema", "public retention state is inconsistent")
+    if retention["archive_finalized"] and not retention["archive_ready"]:
+        raise ContractViolation("result_schema", "finalized evidence was not ready")
+    if result.get("result") == "PASS" and not (
+        retention["archive_ready"] and retention["archive_finalized"]
+    ):
+        raise ContractViolation(
+            "result_schema", "successful result lacks verified evidence retention"
+        )
+    return compatibility
+
 
 class PublicController:
     """Deterministic public orchestration around injected restricted interfaces."""
@@ -835,6 +1100,8 @@ class PublicController:
         workspace_manager: DisposableWorkspaceManager,
         launcher: RestrictedProcessLauncher,
         artifact_validator: ArtifactValidator,
+        evidence_recorder: EvidenceRetentionRecorder,
+        evidence_receipt_verifier: EvidenceReceiptVerifier,
         expected_environment_fingerprint: str,
         expected_restricted_identity: str,
         max_timeout_seconds: int = 600,
@@ -850,6 +1117,8 @@ class PublicController:
         self.workspace_manager = workspace_manager
         self.launcher = launcher
         self.artifact_validator = artifact_validator
+        self.evidence_recorder = evidence_recorder
+        self.evidence_receipt_verifier = evidence_receipt_verifier
         self.expected_environment_fingerprint = _require_sha256(
             expected_environment_fingerprint, "expected environment fingerprint"
         )
@@ -940,8 +1209,21 @@ class PublicController:
             self.max_timeout_seconds,
         )
         started = time.monotonic()
+        binding = EvidenceBinding(
+            evaluation_run_id=cell.evaluation_run_id,
+            control_run_id=cell.control_run_id,
+            cell_id=cell.cell_id,
+            candidate_id=cell.candidate_id,
+            scenario_id=cell.scenario_id,
+            candidate_fingerprint=cell.candidate_fingerprint,
+            fixture_fingerprint=cell.fixture_fingerprint,
+            environment_fingerprint=cell.environment_fingerprint,
+            retention_challenge_id=uuid.uuid4().hex,
+        )
         lease: WorkspaceLease | None = None
         outcome: ProcessOutcome | None = None
+        readiness_receipt: ArchiveReadinessReceipt | None = None
+        launcher_started = False
         validation = ArtifactValidation(None, {"not_executed": False})
         files_modified: list[str] = []
         public_files_modified: list[str] = []
@@ -957,7 +1239,37 @@ class PublicController:
         evidence: dict[str, Any] = {}
         sanitization = "FAIL"
         cleanup = "FAIL"
+        public_retention: dict[str, Any] = {
+            "archive_ready": False,
+            "archive_finalized": False,
+            "readiness_receipt_sha256": None,
+            "finalization_receipt_sha256": None,
+        }
         try:
+            try:
+                candidate_readiness_receipt = self.evidence_recorder.prepare(binding)
+            except Exception as error:
+                raise ContractViolation(
+                    "evidence_archive_not_ready", "evidence archive readiness failed"
+                ) from error
+            candidate_readiness_receipt = _validate_archive_readiness_receipt(
+                candidate_readiness_receipt, binding
+            )
+            try:
+                verification_result = self.evidence_receipt_verifier.verify_readiness(
+                    binding, candidate_readiness_receipt
+                )
+                if verification_result is not None:
+                    raise TypeError("invalid readiness verifier return")
+            except Exception as error:
+                raise ContractViolation(
+                    "evidence_receipt_invalid", "readiness receipt not verified"
+                ) from error
+            readiness_receipt = candidate_readiness_receipt
+            public_retention["archive_ready"] = True
+            public_retention["readiness_receipt_sha256"] = (
+                readiness_receipt.receipt_sha256
+            )
             lease = self.workspace_manager.create(cell.evaluation_run_id)
             before = self._materialize(cell, lease.work)
             request = LaunchRequest(
@@ -968,8 +1280,10 @@ class PublicController:
                 user_prompt=cell.user_prompt,
                 timeout_seconds=cell.timeout_seconds,
                 forbidden_output_markers=self.forbidden_output_markers,
+                evidence_session_id=readiness_receipt.evidence_session_id,
             )
             try:
+                launcher_started = True
                 outcome = self.launcher.launch(request)
             except Exception:
                 failure_codes.append("launcher_failure")
@@ -1072,6 +1386,47 @@ class PublicController:
         except Exception:
             failure_codes.append("controller_failure")
         finally:
+            if readiness_receipt is not None:
+                finalization_request = EvidenceFinalizationRequest(
+                    binding=binding,
+                    evidence_session_id=readiness_receipt.evidence_session_id,
+                    readiness_receipt_sha256=readiness_receipt.receipt_sha256,
+                    terminal_state_sha256=_terminal_state_sha256(
+                        failure_codes,
+                        launcher_started=launcher_started,
+                        outcome_observed=outcome is not None,
+                        workspace_available=lease is not None and lease.work.exists(),
+                    ),
+                    launcher_started=launcher_started,
+                    outcome_observed=outcome is not None,
+                    workspace_available=lease is not None and lease.work.exists(),
+                )
+                try:
+                    candidate_finalization_receipt = self.evidence_recorder.finalize(
+                        finalization_request
+                    )
+                except Exception:
+                    failure_codes.append("evidence_archive_finalize_failed")
+                else:
+                    try:
+                        finalization_receipt = _validate_evidence_finalization_receipt(
+                            candidate_finalization_receipt,
+                            finalization_request,
+                        )
+                        verification_result = (
+                            self.evidence_receipt_verifier.verify_finalization(
+                                finalization_request, finalization_receipt
+                            )
+                        )
+                        if verification_result is not None:
+                            raise TypeError("invalid finalization verifier return")
+                    except Exception:
+                        failure_codes.append("evidence_receipt_invalid")
+                    else:
+                        public_retention["archive_finalized"] = True
+                        public_retention["finalization_receipt_sha256"] = (
+                            finalization_receipt.receipt_sha256
+                        )
             if lease is not None:
                 cleanup = "PASS" if self.workspace_manager.cleanup(lease) else "FAIL"
                 if cleanup == "FAIL":
@@ -1080,7 +1435,7 @@ class PublicController:
         failure_codes = list(dict.fromkeys(failure_codes))
         passed = not failure_codes
         result = {
-            "schema_version": 1,
+            "schema_version": CURRENT_PUBLIC_RESULT_SCHEMA_VERSION,
             "evaluation_run_id": cell.evaluation_run_id,
             "control_run_id": cell.control_run_id,
             "cell_id": cell.cell_id,
@@ -1115,6 +1470,7 @@ class PublicController:
                 "cleanup_correlated": cleanup == "PASS",
             },
             "evidence": evidence,
+            "evidence_retention": public_retention,
         }
         validate_public_result(result, self.manifest)
         return result
