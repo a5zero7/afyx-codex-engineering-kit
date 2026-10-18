@@ -5,17 +5,12 @@ stable `v1.0.0` release.
 
 ## Branch ownership
 
-- `main` is the canonical integration branch.
-- `afyx/native-phase5f-parser-grammar` remains the ongoing engineering branch.
-- `release/alpha-0.1` accepts only reviewed promotions and approved Alpha
-  stabilization fixes.
+- `main` remains the stable integration/release boundary.
+- `dev` is the active engineering branch; historical engineering branches are retained only while needed.
+- `alpha` is the sole Technical Alpha branch and accepts only reviewed, scope-selected promotions and approved Alpha stabilization fixes.
 
-Create promotion pull requests from the development branch into
-`release/alpha-0.1`. Each promotion must identify the exact source commit and
-must pass both `CI` and `Afyx Graph Build` on Windows, Linux, and macOS. Never
-rewrite the Alpha branch. An urgent Alpha hotfix is committed through review on
-the Alpha branch and then merged or cherry-picked back into the development
-branch so the branches cannot silently diverge.
+Promote only reviewed, applicable capabilities from `dev` into `alpha` by pull request (do not bulk-merge unrelated development-only work). Each promotion must identify the exact source commit and
+must pass both `CI` and `Afyx Graph Build` on Windows, Linux, and macOS. Never rewrite the Alpha branch. An urgent Alpha hotfix enters through review on `alpha` and is then reconciled back to `dev`, so the branches cannot silently diverge. The `alpha-0.1` series remains candidate metadata, not a second branch.
 
 ## Candidate identity
 
