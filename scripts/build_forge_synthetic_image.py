@@ -26,6 +26,7 @@ IMAGE_ID = re.compile(r"^sha256:[0-9a-f]{64}$")
 PINNED_REFERENCE = re.compile(
     r"^[a-z0-9][a-z0-9._:/-]*@sha256:[0-9a-f]{64}$"
 )
+ROOTLESS_DOCKER_ENDPOINT = "unix:///run/user/1000/afyx-forge/docker.sock"
 APPROVED_CONTAINERFILE_INSTRUCTIONS = (
     "FROM scratch",
     'LABEL org.opencontainers.image.title="Afyx Forge public synthetic cell" '
@@ -46,6 +47,18 @@ CONTAINERFILE_PARSER_DIRECTIVE = re.compile(
 
 class FixtureBuildError(RuntimeError):
     """The fixture or image could not be built or verified."""
+
+
+def docker_cli_prefix(
+    runtime: Path, endpoint: str = ROOTLESS_DOCKER_ENDPOINT
+) -> tuple[str, ...]:
+    """Return the only approved explicit rootless Docker CLI prefix."""
+
+    if not runtime.is_absolute() or ".." in runtime.parts:
+        raise FixtureBuildError("an absolute container runtime is required")
+    if endpoint != ROOTLESS_DOCKER_ENDPOINT:
+        raise FixtureBuildError("rootless Docker endpoint is invalid")
+    return (str(runtime), "--host", endpoint)
 
 
 def compiler_argv(compiler: Path, output: Path) -> tuple[str, ...]:
@@ -225,7 +238,13 @@ def verify_image_metadata(image: object) -> dict[str, object]:
     }
 
 
-def build_image(runtime: Path, executable: Path, tag: str) -> dict[str, object]:
+def build_image(
+    runtime: Path,
+    executable: Path,
+    tag: str,
+    *,
+    endpoint: str = ROOTLESS_DOCKER_ENDPOINT,
+) -> dict[str, object]:
     """Build and verify an amd64 image; never fabricate a pinned reference."""
 
     if (
@@ -234,6 +253,7 @@ def build_image(runtime: Path, executable: Path, tag: str) -> dict[str, object]:
         or not os.access(runtime, os.X_OK)
     ):
         raise FixtureBuildError("an absolute container runtime is required")
+    prefix = docker_cli_prefix(runtime, endpoint)
     validate_containerfile(CONTAINERFILE.read_text("utf-8"))
     environment = {
         "HOME": "/nonexistent",
@@ -251,7 +271,7 @@ def build_image(runtime: Path, executable: Path, tag: str) -> dict[str, object]:
         os.utime(context / "forge-synthetic-cell", (0, 0))
         _run_checked(
             (
-                str(runtime),
+                *prefix,
                 "build",
                 "--file",
                 str(context / "Containerfile"),
@@ -270,7 +290,7 @@ def build_image(runtime: Path, executable: Path, tag: str) -> dict[str, object]:
             environment=environment,
         )
     raw = _run_checked(
-        (str(runtime), "image", "inspect", tag), environment=environment
+        (*prefix, "image", "inspect", tag), environment=environment
     )
     try:
         inspection = json.loads(raw)
