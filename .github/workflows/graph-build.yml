@@ -8,9 +8,9 @@ name: Afyx Graph Build
 on:
   workflow_dispatch:
   push:
-    branches: [release/alpha-0.1]
+    branches: [alpha]
   pull_request:
-    branches: [main, release/alpha-0.1]
+    branches: [main, alpha]
     paths:
       - 'afyx-graph/**'
       - 'scripts/install-afyx-graph.*'
