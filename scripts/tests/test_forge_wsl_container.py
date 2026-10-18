@@ -76,10 +76,19 @@ class FakeIdentityMapSource:
 
 class FakeAclBackend:
     def __init__(
-        self, *, omit_required: bool = False, add_unexpected: bool = False
+        self,
+        *,
+        omit_required: bool = False,
+        add_unexpected: bool = False,
+        other_permissions: str = "---",
+        base_group_permissions: str = "---",
+        malformed_default: bool = False,
     ) -> None:
         self.omit_required = omit_required
         self.add_unexpected = add_unexpected
+        self.other_permissions = other_permissions
+        self.base_group_permissions = base_group_permissions
+        self.malformed_default = malformed_default
         self.applied: list[tuple[Path, int, int, int]] = []
 
     def apply(self, workspace, *, host_uid, host_gid, gateway_uid):
@@ -93,17 +102,23 @@ class FakeAclBackend:
                 {
                     wsl_container.AclEntry(default, "user", None, "rwx"),
                     wsl_container.AclEntry(default, "user", host_uid, "rwx"),
-                    wsl_container.AclEntry(default, "group", None, "r-x"),
+                    wsl_container.AclEntry(
+                        default, "group", None, self.base_group_permissions
+                    ),
                     wsl_container.AclEntry(default, "group", host_gid, "rwx"),
                     wsl_container.AclEntry(default, "user", gateway_uid, "rwx"),
                     wsl_container.AclEntry(default, "mask", None, "rwx"),
-                    wsl_container.AclEntry(default, "other", None, "---"),
+                    wsl_container.AclEntry(
+                        default, "other", None, self.other_permissions
+                    ),
                 }
             )
         if self.omit_required:
             entries.remove(wsl_container.AclEntry(False, "user", host_uid, "rwx"))
         if self.add_unexpected:
             entries.add(wsl_container.AclEntry(False, "user", 999_999, "rwx"))
+        if self.malformed_default:
+            entries.remove(wsl_container.AclEntry(True, "mask", None, "rwx"))
         return wsl_container.WorkspaceAclObservation(
             workspace=workspace, entries=tuple(entries)
         )
@@ -427,14 +442,14 @@ class WslContainerPolicyTests(unittest.TestCase):
                 b"user::rwx",
                 b"user:1000:rwx",
                 b"user:265531:rwx",
-                b"group::r-x",
+                b"group::---",
                 b"group:365531:rwx",
                 b"mask::rwx",
                 b"other::---",
                 b"default:user::rwx",
                 b"default:user:1000:rwx",
                 b"default:user:265531:rwx",
-                b"default:group::r-x",
+                b"default:group::---",
                 b"default:group:365531:rwx",
                 b"default:mask::rwx",
                 b"default:other::---",
@@ -460,6 +475,26 @@ class WslContainerPolicyTests(unittest.TestCase):
         self.assertIn("--remove-all", clear)
         self.assertIn("--remove-default", clear)
         self.assertIn("--modify", apply)
+        applied_entries = set(apply[3].split(","))
+        self.assertEqual(
+            applied_entries,
+            {
+                "u::rwx",
+                "u:265531:rwx",
+                "u:1000:rwx",
+                "g::---",
+                "g:365531:rwx",
+                "m::rwx",
+                "o::---",
+                "d:u::rwx",
+                "d:u:265531:rwx",
+                "d:u:1000:rwx",
+                "d:g::---",
+                "d:g:365531:rwx",
+                "d:m::rwx",
+                "d:o::---",
+            },
+        )
         self.assertIn("--numeric", inspect)
         for argv in (clear, apply, inspect):
             self.assertNotIn("--recursive", argv)
@@ -505,6 +540,41 @@ class WslContainerPolicyTests(unittest.TestCase):
                     container_uid=65_532,
                     container_gid=65_532,
                 )
+
+    def assert_acl_drift_prevents_runtime(self, acl: FakeAclBackend) -> None:
+        runtime = FakeRuntime()
+        preparer = wsl_container.MappedUidWorkspacePreparer(
+            identity_maps=FakeIdentityMapSource(self.identity_maps()),
+            acl_backend=acl,
+            gateway_uid=os.getuid(),
+            gateway_gid=os.getgid(),
+        )
+        launcher = wsl_container.WslContainerLauncher(
+            runtime=runtime,
+            workspace_preparer=preparer,
+            workspace_root=self.workspace_root,
+            image=PINNED_IMAGE,
+            seccomp_profile=SECCOMP,
+            seccomp_sha256=SECCOMP_SHA256,
+        )
+        with self.assertRaises(wsl_container.ContainerPolicyViolation):
+            launcher.launch(self.request())
+        self.assertEqual(runtime.calls, [])
+
+    def test_inherited_other_read_traverse_prevents_runtime(self) -> None:
+        self.assert_acl_drift_prevents_runtime(
+            FakeAclBackend(other_permissions="r-x")
+        )
+
+    def test_unexpected_base_group_permissions_prevent_runtime(self) -> None:
+        self.assert_acl_drift_prevents_runtime(
+            FakeAclBackend(base_group_permissions="r-x")
+        )
+
+    def test_malformed_access_default_observation_prevents_runtime(self) -> None:
+        self.assert_acl_drift_prevents_runtime(
+            FakeAclBackend(malformed_default=True)
+        )
 
     def test_workspace_preparation_rejects_world_write_symlink_and_escape(self) -> None:
         preparer = wsl_container.MappedUidWorkspacePreparer(

@@ -1,6 +1,6 @@
 # AFYX Forge T09.E8.P2 rootless runtime compatibility
 
-Version: **0.1.0-source**
+Version: **0.1.1-source**
 
 Status: **SOURCE PASS / ROOTLESS RUNTIME NOT TESTED / FORMAL CAMPAIGN BLOCKED — 0/36**
 
@@ -34,8 +34,8 @@ schemas are unchanged. `WslContainerLauncher` still implements the existing
 | Fallback denial | Rootful, TCP, relative, or altered endpoint fails before invocation | Only the exact frozen endpoint is accepted | SOURCE PASS |
 | Identity mapping | Container UID/GID 65532 is translated from observed maps, never assumed offsets | Injected UID and GID range observations are validated for bounds, overlap, unique coverage, non-root host identity, and subordinate separation from the gateway | SOURCE PASS |
 | Lease containment | ACL mutation affects only the current controller lease | The accepted shape is exactly `<approved-root>/<lease>/work`; ancestry, tree, symlinks, inode, owner, group, and world-write state are checked before and after ACL operations | SOURCE PASS |
-| ACL access | Workload and gateway retain effective access | Existing extended/default ACLs are cleared only on the lease directory; exact named workload UID/GID and gateway UID entries plus masks are applied, read back numerically, and verified | SOURCE PASS |
-| Fail closed | No launch on unverifiable preparation | Missing/ambiguous mapping, non-subordinate identity, unexpected ACL principal, ACL/tool failure, wrong ownership, symlink, escape, inode replacement, or invalid receipt prevents `runtime.execute()` | SOURCE PASS |
+| ACL access | Workload and gateway retain effective least-privilege access | Existing ACLs are cleared only on the lease directory. Access/default owner is `rwx`; approved named workload UID/GID and gateway UID entries are `rwx`; mask is `rwx`; base group and other are exactly `---` | SOURCE PASS |
+| Fail closed | No launch on unverifiable preparation | The numeric observation must equal the complete 14-entry policy; missing, malformed, duplicate, additional, or permission-drifted entries prevent `runtime.execute()` | SOURCE PASS |
 | OS enforcement | Real rootless daemon and kernel enforce the policy | No engine or container was invoked | NOT TESTED |
 
 ## Explicit Docker endpoint
@@ -71,10 +71,14 @@ any runtime call it:
    offsets and rejects root or gateway-identity results;
 5. uses `PosixAclBackend` to clear and apply ACLs only on that lease directory,
    without recursive `chown`, `chmod`, or ACL traversal;
-6. reads numeric access/default ACLs back and rejects missing or unexpected
-   qualified principals, ineffective masks, world-write, ownership drift, or
-   inode replacement; and
-7. returns a typed receipt which the launcher validates before executing.
+6. explicitly sets access/default `user::rwx`, base `group::---`,
+   `other::---`, named workload UID/GID `rwx`, named gateway UID `rwx`, and
+   `mask::rwx`;
+7. reads the numeric ACL back and requires exact equality with those 14
+   entries, rejecting inherited base-group/other permissions, missing,
+   duplicated, malformed or additional entries, ineffective permissions,
+   ownership drift, or inode replacement; and
+8. returns a typed receipt which the launcher validates before executing.
 
 Default named ACLs retain gateway access to files later created by the mapped
 workload identity. The gateway remains the directory owner, preserving its
@@ -110,15 +114,18 @@ python3 -m unittest \
 
 Results:
 
-- focused T09.E6/E7 compatibility: **32/32 PASS**;
+- focused least-privilege ACL cases: **6/6 PASS**;
+- focused T09.E6/E7 compatibility: **35/35 PASS**;
 - directly impacted controller/WSL-lab regression: **46/46 PASS**;
 - Python compilation: **PASS**.
 
 Negative coverage includes rootful/TCP/altered endpoint, missing and ambiguous
-maps, nonconforming ACL observations, unexpected ACL principals, world-write,
-symlink, workspace escape, and invalid readiness receipt. Mocked subprocess and
-identity-map results are source evidence only. Accepted T09.E4-E7 suites and
-the historical 178-test baseline were not rerun.
+maps, inherited `other::r-x`, unexpected base-group permissions, malformed
+access/default observations, unexpected ACL principals, world-write, symlink,
+workspace escape, and invalid readiness receipt. The three focused ACL drift
+cases explicitly verify that `runtime.execute()` is never reached. Mocked
+subprocess and identity-map results are source evidence only. Accepted
+T09.E4-E7 suites and the historical 178-test baseline were not rerun.
 
 ## Unchanged contracts and remaining blockers
 

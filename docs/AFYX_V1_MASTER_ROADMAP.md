@@ -1910,14 +1910,15 @@ implements only the two accepted P1 source gaps. All T09.E6 lifecycle commands
 and T09.E7 build/inspect commands now select the exact rootless Unix endpoint
 with no inherited Docker context or rootful fallback. The launcher requires a
 verified pre-launch workspace receipt produced from injected, validated UID/GID
-maps and lease-local numeric POSIX ACL application/readback. Missing or
-ambiguous mapping, non-subordinate identity, wrong ownership, world-write,
-symlink/escape, unexpected ACL principal, ACL failure, or invalid receipt fails
-before runtime execution. Focused compatibility tests pass 32/32 and directly
-impacted controller/WSL-lab regressions pass 46/46. These are source/mock
-results only: no engine was installed or started, no image was built, and no
-container or campaign cell ran. Status is **SOURCE PASS / ROOTLESS RUNTIME NOT
-TESTED / FORMAL CAMPAIGN BLOCKED — 0/36**.
+maps and exact lease-local numeric POSIX ACL application/readback. Access and
+default base-group/other permissions are explicitly `---`; only the owner,
+mapped workload UID/GID, gateway UID, and mask receive the reviewed `rwx`
+permissions. Missing, malformed, additional, inherited or permission-drifted
+entries fail before runtime execution. Focused compatibility tests pass 35/35
+and directly impacted controller/WSL-lab regressions pass 46/46. These are
+source/mock results only: no engine was installed or started, no image was
+built, and no container or campaign cell ran. Status is **SOURCE PASS /
+ROOTLESS RUNTIME NOT TESTED / FORMAL CAMPAIGN BLOCKED — 0/36**.
 
 ## Track B — Platform Generalization
 

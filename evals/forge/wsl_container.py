@@ -321,14 +321,20 @@ class PosixAclBackend:
         )
         entries = ",".join(
             (
+                "u::rwx",
                 f"u:{host_uid}:rwx",
-                f"g:{host_gid}:rwx",
                 f"u:{gateway_uid}:rwx",
+                "g::---",
+                f"g:{host_gid}:rwx",
                 "m::rwx",
+                "o::---",
+                "d:u::rwx",
                 f"d:u:{host_uid}:rwx",
-                f"d:g:{host_gid}:rwx",
                 f"d:u:{gateway_uid}:rwx",
+                "d:g::---",
+                f"d:g:{host_gid}:rwx",
                 "d:m::rwx",
+                "d:o::---",
             )
         )
         self._run(
@@ -406,17 +412,20 @@ class MappedUidWorkspacePreparer:
             raise ContainerPolicyViolation("gateway identity must be non-root")
 
     @staticmethod
-    def _required_entries(
+    def _approved_entries(
         *, host_uid: int, host_gid: int, gateway_uid: int
     ) -> set[AclEntry]:
         entries: set[AclEntry] = set()
         for default in (False, True):
             entries.update(
                 {
+                    AclEntry(default, "user", None, "rwx"),
                     AclEntry(default, "user", host_uid, "rwx"),
-                    AclEntry(default, "group", host_gid, "rwx"),
                     AclEntry(default, "user", gateway_uid, "rwx"),
+                    AclEntry(default, "group", None, "---"),
+                    AclEntry(default, "group", host_gid, "rwx"),
                     AclEntry(default, "mask", None, "rwx"),
+                    AclEntry(default, "other", None, "---"),
                 }
             )
         return entries
@@ -476,19 +485,11 @@ class MappedUidWorkspacePreparer:
             if type(observation) is WorkspaceAclObservation
             else ()
         )
-        allowed_qualified = {
-            (False, "user", host_uid),
-            (False, "user", self.gateway_uid),
-            (False, "group", host_gid),
-            (True, "user", host_uid),
-            (True, "user", self.gateway_uid),
-            (True, "group", host_gid),
-        }
-        required_base_entries = {
-            (default, kind, None)
-            for default in (False, True)
-            for kind in ("user", "group", "mask", "other")
-        }
+        approved_entries = self._approved_entries(
+            host_uid=host_uid,
+            host_gid=host_gid,
+            gateway_uid=self.gateway_uid,
+        )
         if (
             type(observation) is not WorkspaceAclObservation
             or observation.workspace != resolved
@@ -498,29 +499,7 @@ class MappedUidWorkspacePreparer:
             or after.st_uid != self.gateway_uid
             or after.st_gid != self.gateway_gid
             or stat.S_IMODE(after.st_mode) & stat.S_IWOTH
-            or not self._required_entries(
-                host_uid=host_uid,
-                host_gid=host_gid,
-                gateway_uid=self.gateway_uid,
-            ).issubset(set(observed_entries))
-            or not required_base_entries.issubset(
-                {
-                    (entry.default, entry.kind, entry.qualifier)
-                    for entry in observed_entries
-                }
-            )
-            or AclEntry(False, "user", None, "rwx") not in observed_entries
-            or AclEntry(True, "user", None, "rwx") not in observed_entries
-            or any(
-                entry.qualifier is not None
-                and (entry.default, entry.kind, entry.qualifier)
-                not in allowed_qualified
-                for entry in observed_entries
-            )
-            or any(
-                entry.kind == "other" and "w" in entry.permissions
-                for entry in observed_entries
-            )
+            or set(observed_entries) != approved_entries
         ):
             raise ContainerPolicyViolation("workspace ACL verification failed")
         _assert_safe_workspace_path(resolved, inspect_tree=True)
