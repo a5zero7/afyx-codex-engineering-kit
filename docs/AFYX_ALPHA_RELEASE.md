@@ -5,17 +5,12 @@ stable `v1.0.0` release.
 
 ## Branch ownership
 
-- `main` is the canonical integration branch.
-- `afyx/native-phase5f-parser-grammar` remains the ongoing engineering branch.
-- `release/alpha-0.1` accepts only reviewed promotions and approved Alpha
-  stabilization fixes.
+- `main` remains the stable integration/release boundary.
+- `dev` is the active engineering branch; historical engineering branches are retained only while needed.
+- `alpha` is the sole Technical Alpha branch and accepts only reviewed, scope-selected promotions and approved Alpha stabilization fixes.
 
-Create promotion pull requests from the development branch into
-`release/alpha-0.1`. Each promotion must identify the exact source commit and
-must pass both `CI` and `Afyx Graph Build` on Windows, Linux, and macOS. Never
-rewrite the Alpha branch. An urgent Alpha hotfix is committed through review on
-the Alpha branch and then merged or cherry-picked back into the development
-branch so the branches cannot silently diverge.
+Promote only reviewed, applicable capabilities from `dev` into `alpha` by pull request (do not bulk-merge unrelated development-only work). Each promotion must identify the exact source commit and
+must pass both `CI` and `Afyx Graph Build` on Windows, Linux, and macOS. Never rewrite the Alpha branch. An urgent Alpha hotfix enters through review on `alpha` and is then reconciled back to `dev`, so the branches cannot silently diverge. The `alpha-0.1` series remains candidate metadata, not a second branch.
 
 ## Candidate identity
 
@@ -76,3 +71,17 @@ The Windows candidate was also built and installed locally under a disposable
 runtime root. Its revision reported `MATCH`; restoring the prior
 `fd96cd3a9ad41fc98346b46c56f3ade8e73cc1e8` artifact restored that source
 identity and working CLI without touching the active user runtime.
+
+## AFYX-279 security-candidate promotion
+
+AFYX-266 development source `908e56d63ba2e5b38bb557a28e2b88325204f101`
+is eligible only for a reviewed promotion into this branch. The promotion must
+preserve the Alpha triggers, SHA-named candidate artifacts, manifest checks,
+and rollback policy while retaining immutable pins for checkout, Node setup,
+artifact upload, and release provenance actions. Node `>=22.5.0` remains the
+declared runtime compatibility contract; Node 24 is the CI-tested baseline.
+
+The previous `a431ba9ad5fae7bd06329f1fc6e42f1ba503f6dd` candidate remains frozen
+and accepted until the promotion PR is approved, merged, and its resulting
+Alpha SHA passes all candidate and isolated-install acceptance gates. A PR head
+or mutable branch tip is not a replacement candidate identity.

@@ -10,6 +10,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
+    testTimeout: 10_000,
     include: ['__tests__/**/*.test.ts'],
     /**
      * Several MCP integration tests (mcp-daemon, mcp-initialize, mcp-ppid-watchdog,
@@ -31,5 +32,28 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
     },
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: 'engine',
+          include: ['__tests__/**/*.test.ts'],
+          exclude: [
+            '**/node_modules/**',
+            '**/dist/**',
+            '__tests__/ui-package.test.ts',
+            '__tests__/ui-native-runtime.test.ts',
+          ],
+        },
+      },
+      {
+        test: {
+          name: 'ui',
+          globals: true,
+          include: ['__tests__/ui-package.test.ts', '__tests__/ui-native-runtime.test.ts'],
+          environment: 'jsdom',
+        },
+      },
+    ],
   },
 });

@@ -9,11 +9,11 @@ on:
   push:
     branches:
       - main
-      - release/alpha-0.1
+      - alpha
   pull_request:
     branches:
       - main
-      - release/alpha-0.1
+      - alpha
 
 permissions:
   contents: read
@@ -25,7 +25,7 @@ jobs:
   linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Check Bash syntax
         run: bash -n install.sh update.sh uninstall.sh verify.sh scripts/install-afyx-graph.sh scripts/afyx-doctor.sh scripts/afyx-project.sh scripts/lib/afyx-components.sh scripts/lib/afyx-skill-lifecycle.sh
       - name: Validate Afyx Graph identity and metadata
@@ -54,7 +54,7 @@ jobs:
   windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Check PowerShell syntax
         shell: pwsh
         run: |
@@ -111,7 +111,7 @@ jobs:
   macos:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Bash 3.2 syntax and portability (system /bin/bash)
         run: |
           /bin/bash --version | head -n 1
