@@ -6,8 +6,8 @@ Contract revision: **2026-10-15**
 v1 scope policy: **FROZEN — Phase 1 through Phase 11**  
 Post-v1 policy: **PLANNED EXPANSION — not a v1 release blocker**
 
-Current work: **AFYX-285 Docker CE provenance and partial package lock; campaign remains blocked**
-Task: retain the verified public Docker CE acquisition/static audit and unresolved Ubuntu byte-lock gate; no installation, provisioning, service change, container execution, model benchmark, A8 GO, or Alpha promotion
+Current work: **AFYX-285 host-relative Docker CE/Ubuntu transaction lock verified; campaign remains blocked**
+Task: retain the verified public package transaction evidence and installed-host boundary; no installation, provisioning, service change, container execution, model benchmark, A8 GO, or Alpha promotion
 Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`  
 Active implementation branch: `dev` (created from verified T02 final source `ad1560dd930ccde94b0dadaa7b42d804be55714f`)
 Historical engineering branch preserved: `afyx/native-phase5f-parser-grammar`
@@ -1964,6 +1964,27 @@ dependency baseline were not authorized for download and are not byte-locked;
 local Ubuntu metadata remains stale. Classification: **PARTIAL — DOCKER CE
 PROVENANCE VERIFIED / COMPLETE INSTALLATION LOCK BLOCKED**. No installation,
 service change, daemon/container execution or formal cell occurred. Formal
+Forge remains **BLOCKED — 0/36**.
+
+### T09.E8.P5 checkpoint — Ubuntu dependency closure and host-relative lock
+
+[AFYX_FORGE_T09_E8_P5_UBUNTU_DEPENDENCY_LOCK.md](AFYX_FORGE_T09_E8_P5_UBUNTU_DEPENDENCY_LOCK.md)
+and its deterministic
+[lock manifest](AFYX_FORGE_T09_E8_P5_LOCK_MANIFEST.json) record fresh signed
+Ubuntu Resolute base, updates and security metadata plus exact archive-byte
+verification for the eleven missing Ubuntu transaction packages. The five P4
+Docker CE archives remain byte-identical and were not reacquired. P4's 68
+baseline names resolve to 62 installed packages and six virtual/alternative
+mappings: all installed packages have exact dpkg state and clean `dpkg -V`
+observations, 53 have matching archive hashes in fresh authenticated indexes,
+and nine superseded installed versions remain explicitly installed-state only.
+An isolated `--simulate --no-download` run selects exactly 16 new packages,
+zero upgrades, removals, downgrades or undeclared replacements, and no Ubuntu
+Docker/containerd/runc substitute. Classification is **VERIFIED HOST-RELATIVE
+TRANSACTION LOCK**; clean-machine reproducibility, installation safety, real
+rootless enforcement and independent evaluator/evidence custody are not
+claimed. No installation, host mutation, daemon/container execution or formal
+cell occurred. T09.E8.P6 remains a separate authorization gate and Formal
 Forge remains **BLOCKED — 0/36**.
 
 ## Track B — Platform Generalization
