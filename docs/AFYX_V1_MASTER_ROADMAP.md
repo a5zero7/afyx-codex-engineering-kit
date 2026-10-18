@@ -6,10 +6,18 @@ Contract revision: **2026-10-11**
 v1 scope policy: **FROZEN — Phase 1 through Phase 11**  
 Post-v1 policy: **PLANNED EXPANSION — not a v1 release blocker**
 
-Current work: **AFYX-279 reviewed Alpha security candidate promotion; AFYX-248 remains in progress**
+Current work: **T03.R1 Graph-only Alpha promotion is ready for the PR #74 owner merge decision; AFYX-248 remains in progress**
 Task: `AFYX-279`; `AFYX-248` remains in progress
-Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`  
-Active implementation branch: `afyx/native-phase5f-parser-grammar`  
+
+Verified branch topology (2026-10-18):
+
+- `main`: `5349c4a184e539f0ac0752d895ff3262c6326e29`
+- `dev`: `dcebee5a08d3b958d757d056336a3eef7e9653e9`
+- `alpha`: `760778e709ec99e85fded58d10a0efc0350abaa9`
+
+Active promotion branch: `afyx/t03-r1-graph-alpha-promotion`
+Reviewed PR #74 head: `65c17719e9a6bf4fe1a757b69d017ae2c6f87fd5`
+Historical Phase 5F implementation branch: `afyx/native-phase5f-parser-grammar`
 Latest verified Phase 5F implementation checkpoint: `62621a0639f42db0eaac69ef087436d851cdba88`  
 Latest verified Phase 5F semantic-freeze checkpoint: `6fd0296b22844eef62b86a395b861ebb51193dc5`  
 Latest verified Phase 5F performance-baseline checkpoint: `1f671dabc8af5bf8f8088dc6e947e48834cafdc3`  
@@ -2309,7 +2317,7 @@ from this investigation.
 
 ### AFYX-282 — Native Graph source-intelligence refinement
 
-Status: **IMPLEMENTED; FINAL-HEAD GRAPH BUILD REQUIRED; AFYX-248 IN PROGRESS**
+Status: **IMPLEMENTED; PR #74 EXACT-HEAD GRAPH BUILD PASS; POST-MERGE CANDIDATE ACCEPTANCE PENDING; AFYX-248 IN PROGRESS**
 
 Root cause was layered: the native Python extractor indexed classes and methods but omitted direct class assignments, the Node contract had no structural fact for `_inherit`, ranked FTS search could only return bounded metadata candidates, and default MCP instructions incorrectly encouraged treating ranked exploration as universally exhaustive. The SQLite schema itself was sufficient: source-located `property` nodes with exact class ownership and literal signatures fit the existing node/persistence contract, so no schema migration was introduced. Extraction version advances to 28 so older indexes explicitly request re-indexing.
 
@@ -2319,7 +2327,7 @@ Owned Odoo-like ground truth covers nine Odoo-17-style declarations and forty-fi
 
 ### AFYX-281 + AFYX-282 — Final engineering acceptance closure
 
-Status: **LOCAL ACCEPTANCE PASS; EXACT-HEAD GRAPH BUILD REQUIRED; AFYX-248 AND MAC.4 REMAIN IN PROGRESS**
+Status: **LOCAL ACCEPTANCE PASS; PR #74 EXACT-HEAD GRAPH BUILD PASS; POST-MERGE CANDIDATE ACCEPTANCE PENDING; AFYX-248 AND MAC.4 REMAIN IN PROGRESS**
 
 AFYX-281 Linux Graph Build failures (`112.72 ms` and `100.96 ms` against a `100 ms` assertion) retained every functional contract: 500+ true callers, 300 shown, truncation, count parity, uniqueness, and blast-radius parity. Bounded focused reproduction did not demonstrate a product slowdown. The assertion measured loopback HTTP wall time under shared-runner load, which cannot distinguish a batched implementation from N+1 reads. The regression contract now observes the database access shape directly: one focal lookup, one 500-caller batch, and fan-in batches for the 300 displayed rows. Product behavior and thresholds are unchanged.
 
@@ -2329,7 +2337,7 @@ AFYX-280 boundary validation confirmed `limit + 1` over-fetch and handwritten-be
 
 ### Repository knowledge catalog acceptance
 
-Status: **TARGETED REFINEMENT IMPLEMENTED; FINAL-HEAD GRAPH BUILD REQUIRED; AFYX-248 IN PROGRESS**
+Status: **TARGETED REFINEMENT IMPLEMENTED; PR #74 EXACT-HEAD GRAPH BUILD PASS; POST-MERGE CANDIDATE ACCEPTANCE PENDING; AFYX-248 IN PROGRESS**
 
 Read-only Odoo 17 evidence confirmed the full-index accounting contract:
 93,003 discovered, 42,130 eligible, 42,123 indexed, 6 size-skipped, 50,873

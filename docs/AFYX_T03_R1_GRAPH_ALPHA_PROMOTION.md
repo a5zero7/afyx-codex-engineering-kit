@@ -1,6 +1,6 @@
 # T03.R1 — Graph-only Technical Alpha promotion
 
-Status: **IMPLEMENTED LOCALLY; EXACT-HEAD CI AND OWNER MERGE DECISION PENDING**
+Status: **IMPLEMENTED; PR-HEAD CI PASS; OWNER MERGE DECISION PENDING**
 
 ## Reconciliation baseline
 
@@ -45,14 +45,46 @@ The resulting `afyx-graph/engine` tree is byte-equivalent to the accepted
 | Targeted serial rerun of only failed files | **FAIL (environment-bound)** — 267 passed; 21 failed across 6 files: temp-directory cleanup `EPERM` plus one old-Git shim `spawnSync ENOENT` |
 
 The Windows-local failures are not relabelled PASS. The affected Graph feature
-contracts passed in the focused run. Full deterministic Graph regression must
-pass on the exact PR head in the Linux Graph Build job; Windows and macOS jobs
-must pass their declared build, semantic, smoke, installer, and artifact gates.
+contracts passed in the focused run. They remain recorded independently from
+the successful remote checks below.
+
+## Exact PR-head remote validation
+
+The following checks completed successfully for PR head
+`65c17719e9a6bf4fe1a757b69d017ae2c6f87fd5`:
+
+| Workflow | Linux | Windows | macOS |
+|---|---|---|---|
+| [CI 39132876754](https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/39132876754) | **PASS** | **PASS** | **PASS** |
+| [Afyx Graph Build 39132876687](https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/39132876687) | **PASS** | **PASS** | **PASS** |
+
+The Linux Graph Build includes the full unit regression, semantic baseline,
+CLI/MCP smoke, installer verification, host-bundle smoke, and retained
+SHA-pinned artifact. Windows and macOS passed their declared clean-build,
+semantic, smoke, installer, and artifact-retention gates; those jobs do not run
+the full unit regression.
+
+## Candidate identity boundary
+
+- PR #74 reviewed source head: `65c17719e9a6bf4fe1a757b69d017ae2c6f87fd5`.
+- The PR-triggered Graph Build checked out GitHub's synthetic merge ref and
+  named its retained artifacts with
+  `97c4f4ff76ba69ad9b7d9f0bb66960fac5b859e1`.
+- Neither SHA is the final replacement Technical Alpha candidate. That identity
+  can only be the resulting `alpha` SHA after a separately authorized merge.
+
+The PR-run artifacts are validation evidence only. Stage C must use a
+successful Graph Build from the resulting `alpha` SHA, download and verify the
+retained inner archives and manifests independently, and then perform the
+authorized isolated install, rollback, and real MCP acceptance. The previously
+accepted candidate remains active until that process receives explicit
+acceptance.
 
 ## Pending acceptance
 
-Before merge, the focused PR into `alpha` requires review plus exact-head CI
-and Afyx Graph Build success on Linux, Windows, and macOS. This promotion does
-not itself create or accept a new Technical Alpha candidate. After separately
-authorized merge, candidate identity must use the resulting `alpha` merge SHA
-and retained inner archives/manifests—not the PR head or Actions wrapper ZIP.
+The focused PR into `alpha` has exact-head CI and Afyx Graph Build success on
+Linux, Windows, and macOS, and now awaits the owner's merge decision. This
+promotion does not itself create or accept a new Technical Alpha candidate.
+After separately authorized merge, candidate identity must use the resulting
+`alpha` SHA and retained inner archives/manifests—not the PR head, the synthetic
+merge-ref SHA, or an Actions wrapper ZIP.
