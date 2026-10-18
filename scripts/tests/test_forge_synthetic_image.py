@@ -101,6 +101,54 @@ class ForgeSyntheticImageTests(unittest.TestCase):
             ):
                 fixture.validate_containerfile(changed)
 
+    def test_containerfile_rejects_additional_stage_or_copy(self) -> None:
+        original = fixture.CONTAINERFILE.read_text("utf-8")
+        for directive in (
+            "FROM scratch",
+            "COPY unexpected /opt/afyx/bin/unexpected",
+        ):
+            with self.subTest(directive=directive), self.assertRaises(
+                fixture.FixtureBuildError
+            ):
+                fixture.validate_containerfile(f"{original}\n{directive}\n")
+
+    def test_containerfile_rejects_duplicate_or_overridden_runtime_directives(
+        self,
+    ) -> None:
+        original = fixture.CONTAINERFILE.read_text("utf-8")
+        directives = (
+            'ENTRYPOINT ["/opt/afyx/bin/forge-synthetic-cell"]',
+            'ENTRYPOINT ["/bin/other"]',
+            'CMD ["--mode", "public-synthetic"]',
+            'CMD ["--mode", "other"]',
+            "USER 65532:65532",
+            "USER 0:0",
+        )
+        for directive in directives:
+            with self.subTest(directive=directive), self.assertRaises(
+                fixture.FixtureBuildError
+            ):
+                fixture.validate_containerfile(f"{original}\n{directive}\n")
+
+    def test_containerfile_comment_and_whitespace_rules_are_explicit(self) -> None:
+        original = fixture.CONTAINERFILE.read_text("utf-8")
+        fixture.validate_containerfile(
+            f"  # ordinary full-line comment\n\n{original}\n  # trailing comment\n"
+        )
+        for changed in (
+            original.replace("FROM scratch", "FROM scratch # inline comment"),
+            "# syntax=docker/dockerfile:1\n" + original,
+            original.replace(
+                'LABEL org.opencontainers.image.title="Afyx Forge public synthetic cell" \\\n',
+                'LABEL org.opencontainers.image.title="Afyx Forge public synthetic cell" \\\n# interrupted\n',
+            ),
+            original + "\\\n",
+        ):
+            with self.subTest(changed=changed), self.assertRaises(
+                fixture.FixtureBuildError
+            ):
+                fixture.validate_containerfile(changed)
+
     def test_image_metadata_yields_only_verified_pinned_reference(self) -> None:
         digest = "a" * 64
         result = fixture.verify_image_metadata(

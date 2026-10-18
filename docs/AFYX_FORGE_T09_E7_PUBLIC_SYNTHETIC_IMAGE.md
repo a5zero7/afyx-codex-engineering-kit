@@ -69,8 +69,12 @@ entrypoint, and fixed default arguments. It contains no package manager,
 runtime library, shell, mutable base image, network build step, volume,
 credential, or implicit runtime dependency.
 
-`scripts/build_forge_synthetic_image.py` validates that recipe before use. An
-actual image build is requested explicitly with `--runtime`; its command uses
+`scripts/build_forge_synthetic_image.py` validates the exact seven logical
+instructions, in order, before use. It rejects extra stages or copies,
+duplicate or overridden runtime directives, inline comments, parser
+directives, and malformed continuations. Blank lines and ordinary full-line
+comments are allowed only between instructions. An actual image build is
+requested explicitly with `--runtime`; its command uses
 `--platform linux/amd64`, build network `none`, `--pull=false`, and
 `--no-cache`. Build-context file timestamps and `SOURCE_DATE_EPOCH` are fixed
 at zero. After a successful build the helper inspects and requires:
@@ -118,7 +122,7 @@ python -m unittest \
   scripts.tests.test_forge_wsl_container -v
 ```
 
-Result: `21/21 PASS` comprising `8/8` new fixture/image-contract tests and
+Result: `24/24 PASS` comprising `11/11` fixture/image-contract tests and
 `13/13` directly impacted T09.E6 launcher regressions.
 
 The tests prove byte-identical repeated builds, static x86-64 ELF validation,

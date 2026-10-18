@@ -26,6 +26,22 @@ IMAGE_ID = re.compile(r"^sha256:[0-9a-f]{64}$")
 PINNED_REFERENCE = re.compile(
     r"^[a-z0-9][a-z0-9._:/-]*@sha256:[0-9a-f]{64}$"
 )
+APPROVED_CONTAINERFILE_INSTRUCTIONS = (
+    "FROM scratch",
+    'LABEL org.opencontainers.image.title="Afyx Forge public synthetic cell" '
+    'org.opencontainers.image.version="1" '
+    'org.opencontainers.image.source="https://github.com/a5zero7/'
+    'afyx-codex-engineering-kit"',
+    "COPY --chown=65532:65532 --chmod=0555 forge-synthetic-cell "
+    "/opt/afyx/bin/forge-synthetic-cell",
+    "USER 65532:65532",
+    "WORKDIR /workspace",
+    'ENTRYPOINT ["/opt/afyx/bin/forge-synthetic-cell"]',
+    'CMD ["--mode", "public-synthetic"]',
+)
+CONTAINERFILE_PARSER_DIRECTIVE = re.compile(
+    r"^#\s*(?:syntax|escape|check)\s*=", re.IGNORECASE
+)
 
 
 class FixtureBuildError(RuntimeError):
@@ -80,23 +96,41 @@ def verify_elf_x86_64(path: Path) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def validate_containerfile(text: str) -> None:
-    """Fail closed if the scratch image contract drifts."""
+def _containerfile_instructions(text: str) -> tuple[str, ...]:
+    """Parse only the whitespace, comments, and continuations we approve."""
 
-    required = (
-        "FROM scratch",
-        "COPY --chown=65532:65532 --chmod=0555 forge-synthetic-cell "
-        "/opt/afyx/bin/forge-synthetic-cell",
-        "USER 65532:65532",
-        "WORKDIR /workspace",
-        'ENTRYPOINT ["/opt/afyx/bin/forge-synthetic-cell"]',
-        'CMD ["--mode", "public-synthetic"]',
-    )
-    if any(item not in text for item in required):
+    instructions: list[str] = []
+    continued: str | None = None
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            if continued is not None:
+                raise FixtureBuildError(
+                    "blank lines are forbidden inside a continued instruction"
+                )
+            continue
+        if line.startswith("#"):
+            if continued is not None or CONTAINERFILE_PARSER_DIRECTIVE.match(line):
+                raise FixtureBuildError("Containerfile comment is unsupported")
+            continue
+        logical = (
+            f"{continued} {line}".strip() if continued is not None else line
+        )
+        if logical.endswith("\\"):
+            continued = logical[:-1].rstrip()
+            continue
+        instructions.append(logical)
+        continued = None
+    if continued is not None:
+        raise FixtureBuildError("Containerfile has a dangling continuation")
+    return tuple(instructions)
+
+
+def validate_containerfile(text: str) -> None:
+    """Require the exact approved one-stage, one-file image recipe."""
+
+    if _containerfile_instructions(text) != APPROVED_CONTAINERFILE_INSTRUCTIONS:
         raise FixtureBuildError("Containerfile does not match the frozen fixture contract")
-    forbidden = re.compile(r"^(ADD|ARG|ENV|EXPOSE|HEALTHCHECK|RUN|VOLUME)\b", re.M)
-    if forbidden.search(text):
-        raise FixtureBuildError("Containerfile contains an unsupported instruction")
 
 
 def build_fixture(compiler: Path, output: Path) -> str:
