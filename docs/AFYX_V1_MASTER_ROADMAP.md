@@ -6,8 +6,8 @@ Contract revision: **2026-10-15**
 v1 scope policy: **FROZEN — Phase 1 through Phase 11**  
 Post-v1 policy: **PLANNED EXPANSION — not a v1 release blocker**
 
-Current work: **AFYX-285 Forge public synthetic runtime readiness preflight; campaign remains blocked**
-Task: read-only WSL substrate and provisioning assessment; no runtime installation, container execution, model benchmark, A8 GO, or Alpha promotion
+Current work: **AFYX-285 Forge rootless runtime provisioning design; campaign remains blocked**
+Task: reconcile ordinary WSL observations and specify pinned rootless Docker requirements; no installation, source implementation, container execution, model benchmark, A8 GO, or Alpha promotion
 Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`  
 Active implementation branch: `dev` (created from verified T02 final source `ad1560dd930ccde94b0dadaa7b42d804be55714f`)
 Historical engineering branch preserved: `afyx/native-phase5f-parser-grammar`
@@ -1887,6 +1887,21 @@ Actual runtime enforcement and external evaluator/evidence independence remain
 not verified. No engine was installed or started, no image was built, and no
 container or campaign cell ran. Status is **PROVISIONING REQUIRED / RUNTIME
 ACCEPTANCE BLOCKED — 0/36**.
+
+### T09.E8.P1 checkpoint — ordinary WSL reconciliation and rootless design
+
+[AFYX_FORGE_T09_E8_ROOTLESS_PROVISIONING_DESIGN.md](AFYX_FORGE_T09_E8_ROOTLESS_PROVISIONING_DESIGN.md)
+preserves the P0 managed-sandbox snapshot while recording distinct
+owner-supplied ordinary WSL observations: systemd is PID 1 and running, cgroup
+v2 is `rw,nsdelegate`, ext4 is writable, and engine/rootless/OCI tooling remains
+absent. Root-cgroup non-writability does not establish user-service delegation,
+which remains unverified. The proposed minimum target is pinned rootless Docker
+with a dedicated ext4 layout, systemd-user supervision, explicit rootless Unix
+socket, controlled-registry digest flow, and independently verified cgroup and
+workspace UID mapping. Two bounded source gaps—explicit socket selection and
+mapped-UID workspace access—must be reviewed before acceptance. No version was
+invented, no package or host state changed, and no container ran. Status remains
+**PROVISIONING NOT AUTHORIZED / RUNTIME ACCEPTANCE BLOCKED — 0/36**.
 
 ## Track B — Platform Generalization
 

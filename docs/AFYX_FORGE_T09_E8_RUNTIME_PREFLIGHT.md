@@ -78,6 +78,23 @@ be projected onto a future gateway, daemon, container, or unrestricted WSL
 login. Conversely, visible kernel features do not prove that an engine can
 delegate and enforce them under the intended identity.
 
+## P1 ordinary WSL reconciliation
+
+Owner-supplied observations from a distinct ordinary interactive WSL terminal
+reported the same Ubuntu/kernel/architecture, UID/GID 1000, absent engine and
+rootless/OCI tooling, absent `/usr/bin/docker`, and writable ext4 repository.
+Unlike this P0 sandbox, that terminal reported PID 1 `systemd`, service manager
+`running`, cgroup v2 mounted `rw,nsdelegate`, and user-namespace limit 62525.
+The cgroup root was not writable to UID 1000; this neither proves nor disproves
+delegation to a future systemd user-service subtree.
+
+The ordinary shell reported `NoNewPrivs=0` and `Seccomp=0`, while this managed
+session reported `1` and `2`. Both are process-context observations only and
+neither is future container-enforcement evidence. P0 remains the historical
+sandbox snapshot; it is not relabeled as host-wide. The reconciled design and
+rootless-Docker requirements are recorded in
+[T09.E8.P1](AFYX_FORGE_T09_E8_ROOTLESS_PROVISIONING_DESIGN.md).
+
 ## Commands used
 
 Only non-mutating inspection commands were used. The relevant command set was:
