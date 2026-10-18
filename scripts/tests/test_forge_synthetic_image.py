@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -194,6 +195,56 @@ class ForgeSyntheticImageTests(unittest.TestCase):
         changed["Config"] = dict(base["Config"], User="0:0")
         with self.assertRaises(fixture.FixtureBuildError):
             fixture.verify_image_metadata(changed)
+
+    def test_image_operations_use_only_explicit_rootless_endpoint(self) -> None:
+        runtime = self.root / "docker"
+        runtime.write_bytes(b"synthetic runtime placeholder")
+        runtime.chmod(0o755)
+        executable = self.root / "forge-synthetic-cell"
+        executable.write_bytes(b"synthetic executable placeholder")
+        executable.chmod(0o555)
+        image = {
+            "Id": "sha256:" + "b" * 64,
+            "Architecture": "amd64",
+            "Os": "linux",
+            "RepoDigests": [],
+            "Config": {
+                "User": "65532:65532",
+                "Entrypoint": ["/opt/afyx/bin/forge-synthetic-cell"],
+                "Cmd": ["--mode", "public-synthetic"],
+            },
+        }
+        with mock.patch.object(
+            fixture,
+            "_run_checked",
+            side_effect=(b"", json.dumps([image]).encode("utf-8")),
+        ) as run:
+            fixture.build_image(runtime, executable, "afyx/forge:test")
+        expected = (
+            str(runtime),
+            "--host",
+            fixture.ROOTLESS_DOCKER_ENDPOINT,
+        )
+        self.assertEqual(run.call_args_list[0].args[0][:3], expected)
+        self.assertEqual(run.call_args_list[0].args[0][3], "build")
+        self.assertEqual(run.call_args_list[1].args[0][:3], expected)
+        self.assertEqual(run.call_args_list[1].args[0][3:5], ("image", "inspect"))
+        for invocation in run.call_args_list:
+            environment = invocation.kwargs["environment"]
+            self.assertNotIn("DOCKER_HOST", environment)
+            self.assertNotIn("DOCKER_CONTEXT", environment)
+
+    def test_image_helper_rejects_fallback_or_invalid_endpoint(self) -> None:
+        for endpoint in (
+            "unix:///var/run/docker.sock",
+            "tcp://127.0.0.1:2375",
+            "unix:///run/user/1000/afyx-forge/../docker.sock",
+            "",
+        ):
+            with self.subTest(endpoint=endpoint), self.assertRaises(
+                fixture.FixtureBuildError
+            ):
+                fixture.docker_cli_prefix(Path("/usr/bin/docker"), endpoint)
 
 
 if __name__ == "__main__":

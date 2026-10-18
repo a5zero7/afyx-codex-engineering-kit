@@ -6,8 +6,8 @@ Contract revision: **2026-10-15**
 v1 scope policy: **FROZEN — Phase 1 through Phase 11**  
 Post-v1 policy: **PLANNED EXPANSION — not a v1 release blocker**
 
-Current work: **AFYX-285 Forge rootless runtime provisioning design; campaign remains blocked**
-Task: reconcile ordinary WSL observations and specify pinned rootless Docker requirements; no installation, source implementation, container execution, model benchmark, A8 GO, or Alpha promotion
+Current work: **AFYX-285 Forge rootless runtime source compatibility; campaign remains blocked**
+Task: implement explicit Docker endpoint and mapped-UID lease ACL preparation; no installation, provisioning, container execution, model benchmark, A8 GO, or Alpha promotion
 Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`  
 Active implementation branch: `dev` (created from verified T02 final source `ad1560dd930ccde94b0dadaa7b42d804be55714f`)
 Historical engineering branch preserved: `afyx/native-phase5f-parser-grammar`
@@ -1902,6 +1902,23 @@ workspace UID mapping. Two bounded source gaps—explicit socket selection and
 mapped-UID workspace access—must be reviewed before acceptance. No version was
 invented, no package or host state changed, and no container ran. Status remains
 **PROVISIONING NOT AUTHORIZED / RUNTIME ACCEPTANCE BLOCKED — 0/36**.
+
+### T09.E8.P2 checkpoint — rootless runtime source compatibility
+
+[AFYX_FORGE_T09_E8_RUNTIME_COMPATIBILITY.md](AFYX_FORGE_T09_E8_RUNTIME_COMPATIBILITY.md)
+implements only the two accepted P1 source gaps. All T09.E6 lifecycle commands
+and T09.E7 build/inspect commands now select the exact rootless Unix endpoint
+with no inherited Docker context or rootful fallback. The launcher requires a
+verified pre-launch workspace receipt produced from injected, validated UID/GID
+maps and exact lease-local numeric POSIX ACL application/readback. Access and
+default base-group/other permissions are explicitly `---`; only the owner,
+mapped workload UID/GID, gateway UID, and mask receive the reviewed `rwx`
+permissions. Missing, malformed, additional, inherited or permission-drifted
+entries fail before runtime execution. Focused compatibility tests pass 35/35
+and directly impacted controller/WSL-lab regressions pass 46/46. These are
+source/mock results only: no engine was installed or started, no image was
+built, and no container or campaign cell ran. Status is **SOURCE PASS /
+ROOTLESS RUNTIME NOT TESTED / FORMAL CAMPAIGN BLOCKED — 0/36**.
 
 ## Track B — Platform Generalization
 
