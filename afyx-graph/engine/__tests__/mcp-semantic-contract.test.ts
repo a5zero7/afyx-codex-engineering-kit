@@ -21,6 +21,7 @@ import {
 const MCP_TOOLS_ENV = 'AFYX_GRAPH_MCP_TOOLS';
 const EXPECTED_TOOL_NAMES = [
   'afyx_graph_search',
+  'afyx_graph_inventory',
   'afyx_graph_callers',
   'afyx_graph_callees',
   'afyx_graph_impact',
@@ -84,10 +85,10 @@ describe('MCP public semantic contract', () => {
     expect(REGISTERED_TOOL_NAMES).toEqual(EXPECTED_TOOL_NAMES);
     expect(catalogMatchesRegistry(tools)).toBe(true);
     expect(createHash('sha256').update(JSON.stringify(tools)).digest('hex'))
-      .toBe('4eaa5a29a1f93bcee7d6b9a77605aa221f53c5767ba26cf0c6d150a0b43d6b3a');
+      .toBe('abc1da85b7fea6dd50defb57894416919ca0f8da6729e439e4a844cb5a267fe3');
 
     delete process.env[MCP_TOOLS_ENV];
-    expect(getStaticTools().map((tool) => tool.name)).toEqual(['afyx_graph_explore']);
+    expect(getStaticTools().map((tool) => tool.name)).toEqual(['afyx_graph_inventory', 'afyx_graph_explore']);
   });
 
   it('parses call envelopes without widening or inventing schema behavior', () => {
@@ -111,6 +112,10 @@ describe('MCP public semantic contract', () => {
     expect(result.serverInfo).toEqual(SERVER_INFO);
     expect(result.capabilities).toEqual({ tools: {} });
     expect(typeof result.instructions).toBe('string');
+    expect(result.instructions).toMatch(/afyx_graph_inventory/);
+    expect(result.instructions).toMatch(/ranked\/capped results as exhaustive/);
+    expect(result.instructions).toMatch(/direct source inspection/);
+    expect(result.instructions).not.toMatch(/Trust afyx-graph's results/);
   });
 
   it('lists the handler surface and dispatches a valid tool call unchanged', async () => {

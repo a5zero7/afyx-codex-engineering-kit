@@ -68,11 +68,12 @@ export function recoverUnresolvedReference(
 export class ExtractionAdmission {
   constructor(private readonly queries: QueryBuilder) {}
 
-  /** Remove incomplete zero-node rows while retaining deliberate skip markers. */
+  /** Remove only pre-v10/in-memory incomplete rows lacking an explicit catalog contract. */
   healIncompleteFiles(): void {
     for (const file of this.queries.getAllFiles()) {
       if (
         file.nodeCount === 0 &&
+        file.indexingLevel === undefined &&
         !isFileLevelOnlyLanguage(file.language) &&
         (file.errors === undefined || file.errors.length === 0)
       ) {
@@ -97,8 +98,9 @@ export class ExtractionAdmission {
       modifiedAt: stats.mtimeMs,
       indexedAt: Date.now(),
       nodeCount,
+      indexingLevel: isFileLevelOnlyLanguage(language) ? 'metadata' : 'structural',
       errors: errors.length > 0 ? errors : undefined,
-      generated: detectGeneratedFile(filePath, content),
+      generated: !isFileLevelOnlyLanguage(language) && detectGeneratedFile(filePath, content),
     };
   }
 

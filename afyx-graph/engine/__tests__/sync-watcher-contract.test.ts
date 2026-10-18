@@ -379,8 +379,8 @@ describe('Sync/Watcher contract (Phase 3B.6 freeze)', () => {
     it('3.7 an unsupported (non-source) extension never becomes pending', () => {
       const w = newWatcher(vi.fn().mockResolvedValue({ filesChanged: 0, durationMs: 0 }), { debounceMs: 30_000 });
       w.start();
-      fs.writeFileSync(path.join(testDir, 'README.md'), '# hi');
-      __emitWatchEventForTests(testDir, 'README.md');
+      fs.writeFileSync(path.join(testDir, 'README.txt'), 'unsupported');
+      __emitWatchEventForTests(testDir, 'README.txt');
       expect(w.getPendingFiles().length).toBe(0);
       w.stop();
     });
@@ -857,10 +857,10 @@ describe('Sync/Watcher contract (Phase 3B.6 freeze)', () => {
 
     it('10.7 an existing non-source file change is fully ignored (no sync scheduled)', async () => {
       const syncFn = vi.fn().mockResolvedValue({ filesChanged: 0, durationMs: 0 });
-      fs.writeFileSync(path.join(testDir, 'README.md'), '# hi');
+      fs.writeFileSync(path.join(testDir, 'README.txt'), 'unsupported');
       const w = newWatcher(syncFn, { debounceMs: 60 });
       w.start();
-      __emitWatchEventForTests(testDir, 'README.md');
+      __emitWatchEventForTests(testDir, 'README.txt');
       await new Promise((r) => setTimeout(r, 200));
       expect(syncFn).not.toHaveBeenCalled();
       w.stop();

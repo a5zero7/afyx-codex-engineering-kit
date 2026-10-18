@@ -17,13 +17,21 @@ describe('AFYX_GRAPH_MCP_TOOLS allowlist', () => {
 
   const listed = () => new ToolHandler(null).getTools().map(t => t.name).sort();
 
-  it('exposes ONLY afyx_graph_explore by default when unset', () => {
+  it('exposes inventory and explore by default when unset', () => {
     delete process.env[ENV];
-    // The default set (see DEFAULT_MCP_TOOLS) is pared to explore alone — the one
-    // tool that earns its place (verbatim source grouped by file).
+    // The default set keeps the two distinct correctness routes: exact
+    // structural inventory and ranked relational/source exploration.
     // node/search/callers/callees/impact/files/status stay defined and executable
     // but unlisted; AFYX_GRAPH_MCP_TOOLS re-enables them.
-    expect(listed()).toEqual(['afyx_graph_explore']);
+    expect(listed()).toEqual(['afyx_graph_explore', 'afyx_graph_inventory']);
+  });
+
+  it('keeps exact inventory visible after tiny-repository tool gating', () => {
+    delete process.env[ENV];
+    const tiny = { getStats: () => ({ fileCount: 12 }) } as unknown as
+      NonNullable<ConstructorParameters<typeof ToolHandler>[0]>;
+    expect(new ToolHandler(tiny).getTools().map((tool) => tool.name).sort())
+      .toEqual(['afyx_graph_explore', 'afyx_graph_inventory']);
   });
 
   it('re-enables an unlisted tool via the allowlist (impact)', () => {
@@ -43,7 +51,7 @@ describe('AFYX_GRAPH_MCP_TOOLS allowlist', () => {
 
   it('treats an empty/whitespace value as unset (default surface)', () => {
     process.env[ENV] = '   ';
-    expect(listed()).toEqual(['afyx_graph_explore']);
+    expect(listed()).toEqual(['afyx_graph_explore', 'afyx_graph_inventory']);
   });
 
   it('keeps a non-empty unknown allowlist as an intentionally empty surface', () => {

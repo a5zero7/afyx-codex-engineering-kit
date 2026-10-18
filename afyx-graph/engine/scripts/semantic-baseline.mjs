@@ -13,7 +13,10 @@
  *
  * Usage:
  *   node scripts/semantic-baseline.mjs            compare against the frozen snapshot
- *   node scripts/semantic-baseline.mjs --write    (re)freeze from the engine in ./dist
+ *   AFYX_SEMANTIC_EXPECTED=<scratch> node scripts/semantic-baseline.mjs --write
+ *                                             write a disposable comparison snapshot
+ *   node scripts/semantic-baseline.mjs --probe-historical-regression
+ *                                             prove unrelated historical drift is rejected
  *
  * Freezing is only legitimate from the pre-independence implementation (see
  * tests/semantic-baseline.meta.json); set AFYX_SEMANTIC_CLI to that build's CLI.
@@ -21,6 +24,7 @@
  * on a tampered snapshot).
  */
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -35,6 +39,8 @@ const root = fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-graph-semantic-'));
 const distRoot = path.resolve('dist');
 const cliPath = path.resolve(process.env.AFYX_SEMANTIC_CLI ?? 'dist/bin/afyx-graph.js');
 const expectedPath = path.resolve(process.env.AFYX_SEMANTIC_EXPECTED ?? 'tests/semantic-baseline.json');
+const canonicalExpectedPath = path.resolve('tests/semantic-baseline.json');
+const baselineMetaPath = path.resolve('tests/semantic-baseline.meta.json');
 
 const fixtures = {
   typescript: {
@@ -204,6 +210,64 @@ function normalizeAcceptedNativeCorrections(name, snapshot, verify) {
   };
 }
 
+/**
+ * Extraction v28 adds source-grounded Python class properties. Verify that
+ * additive contract independently, then remove only those accepted facts so
+ * the unchanged pre-independence oracle still detects every other drift.
+ */
+function normalizeExtractionV28Additions(name, snapshot, verify) {
+  if (name !== 'odoo' || !verify) return snapshot;
+
+  const properties = [
+    { kind: 'property', name: '_inherit', filePath: 'addons/base_mod/models/partner.py', startLine: 5, endLine: 5 },
+    { kind: 'property', name: '_inherit', filePath: 'addons/dep_mod/models/partner_ext.py', startLine: 5, endLine: 5 },
+  ];
+  const containment = [
+    {
+      kind: 'contains',
+      source: 'class:ResPartner@addons/base_mod/models/partner.py:4',
+      target: 'property:_inherit@addons/base_mod/models/partner.py:5',
+    },
+    {
+      kind: 'contains',
+      source: 'class:ResPartnerExt@addons/dep_mod/models/partner_ext.py:4',
+      target: 'property:_inherit@addons/dep_mod/models/partner_ext.py:5',
+    },
+  ];
+  const actualProperties = snapshot.nodeList.filter((node) => node.kind === 'property');
+  const actualContainment = snapshot.edgeList.filter((edge) =>
+    edge.kind === 'contains' && edge.target.startsWith('property:_inherit@'));
+  assert.deepEqual(actualProperties, properties,
+    'extraction-v28 additive contract differs: expected exact `_inherit` property facts');
+  assert.deepEqual(actualContainment, containment,
+    'extraction-v28 additive contract differs: expected exact class containment facts');
+
+  return {
+    ...snapshot,
+    nodes: snapshot.nodes - properties.length,
+    edges: snapshot.edges - containment.length,
+    relations: {
+      ...snapshot.relations,
+      contains: snapshot.relations.contains - containment.length,
+    },
+    nodeList: snapshot.nodeList.filter((node) => !properties.some((item) => byJson(node, item) === 0)),
+    edgeList: snapshot.edgeList.filter((edge) => !containment.some((item) => byJson(edge, item) === 0)),
+  };
+}
+
+function verifyFrozenOracle() {
+  const metadata = JSON.parse(fs.readFileSync(baselineMetaPath, 'utf8'));
+  const digest = crypto.createHash('sha256').update(fs.readFileSync(canonicalExpectedPath)).digest('hex');
+  assert.equal(digest, metadata.snapshot_sha256,
+    'historical semantic oracle digest differs from semantic-baseline.meta.json; never refreeze it from current code');
+}
+
+function pathIdentity(value) {
+  const resolved = path.resolve(value);
+  const identity = fs.existsSync(resolved) ? fs.realpathSync.native(resolved) : resolved;
+  return process.platform === 'win32' ? identity.toLowerCase() : identity;
+}
+
 function nodes(items) {
   const values = items instanceof Map ? [...items.values()] : items;
   return values
@@ -315,20 +379,33 @@ try {
   assert.ok(fs.existsSync(cliPath), `CLI not found: ${cliPath}`);
   const result = {};
   for (const [name, fixture] of Object.entries(fixtures)) result[name] = await capture(name, fixture);
+  if (process.argv.includes('--probe-historical-regression')) {
+    // Owned negative-control mutation: additive-v28 normalization must not
+    // conceal an unrelated historical regression.
+    result.typescript.files += 1;
+  }
   if (process.argv.includes('--write')) {
+    assert.notEqual(pathIdentity(expectedPath), pathIdentity(canonicalExpectedPath),
+      'refusing to overwrite the frozen historical oracle; set AFYX_SEMANTIC_EXPECTED to a disposable path');
     fs.mkdirSync(path.dirname(expectedPath), { recursive: true });
     fs.writeFileSync(expectedPath, JSON.stringify(result, null, 2) + '\n');
     console.log(`Semantic baseline written: ${expectedPath}`);
   } else {
+    verifyFrozenOracle();
     const expected = JSON.parse(fs.readFileSync(expectedPath, 'utf8'));
     for (const name of Object.keys(fixtures)) {
       assert.deepEqual(
-        normalizeSearchScores(normalizeAcceptedNativeCorrections(name, result[name], true)),
+        normalizeSearchScores(normalizeAcceptedNativeCorrections(
+          name,
+          normalizeExtractionV28Additions(name, result[name], true),
+          true,
+        )),
         normalizeSearchScores(expected[name]),
         `semantic baseline differs for fixture "${name}"`,
       );
     }
     assert.deepEqual(Object.keys(result), Object.keys(expected), 'fixture set differs from the frozen baseline');
+    console.log('Afyx Graph extraction-v28 additive contract: PASS');
     console.log(`Afyx Graph semantic baseline: PASS (${Object.keys(fixtures).length} fixtures)`);
   }
 } finally {

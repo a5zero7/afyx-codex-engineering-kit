@@ -118,10 +118,15 @@ export const LANGUAGES = [
   'vbnet',
   'erlang',
   'terraform',
+  'markdown',
+  'json',
   'unknown',
 ] as const;
 
 export type Language = (typeof LANGUAGES)[number];
+
+export const FILE_INDEXING_LEVELS = ['metadata', 'content', 'structural'] as const;
+export type FileIndexingLevel = (typeof FILE_INDEXING_LEVELS)[number];
 
 // =============================================================================
 // Core Graph Types
@@ -251,6 +256,13 @@ export interface FileRecord {
 
   /** Number of nodes extracted */
   nodeCount: number;
+
+  /**
+   * Truthful catalog depth for this file. `metadata` stores path/hash/size only,
+   * `content` is reserved for searchable full-text content, and `structural`
+   * means Afyx Graph ran its structural extraction contract.
+   */
+  indexingLevel?: FileIndexingLevel;
 
   /** Any extraction errors */
   errors?: ExtractionError[];

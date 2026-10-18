@@ -6,6 +6,7 @@ export interface FilesToolFile {
   path: string;
   language: string;
   nodeCount: number;
+  indexingLevel?: 'metadata' | 'content' | 'structural';
 }
 
 export interface FilesToolSource {
@@ -23,7 +24,11 @@ export interface FilesToolRequest {
 interface FilesTreeNode {
   name: string;
   children: Map<string, FilesTreeNode>;
-  file?: { language: string; nodeCount: number };
+  file?: { language: string; nodeCount: number; indexingLevel?: 'metadata' | 'content' | 'structural' };
+}
+
+function indexingLabel(file: FilesToolFile): string {
+  return `${file.indexingLevel ?? 'structural'}-indexed`;
 }
 
 /** Adapt an already path-validated MCP Files request to the frozen Files facts API. */
@@ -94,7 +99,7 @@ function formatFilesFlat(files: FilesToolFile[], includeMetadata: boolean): stri
 
   for (const file of files.sort((left, right) => left.path.localeCompare(right.path))) {
     lines.push(includeMetadata
-      ? `- ${file.path} (${file.language}, ${file.nodeCount} symbols)`
+      ? `- ${file.path} (${file.language}, ${indexingLabel(file)}, ${file.nodeCount} symbols)`
       : `- ${file.path}`);
   }
 
@@ -116,7 +121,7 @@ function formatFilesGrouped(files: FilesToolFile[], includeMetadata: boolean): s
     lines.push(`**${language} (${languageFiles.length})**`);
     for (const file of languageFiles.sort((left, right) => left.path.localeCompare(right.path))) {
       lines.push(includeMetadata
-        ? `- ${file.path} (${file.nodeCount} symbols)`
+        ? `- ${file.path} (${indexingLabel(file)}, ${file.nodeCount} symbols)`
         : `- ${file.path}`);
     }
     lines.push('');
@@ -144,7 +149,7 @@ function formatFilesTree(
       }
       current = current.children.get(part)!;
       if (index === parts.length - 1) {
-        current.file = { language: file.language, nodeCount: file.nodeCount };
+        current.file = { language: file.language, nodeCount: file.nodeCount, indexingLevel: file.indexingLevel };
       }
     }
   }
@@ -164,7 +169,7 @@ function formatFilesTree(
     if (node.name) {
       let line = prefix + connector + node.name;
       if (node.file && includeMetadata) {
-        line += ` (${node.file.language}, ${node.file.nodeCount} symbols)`;
+        line += ` (${node.file.language}, ${node.file.indexingLevel ?? 'structural'}-indexed, ${node.file.nodeCount} symbols)`;
       }
       lines.push(line);
     }

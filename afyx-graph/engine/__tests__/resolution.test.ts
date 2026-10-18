@@ -947,7 +947,8 @@ function processDate(input: string): string {
 
       // Get stats to verify indexing worked
       const stats = cg.getStats();
-      expect(stats.fileCount).toBe(2);
+      // Two structural sources plus package.json in the metadata-only catalog.
+      expect(stats.fileCount).toBe(3);
       expect(stats.nodeCount).toBeGreaterThan(0);
     });
 

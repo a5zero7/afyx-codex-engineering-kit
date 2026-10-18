@@ -950,6 +950,13 @@ program
           `${formatNumber(accounting.failed)} failed; retries ` +
           `${formatNumber(accounting.retry.recoveredFiles)}/${formatNumber(accounting.retry.attemptedFiles)} recovered`
         );
+        if (accounting.metadataIndexed !== null) {
+          console.log(
+            `  Catalog depth: ${formatNumber(accounting.metadataIndexed)} metadata-indexed, ` +
+            `${formatNumber(accounting.contentIndexed ?? 0)} content-indexed, ` +
+            `${formatNumber(accounting.structurallyIndexed ?? 0)} structurally indexed.`
+          );
+        }
         console.log('  Ignored paths are not enumerated (ignored count: unknown).');
       }
       console.log();
@@ -1138,6 +1145,43 @@ program
       cg.destroy();
     } catch (err) {
       error(`Search failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(1);
+    }
+  });
+
+/**
+ * afyx-graph inventory <declaration> <value>
+ */
+program
+   .route(cliCommand('inventory', '<declaration> <value>'))
+   .summary('Enumerate exact indexed Python class assignments (same output as afyx_graph_inventory)')
+   .flag('-p, --path <path>', 'Project path')
+   .flag('-s, --scope <path>', 'Project-relative inventory scope')
+   .flag('--offset <number>', 'Zero-based page offset', '0')
+   .flag('-l, --limit <number>', 'Maximum declarations to display (max 200)', '100')
+   .handle(async (declaration: string, value: string, options: { path?: string; scope?: string; offset?: string; limit?: string }) => {
+    const projectPath = resolveProjectPath(options.path);
+    try {
+      if (!isInitialized(projectPath)) {
+        error(`Afyx Graph not initialized in ${projectPath}`);
+        process.exit(1);
+      }
+      const { default: AfyxGraph } = await loadAfyxGraph();
+      const cg = await AfyxGraph.open(projectPath);
+      const { ToolHandler } = await import('../mcp/tools');
+      const handler = new ToolHandler(cg);
+      const result = await handler.execute('afyx_graph_inventory', {
+        declaration,
+        value,
+        path: options.scope,
+        offset: Number(options.offset ?? '0'),
+        limit: Number(options.limit ?? '100'),
+      });
+      console.log(result.content[0]?.text ?? '');
+      cg.destroy();
+      if (result.isError) process.exit(1);
+    } catch (err) {
+      error(`Inventory failed: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(1);
     }
   });
@@ -1986,6 +2030,7 @@ program
 `));
         console.error('Available tools:');
         console.error(chalk.cyan('  afyx_graph_explore') + '   - Primary: source of the relevant symbols for any question');
+        console.error(chalk.cyan('  afyx_graph_inventory') + ' - Exact structural declaration inventory');
         console.error(chalk.cyan('  afyx_graph_search') + '    - Search for code symbols');
         console.error(chalk.cyan('  afyx_graph_callers') + '   - Find callers of a symbol');
         console.error(chalk.cyan('  afyx_graph_callees') + '   - Find what a symbol calls');

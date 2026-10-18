@@ -59,7 +59,7 @@ describe('Afyx Graph environment namespace', () => {
 
   it('AFYX_GRAPH_MCP_TOOLS selects the exposed tools', async () => {
     const { getStaticTools } = await import('../src/mcp/tools');
-    expect(getStaticTools().map((tool) => tool.name)).toEqual(['afyx_graph_explore']);
+    expect(getStaticTools().map((tool) => tool.name)).toEqual(['afyx_graph_inventory', 'afyx_graph_explore']);
 
     process.env.AFYX_GRAPH_MCP_TOOLS = 'search';
     expect(getStaticTools().map((tool) => tool.name)).toEqual(['afyx_graph_search']);

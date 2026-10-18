@@ -6,10 +6,18 @@ Contract revision: **2026-10-11**
 v1 scope policy: **FROZEN — Phase 1 through Phase 11**  
 Post-v1 policy: **PLANNED EXPANSION — not a v1 release blocker**
 
-Current work: **AFYX-279 reviewed Alpha security candidate promotion; AFYX-248 remains in progress**
+Current work: **T03.R1 Graph-only Alpha promotion is ready for the PR #74 owner merge decision; AFYX-248 remains in progress**
 Task: `AFYX-279`; `AFYX-248` remains in progress
-Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`  
-Active implementation branch: `afyx/native-phase5f-parser-grammar`  
+
+Verified branch topology (2026-10-18):
+
+- `main`: `5349c4a184e539f0ac0752d895ff3262c6326e29`
+- `dev`: `dcebee5a08d3b958d757d056336a3eef7e9653e9`
+- `alpha`: `760778e709ec99e85fded58d10a0efc0350abaa9`
+
+Active promotion branch: `afyx/t03-r1-graph-alpha-promotion`
+Reviewed PR #74 head: `65c17719e9a6bf4fe1a757b69d017ae2c6f87fd5`
+Historical Phase 5F implementation branch: `afyx/native-phase5f-parser-grammar`
 Latest verified Phase 5F implementation checkpoint: `62621a0639f42db0eaac69ef087436d851cdba88`  
 Latest verified Phase 5F semantic-freeze checkpoint: `6fd0296b22844eef62b86a395b861ebb51193dc5`  
 Latest verified Phase 5F performance-baseline checkpoint: `1f671dabc8af5bf8f8088dc6e947e48834cafdc3`  
@@ -2276,3 +2284,91 @@ Then, and only then:
 After v1, evolution follows Track A / Track B / Track C / Track D without
 reopening the v1 feature contract unless maintenance of an existing v1
 guarantee requires it.
+
+### AFYX-280 — Graph discovery coverage and completeness
+
+Status: **ENGINEERING CLOSURE PASS; AFYX-272 MAC.4 REMAINS SEPARATE; AFYX-248 IN PROGRESS**
+
+The AFYX-272 report of four Graph-assisted files versus nine direct-source
+declarations is not reproducible as a comparable measurement because the
+original query, tool response, result limit, indexed revision, and execution
+environment were not recorded. A disposable Git-backed Python fixture at
+development baseline `908e56d63ba2e5b38bb557a28e2b88325204f101` established
+nine direct `_inherit = 'sale.order'` declarations, multiline syntax, negative
+comment/string/unrelated-model cases, and a Git-ignored declaration. Initial
+indexing was complete (10 eligible/indexed Python files, 0 failed), and all nine
+target files were present in ranked discovery while the ignored file remained
+excluded. Literal `sale.order` search also admitted negative metadata matches,
+confirming that this command is ranked symbol-metadata discovery rather than an
+exhaustive source-declaration query.
+
+The controlled `limit: 4` MCP case confirmed a separate generic presentation
+defect: MCP requested exactly four rows and labelled them `4 found`, unlike the
+CLI's existing one-extra-row truncation detection. The MCP adapter now fetches
+one extra ranked result, renders `N shown`, reports truncation and the supported
+limit widening path, and explicitly says ranked symbol search is not an
+exhaustive source-declaration inventory. Ranking, extraction, indexing, CLI
+JSON shape, and Odoo-specific semantics were not changed. Focused Search/MCP
+contract tests, clean typecheck/UI build, semantic baseline, and CLI/MCP smoke
+provide the engineering acceptance evidence. No active runtime, MCP
+configuration, Alpha branch/candidate, Adit environment, or IJP repository was
+modified. Formal AFYX-272 MAC.4 remains unverified and must not be marked PASS
+from this investigation.
+
+### AFYX-282 — Native Graph source-intelligence refinement
+
+Status: **IMPLEMENTED; PR #74 EXACT-HEAD GRAPH BUILD PASS; POST-MERGE CANDIDATE ACCEPTANCE PENDING; AFYX-248 IN PROGRESS**
+
+Root cause was layered: the native Python extractor indexed classes and methods but omitted direct class assignments, the Node contract had no structural fact for `_inherit`, ranked FTS search could only return bounded metadata candidates, and default MCP instructions incorrectly encouraged treating ranked exploration as universally exhaustive. The SQLite schema itself was sufficient: source-located `property` nodes with exact class ownership and literal signatures fit the existing node/persistence contract, so no schema migration was introduced. Extraction version advances to 28 so older indexes explicitly request re-indexing.
+
+The new generic Python class-assignment fact supports scalar and multiline list/tuple string literals. Dynamic/aliased expressions remain unresolved and are never converted into invented values. `afyx_graph_inventory` and `afyx-graph inventory` provide exact value matching, project-relative scope, stable source locations, exact totals across declarations/files/modules, bounded pagination, and explicit extraction/failure/skipped/unsupported/ignored/stale coverage. A limited page is labelled incomplete. Existing ranked search/explore behavior remains available for navigation and relationships; default MCP now exposes inventory plus explore and routes hybrid requests to enumerate first.
+
+Owned Odoo-like ground truth covers nine Odoo-17-style declarations and forty-five Odoo-20-style declarations (44 scalar plus one list-form), duplicate class names, multiple declarations per file, multiline values, `_name`, `sale.order.line`, comments/strings, dynamic expressions, ignored and sibling paths, catch-up, create/modify/delete/rename, restart, path refusal, pagination, worker dispatch, and existing ranked-search/explore regressions. These synthetic fixtures validate the product contract only; they are not real IJP/Odoo acceptance, do not establish runtime registry behavior, and do not change AFYX-272 MAC.4.
+
+### AFYX-281 + AFYX-282 — Final engineering acceptance closure
+
+Status: **LOCAL ACCEPTANCE PASS; PR #74 EXACT-HEAD GRAPH BUILD PASS; POST-MERGE CANDIDATE ACCEPTANCE PENDING; AFYX-248 AND MAC.4 REMAIN IN PROGRESS**
+
+AFYX-281 Linux Graph Build failures (`112.72 ms` and `100.96 ms` against a `100 ms` assertion) retained every functional contract: 500+ true callers, 300 shown, truncation, count parity, uniqueness, and blast-radius parity. Bounded focused reproduction did not demonstrate a product slowdown. The assertion measured loopback HTTP wall time under shared-runner load, which cannot distinguish a batched implementation from N+1 reads. The regression contract now observes the database access shape directly: one focal lookup, one 500-caller batch, and fan-in batches for the 300 displayed rows. Product behavior and thresholds are unchanged.
+
+AFYX-282 had incorrectly incorporated extraction-v28 `_inherit` property facts into the pre-independence semantic snapshot. The historical file is restored byte-for-byte to the digest recorded by `semantic-baseline.meta.json`, with repository attributes pinning its checkout to LF so the same byte identity is enforced on Windows, Linux, and macOS. A separate deterministic additive contract verifies the exact two property facts and two class-containment edges, removes only those additions, and then compares all six fixtures with the unchanged historical oracle. A controlled unrelated TypeScript file-count mutation still fails the historical gate. Canonical `--write` is refused; disposable snapshots require an explicit alternate path.
+
+AFYX-280 boundary validation confirmed `limit + 1` over-fetch and handwritten-before-generated composition. It also reproduced a presentation defect near the shared output bound: a tail-positioned completeness notice could be trimmed. The notice now precedes result rows, so bounded output retains both the ranked-search incompleteness warning and the generic character-truncation marker. Ranking and result composition are unchanged.
+
+### Repository knowledge catalog acceptance
+
+Status: **TARGETED REFINEMENT IMPLEMENTED; PR #74 EXACT-HEAD GRAPH BUILD PASS; POST-MERGE CANDIDATE ACCEPTANCE PENDING; AFYX-248 IN PROGRESS**
+
+Read-only Odoo 17 evidence confirmed the full-index accounting contract:
+93,003 discovered, 42,130 eligible, 42,123 indexed, 6 size-skipped, 50,873
+unsupported, and one parser-timeout failure. The previously reported 807
+records are not 807 failed files: they contain 901 diagnostics, comprising 800
+warning-only `native_incomplete_source` files, six warning-only
+`size_exceeded` files, and one error-severity `parse_error` file. Independent
+Python AST ground truth found the same nine scoped literal
+`_inherit = 'sale.order'` declarations, paths, classes, and lines as Graph.
+
+Inventory coverage now distinguishes scoped Python diagnostics from global
+file-record diagnostics and separates error-severity files from warning-only
+files. A localized failure outside the requested scope no longer makes a clean
+scope look incomplete; any Python extraction diagnostic inside the scope, an
+unlocated full-index failure, partial/failed index state, stale extraction, or
+bounded page still preserves the conservative limited/partial verdict. Exact
+inventory remains static supported-literal evidence rather than the Odoo
+runtime registry.
+
+The Odoo 17 dependency file `winerror.py` completed in an isolated one-file
+index (7,250 nodes, 7,266 edges, 56.7 seconds), so the prior 60-second timeout
+is a load-sensitive large-file limitation rather than a deterministic parser
+failure. No timeout or dependency-exclusion policy changed. Its full-index
+completion timestamp and a later freshness/sync timestamp remain distinct.
+
+Odoo 17 has an empty/non-functional `.git` directory, so null Git-head
+freshness is correctly `UNKNOWN`, not silently fresh. A bounded locking fixture
+confirmed WAL readers proceed during an active WAL writer, while an exclusive
+MEMORY-journal writer makes a concurrent open fail with `database is locked`;
+this is the fresh-build isolation boundary. The Odoo 19 log preserves that
+initial open failure and shows successful retry, watcher startup, catch-up,
+subsequent syncs, complete index state, zero pending references, and WAL mode.
+No writer coordination, daemon lifecycle, schema, parser, ranking, or timeout
+change was justified by this acceptance slice.

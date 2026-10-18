@@ -115,7 +115,7 @@ function makeGraph(scenario: Scenario, calls: string[], root = 'C:/project') {
     getStats: record('getStats', stats),
     getIndexState: record('getIndexState', 'complete'),
     getIndexAccounting: record('getIndexAccounting', null),
-    getIndexBuildInfo: record('getIndexBuildInfo', { version: '1.0.0', extractionVersion: 27 }),
+    getIndexBuildInfo: record('getIndexBuildInfo', { version: '1.0.0', extractionVersion: 28 }),
     isIndexStale: record('isIndexStale', false),
     getJournalMode: record('getJournalMode', scenario.journalMode ?? (scenario.id === 'journal-undefined' ? undefined : 'wal')),
     getPendingReferenceCount: record('getPendingReferenceCount', scenario.pendingReferences ?? 0),
@@ -267,7 +267,7 @@ describe('Afyx-native Status seam', () => {
       '- Git freshness: MISSING — no Afyx Graph database; run "afyx-graph init"\n' +
       '- Filesystem/content: CURRENT (0 pending)\n' +
       '- Extraction: COMPLETE\n' +
-      '- Extraction version: 27/27\n' +
+      '- Extraction version: 28/28\n' +
       '- Pending references: 0\n' +
       '- Watcher: ENABLED\n' +
       '- Last full index accounting: unavailable\n' +

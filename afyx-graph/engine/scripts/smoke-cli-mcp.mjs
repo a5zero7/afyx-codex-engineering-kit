@@ -157,9 +157,9 @@ try {
     defaults.notify('notifications/initialized', {});
     const listed = await defaults.request('tools/list', {});
     const names = listed.result.tools.map((tool) => tool.name);
-    assert.deepEqual(names, ['afyx_graph_explore'], `default tools/list changed: ${names}`);
+    assert.deepEqual(names, ['afyx_graph_inventory', 'afyx_graph_explore'], `default tools/list changed: ${names}`);
     assert.doesNotMatch(JSON.stringify(listed.result), FOREIGN_IDENTITY, 'tool definitions mention a foreign identity');
-    ok('tools/list default exposure (afyx_graph_explore only)');
+    ok('tools/list default exposure (inventory + explore)');
   } finally {
     defaults.close();
   }

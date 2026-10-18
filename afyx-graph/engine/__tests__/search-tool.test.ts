@@ -24,17 +24,17 @@ describe('MCP Search adapter', () => {
   it('maps type to type_alias and invokes the domain exactly once', () => {
     const { source, calls } = fixture([result('hit')]);
     executeSearchTool(source, { query: 'needle', kind: 'type', limit: 5 });
-    expect(calls).toEqual([{ query: 'needle', options: { limit: 5, kinds: ['type_alias'] } }]);
+    expect(calls).toEqual([{ query: 'needle', options: { limit: 6, kinds: ['type_alias'] } }]);
   });
 
   it('omits kinds when no kind is supplied and forwards other runtime kinds', () => {
     const omitted = fixture([result('hit')]);
     executeSearchTool(omitted.source, { query: 'q' });
-    expect(omitted.calls[0]).toEqual({ query: 'q', options: { limit: 10, kinds: undefined } });
+    expect(omitted.calls[0]).toEqual({ query: 'q', options: { limit: 11, kinds: undefined } });
 
     const unknown = fixture([result('hit')]);
     executeSearchTool(unknown.source, { query: 'q', kind: 'mystery' });
-    expect(unknown.calls[0]).toEqual({ query: 'q', options: { limit: 10, kinds: ['mystery'] } });
+    expect(unknown.calls[0]).toEqual({ query: 'q', options: { limit: 11, kinds: ['mystery'] } });
   });
 
   it.each([
@@ -42,7 +42,7 @@ describe('MCP Search adapter', () => {
   ])('normalizes limit %p to %p', (input, expected) => {
     const { source, calls } = fixture([result('hit')]);
     executeSearchTool(source, { query: 'q', limit: input });
-    expect((calls[0]!.options as { limit: number }).limit).toBe(expected);
+    expect((calls[0]!.options as { limit: number }).limit).toBe(expected + 1);
   });
 
   it('returns exact success-shaped empty result', () => {
@@ -62,16 +62,54 @@ describe('MCP Search adapter', () => {
     expect([...text.matchAll(/^\*\*(.+?)\*\* \(/gm)].map((match) => match[1])).toEqual(['handA', 'handB', 'genA', 'genB']);
   });
 
+  it('uses the over-fetched boundary row when composing handwritten before generated results', () => {
+    const { source, calls } = fixture([
+      result('generatedTop', 'src/generated/top.ts'),
+      result('handRankedSecond'),
+      result('handBoundary'),
+    ]);
+    const text = executeSearchTool(source, { query: 'q', limit: 2 }).content[0]!.text;
+    expect(calls[0]).toEqual({ query: 'q', options: { limit: 3, kinds: undefined } });
+    expect([...text.matchAll(/^\*\*(.+?)\*\* \(/gm)].map((match) => match[1]))
+      .toEqual(['handRankedSecond', 'handBoundary']);
+    expect(text).not.toContain('**generatedTop**');
+    expect(text).toContain('Results truncated at 2');
+  });
+
+  it('distinguishes an exact full page from a page with one over-fetched result', () => {
+    const exact = fixture([result('one'), result('two')]);
+    const exactText = executeSearchTool(exact.source, { query: 'q', limit: 2 }).content[0]!.text;
+    expect(exactText).not.toContain('Results truncated');
+
+    const over = fixture([result('one'), result('two'), result('three')]);
+    const overText = executeSearchTool(over.source, { query: 'q', limit: 2 }).content[0]!.text;
+    expect(overText).toContain('Results truncated at 2');
+    expect(overText).toContain('not an exhaustive source-declaration inventory');
+  });
+
   it('preserves exact compact formatting, optional signature, and optional line', () => {
     const { source } = fixture([
       result('signed', 'src/signed.ts', { startLine: 17, signature: 'signed(): void' }),
       result('plain', 'src/plain.ts'),
     ]);
     expect(executeSearchTool(source, { query: 'q' }).content[0]!.text).toBe(
-      '**Search Results (2 found)**\n\n' +
+      '**Search Results (2 shown)**\n\n' +
       '**signed** (function)\nsrc/signed.ts:17\n`signed(): void`\n\n' +
       '**plain** (function)\nsrc/plain.ts\n'
     );
+  });
+
+  it('reports a bounded Odoo-like discovery page without presenting it as a complete inventory', () => {
+    const matches = Array.from({ length: 9 }, (_, index) =>
+      result(`SaleOrderAddon${index + 1}`, `addon_${index + 1}/models/sale_order.py`),
+    );
+    const { source, calls } = fixture(matches);
+    const text = executeSearchTool(source, { query: 'sale.order', limit: 4 }).content[0]!.text;
+    expect(calls[0]).toEqual({ query: 'sale.order', options: { limit: 5, kinds: undefined } });
+    expect(text).toContain('**Search Results (4 shown)**');
+    expect(text).not.toContain('**SaleOrderAddon5**');
+    expect(text).toContain('Results truncated at 4; pass `limit` (up to 100) to widen.');
+    expect(text).toContain('not an exhaustive source-declaration inventory');
   });
 
   it('consumes the frozen shared output bound', () => {
@@ -82,5 +120,7 @@ describe('MCP Search adapter', () => {
     const text = executeSearchTool(source, { query: 'q', limit: 100 }).content[0]!.text;
     expect(text.endsWith('\n\n... (output truncated)')).toBe(true);
     expect(text.length).toBeLessThanOrEqual(15_024);
+    expect(text).toContain('Results truncated at 100');
+    expect(text).toContain('not an exhaustive source-declaration inventory');
   });
 });

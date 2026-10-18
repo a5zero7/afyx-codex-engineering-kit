@@ -19,7 +19,9 @@ export function executeSearchTool(source: SearchToolSource, request: SearchToolR
   const kind = request.kind === 'type' ? 'type_alias' : request.kind;
   const limit = clamp(Number(request.limit) || 10, 1, 100);
   const results = source.searchNodes(request.query, {
-    limit,
+    // One extra ranked match is enough to distinguish a full displayed page
+    // from a complete result set without changing search ranking or pagination.
+    limit: limit + 1,
     kinds: kind ? [kind as NodeKind] : undefined,
   });
 
@@ -33,12 +35,19 @@ export function executeSearchTool(source: SearchToolSource, request: SearchToolR
     const rightGenerated = isGenerated(right.node.filePath) ? 1 : 0;
     return leftGenerated - rightGenerated;
   });
+  const truncated = ordered.length > limit;
 
-  return textToolResult(boundToolOutput(formatSearchResults(ordered)));
+  return textToolResult(boundToolOutput(formatSearchResults(ordered.slice(0, limit), truncated, limit)));
 }
 
-function formatSearchResults(results: SearchResult[]): string {
-  const lines: string[] = [`**Search Results (${results.length} found)**`, ''];
+function formatSearchResults(results: SearchResult[], truncated: boolean, limit: number): string {
+  const lines: string[] = [`**Search Results (${results.length} shown)**`, ''];
+
+  if (truncated) {
+    // Lead with completeness because the shared character bound can trim the
+    // tail of a page containing long paths/signatures.
+    lines.push(`> Results truncated at ${limit}; pass \`limit\` (up to 100) to widen. Ranked symbol search is not an exhaustive source-declaration inventory.`, '');
+  }
 
   for (const { node } of results) {
     const location = node.startLine ? `:${node.startLine}` : '';
