@@ -44,3 +44,7 @@ The `unelevated` backend was useful for synthetic functional proof, **not indepe
 - **Owner/evaluator after code review:** independently deploy/review controlled runner and credential boundary; run one controller-mediated synthetic end-to-end job, then repeat security acceptance through the actual controller before any campaign decision.
 
 Git workflow: PR against `dev`; no direct `main` update; no changes to frozen six candidates, 36-cell order or A0–A12. Forge A8 must explicitly GO before A9. Odoo Engineering and Expert architecture remain separate.
+
+## Dated integration checkpoint — 2026-10-18
+
+This section updates only the public repository integration status, not the historical owner-reported synthetic test observations above. The public trusted-controller source contract and evidence-retention gate were merged to `dev` through PR #61 and PR #62; the P5 Ubuntu host-relative transaction-lock documentation was later merged through PR #72, reaching `dev` merge SHA `635086c96fb127f1b968a2f692474375bcac4259`. These repository merges do **not** attest owner-private raw evidence custody, deployment, controlled runtime isolation, or credential containment. Those owner/evaluator gates remain separately PENDING/BLOCKED. Formal B0–B5 stays BLOCKED — **0/36**. The owner has frozen automatic expansion of T09.E8 environment subtasks; this historical report does not authorize installation or a WSL formal-evaluator amendment.
