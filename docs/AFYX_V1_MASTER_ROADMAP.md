@@ -6,8 +6,8 @@ Contract revision: **2026-10-15**
 v1 scope policy: **FROZEN — Phase 1 through Phase 11**  
 Post-v1 policy: **PLANNED EXPANSION — not a v1 release blocker**
 
-Current work: **AFYX-286 Forge public trusted-controller contract; campaign remains blocked**
-Task: synthetic-only manifest/schema validation, disposable materialization, restricted-launch interface, bounded evidence and cleanup; no privileged deployment, model benchmark, A8 GO, or Alpha promotion
+Current work: **AFYX-285 Forge public synthetic runtime readiness preflight; campaign remains blocked**
+Task: read-only WSL substrate and provisioning assessment; no runtime installation, container execution, model benchmark, A8 GO, or Alpha promotion
 Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`  
 Active implementation branch: `dev` (created from verified T02 final source `ad1560dd930ccde94b0dadaa7b42d804be55714f`)
 Historical engineering branch preserved: `afyx/native-phase5f-parser-grammar`
@@ -1862,6 +1862,31 @@ before WSL could replace it. PR #63 evidence is reused only within its accepted
 same-user synthetic scope; no runtime was implemented, no accepted tests were
 rerun, and no campaign cell was executed. Status remains **CAMPAIGN BLOCKED —
 0/36**.
+
+### T09.E6-E7 closure — container adapter and synthetic image source accepted
+
+T09.E6 implements the bounded Docker CLI isolation adapter while preserving the
+public controller and evidence lifecycle interfaces. Its source-level policy,
+cleanup classification, and focused regressions are accepted through PR #65;
+no real container enforcement was claimed. T09.E7 adds the deterministic static
+Linux `amd64` synthetic executable, exact one-stage `scratch` recipe, strict OCI
+recipe/metadata validation, and focused source tests accepted through PR #66.
+No OCI image or repository digest was produced because no engine was present.
+Both closures remain developer-side source evidence, not formal-runtime
+acceptance. Status remains **CAMPAIGN BLOCKED — 0/36**.
+
+### T09.E8.P0 checkpoint — WSL runtime readiness preflight
+
+[AFYX_FORGE_T09_E8_RUNTIME_PREFLIGHT.md](AFYX_FORGE_T09_E8_RUNTIME_PREFLIGHT.md)
+records a read-only snapshot at PR #66 baseline. WSL2 `amd64`, the accepted
+compiler/linker, cgroup v2, namespace, seccomp, subordinate-ID, ext4, and
+overlay/fuse substrate are visible. Container engines, low-level runtimes,
+rootless helpers, OCI transport tools, cgroup delegation, and an immutable
+`repository@sha256` flow are absent or unavailable to the inspected session.
+Actual runtime enforcement and external evaluator/evidence independence remain
+not verified. No engine was installed or started, no image was built, and no
+container or campaign cell ran. Status is **PROVISIONING REQUIRED / RUNTIME
+ACCEPTANCE BLOCKED — 0/36**.
 
 ## Track B — Platform Generalization
 
