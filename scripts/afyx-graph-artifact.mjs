@@ -115,6 +115,29 @@ function verifyReleaseManifest(manifestFile, archiveFile, metadataFile) {
   return { status: 'VERIFIED', sourceRevision: identity.sourceRevision, target: identity.target, archiveSha256: entry.sha256 };
 }
 
+function verifyRetainedArtifact(candidateManifestFile, releaseManifestFile, checksumsFile, archiveFile, metadataFile) {
+  const candidateBytes = readFileSync(candidateManifestFile);
+  const releaseBytes = readFileSync(releaseManifestFile);
+  if (!candidateBytes.equals(releaseBytes)) {
+    throw new Error('release manifest is not byte-identical to the validated Alpha candidate manifest');
+  }
+  const verified = verifyReleaseManifest(releaseManifestFile, archiveFile, metadataFile);
+  const name = basename(archiveFile);
+  const checksumLines = readFileSync(checksumsFile, 'utf8').split(/\r?\n/).filter(Boolean);
+  const matches = checksumLines.filter((line) => line.match(/^([0-9a-fA-F]{64})\s+\*?(.+)$/)?.[2] === name);
+  if (matches.length !== 1) throw new Error(`SHA256SUMS must contain exactly one entry for ${name}`);
+  const digest = matches[0].match(/^([0-9a-fA-F]{64})\s+\*?(.+)$/)?.[1].toLowerCase();
+  if (digest !== sha256(archiveFile)) throw new Error('SHA256SUMS archive digest mismatch');
+  return verified;
+}
+
+function prepareRetainedArtifact(candidateManifestFile, releaseManifestFile, checksumsFile, archiveFile, metadataFile) {
+  const verified = verifyReleaseManifest(candidateManifestFile, archiveFile, metadataFile);
+  writeFileSync(releaseManifestFile, readFileSync(candidateManifestFile));
+  writeFileSync(checksumsFile, `${verified.archiveSha256}  ${basename(archiveFile)}\n`, 'ascii');
+  return verifyRetainedArtifact(candidateManifestFile, releaseManifestFile, checksumsFile, archiveFile, metadataFile);
+}
+
 try {
   const command = process.argv[2];
   const file = argument('--metadata');
@@ -129,6 +152,22 @@ try {
   } else if (command === 'verify-release-manifest') {
     console.log(JSON.stringify(verifyReleaseManifest(
       requireValue(argument('--manifest'), '--manifest'),
+      requireValue(argument('--archive'), '--archive'),
+      requireValue(file, '--metadata'),
+    )));
+  } else if (command === 'prepare-retained-artifact') {
+    console.log(JSON.stringify(prepareRetainedArtifact(
+      requireValue(argument('--candidate-manifest'), '--candidate-manifest'),
+      requireValue(argument('--release-manifest'), '--release-manifest'),
+      requireValue(argument('--checksums'), '--checksums'),
+      requireValue(argument('--archive'), '--archive'),
+      requireValue(file, '--metadata'),
+    )));
+  } else if (command === 'verify-retained-artifact') {
+    console.log(JSON.stringify(verifyRetainedArtifact(
+      requireValue(argument('--candidate-manifest'), '--candidate-manifest'),
+      requireValue(argument('--release-manifest'), '--release-manifest'),
+      requireValue(argument('--checksums'), '--checksums'),
       requireValue(argument('--archive'), '--archive'),
       requireValue(file, '--metadata'),
     )));
@@ -167,7 +206,7 @@ try {
     writeMetadata(file, updated);
     console.log(JSON.stringify(artifactIdentity(updated)));
   } else {
-    throw new Error('usage: afyx-graph-artifact.mjs create-release-manifest|verify-release-manifest|stamp|inspect|require-revision|record-install [options]');
+    throw new Error('usage: afyx-graph-artifact.mjs create-release-manifest|verify-release-manifest|prepare-retained-artifact|verify-retained-artifact|stamp|inspect|require-revision|record-install [options]');
   }
 } catch (error) {
   console.error(`[artifact] ${error instanceof Error ? error.message : String(error)}`);

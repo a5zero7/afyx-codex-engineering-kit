@@ -73,6 +73,18 @@ jobs:
             --manifest release/ALPHA-CANDIDATE-MANIFEST.json \
             --archive release/afyx-graph-linux-x64.tar.gz \
             --metadata /tmp/afyx-graph-smoke/afyx-graph-linux-x64/metadata.json
+          node ../../scripts/afyx-graph-artifact.mjs prepare-retained-artifact \
+            --candidate-manifest release/ALPHA-CANDIDATE-MANIFEST.json \
+            --release-manifest release/RELEASE-MANIFEST.json \
+            --checksums release/SHA256SUMS \
+            --archive release/afyx-graph-linux-x64.tar.gz \
+            --metadata /tmp/afyx-graph-smoke/afyx-graph-linux-x64/metadata.json
+          node ../../scripts/afyx-graph-artifact.mjs verify-retained-artifact \
+            --candidate-manifest release/ALPHA-CANDIDATE-MANIFEST.json \
+            --release-manifest release/RELEASE-MANIFEST.json \
+            --checksums release/SHA256SUMS \
+            --archive release/afyx-graph-linux-x64.tar.gz \
+            --metadata /tmp/afyx-graph-smoke/afyx-graph-linux-x64/metadata.json
           /tmp/afyx-graph-smoke/afyx-graph-linux-x64/bin/afyx-graph --version
           /tmp/afyx-graph-smoke/afyx-graph-linux-x64/bin/afyx-graph help
       - name: Retain SHA-pinned Linux Alpha candidate
@@ -82,6 +94,8 @@ jobs:
           path: |
             afyx-graph/engine/release/afyx-graph-linux-x64.tar.gz
             afyx-graph/engine/release/ALPHA-CANDIDATE-MANIFEST.json
+            afyx-graph/engine/release/RELEASE-MANIFEST.json
+            afyx-graph/engine/release/SHA256SUMS
           if-no-files-found: error
 
   windows:
@@ -124,6 +138,18 @@ jobs:
             --manifest afyx-graph/engine/release/ALPHA-CANDIDATE-MANIFEST.json `
             --archive afyx-graph/engine/release/afyx-graph-win32-x64.zip `
             --metadata (Join-Path $runtime 'current/metadata.json')
+          node scripts/afyx-graph-artifact.mjs prepare-retained-artifact `
+            --candidate-manifest afyx-graph/engine/release/ALPHA-CANDIDATE-MANIFEST.json `
+            --release-manifest afyx-graph/engine/release/RELEASE-MANIFEST.json `
+            --checksums afyx-graph/engine/release/SHA256SUMS `
+            --archive afyx-graph/engine/release/afyx-graph-win32-x64.zip `
+            --metadata (Join-Path $runtime 'current/metadata.json')
+          node scripts/afyx-graph-artifact.mjs verify-retained-artifact `
+            --candidate-manifest afyx-graph/engine/release/ALPHA-CANDIDATE-MANIFEST.json `
+            --release-manifest afyx-graph/engine/release/RELEASE-MANIFEST.json `
+            --checksums afyx-graph/engine/release/SHA256SUMS `
+            --archive afyx-graph/engine/release/afyx-graph-win32-x64.zip `
+            --metadata (Join-Path $runtime 'current/metadata.json')
       - name: Retain SHA-pinned Windows Alpha candidate
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -131,6 +157,8 @@ jobs:
           path: |
             afyx-graph/engine/release/afyx-graph-win32-x64.zip
             afyx-graph/engine/release/ALPHA-CANDIDATE-MANIFEST.json
+            afyx-graph/engine/release/RELEASE-MANIFEST.json
+            afyx-graph/engine/release/SHA256SUMS
           if-no-files-found: error
 
   macos:
@@ -176,6 +204,16 @@ jobs:
           node scripts/afyx-graph-artifact.mjs verify-release-manifest \
             --manifest afyx-graph/engine/release/ALPHA-CANDIDATE-MANIFEST.json \
             --archive "$archive" --metadata "$AFYX_GRAPH_RUNTIME_ROOT/current/metadata.json"
+          node scripts/afyx-graph-artifact.mjs prepare-retained-artifact \
+            --candidate-manifest afyx-graph/engine/release/ALPHA-CANDIDATE-MANIFEST.json \
+            --release-manifest afyx-graph/engine/release/RELEASE-MANIFEST.json \
+            --checksums afyx-graph/engine/release/SHA256SUMS \
+            --archive "$archive" --metadata "$AFYX_GRAPH_RUNTIME_ROOT/current/metadata.json"
+          node scripts/afyx-graph-artifact.mjs verify-retained-artifact \
+            --candidate-manifest afyx-graph/engine/release/ALPHA-CANDIDATE-MANIFEST.json \
+            --release-manifest afyx-graph/engine/release/RELEASE-MANIFEST.json \
+            --checksums afyx-graph/engine/release/SHA256SUMS \
+            --archive "$archive" --metadata "$AFYX_GRAPH_RUNTIME_ROOT/current/metadata.json"
       - name: Retain SHA-pinned macOS Alpha candidate
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -183,4 +221,6 @@ jobs:
           path: |
             afyx-graph/engine/release/afyx-graph-darwin-*.tar.gz
             afyx-graph/engine/release/ALPHA-CANDIDATE-MANIFEST.json
+            afyx-graph/engine/release/RELEASE-MANIFEST.json
+            afyx-graph/engine/release/SHA256SUMS
           if-no-files-found: error
