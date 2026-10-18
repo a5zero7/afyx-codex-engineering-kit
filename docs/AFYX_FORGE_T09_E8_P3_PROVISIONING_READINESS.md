@@ -2,7 +2,11 @@
 
 Version: **0.1.0-readiness**
 
-Verdict: **BLOCKED — PACKAGE SOURCE/LOCK DECISION REQUIRED**
+Addendum: **0.1.1-owner-decision — 2026-10-18**
+
+Historical verdict: **BLOCKED — PACKAGE SOURCE/LOCK DECISION REQUIRED**
+
+Current verdict: **BLOCKED — DOCKER CE PROVENANCE/PACKAGE LOCK NOT VERIFIED**
 
 Status: **READ-ONLY AUDIT COMPLETE / PROVISIONING NOT AUTHORIZED / FORMAL CAMPAIGN BLOCKED — 0/36**
 
@@ -42,6 +46,31 @@ The provisioning verdict is **BLOCKED**, for these concrete reasons:
 
 Readiness is not approval. T09.E1 remains authoritative, T09.E5 remains
 unapproved, and the formal campaign remains blocked.
+
+## Owner decision addendum — 2026-10-18
+
+Focused review **#5562123629** is closed by recording the following bounded
+owner decision:
+
+- the official Docker CE repository is the **SELECTED SOURCE TARGET** for the
+  next, separately authorized provenance and package-lock assessment;
+- this selection does **not** authenticate or approve a repository, signing
+  key, package, version, dependency, installation, service action or runtime;
+- the exact Docker CE repository signing identity and fingerprint, fresh
+  candidate versions, package hashes, dependency closure,
+  conflicts/removals/upgrades and reproducible package lock remain **NOT
+  VERIFIED**;
+- the Ubuntu 26.04 archive observations below remain unchanged historical P3
+  evidence, are not relabelled as Docker CE evidence and are no longer the
+  selected source path; and
+- the original `0.1.0-readiness` verdict remains historical evidence of the
+  decision state at audit time. After this source-target decision, the narrower
+  current verdict is **BLOCKED — DOCKER CE PROVENANCE/PACKAGE LOCK NOT
+  VERIFIED**.
+
+No provisioning authority follows from this addendum. Obtaining fresh metadata
+or package payloads, adding a repository/key, installing packages or changing a
+unit requires a later explicit authorization.
 
 ## 2. Audit boundary and commands
 
@@ -136,8 +165,8 @@ two-month-old candidate set a current lock.
 
 | Source option | Candidate evidence | Support/provenance | Contract fit | Decision |
 |---|---|---|---|---|
-| Docker official stable repository | Ubuntu 26.04 is vendor-supported, but repository/key/candidates are absent locally | Docker-maintained; exact key, versions, hashes and dependency closure NOT VERIFIED | Matches P1 names and rootless-extras design | **PREFERRED BUT BLOCKED** |
-| Ubuntu archive | Exact signed candidates and hashes below; clean simulation | Ubuntu/Canonical packages; Docker documentation says distribution packages are maintained separately and may differ | Likely compatible, but helper payload and exact CLI/daemon behavior NOT VERIFIED | **CONDITIONAL OWNER ALTERNATIVE** |
+| Docker official stable repository | Ubuntu 26.04 is vendor-supported, but repository/key/candidates are absent locally | Docker-maintained; exact key, versions, hashes and dependency closure NOT VERIFIED | Matches P1 names and rootless-extras design | **SELECTED SOURCE TARGET / NOT VERIFIED** |
+| Ubuntu archive | Exact signed candidates and hashes below; clean simulation | Ubuntu/Canonical packages; Docker documentation says distribution packages are maintained separately and may differ | Likely compatible, but helper payload and exact CLI/daemon behavior NOT VERIFIED | **NOT SELECTED; HISTORICAL AUDIT RETAINED** |
 | Convenience/static script | No controlled local provenance or lock | Script/binary flow outside APT closure | Violates reviewed provenance approach | **REJECTED** |
 | Rootful Docker/Desktop/Podman shim | Not evaluated for this contract | Different authority/API boundary | Conflicts with rootless Docker target or P2 exact CLI semantics | **REJECTED** |
 
@@ -202,15 +231,16 @@ the fallback.
 
 The owner must resolve all of these before a provisioning request can be GO:
 
-1. **Package authority:** choose Docker's official repository (preferred P1
-   contract) or explicitly accept Ubuntu-maintained packages and their
-   different support/packaging boundary.
+1. **Package authority:** official Docker CE is the selected source target.
+   Mixing Docker CE and Ubuntu archive package authorities remains prohibited.
 2. **Fresh lock:** authorize a later metadata-refresh window for only the
    selected source, independent key-fingerprint verification, package payload
    retrieval/inspection, exact version/hash freeze and a repeat simulation.
-3. **Rootful-unit containment:** approve persistent masks for rootful
-   `docker.service`, `docker.socket` and system `containerd.service` before
-   package maintainer scripts can start them.
+3. **Rootful auto-start prevention:** after Docker CE payloads and maintainer
+   scripts plus current unit/dependency ownership are inspected, separately
+   approve one exact, bounded and reversible strategy that prevents rootful
+   Docker daemon/socket activation during the authorized transaction. No
+   prevention mechanism is pre-approved by this document.
 4. **Cgroup delegation:** decide whether an owner-controlled
    `user@.service.d` drop-in is acceptable if ordinary-WSL evidence does not
    already prove writable `cpu memory pids` delegation.
@@ -268,7 +298,9 @@ Depending on the source decision, the bounded authorization would affect:
 - selected exact packages and their solver closure only;
 - for Docker CE only, one task-approved source file and one independently
   verified key under `/etc/apt`; neither exists now;
-- persistent masks for rootful Docker/socket/system-containerd units;
+- an exact, separately approved and reversible rootful auto-start prevention
+  control, whose targets and effects are derived from verified Docker CE
+  payload/maintainer-script inspection and current unit/dependency ownership;
 - `/var/lib/afyx-forge-public-runtime` and its four children;
 - one reviewed user unit named `afyx-forge-rootless-docker.service` and its
   task-owned configuration;
@@ -282,6 +314,9 @@ No change to `/etc/subuid` or `/etc/subgid` is proposed: each already has one
 65,536-entry range. Package maintainer scripts may create units, sockets or a
 `docker` group; their exact payload/scripts must be inspected after authorized
 download and before installation. Any undeclared impact is a STOP condition.
+Global masking of system `containerd.service` or any unrelated service is
+explicitly prohibited without impact evidence and separate owner approval;
+this document authorizes no masking.
 
 ## 8. Authenticated daemon map and ACL design
 
@@ -306,36 +341,48 @@ runtime acceptance tests.
 
 Every stage has an owner checkpoint and stops on drift:
 
-1. **Select source.** Record owner approval for Docker CE or Ubuntu packages.
+1. **Use the selected source target.** Official Docker CE is selected; mixing
+   package authorities is prohibited. This step records direction only and
+   performs no repository action.
 2. **Acquire fresh metadata under separate authorization.** Verify HTTPS
    endpoint, signing fingerprint through two channels, signed Release identity,
    candidate set and package SHA-256. Do not install.
 3. **Inspect payload and maintainer scripts.** Require `/usr/bin/docker`,
-   dockerd, RootlessKit launch assets and Buildx plugin; enumerate units,
-   accounts/groups, sockets, config and post-install actions.
+   dockerd, RootlessKit launch assets and Buildx plugin; enumerate units, unit
+   ownership, dependencies/reverse dependencies, accounts/groups, sockets,
+   config, triggers and post-install actions. Capture the current
+   installed/active/enabled/masked state for every potentially affected unit.
 4. **Freeze closure.** Pin every direct/transitive version and hash; repeat
    `apt-get --simulate --no-install-recommends`; require zero removal,
    unrelated upgrade, downgrade or replacement.
-5. **Pre-mask rootful units.** Record their prior state and ensure package
-   installation cannot start a rootful daemon or system socket.
-6. **Install exact closure.** This step requires a new explicit authorization.
+5. **Design and separately approve rootful auto-start prevention.** Use the
+   verified evidence from step 3 to propose the narrowest transaction-bounded,
+   reversible control. State exact targets, duration, verification and
+   rollback. Do not assume a mask, and do not globally mask system
+   `containerd.service` or unrelated services without impact evidence and
+   separate approval.
+6. **Apply only the separately approved prevention control.** Immediately
+   verify the recorded unit state and prove the rootful daemon/socket cannot
+   activate through the planned transaction. Abort on any unreviewed unit or
+   dependency effect.
+7. **Install exact closure.** This step requires a new explicit authorization.
    Verify dpkg status and package/file hashes immediately; abort before service
    creation on mismatch.
-7. **Create layout.** Establish only the approved ext4 paths and exact modes;
+8. **Create layout.** Establish only the approved ext4 paths and exact modes;
    reject symlinks, DrvFS/9p and unexpected mount boundaries.
-8. **Verify cgroup/user manager.** Prove systemd user supervision and writable
+9. **Verify cgroup/user manager.** Prove systemd user supervision and writable
    delegated `cpu memory pids`; apply an approved drop-in only if required.
-9. **Install reviewed user unit.** Use the package-owned rootless launcher and
+10. **Install reviewed user unit.** Use the package-owned rootless launcher and
    explicit endpoint/data/exec/PID paths, `Delegate=yes`, `Restart=no`, no
    rootful socket, no TCP listener and no linger unless separately approved.
-10. **Start only in an authorized acceptance window.** Verify socket
+11. **Start only in an authorized acceptance window.** Verify socket
     owner/mode, daemon rootless state, package identities, maps, cgroup driver
     and empty stores before any image operation.
-11. **Promote public image.** Build with the accepted T09.E7 recipe, use an
+12. **Promote public image.** Build with the accepted T09.E7 recipe, use an
     isolated credential directory, independently verify the registry manifest,
     retain exact `repository@sha256`, remove credentials, disable resolution
     dependency, and retain `--pull never`.
-12. **Run bounded public acceptance.** Execute only the separately authorized
+13. **Run bounded public acceptance.** Execute only the separately authorized
     positive/negative checklist in section 11. No formal cell is included.
 
 ## 10. Rollback procedure — NOT EXECUTED
@@ -354,7 +401,10 @@ Rollback is evidence-preserving and explicit:
    never use an unreviewed broad `autoremove`;
 6. remove a task-added Docker source/key only after package rollback and retain
    their identities in the audit record;
-7. restore prior rootful-unit mask state without starting any service; and
+7. remove only the exact transaction-bounded auto-start prevention control
+   that was separately approved, then restore and verify every recorded
+   pre-change unit state; do not introduce or retain a global mask as a
+   rollback shortcut; and
 8. verify no socket, daemon, process, cgroup or credential directory remains.
 
 Rollback stops if package ownership is shared, evidence is not finalized,
@@ -365,7 +415,12 @@ process absence is inconclusive or any target falls outside the inventory.
 ### Positive gates
 
 - [ ] Fresh signed lock and every package/file hash match.
-- [ ] Rootful services/sockets never start; no Docker group authority is used.
+- [ ] Rootful services/sockets never start; the prevention control is
+      evidence-derived, exact, reversible and separately approved; no Docker
+      group authority is used.
+- [ ] System `containerd.service` and unrelated services remain unchanged
+      unless impact evidence and separate owner approval explicitly authorize
+      a scoped action.
 - [ ] Dedicated systemd user unit, socket and ext4 paths match the inventory.
 - [ ] `docker info` proves rootless mode, cgroup v2 and systemd driver.
 - [ ] `cpu`, `memory` and `pids` limits are observed in the workload cgroup.
@@ -389,6 +444,9 @@ process absence is inconclusive or any target falls outside the inventory.
       unexpected principal and base-group/other permission.
 - [ ] Reject ignored cgroup limits, seccomp/capability/network drift, forked
       survivor, timeout/interrupt ambiguity and cleanup uncertainty.
+- [ ] Reject global masking of `containerd.service` or an unrelated service
+      without demonstrated impact and separate owner approval, and reject any
+      unit action absent from the reviewed prevention/rollback record.
 - [ ] Reject truncated capture, tamper/replay, recorder failure, durability or
       recovery failure.
 
@@ -399,11 +457,18 @@ evaluator-owned evidence custody or formal T09.E1/T09.E5 approval.
 
 Stop before installation if any of these remains true:
 
-- package source/support model is unapproved;
+- the selected Docker CE source cannot be authenticated and locked, its
+  supportability is unresolved, or a different source is proposed without a
+  new owner decision;
 - metadata/key/version/hash/payload/maintainer-script evidence is stale,
   missing or mismatched;
 - simulation proposes a removal, unrelated upgrade, downgrade or undeclared
   package/config/account/unit change;
+- Docker CE payload/maintainer-script and current unit/dependency ownership
+  inspection is incomplete;
+- the rootful auto-start prevention and rollback plan lacks separate owner
+  approval, is not reversible, or targets `containerd.service`/an unrelated
+  service without impact evidence and separate approval;
 - rootful unit startup cannot be prevented and proven absent;
 - `/usr/bin/docker`, rootless launcher or Buildx identity is absent or not
   package-owned;
@@ -413,9 +478,12 @@ Stop before installation if any of these remains true:
   is undecided; or
 - evaluator/evidence claims exceed public synthetic workload isolation.
 
-Owner decision requested: choose the package authority and support model. Only
-after that decision may a separately authorized metadata/payload-lock step
-produce a current installable closure. This document does not authorize that
-step or the subsequent installation.
+Owner decision recorded: official Docker CE is the selected source target. The
+next possible authorization is limited to fresh provenance/metadata,
+payload/maintainer-script and package-lock assessment. Registry/custody,
+cgroup/lingering policy, the exact rootful auto-start prevention strategy,
+installation and runtime acceptance remain separate decisions. Do not authorize
+installation until the exact lock, unit/dependency impact inventory, reversible
+prevention control and rollback plan have been independently reviewed.
 
 Formal Forge remains **BLOCKED — 0/36**.

@@ -6,8 +6,8 @@ Contract revision: **2026-10-15**
 v1 scope policy: **FROZEN — Phase 1 through Phase 11**  
 Post-v1 policy: **PLANNED EXPANSION — not a v1 release blocker**
 
-Current work: **AFYX-285 Forge controlled rootless provisioning readiness; campaign remains blocked**
-Task: audit signed package provenance and prepare the owner decision gate; no installation, provisioning, container execution, model benchmark, A8 GO, or Alpha promotion
+Current work: **AFYX-285 Docker CE source-selection addendum; campaign remains blocked**
+Task: record the selected source target and close the reversible rootful auto-start planning gate; no metadata refresh, download, installation, provisioning, service change, container execution, model benchmark, A8 GO, or Alpha promotion
 Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`  
 Active implementation branch: `dev` (created from verified T02 final source `ad1560dd930ccde94b0dadaa7b42d804be55714f`)
 Historical engineering branch preserved: `afyx/native-phase5f-parser-grammar`
@@ -1930,11 +1930,21 @@ visible. The configured signed Ubuntu archive offers exact snapshot candidates
 for `docker.io`, `docker-buildx`, containerd/runc, RootlessKit, slirp4netns,
 uidmap and ACL; its simulated minimal closure is 17 new packages, zero upgrades
 and zero removals. However the updates/security snapshot is dated 2026-08-10,
-Docker CE repository/key/candidates are absent, Ubuntu versus Docker package
-authority is undecided, and systemd-user/cgroup/socket/ACL/runtime enforcement
-cannot be verified in this managed session. No package, source, key, service,
-daemon, image or container changed. Verdict: **BLOCKED — PACKAGE SOURCE/LOCK
-DECISION REQUIRED / FORMAL CAMPAIGN BLOCKED — 0/36**.
+Docker CE repository/key/candidates are absent, and
+systemd-user/cgroup/socket/ACL/runtime enforcement cannot be verified in this
+managed session. No package, source, key, service, daemon, image or container
+changed. The original verdict **BLOCKED — PACKAGE SOURCE/LOCK DECISION
+REQUIRED** remains historical evidence. The owner addendum dated 2026-10-18
+selects official Docker CE as the **SELECTED SOURCE TARGET**; its exact signing
+identity, fresh candidates, package digests, dependency closure and lock remain
+**NOT VERIFIED**, so the current verdict is **BLOCKED — DOCKER CE
+PROVENANCE/PACKAGE LOCK NOT VERIFIED**. Persistent global masking is not
+pre-approved: any future rootful auto-start prevention strategy must be
+evidence-derived, reversible and separately approved after package
+payload/maintainer-script and current unit/dependency ownership inspection.
+Global masking of system `containerd.service` or unrelated services is
+prohibited without impact evidence and separate approval. Formal campaign
+remains **BLOCKED — 0/36**.
 
 ## Track B — Platform Generalization
 
