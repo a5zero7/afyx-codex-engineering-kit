@@ -6,8 +6,8 @@ Contract revision: **2026-10-15**
 v1 scope policy: **FROZEN — Phase 1 through Phase 11**  
 Post-v1 policy: **PLANNED EXPANSION — not a v1 release blocker**
 
-Current work: **AFYX-285 Docker CE source-selection addendum; campaign remains blocked**
-Task: record the selected source target and close the reversible rootful auto-start planning gate; no metadata refresh, download, installation, provisioning, service change, container execution, model benchmark, A8 GO, or Alpha promotion
+Current work: **AFYX-285 Docker CE provenance and partial package lock; campaign remains blocked**
+Task: retain the verified public Docker CE acquisition/static audit and unresolved Ubuntu byte-lock gate; no installation, provisioning, service change, container execution, model benchmark, A8 GO, or Alpha promotion
 Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`  
 Active implementation branch: `dev` (created from verified T02 final source `ad1560dd930ccde94b0dadaa7b42d804be55714f`)
 Historical engineering branch preserved: `afyx/native-phase5f-parser-grammar`
@@ -1945,6 +1945,26 @@ payload/maintainer-script and current unit/dependency ownership inspection.
 Global masking of system `containerd.service` or unrelated services is
 prohibited without impact evidence and separate approval. Formal campaign
 remains **BLOCKED — 0/36**.
+
+### T09.E8.P4 checkpoint — Docker CE provenance and partial package lock
+
+[AFYX_FORGE_T09_E8_P4_DOCKER_CE_PACKAGE_LOCK.md](AFYX_FORGE_T09_E8_P4_DOCKER_CE_PACKAGE_LOCK.md)
+records bounded acquisition from official Docker CE Resolute/stable/amd64.
+Independent fingerprint corroboration, isolated `gpgv` verification, the
+signed Release-to-index digest and all five required Docker `.deb` size/hash
+bindings pass. Static inspection identifies exact Docker CLI/daemon,
+containerd/runc, Buildx and RootlessKit payloads plus maintainer-script actions
+that un-mask, enable and request startup of rootful Docker/socket/containerd
+units and create the `docker` group. The proposed future control is a separately
+approved transaction-scoped service-start guard followed by exact disabling and
+verification of only newly package-owned rootful units; persistent/global
+masking remains prohibited. The simulation selects 16 new packages, zero
+upgrade and zero removal, but 11 Ubuntu archives and the satisfied installed
+dependency baseline were not authorized for download and are not byte-locked;
+local Ubuntu metadata remains stale. Classification: **PARTIAL — DOCKER CE
+PROVENANCE VERIFIED / COMPLETE INSTALLATION LOCK BLOCKED**. No installation,
+service change, daemon/container execution or formal cell occurred. Formal
+Forge remains **BLOCKED — 0/36**.
 
 ## Track B — Platform Generalization
 
