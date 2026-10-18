@@ -28,13 +28,6 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** Race a promise against a real delay; tells us whether it was STILL pending after that delay. */
-async function isStillPendingAfter<T>(promise: Promise<T>, ms: number): Promise<boolean> {
-  const marker = Symbol('pending');
-  const result = await Promise.race([promise, sleep(ms).then(() => marker)]);
-  return result === marker;
-}
-
 function insertBatch(q: QueryBuilder, fileIndex: number, count: number): void {
   const nodes = [];
   for (let i = 0; i < count; i++) {
@@ -94,7 +87,7 @@ describe('WAL policy: real-SQLite concurrency (Phase 3B.4C §13)', () => {
     expect(after!.log).toBe(after!.checkpointed); // reader gone: now a full backfill
   }, 20_000);
 
-  it("backpressure() actually stays pending while a reader pins the WAL, and resolves once it lets go", async () => {
+  it("backpressure() observes a pinned pass, then recovers when the reader releases within its retry budget", async () => {
     openWriter();
     const valve = new WalCheckpointValve(conn, 0.02); // ~20KB soft -> hard = 40KB, file cap = 80KB
     const reader = new DatabaseSync(dbPath);
@@ -103,12 +96,37 @@ describe('WAL policy: real-SQLite concurrency (Phase 3B.4C §13)', () => {
 
     insertBatch(q, 0, 2000); // push well past the (tiny) hard cap while the reader pins frames
 
+    // Coordinate on an actual partial SQLite checkpoint instead of assuming the
+    // bounded 20-pass loop must take more than 500ms. Fast runners can exhaust
+    // that safety budget sooner and correctly abort. Holding the first observed
+    // partial result lets this test release the reader before the next pass,
+    // deterministically exercising the successful-recovery side of the contract.
+    const checkpoint = conn.checkpointWalPassive.bind(conn);
+    let observePinnedPass!: () => void;
+    let allowRetry!: () => void;
+    const pinnedPassObserved = new Promise<void>((resolve) => { observePinnedPass = resolve; });
+    const retryAllowed = new Promise<void>((resolve) => { allowRetry = resolve; });
+    let heldPinnedPass = false;
+    conn.checkpointWalPassive = async () => {
+      const result = await checkpoint();
+      if (!heldPinnedPass && result && result.log > result.checkpointed) {
+        heldPinnedPass = true;
+        observePinnedPass();
+        await retryAllowed;
+      }
+      return result;
+    };
+
     const pause = valve.backpressure();
     expect(pause).not.toBeNull();
-    await expect(isStillPendingAfter(pause!, 500)).resolves.toBe(true);
+    let settled = false;
+    void pause!.then(() => { settled = true; }, () => { settled = true; });
+    await pinnedPassObserved;
+    expect(settled).toBe(false);
 
     reader.exec('COMMIT;');
     reader.close();
+    allowRetry();
     await expect(pause).resolves.toBeUndefined(); // now resolves for real, no fake clock involved
   }, 20_000);
 
