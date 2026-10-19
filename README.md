@@ -63,6 +63,11 @@ Installer tidak pernah menulis atau mengganti:
 
 Installer melakukan inventory sebelum mutasi untuk enam komponen selectable: Efficient Coding, Odoo Engineering, Afyx Engineering Expert, Prompt Master, Afyx Graph, dan Usage Tracking. Pilihan mengikuti state: belum terpasang = Install/Skip, sehat = Update/Skip, incomplete/invalid = Repair/Skip, sedangkan ownership tidak dikenal selalu ditolak. Mode non-interaktif selalu memilih Skip kecuali action disebut eksplisit. Update/repair memakai staging, validasi, backup, swap, dan rollback bila pemasangan gagal.
 
+Desired-state mode menggunakan source of truth yang sama: `-Preset minimal|recommended|full|custom`
+atau `--preset ...`. Install, update, dan verify menyelesaikan plan identik; komponen
+di luar plan serta konfigurasi USER/EXTERNAL dipertahankan. Custom memakai
+`-CustomComponent` / `--custom-component` berulang untuk subset yang eksplisit.
+
 ### Afyx Graph
 
 Afyx Graph dipasang sebagai runtime opsional di `~/.afyx/graph/`; ia tidak ditempatkan di direktori skill. Identitasnya: paket `@a5zero7/afyx-graph`, CLI `afyx-graph`, API `AfyxGraph`, project state `.afyx-graph/` (database `afyx-graph.db`), environment prefix `AFYX_GRAPH_*`, dan identitas MCP `afyx_graph` dengan tool `afyx_graph_*`.

@@ -229,8 +229,11 @@ function Install-AfyxSkillTransaction {
     if ((Get-Item -LiteralPath $Stage -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "$Name staging directory is a reparse point." }
     Write-AfyxSkillMarker -Target $Stage -Component $Component -Owner $Owner -Version $Version -SourceRepository $SourceRepository -SourceRevision $SourceRevision
     $state = Get-AfyxSkillOwnership -Target $Target -Component $Component -ExpectedOwner $Owner
-    if ($state -notin @('NOT_INSTALLED', 'AFYX_OWNED_UNMODIFIED', 'EXTERNAL_UPSTREAM') -and -not $AuthorizeUnproven) {
-        throw "Refusing to replace $Target ($state) without explicit authorization."
+    if ($state -eq 'AFYX_OWNED_MODIFIED' -and -not $AuthorizeUnproven) {
+        throw "Refusing to replace $Target ($state) without explicit repair authorization."
+    }
+    if ($state -notin @('NOT_INSTALLED', 'AFYX_OWNED_UNMODIFIED', 'AFYX_OWNED_MODIFIED', 'EXTERNAL_UPSTREAM')) {
+        throw "Refusing to take ownership of $Target ($state)."
     }
     if ($state -eq 'UNSAFE') { throw "Refusing unsafe skill target $Target." }
     $old = Join-Path (Split-Path -Parent $Target) ".$((Split-Path -Leaf $Target)).afyx-old"

@@ -32,6 +32,84 @@ afyx_component_field() {
   ' "$AFYX_COMPONENTS_JSON"
 }
 
+afyx_provider_ids() {
+  sed -n 's/^[[:space:]]*"provider"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$AFYX_COMPONENTS_JSON"
+}
+
+afyx_provider_field() {
+  awk -v provider="$1" -v key="$2" '
+    /^[[:space:]]*\{[[:space:]]*$/ { inobj = 1; hit = 0; val = ""; next }
+    inobj && /^[[:space:]]*\}[,]?[[:space:]]*$/ { if (hit) { print val; exit } inobj = 0; next }
+    inobj {
+      if ($0 ~ "^[[:space:]]*\"provider\"[[:space:]]*:[[:space:]]*\"" provider "\"") hit = 1
+      if (match($0, "^[[:space:]]*\"" key "\"[[:space:]]*:[[:space:]]*\"[^\"]*\"")) {
+        s = substr($0, RSTART, RLENGTH); sub(/^[^:]*:[[:space:]]*"/, "", s); sub(/"$/, "", s); val = s
+      }
+    }
+  ' "$AFYX_COMPONENTS_JSON"
+}
+
+afyx_preset_valid() {
+  case "$1" in minimal|recommended|full|custom) return 0 ;; *) return 1 ;; esac
+}
+
+afyx_component_desired() {
+  local id="$1" preset="$2" custom="${3:-}" memberships
+  afyx_preset_valid "$preset" || return 2
+  if [[ "$preset" == custom ]]; then
+    case ";$custom;" in *";$id;"*) return 0 ;; *) return 1 ;; esac
+  fi
+  memberships="$(afyx_component_field "$id" presets)"
+  case ";$memberships;" in *";$preset;"*) return 0 ;; *) return 1 ;; esac
+}
+
+# afyx_control_classify <id> <actual-state> <preset> [custom-id;list]
+# Sets a read-only desired-state comparison for callers; it never mutates disk.
+afyx_control_classify() {
+  local id="$1" actual="$2" preset="$3" custom="${4:-}" declared platform type runtime_verified=true marker field value
+  declared="$(afyx_component_field "$id" ownership_class)"
+  platform="$(afyx_component_field "$id" platforms)"
+  type="$(afyx_component_field "$id" type)"
+  AFYX_DESIRED=false; afyx_component_desired "$id" "$preset" "$custom" && AFYX_DESIRED=true
+  AFYX_ACTUAL_OWNERSHIP="$declared"
+  [[ "$actual" == UNKNOWN ]] && AFYX_ACTUAL_OWNERSHIP=USER
+  [[ "$actual" == 'NOT INSTALLED' ]] && AFYX_ACTUAL_OWNERSHIP=NONE
+  if [[ "$type" == runtime && "$actual" != 'NOT INSTALLED' ]]; then
+    runtime_verified=false
+    marker="$(afyx_component_root "$id")/$(afyx_component_field "$id" marker_file)"
+    field="$(afyx_component_field "$id" marker_field)"; value="$(afyx_component_field "$id" marker_value)"
+    if [[ -f "$marker" ]] && grep -q "\"$field\"[[:space:]]*:[[:space:]]*\"$value\"" "$marker"; then runtime_verified=true; fi
+    [[ "$runtime_verified" == true ]] || AFYX_ACTUAL_OWNERSHIP=USER
+  fi
+  AFYX_REPAIR=NONE
+  if [[ "$platform" == windows && "$(afyx_platform)" != windows ]]; then
+    AFYX_DRIFT=NOT_APPLICABLE; return 0
+  fi
+  if [[ "$AFYX_DESIRED" != true ]]; then
+    [[ "$actual" == 'NOT INSTALLED' ]] && AFYX_DRIFT=ABSENT || AFYX_DRIFT=EXTRA
+    return 0
+  fi
+  if [[ "$runtime_verified" != true ]]; then AFYX_DRIFT=UNVERIFIED; AFYX_REPAIR=BLOCKED; return 0; fi
+  case "$actual" in
+    HEALTHY) AFYX_DRIFT=IN_SYNC ;;
+    'NOT INSTALLED') AFYX_DRIFT=MISSING; AFYX_REPAIR=INSTALL ;;
+    DRIFTED) AFYX_DRIFT=MODIFIED; [[ "$declared" == AFYX ]] && AFYX_REPAIR=REPAIR || AFYX_REPAIR=BLOCKED ;;
+    INCOMPLETE|INVALID) AFYX_DRIFT=DEGRADED; [[ "$declared" == AFYX ]] && AFYX_REPAIR=REPAIR || AFYX_REPAIR=BLOCKED ;;
+    *) AFYX_DRIFT=UNVERIFIED; AFYX_REPAIR=BLOCKED ;;
+  esac
+}
+
+afyx_control_plan_identity() {
+  local preset="$1" custom="${2:-}" id desired=() separator=
+  afyx_preset_valid "$preset" || return 2
+  for id in $(afyx_component_ids); do
+    [[ "$(afyx_component_field "$id" type)" == detected-cli ]] && continue
+    if afyx_component_desired "$id" "$preset" "$custom"; then desired+=("$id"); fi
+  done
+  printf 'v1|%s|codex|' "$preset"
+  for id in "${desired[@]}"; do printf '%s%s' "$separator" "$id"; separator=,; done
+}
+
 afyx_platform() {
   if [[ -n "${AFYX_PLATFORM:-}" ]]; then printf '%s' "$AFYX_PLATFORM"; return; fi
   case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) printf windows ;; *) printf unix ;; esac

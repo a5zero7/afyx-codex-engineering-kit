@@ -5,6 +5,8 @@ param(
     [switch]$Force,
     [switch]$ValidateOnly,
     [string[]]$ComponentAction = @(),
+    [string]$Preset = '',
+    [string[]]$CustomComponent = @(),
     [switch]$UpdateInstalled,
     [switch]$Offline,
     [switch]$NoBuildFallback,
@@ -46,9 +48,12 @@ foreach ($component in (Get-AfyxComponentContract | Where-Object { $_.type -eq '
     $state = $componentStates[[string]$component.id]
     if ($state.State -eq 'NOT INSTALLED') { continue }
     $installedOwnership = Get-AfyxSkillOwnership -Target $state.Path -Component ([string]$component.id) -ExpectedOwner ([string]$component.ownership)
-    if ($installedOwnership -notin @('AFYX_OWNED_UNMODIFIED', 'EXTERNAL_UPSTREAM')) {
+    if ($installedOwnership -eq 'AFYX_OWNED_MODIFIED') {
+        $state.State = 'DRIFTED'
+        $state.Detail = 'Afyx ownership verified but installed content was modified'
+    } elseif ($installedOwnership -notin @('AFYX_OWNED_UNMODIFIED', 'EXTERNAL_UPSTREAM')) {
         $state.State = 'UNKNOWN'
-        $state.Detail = if ($installedOwnership -eq 'AFYX_OWNED_MODIFIED') { 'Afyx ownership verified but installed content was modified' } else { "installed ownership is $installedOwnership" }
+        $state.Detail = "installed ownership is $installedOwnership"
     }
 }
 $componentActions = @{}
@@ -60,6 +65,12 @@ foreach ($specification in $ComponentAction) {
 }
 $knownSelectable = @('efficient-coding', 'odoo-engineering', 'afyx-engineering-expert', 'prompt-master', 'afyx-graph', 'codex-usage-tracking')
 foreach ($id in $componentActions.Keys) { if ($id -notin $knownSelectable) { throw "Unknown selectable component: $id" } }
+if ($Preset -and $Preset -notin @('minimal', 'recommended', 'full', 'custom')) { throw "Unknown preset: $Preset" }
+if (-not $Preset -and $CustomComponent.Count) { throw '-CustomComponent requires -Preset custom.' }
+if ($Preset -and ($ComponentAction.Count -or $Force -or $InstallUsageTracker -or $SkipUsageTracker)) {
+    throw 'A preset is immutable for one operation; do not combine it with ComponentAction, Force, InstallUsageTracker, or SkipUsageTracker.'
+}
+$controlPlan = if ($Preset) { Get-AfyxControlPlan -Preset $Preset -CustomComponent $CustomComponent -Context $componentContext -StateById $componentStates } else { $null }
 
 function Get-AvailableVersion([string]$Id) {
     switch ($Id) {
@@ -80,11 +91,23 @@ function Compare-AfyxVersion([string]$Installed, [string]$Available) {
 function Get-ComponentAction([string]$Id, [string]$Label) {
     $state = $componentStates[$Id]
     if ($componentActions.ContainsKey($Id)) { $action = $componentActions[$Id] }
+    elseif ($controlPlan) {
+        $planItem = @($controlPlan.Components | Where-Object { $_.Id -eq $Id })[0]
+        if (-not $planItem.Desired -or $planItem.Drift -eq 'NOT_APPLICABLE') { $action = 'skip' }
+        elseif ($planItem.Repair -eq 'BLOCKED') { throw "$Label drift is $($planItem.Drift) with actual ownership $($planItem.ActualOwnership); automatic takeover is forbidden." }
+        elseif ($planItem.Repair -eq 'INSTALL') { $action = 'install' }
+        elseif ($planItem.Repair -eq 'REPAIR') { $action = 'repair' }
+        else {
+            $available = Get-AvailableVersion $Id
+            $action = if ($state.State -eq 'HEALTHY' -and $available -and (Compare-AfyxVersion $state.Version $available) -lt 0) { 'update' } else { 'skip' }
+        }
+    }
     elseif ($Force) {
-        $action = if ($state.State -eq 'NOT INSTALLED') { 'install' } elseif ($state.State -in @('INCOMPLETE', 'INVALID', 'UNKNOWN')) { 'repair' } else { 'update' }
+        if ($state.State -eq 'UNKNOWN') { throw "$Label ownership is unknown; -Force cannot take ownership." }
+        $action = if ($state.State -eq 'NOT INSTALLED') { 'install' } elseif ($state.State -in @('INCOMPLETE', 'INVALID', 'DRIFTED')) { 'repair' } else { 'update' }
     } elseif ($UpdateInstalled) {
         $available = Get-AvailableVersion $Id
-        if ($state.State -in @('INCOMPLETE', 'INVALID')) { $action = 'repair' }
+        if ($state.State -in @('INCOMPLETE', 'INVALID', 'DRIFTED')) { $action = 'repair' }
         elseif ($state.State -eq 'HEALTHY' -and $available -and (Compare-AfyxVersion $state.Version $available) -lt 0) { $action = 'update' }
         else { $action = 'skip' }
     } elseif ($WhatIfPreference -or $env:CI -or [Console]::IsInputRedirected) { $action = 'skip' }
@@ -98,7 +121,7 @@ function Get-ComponentAction([string]$Id, [string]$Label) {
             $default = if ($available -and (Compare-AfyxVersion $state.Version $available) -lt 0) { 'U' } else { 'S' }
             do { $answer = (Read-Host "$Label is healthy.$versionDetail [U] Update / [S] Skip [$default]").Trim() } until ($answer -match '(?i)^(|u|update|s|skip)$')
             $action = if ($answer -match '(?i)^(u|update)$' -or (-not $answer -and $default -eq 'U')) { 'update' } else { 'skip' }
-        } elseif ($state.State -in @('INCOMPLETE', 'INVALID')) {
+        } elseif ($state.State -in @('INCOMPLETE', 'INVALID', 'DRIFTED')) {
             do { $answer = (Read-Host "$Label is $($state.State): $($state.Detail) [R] Repair / [S] Skip [S]").Trim() } until ($answer -match '(?i)^(|r|repair|s|skip)$')
             $action = if ($answer -match '(?i)^(r|repair)$') { 'repair' } else { 'skip' }
         } else {
@@ -109,8 +132,8 @@ function Get-ComponentAction([string]$Id, [string]$Label) {
     $allowed = switch ($state.State) {
         'NOT INSTALLED' { @('install', 'skip') }
         'HEALTHY' { @('update', 'adopt', 'skip') }
-        { $_ -in @('INCOMPLETE', 'INVALID') } { @('repair', 'skip') }
-        'UNKNOWN' { @('adopt', 'repair', 'skip') }
+        { $_ -in @('INCOMPLETE', 'INVALID', 'DRIFTED') } { @('repair', 'skip') }
+        'UNKNOWN' { @('adopt', 'skip') }
         default { @('skip') }
     }
     if ($action -notin $allowed) { throw "$Label state $($state.State) does not permit '$action' (allowed: $($allowed -join ', '))." }
@@ -147,7 +170,8 @@ function Install-ManagedSkillSafely([string]$Component, [string]$Name, [string]$
     try {
         Copy-Item -LiteralPath $Source -Destination $stage -Recurse -Force -ErrorAction Stop
         if (-not (Test-SkillManifest $stage)) { throw "$Name staged manifest is invalid." }
-        $authorized = $Force -or $componentActions.ContainsKey($Component)
+        $planRepair = $controlPlan -and @($controlPlan.Components | Where-Object { $_.Id -eq $Component -and $_.Repair -eq 'REPAIR' }).Count -eq 1
+        $authorized = $Force -or $componentActions.ContainsKey($Component) -or $planRepair
         Install-AfyxSkillTransaction -SkillsRoot $SkillsRoot -Component $Component -Name $Name -Stage $stage -Target $Target -Owner afyx -Version (Get-AfyxSkillVersion -Directory $Source) -AuthorizeUnproven:$authorized
     } finally {
         if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue }
@@ -228,6 +252,13 @@ foreach ($entry in $states.GetEnumerator()) {
     Write-Host ("{0}: {1}; installed={2}; available={3}; ownership={4}" -f $entry.Key, $entry.Value, $(if ($installed) { $installed } else { 'n/a' }), $(if ($available) { $available } else { 'external/n/a' }), $componentStates[$id].Ownership)
 }
 Write-Host "Headroom: $(if (Get-Command headroom -ErrorAction SilentlyContinue) { 'externally managed; detected' } else { 'externally managed; not detected' })"
+if ($controlPlan) {
+    Write-Host ''
+    Write-Host "Desired State Plan: $($controlPlan.Identity)"
+    foreach ($item in $controlPlan.Components) {
+        Write-Host ("{0}: desired={1}; actual={2}; drift={3}; ownership={4}; repair={5}" -f $item.Id, $item.Desired, $item.ActualState, $item.Drift, $item.ActualOwnership, $item.Repair)
+    }
+}
 Write-Host ''
 Write-Host 'Prerequisite Inventory'
 $gitVersion = try { (& git --version 2>$null) -join ' ' } catch { '' }
@@ -269,8 +300,18 @@ if ($ValidateOnly) {
         HeadroomAvailable = [bool](Get-Command headroom -ErrorAction SilentlyContinue)
         CodexCliDetected = $codexCliDetected
         VsCodeExtensionDetected = $vscodeExtensionDetected
+        ControlPlanIdentity = if ($controlPlan) { $controlPlan.Identity } else { 'LEGACY_INTERACTIVE' }
+        ControlPlanDrift = if ($controlPlan) { @($controlPlan.Components | Where-Object { $_.Desired -and $_.Drift -ne 'IN_SYNC' -and $_.Drift -ne 'NOT_APPLICABLE' }).Count } else { 0 }
     } | Format-List
     exit 0
+}
+
+if ($controlPlan) {
+    $blockedPlanItems = @($controlPlan.Components | Where-Object { $_.Desired -and $_.Repair -eq 'BLOCKED' })
+    if ($blockedPlanItems.Count) {
+        $blockedSummary = ($blockedPlanItems | ForEach-Object { "$($_.Id):$($_.Drift):$($_.ActualOwnership)" }) -join ', '
+        throw "Desired-state plan is blocked before mutation: $blockedSummary"
+    }
 }
 
 if (-not $codexCliDetected -and -not $vscodeExtensionDetected) { throw 'Neither Codex CLI nor the ChatGPT/Codex VS Code extension was detected. Install one before installing skills.' }

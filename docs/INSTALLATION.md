@@ -22,6 +22,14 @@ Untuk pengujian Alpha internal, `D:\Project\workspace\afyx-codex-engineering-kit
 
 Installer melakukan inventory read-only lebih dahulu untuk Efficient Coding, Odoo Engineering, Afyx Engineering Expert, Prompt Master, Afyx Graph, dan Usage Tracking. State menentukan action yang sah: `NOT INSTALLED` = Install/Skip, `HEALTHY` = Update/Skip, `INCOMPLETE`/`INVALID` = Repair/Skip, dan `UNKNOWN` = Skip saja. Mode non-interaktif selalu Skip kecuali action diberikan melalui `-ComponentAction id=...` atau `--component id=...`. `-ValidateOnly`, `-WhatIf`, dan `--dry-run` tidak membuat mutasi.
 
+Phase 6 menambahkan desired-state preset pada engine yang sama: `minimal`,
+`recommended`, `full`, atau `custom`. Gunakan `-Preset minimal` / `--preset minimal`;
+untuk Custom tambahkan `-CustomComponent <id>` / `--custom-component <id>`. Komponen
+yang tidak dipilih dipertahankan, bukan dihapus. `verify.ps1`/`verify.sh` menerima
+preset yang sama dan gagal tegas untuk desired component yang missing, drifted, atau
+ownership-nya tidak terverifikasi. Hanya instalasi ber-marker Afyx yang berubah dapat
+direpair otomatis; USER/foreign tetap ditolak.
+
 ## Afyx Graph Technical Alpha
 
 Afyx Graph saat ini merupakan Technical Alpha prerelease, bukan Stable v1. Installer memilih artifact berdasarkan versi, channel, OS, dan arsitektur; memverifikasi SHA-256 dan staged identity; lalu memasang secara transaksional. Jika release yang cocok tidak tersedia atau cache/release gagal verifikasi, installer dapat menjalankan `npm ci`, clean build, packaging, dan checksum otomatis dari checkout Git tervalidasi. Windows menggunakan packaging PowerShell native—Bash/WSL tidak diperlukan.

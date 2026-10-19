@@ -18,9 +18,11 @@ CONTRACT = ROOT / "scripts" / "components.json"
 TYPES = {"skill", "runtime", "toolset", "detected-cli"}
 TIERS = {"core", "optional", "external"}
 OWNERSHIP = {"afyx", "upstream", "external"}
+OWNERSHIP_CLASSES = {"AFYX", "EXTERNAL", "USER"}
+PRESETS = {"minimal", "recommended", "full", "custom"}
 PLATFORMS = {"all", "windows"}
 INSTALL_ROOTS = {"skills_root", "afyx_graph_root", "codex_tools", ""}
-REQUIRED_KEYS = {"id", "name", "type", "tier", "ownership", "platforms", "install_root", "install_path"}
+REQUIRED_KEYS = {"id", "name", "type", "tier", "ownership", "ownership_class", "presets", "platforms", "install_root", "install_path"}
 EXPECTED_IDS = ["efficient-coding", "odoo-engineering", "afyx-engineering-expert", "prompt-master", "afyx-graph", "codex-usage-tracking", "headroom"]
 LINE_RE = re.compile(r'^\s*"[a-z_]+":\s*"[^"\\]*",?\s*$')
 
@@ -33,6 +35,21 @@ text = CONTRACT.read_text(encoding="utf-8")
 document = json.loads(text)
 if document.get("schema_version") != 1:
     fail("schema_version must be 1")
+if document.get("control_plane_version") != 1:
+    fail("control_plane_version must be 1")
+if set(document.get("supported_presets", "").split(";")) != PRESETS:
+    fail("supported_presets must contain minimal, recommended, full and custom")
+providers = document.get("providers", [])
+provider_ids = [provider.get("provider") for provider in providers]
+if provider_ids != ["codex", "headroom"] or document.get("default_provider") != "codex":
+    fail("provider registry must declare Codex primary and Headroom external")
+for provider in providers:
+    if provider.get("ownership_class") not in OWNERSHIP_CLASSES:
+        fail(f"provider {provider.get('provider')}: invalid ownership_class")
+    if provider.get("configuration_policy") not in {"merge-afyx-owned-entries-only", "observe-only"}:
+        fail(f"provider {provider.get('provider')}: unsafe configuration_policy")
+if providers[0].get("primary") != "true" or providers[1].get("primary") != "false":
+    fail("only Codex may be the primary v1 provider")
 components = document["components"]
 
 # The Bash reader parses one scalar "key": "value" per line inside each object.
@@ -68,6 +85,11 @@ for component in components:
         fail(f"{cid}: unknown tier {component['tier']}")
     if component["ownership"] not in OWNERSHIP:
         fail(f"{cid}: unknown ownership {component['ownership']}")
+    if component["ownership_class"] not in OWNERSHIP_CLASSES - {"USER"}:
+        fail(f"{cid}: invalid declared ownership_class")
+    declared_presets = {item for item in component["presets"].split(";") if item}
+    if not declared_presets <= PRESETS - {"custom"}:
+        fail(f"{cid}: invalid preset membership")
     if component["platforms"] not in PLATFORMS:
         fail(f"{cid}: unknown platforms {component['platforms']}")
     if component["install_root"] not in INSTALL_ROOTS:
@@ -76,6 +98,17 @@ for component in components:
         fail(f"{cid}: a core component cannot be externally owned")
 
 by_id = {component["id"]: component for component in components}
+expected_presets = {
+    "minimal": {"efficient-coding", "odoo-engineering"},
+    "recommended": {"efficient-coding", "odoo-engineering", "afyx-engineering-expert", "prompt-master"},
+    "full": set(EXPECTED_IDS) - {"headroom"},
+}
+for preset, expected in expected_presets.items():
+    actual = {component["id"] for component in components if preset in component["presets"].split(";")}
+    if actual != expected:
+        fail(f"{preset}: component membership mismatch")
+if by_id["prompt-master"]["ownership_class"] != "EXTERNAL" or by_id["headroom"]["ownership_class"] != "EXTERNAL":
+    fail("Prompt Master and Headroom must remain EXTERNAL")
 
 # Bundled skills must ship exactly what the contract requires.
 for cid in ("efficient-coding", "odoo-engineering", "afyx-engineering-expert"):

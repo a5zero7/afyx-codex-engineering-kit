@@ -13,13 +13,15 @@ validate_only=false
 dry_run=false
 update_installed=false
 component_actions=()
+preset=
+custom_components=()
 offline=false
 no_build_fallback=false
 allow_dirty_source=false
 skip_graph_mcp=false
 
 usage() {
-  printf '%s\n' 'Usage: ./install.sh [--skills-root PATH] [--component ID=skip|install|update|repair|adopt] [--update-installed] [--force] [--validate-only] [--dry-run]'
+  printf '%s\n' 'Usage: ./install.sh [--skills-root PATH] [--preset minimal|recommended|full|custom] [--custom-component ID] [--component ID=skip|install|update|repair|adopt] [--update-installed] [--force] [--validate-only] [--dry-run]'
 }
 
 while (($#)); do
@@ -27,6 +29,8 @@ while (($#)); do
     --skills-root) (($# >= 2)) || { printf '%s\n' '--skills-root requires a value.' >&2; exit 2; }; skills_root="$2"; shift 2 ;;
     --force) force=true; shift ;;
     --component) (($# >= 2)) || { printf '%s\n' '--component requires a value.' >&2; exit 2; }; component_actions+=("$2"); shift 2 ;;
+    --preset) (($# >= 2)) || { printf '%s\n' '--preset requires a value.' >&2; exit 2; }; preset="$2"; shift 2 ;;
+    --custom-component) (($# >= 2)) || { printf '%s\n' '--custom-component requires a value.' >&2; exit 2; }; custom_components+=("$2"); shift 2 ;;
     --update-installed) update_installed=true; shift ;;
     --offline) offline=true; shift ;;
     --no-build-fallback) no_build_fallback=true; shift ;;
@@ -48,6 +52,16 @@ valid_manifest() { [[ -s "$1/SKILL.md" ]] && [[ "$(head -n 1 "$1/SKILL.md")" == 
 # shellcheck source=scripts/lib/afyx-skill-lifecycle.sh
 . "$PACKAGE_ROOT/scripts/lib/afyx-skill-lifecycle.sh"
 PROMPT_MASTER_REVISION="$(afyx_component_field prompt-master source_revision)"
+if [[ -n "$preset" ]] && ! afyx_preset_valid "$preset"; then printf 'Unknown preset: %s\n' "$preset" >&2; exit 2; fi
+if ((${#custom_components[@]})) && [[ "$preset" != custom ]]; then printf '%s\n' '--custom-component requires --preset custom.' >&2; exit 2; fi
+if [[ -n "$preset" ]] && { ((${#component_actions[@]})) || [[ "$force" == true ]]; }; then
+  printf '%s\n' 'A preset is immutable for one operation; do not combine it with --component or --force.' >&2; exit 2
+fi
+custom_component_list=
+for custom_id in "${custom_components[@]}"; do
+  case "$custom_id" in efficient-coding|odoo-engineering|afyx-engineering-expert|prompt-master|afyx-graph|codex-usage-tracking) ;; *) printf 'Unknown custom component: %s\n' "$custom_id" >&2; exit 2 ;; esac
+  custom_component_list="${custom_component_list:+$custom_component_list;}$custom_id"
+done
 component_state() {
   local id="$1" owner target
   afyx_component_evaluate "$id"
@@ -56,7 +70,7 @@ component_state() {
     afyx_classify_skill "$target" "$id" "$owner"
     case "$AFYX_OWNERSHIP_STATE" in
       AFYX_OWNED_UNMODIFIED|EXTERNAL_UPSTREAM) ;;
-      AFYX_OWNED_MODIFIED) AFYX_STATE=UNKNOWN; AFYX_DETAIL='Afyx ownership verified but installed content was modified' ;;
+      AFYX_OWNED_MODIFIED) AFYX_STATE=DRIFTED; AFYX_DETAIL='Afyx ownership verified but installed content was modified' ;;
       *) AFYX_STATE=UNKNOWN; AFYX_DETAIL="installed ownership is $AFYX_OWNERSHIP_STATE" ;;
     esac
   fi
@@ -100,10 +114,21 @@ component_action() {
   local id="$1" label="$2" state="$3" installed="$4" available action= answer default
   available="$(available_version "$id")"
   if action="$(explicit_action "$id")"; then :
+  elif [[ -n "$preset" ]]; then
+    afyx_control_classify "$id" "$state" "$preset" "$custom_component_list"
+    if [[ "$AFYX_DESIRED" != true || "$AFYX_DRIFT" == NOT_APPLICABLE ]]; then action=skip
+    elif [[ "$AFYX_REPAIR" == BLOCKED ]]; then printf '%s drift is %s with actual ownership %s; automatic takeover is forbidden.\n' "$label" "$AFYX_DRIFT" "$AFYX_ACTUAL_OWNERSHIP" >&2; return 2
+    elif [[ "$AFYX_REPAIR" == INSTALL ]]; then action=install
+    elif [[ "$AFYX_REPAIR" == REPAIR ]]; then action=repair
+    elif [[ "$state" == HEALTHY && -n "$available" && -n "$installed" ]] && version_lt "$installed" "$available"; then action=update
+    else action=skip; fi
   elif "$force"; then
-    if [[ "$state" == 'NOT INSTALLED' ]]; then action=install; elif [[ "$state" == INCOMPLETE || "$state" == INVALID || "$state" == UNKNOWN ]]; then action=repair; else action=update; fi
+    if [[ "$state" == UNKNOWN ]]; then printf '%s ownership is unknown; --force cannot take ownership.\n' "$label" >&2; return 2
+    elif [[ "$state" == 'NOT INSTALLED' ]]; then action=install
+    elif [[ "$state" == INCOMPLETE || "$state" == INVALID || "$state" == DRIFTED ]]; then action=repair
+    else action=update; fi
   elif "$update_installed"; then
-    if [[ "$state" == INCOMPLETE || "$state" == INVALID ]]; then action=repair
+    if [[ "$state" == INCOMPLETE || "$state" == INVALID || "$state" == DRIFTED ]]; then action=repair
     elif [[ "$state" == HEALTHY && -n "$available" && -n "$installed" ]] && version_lt "$installed" "$available"; then action=update
     else action=skip; fi
   elif ! "$interactive" || "$dry_run"; then action=skip
@@ -114,7 +139,7 @@ component_action() {
     default=S; [[ -n "$available" && -n "$installed" ]] && version_lt "$installed" "$available" && default=U
     read -r -p "$label is healthy. installed=$installed available=$available [U] Update / [S] Skip [$default]: " answer || answer=
     case "$answer" in [uU]|[uU][pP][dD][aA][tT][eE]) action=update ;; '') [[ "$default" == U ]] && action=update || action=skip ;; *) action=skip ;; esac
-  elif [[ "$state" == INCOMPLETE || "$state" == INVALID ]]; then
+  elif [[ "$state" == INCOMPLETE || "$state" == INVALID || "$state" == DRIFTED ]]; then
     read -r -p "$label is $state [R] Repair / [S] Skip [S]: " answer || answer=
     case "$answer" in [rR]|[rR][eE][pP][aA][iI][rR]) action=repair ;; *) action=skip ;; esac
   else
@@ -122,7 +147,7 @@ component_action() {
     case "$answer" in [aA]|[aA][dD][oO][pP][tT]) action=adopt ;; *) action=skip ;; esac
   fi
   case "$state:$action" in
-    'NOT INSTALLED':install|'NOT INSTALLED':skip|HEALTHY:update|HEALTHY:adopt|HEALTHY:skip|INCOMPLETE:repair|INCOMPLETE:skip|INVALID:repair|INVALID:skip|UNKNOWN:adopt|UNKNOWN:repair|UNKNOWN:skip) ;;
+    'NOT INSTALLED':install|'NOT INSTALLED':skip|HEALTHY:update|HEALTHY:adopt|HEALTHY:skip|INCOMPLETE:repair|INCOMPLETE:skip|INVALID:repair|INVALID:skip|DRIFTED:repair|DRIFTED:skip|UNKNOWN:adopt|UNKNOWN:skip) ;;
     *) printf '%s state %s does not permit action %s.\n' "$label" "$state" "$action" >&2; return 2 ;;
   esac
   printf '%s' "$action"
@@ -150,6 +175,7 @@ install_choice() {
 replacement_authorized() {
   local id="$1" specification
   "$force" && return 0
+  if [[ -n "$preset" ]] && afyx_component_desired "$id" "$preset" "$custom_component_list"; then return 0; fi
   for specification in "${component_actions[@]}"; do
     [[ "$specification" == "$id="* && "$specification" != "$id=skip" ]] && return 0
   done
@@ -224,6 +250,14 @@ printf 'Prompt Master: %s; installed=%s; available=external; ownership=upstream\
 printf 'Afyx Graph: %s; installed=%s; available=%s; ownership=afyx\n' "$afyx_graph_state" "$(component_version afyx-graph)" "$(available_version afyx-graph)"
 printf 'Usage Tracking: NOT INSTALLED (Windows-only runtime)\n'
 if command -v headroom >/dev/null 2>&1; then printf 'Headroom: externally managed; detected\n'; else printf 'Headroom: externally managed; not detected\n'; fi
+if [[ -n "$preset" ]]; then
+  printf '\nDesired State Plan: %s\n' "$(afyx_control_plan_identity "$preset" "$custom_component_list")"
+  for plan_id in $(afyx_component_ids); do
+    plan_state="$(component_state "$plan_id")"
+    afyx_control_classify "$plan_id" "$plan_state" "$preset" "$custom_component_list"
+    printf '%s: desired=%s; actual=%s; drift=%s; ownership=%s; repair=%s\n' "$plan_id" "$AFYX_DESIRED" "$plan_state" "$AFYX_DRIFT" "$AFYX_ACTUAL_OWNERSHIP" "$AFYX_REPAIR"
+  done
+fi
 
 codex_cli_detected=false; command -v codex >/dev/null 2>&1 && codex_cli_detected=true
 vscode_extension_detected=false
@@ -251,6 +285,18 @@ if "$validate_only"; then
   printf 'BundledAfyxGraphSource: true\nInstalledAfyxGraph: %s\nAfyxGraphState: %s\nAfyxGraphVersion: %s\n' "$([[ "$afyx_graph_state" == HEALTHY ]] && echo true || echo false)" "$afyx_graph_state" "$graph_version"
   printf 'InstalledUsageTracker: false\nUsageTrackerState: NOT INSTALLED\nCodexCliDetected: %s\nVsCodeExtensionDetected: %s\n' "$codex_cli_detected" "$vscode_extension_detected"
   exit 0
+fi
+
+if [[ -n "$preset" ]]; then
+  blocked_plan=
+  for plan_id in $(afyx_component_ids); do
+    plan_state="$(component_state "$plan_id")"
+    afyx_control_classify "$plan_id" "$plan_state" "$preset" "$custom_component_list"
+    if [[ "$AFYX_DESIRED" == true && "$AFYX_REPAIR" == BLOCKED ]]; then
+      blocked_plan="${blocked_plan:+$blocked_plan, }$plan_id:$AFYX_DRIFT:$AFYX_ACTUAL_OWNERSHIP"
+    fi
+  done
+  [[ -z "$blocked_plan" ]] || { printf 'Desired-state plan is blocked before mutation: %s\n' "$blocked_plan" >&2; exit 1; }
 fi
 
 if ! "$codex_cli_detected" && ! "$vscode_extension_detected"; then printf 'Neither Codex CLI nor the ChatGPT/Codex VS Code extension was detected.\n' >&2; exit 1; fi

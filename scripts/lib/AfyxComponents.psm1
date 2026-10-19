@@ -6,7 +6,7 @@ Set-StrictMode -Version Latest
 # Read-only: nothing here writes, installs, or changes configuration.
 
 $script:ContractPath = Join-Path (Split-Path -Parent $PSScriptRoot) 'components.json'
-$script:States = @('NOT INSTALLED', 'HEALTHY', 'INCOMPLETE', 'INVALID', 'UNKNOWN')
+$script:States = @('NOT INSTALLED', 'HEALTHY', 'INCOMPLETE', 'INVALID', 'DRIFTED', 'UNKNOWN')
 
 function Get-AfyxPlatform {
     if ($PSVersionTable.PSVersion.Major -ge 6) {
@@ -43,6 +43,105 @@ function Get-AfyxComponentContract {
     $document = Get-Content -Raw -LiteralPath $Path -Encoding utf8 | ConvertFrom-Json
     if ($document.schema_version -ne 1) { throw "Unsupported component contract schema_version: $($document.schema_version)" }
     return @($document.components)
+}
+
+function Get-AfyxControlPlaneContract {
+    [CmdletBinding()]
+    param([string]$Path = $script:ContractPath)
+    $document = Get-Content -Raw -LiteralPath $Path -Encoding utf8 | ConvertFrom-Json
+    if ($document.schema_version -ne 1 -or $document.control_plane_version -ne 1) {
+        throw 'Unsupported Afyx component/control-plane contract version.'
+    }
+    return $document
+}
+
+function Get-AfyxProviderRegistry {
+    [CmdletBinding()]
+    param([string]$Path = $script:ContractPath)
+    return @((Get-AfyxControlPlaneContract -Path $Path).providers)
+}
+
+function Get-AfyxDesiredComponentIds {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][ValidateSet('minimal', 'recommended', 'full', 'custom')][string]$Preset,
+        [string[]]$CustomComponent = @(),
+        [string]$Path = $script:ContractPath
+    )
+    $components = @(Get-AfyxComponentContract -Path $Path)
+    $selectable = @($components | Where-Object { $_.type -ne 'detected-cli' } | ForEach-Object { [string]$_.id })
+    if ($Preset -eq 'custom') {
+        $unknown = @($CustomComponent | Where-Object { $_ -notin $selectable })
+        if ($unknown.Count) { throw "Unknown custom component(s): $($unknown -join ', ')" }
+        return @($selectable | Where-Object { $_ -in $CustomComponent })
+    }
+    if ($CustomComponent.Count) { throw '-CustomComponent is valid only with preset custom.' }
+    return @($components | Where-Object { ";$($_.presets);" -like "*;$Preset;*" } | ForEach-Object { [string]$_.id })
+}
+
+function Get-AfyxControlPlan {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][ValidateSet('minimal', 'recommended', 'full', 'custom')][string]$Preset,
+        [Parameter(Mandatory)]$Context,
+        [string[]]$CustomComponent = @(),
+        [hashtable]$StateById,
+        [string]$ContractPath = $script:ContractPath
+    )
+    $contract = Get-AfyxControlPlaneContract -Path $ContractPath
+    $components = @($contract.components)
+    $desiredIds = @(Get-AfyxDesiredComponentIds -Preset $Preset -CustomComponent $CustomComponent -Path $ContractPath)
+    if (-not $StateById) {
+        $StateById = @{}
+        foreach ($state in (Get-AfyxComponentStates -Context $Context -ContractPath $ContractPath)) { $StateById[$state.Id] = $state }
+    }
+    $items = foreach ($component in $components) {
+        $id = [string]$component.id
+        $state = $StateById[$id]
+        $desired = $id -in $desiredIds
+        $notApplicable = $component.platforms -eq 'windows' -and $Context.Platform -ne 'windows'
+        $actualState = if ($state) { [string]$state.State } else { 'UNKNOWN' }
+        $runtimeOwnershipVerified = $true
+        if ($component.type -eq 'runtime' -and $actualState -ne 'NOT INSTALLED') {
+            $runtimeOwnershipVerified = $false
+            try {
+                $markerPath = Join-Path (Get-AfyxComponentRoot -Component $component -Context $Context) ([string]$component.marker_file)
+                $markerDocument = Get-Content -Raw -LiteralPath $markerPath -Encoding utf8 | ConvertFrom-Json -ErrorAction Stop
+                $marker = $markerDocument.PSObject.Properties[[string]$component.marker_field]
+                $runtimeOwnershipVerified = $marker -and [string]$marker.Value -eq [string]$component.marker_value
+            } catch { $runtimeOwnershipVerified = $false }
+        }
+        $drift = if ($notApplicable) { 'NOT_APPLICABLE' }
+            elseif (-not $desired) { if ($actualState -eq 'NOT INSTALLED') { 'ABSENT' } else { 'EXTRA' } }
+            elseif (-not $runtimeOwnershipVerified) { 'UNVERIFIED' }
+            else { switch ($actualState) {
+                'HEALTHY' { 'IN_SYNC' }
+                'NOT INSTALLED' { 'MISSING' }
+                'DRIFTED' { 'MODIFIED' }
+                { $_ -in @('INCOMPLETE', 'INVALID') } { 'DEGRADED' }
+                default { 'UNVERIFIED' }
+            } }
+        $ownership = if ($actualState -eq 'UNKNOWN' -or -not $runtimeOwnershipVerified) { 'USER' } elseif ($actualState -eq 'NOT INSTALLED') { 'NONE' } else { [string]$component.ownership_class }
+        $repair = switch ($drift) {
+            'MISSING' { 'INSTALL' }
+            { $_ -in @('MODIFIED', 'DEGRADED') } { if ($component.ownership_class -eq 'AFYX') { 'REPAIR' } else { 'BLOCKED' } }
+            'UNVERIFIED' { 'BLOCKED' }
+            default { 'NONE' }
+        }
+        [pscustomobject]@{
+            Id = $id; Desired = $desired; Ownership = [string]$component.ownership_class
+            ActualOwnership = $ownership; ActualState = $actualState; Drift = $drift; Repair = $repair
+        }
+    }
+    $identity = "v$($contract.control_plane_version)|$Preset|$($contract.default_provider)|$($desiredIds -join ',')"
+    [pscustomobject]@{
+        Version = [int]$contract.control_plane_version
+        Identity = $identity
+        Preset = $Preset
+        Provider = [string]$contract.default_provider
+        DesiredComponents = @($desiredIds)
+        Components = @($items)
+    }
 }
 
 function Get-AfyxField {
@@ -193,4 +292,4 @@ function Get-AfyxComponentStates {
     }
 }
 
-Export-ModuleMember -Function Get-AfyxPlatform, New-AfyxComponentContext, Get-AfyxComponentContract, Get-AfyxComponentRoot, Test-AfyxSkillManifest, Get-AfyxSkillVersion, Get-AfyxComponentState, Get-AfyxComponentStates
+Export-ModuleMember -Function Get-AfyxPlatform, New-AfyxComponentContext, Get-AfyxComponentContract, Get-AfyxControlPlaneContract, Get-AfyxProviderRegistry, Get-AfyxDesiredComponentIds, Get-AfyxControlPlan, Get-AfyxComponentRoot, Test-AfyxSkillManifest, Get-AfyxSkillVersion, Get-AfyxComponentState, Get-AfyxComponentStates
