@@ -8,7 +8,7 @@ import fnmatch
 import json
 import re
 import sys
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 
@@ -40,6 +40,11 @@ def require(condition: bool, message: str) -> None:
 def validate_contract(contract: dict[str, Any]) -> None:
     require(contract.get("schema_version") == 1, "contract schema_version must be 1")
     require(contract.get("contract_id") == "afyx-engineering-assurance-v1", "unexpected contract_id")
+    require(contract.get("validator_authority") == "record-schema-only", "validator must remain schema-only")
+    require(
+        contract.get("acceptance_authority") == "independent-verification-required",
+        "independent acceptance verification must remain required",
+    )
     require(
         contract.get("lifecycle") == ["PLANNED", "ANALYZED", "IMPLEMENTED", "VALIDATED", "DOCUMENTED", "MERGE_READY"],
         "canonical lifecycle differs from the frozen Phase 7 order",
@@ -57,9 +62,26 @@ def validate_contract(contract: dict[str, Any]) -> None:
     require(contract.get("priority") == ["correctness", "security", "performance", "efficiency"], "assurance priority is invalid")
 
 
+def canonical_repo_path(path: str, *, allow_glob: bool) -> str:
+    require(isinstance(path, str) and bool(path), "repository path must be a non-empty string")
+    require(not any(ord(character) < 32 for character in path), "repository path contains control characters")
+    windows = PureWindowsPath(path)
+    normalized = path.replace("\\", "/")
+    require(not windows.drive and not windows.root, "repository path must not be drive-qualified, UNC or rooted")
+    require(not normalized.startswith("/"), "repository path must be relative")
+    segments = normalized.split("/")
+    require(all(segment not in {"", ".", ".."} for segment in segments), "repository path contains non-canonical segments")
+    require(all(not segment.endswith((" ", ".")) for segment in segments), "repository path contains a malformed segment")
+    require(all(":" not in segment for segment in segments), "repository path contains a drive or stream qualifier")
+    if not allow_glob:
+        require(not any(character in normalized for character in "*?[]"), "changed repository path must not contain glob syntax")
+    return normalized
+
+
 def path_allowed(path: str, patterns: list[str]) -> bool:
-    normalized = path.replace("\\", "/").lstrip("./")
-    return any(fnmatch.fnmatchcase(normalized, pattern) for pattern in patterns)
+    normalized = canonical_repo_path(path, allow_glob=False)
+    canonical_patterns = [canonical_repo_path(pattern, allow_glob=True) for pattern in patterns]
+    return any(fnmatch.fnmatchcase(normalized, pattern) for pattern in canonical_patterns)
 
 
 def validate_measurement(test: dict[str, Any], label: str) -> None:
@@ -90,10 +112,17 @@ def validate_record(record: dict[str, Any], contract: dict[str, Any], expected_h
     require(record.get("schema_version") == 1, "record schema_version must be 1")
     require(isinstance(record.get("task_id"), str) and record["task_id"].strip(), "task_id is required")
     require(state in lifecycle, "unknown lifecycle_state")
+    authority = record.get("evidence_authority", {})
+    require(
+        isinstance(authority, dict)
+        and authority.get("classification") == "SELF_DECLARED"
+        and authority.get("independent_verification") == "REQUIRED",
+        "record must declare SELF_DECLARED evidence and REQUIRED independent verification",
+    )
 
     baseline = record.get("baseline", {})
     source = record.get("source", {})
-    require(isinstance(baseline, dict) and baseline.get("verified") is True, "baseline must be independently verified")
+    require(isinstance(baseline, dict) and baseline.get("verified") is True, "baseline record must declare verified=true")
     require(baseline.get("worktree_clean") is True, "baseline worktree must be clean")
     require(isinstance(baseline.get("sha"), str) and SHA_RE.fullmatch(baseline["sha"]), "baseline SHA must be exact")
     require(isinstance(source, dict) and isinstance(source.get("sha"), str) and SHA_RE.fullmatch(source["sha"]), "source SHA must be exact")
@@ -106,10 +135,14 @@ def validate_record(record: dict[str, Any], contract: dict[str, Any], expected_h
     scope = record.get("scope", {})
     allowed = scope.get("allowed", []) if isinstance(scope, dict) else []
     changed = scope.get("changed", []) if isinstance(scope, dict) else []
+    require(scope.get("authority") == "SELF_DECLARED", "scope.changed must be classified SELF_DECLARED")
     require(bool(allowed) and all(isinstance(item, str) and item for item in allowed), "scope.allowed must be non-empty")
     require(isinstance(changed, list) and all(isinstance(item, str) and item for item in changed), "scope.changed must be a string list")
+    canonical_allowed: list[str] = []
+    for pattern in allowed:
+        check(lambda pattern=pattern: canonical_allowed.append(canonical_repo_path(pattern, allow_glob=True)))
     for path in changed:
-        check(lambda path=path: require(path_allowed(path, allowed), f"scope violation: {path}"))
+        check(lambda path=path: require(path_allowed(path, canonical_allowed), f"scope violation or non-canonical path: {path}"))
 
     risk = record.get("risk", {})
     level = risk.get("level") if isinstance(risk, dict) else None
@@ -130,6 +163,7 @@ def validate_record(record: dict[str, Any], contract: dict[str, Any], expected_h
     tests = record.get("tests", [])
     require(isinstance(tests, list), "tests must be a list")
     test_ids: set[str] = set()
+    evidence_status: dict[str, str] = {}
     passed_kinds: set[str] = set()
     blocking = False
     for index, test in enumerate(tests):
@@ -145,6 +179,8 @@ def validate_record(record: dict[str, Any], contract: dict[str, Any], expected_h
         if isinstance(test_id, str):
             check(lambda: require(test_id not in test_ids, f"duplicate test id: {test_id}"))
             test_ids.add(test_id)
+            if status in statuses:
+                evidence_status[test_id] = status
         check(lambda: require(status in statuses, f"{label}: unknown status {status!r}"))
         check(lambda: require(isinstance(kind, str) and bool(kind), f"{label}: kind is required"))
         check(lambda: require(requirement in {"v1", "optional", "unrelated"}, f"{label}: invalid requirement classification"))
@@ -180,6 +216,7 @@ def validate_record(record: dict[str, Any], contract: dict[str, Any], expected_h
         evidence_id = item.get("id")
         require(isinstance(evidence_id, str) and evidence_id and evidence_id not in evidence_ids, f"{label}: unique id required")
         evidence_ids.add(evidence_id)
+        evidence_status[evidence_id] = "PASS"
         require(item.get("status") == "PASS", f"{label}: only PASS evidence may be reused")
         require(item.get("relevant_source_digest") == source["relevant_source_digest"], f"{label}: stale or mismatched source evidence")
         require(item.get("acceptance_revision") == source["acceptance_revision"], f"{label}: acceptance contract mismatch")
@@ -191,7 +228,15 @@ def validate_record(record: dict[str, Any], contract: dict[str, Any], expected_h
     for index, claim in enumerate(ground_truth):
         require(isinstance(claim, dict), f"ground_truth[{index}] must be an object")
         require(isinstance(claim.get("claim"), str) and claim["claim"].strip(), f"ground_truth[{index}].claim is required")
-        require(claim.get("evidence_id") in evidence_ids, f"ground_truth[{index}] references unknown evidence")
+        evidence_id = claim.get("evidence_id")
+        classification = claim.get("classification")
+        require(evidence_id in evidence_ids, f"ground_truth[{index}] references unknown evidence")
+        require(classification in contract["ground_truth_classes"], f"ground_truth[{index}] has invalid classification")
+        status = evidence_status.get(evidence_id)
+        if classification == "AFFIRMATIVE":
+            require(status == "PASS", f"ground_truth[{index}] affirmative claim requires PASS evidence")
+        else:
+            require(status in {"FAIL", "BLOCKED", "NOT_RUN"}, f"ground_truth[{index}] negative observation requires non-PASS evidence")
 
     merge_ready = state == "MERGE_READY" or record.get("merge_readiness") == "READY"
     if merge_ready:
@@ -222,8 +267,13 @@ def main() -> int:
     except AssuranceError as exc:
         print(f"Engineering assurance: FAIL — {exc}", file=sys.stderr)
         return 1
-    suffix = f"; record={args.record}" if args.record else ""
-    print(f"Engineering assurance: PASS ({contract['contract_id']}{suffix})")
+    if args.record:
+        print(
+            "Engineering assurance record: SCHEMA_VALID; "
+            f"acceptance=INDEPENDENT_VERIFICATION_REQUIRED; record={args.record}"
+        )
+    else:
+        print(f"Engineering assurance schema: PASS ({contract['contract_id']})")
     return 0
 
 

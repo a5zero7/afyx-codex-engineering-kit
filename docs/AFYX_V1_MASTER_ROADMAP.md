@@ -2968,17 +2968,22 @@ preserved and explicit acquisition retains pinned provenance, backup, rollback,
 and offline fail-closed behavior. This retirement does not claim a Forge-native
 replacement.
 
-The lightweight machine-readable engineering-assurance contract binds Task,
-Baseline, Scope, Ground Truth, risk Levels 1/2/3, adaptive validation budget,
+The lightweight machine-readable engineering-assurance contract validates the
+schema of self-declared Task, Baseline, Scope, Ground Truth, risk Levels 1/2/3,
+adaptive validation budget,
 conditional mutation/differential/performance proof, failed/skipped classification,
 evidence reuse, CI, documentation, and merge readiness. Unknown status, stale or
 mismatched evidence, unjustified skip, out-of-scope change, and required-v1 failure
-all fail closed. Correctness and security remain higher priority than performance
-or efficiency. The lifecycle remains `PLANNED → ANALYZED → IMPLEMENTED → VALIDATED
+all fail closed. Canonical repository-relative paths reject traversal, absolute,
+drive-qualified, UNC, and malformed input before allowlist matching. Affirmative
+Ground Truth requires PASS evidence; negative observations are separately classified.
+Source/diff/CI identities still require independent verification before acceptance.
+Correctness and security remain higher priority than performance or efficiency. The
+lifecycle remains `PLANNED → ANALYZED → IMPLEMENTED → VALIDATED
 → DOCUMENTED → MERGE_READY`.
 
 Focused evidence at implementation time is component contract PASS,
-engineering-assurance 9/9 PASS, and control-plane 11/11 PASS. The current
+engineering-assurance 13/13 PASS, and control-plane 11/11 PASS. The current
 native-Windows scripts suite executed 240 tests with zero assertion failures and 15
 environment errors in the same synthetic-image/WSL-container/WSL-lab Forge modules;
 it remains `FAIL`, separate from the historical 25-error run. Exact-head CI,

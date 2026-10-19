@@ -44,23 +44,32 @@ python scripts/validate-engineering-assurance.py
 python scripts/validate-engineering-assurance.py --record <record.json> --expected-head <40-char-sha>
 ```
 
-The record binds a Task Contract to an exact baseline, source SHA, relevant-source
-digest, acceptance revision, allowed/changed scope, and evidence-backed ground truth.
+The record declares its Task Contract baseline, source SHA, relevant-source digest,
+acceptance revision, allowed/changed scope, and evidence-backed ground truth. The
+validator is deliberately a record-schema validator: these source, scope, CI, and
+evidence identities are `SELF_DECLARED`, not independently discovered facts. Its
+successful record result is `SCHEMA_VALID` with
+`INDEPENDENT_VERIFICATION_REQUIRED`; a reviewer or trusted automation must still
+verify the Git source/diff and CI identities before acceptance.
 Validation Level 1 requires static and focused evidence; Level 2 adds negative and
 regression evidence; Level 3 adds security and rollback evidence. Mutation,
 differential, and measured performance proof are mandatory only when their risk flags
 are set. Performance uses a numeric value, threshold, comparator, and unit and can
 never override correctness or security failure.
 
-Only `PASS`, `FAIL`, `NOT_RUN`, and `BLOCKED` are accepted. `NOT_RUN` needs an
+Only `PASS`, `FAIL`, `NOT_RUN`, and `BLOCKED` are accepted. An `AFFIRMATIVE`
+Ground Truth claim requires `PASS` evidence. A separately classified
+`NEGATIVE_OBSERVATION` may cite only `FAIL`, `BLOCKED`, or `NOT_RUN`, preserving
+real negative evidence without allowing it to prove success. `NOT_RUN` needs an
 `UNSUPPORTED`, `DEFERRED`, or `ENVIRONMENT` disposition and reason. `FAIL`/`BLOCKED`
 needs an owner, resolution, and expected acceptance evidence; required-v1 failures
 block readiness. Evidence reuse requires matching relevant-source digest, acceptance
 revision, and scope fingerprint plus no new relevant failure. Validation-budget
 overrun needs an explicit reason.
 
-`MERGE_READY` requires a verified clean baseline, no scope violation, evidence-backed
-ground truth, the risk-level test set, and explicit CI/documentation PASS evidence.
+`MERGE_READY` requires a record declaring a clean baseline, no scope violation,
+eligible ground truth, the risk-level test set, and explicit CI/documentation PASS
+evidence. This is schema-valid merge-readiness input, not independent acceptance.
 The canonical lifecycle remains:
 
 ```text
@@ -71,7 +80,7 @@ PLANNED → ANALYZED → IMPLEMENTED → VALIDATED → DOCUMENTED → MERGE_READ
 
 | Requirement | Implementation | Status |
 |---|---|---|
-| Task Contract / Baseline / Scope / Ground Truth | Exact identity and allowlisted-scope validation in assurance record | PASS |
+| Task Contract / Baseline / Scope / Ground Truth | Canonical repository-relative scope validation, status-eligible claims, and explicit self-declared authority | PASS |
 | Risk Levels 1/2/3 | Cumulative required test kinds | PASS |
 | Mutation / Differential Proof | Conditional risk flags and named PASS evidence | PASS |
 | Performance Gate | Numeric threshold-bound measurement | PASS |
@@ -82,7 +91,7 @@ PLANNED → ANALYZED → IMPLEMENTED → VALIDATED → DOCUMENTED → MERGE_READ
 | Daily-runtime compatibility | PASS in disposable focused workflows; active user runtime NOT TOUCHED |
 | Exact-head cross-platform CI | PENDING |
 
-Local focused evidence: component contract PASS; engineering-assurance 9/9 PASS;
+Local focused evidence: component contract PASS; engineering-assurance 13/13 PASS;
 control-plane 11/11 PASS. The current native-Windows scripts suite executed 240
 tests with zero assertion failures and 15 environment errors in the same three Forge
 POSIX/WSL modules: three synthetic-image compiler-path cases, six WSL-container

@@ -33,6 +33,7 @@ def passing_record() -> dict:
         "schema_version": 1,
         "task_id": "PHASE7-TEST",
         "lifecycle_state": "MERGE_READY",
+        "evidence_authority": {"classification": "SELF_DECLARED", "independent_verification": "REQUIRED"},
         "baseline": {"sha": "0" * 40, "verified": True, "worktree_clean": True},
         "source": {
             "sha": HEAD,
@@ -40,8 +41,14 @@ def passing_record() -> dict:
             "relevant_source_digest": DIGEST,
             "scope_fingerprint": SCOPE,
         },
-        "scope": {"allowed": ["scripts/**", "docs/**"], "changed": ["scripts/example.py", "docs/example.md"]},
-        "ground_truth": [{"claim": "focused behavior observed", "evidence_id": "test-focused"}],
+        "scope": {
+            "authority": "SELF_DECLARED",
+            "allowed": ["scripts/**", "docs/**"],
+            "changed": ["scripts/example.py", "docs/example.md"],
+        },
+        "ground_truth": [
+            {"claim": "focused behavior observed", "classification": "AFFIRMATIVE", "evidence_id": "test-focused"}
+        ],
         "risk": {
             "level": 2,
             "rationale": "Cross-platform lifecycle contract change",
@@ -70,9 +77,16 @@ class EngineeringAssuranceTests(unittest.TestCase):
         self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
         return result
 
-    def test_contract_and_merge_ready_record_pass(self) -> None:
+    def test_contract_and_merge_ready_record_schema_is_explicit(self) -> None:
         self.assertIn("PASS", self.run_validator().stdout)
-        self.assertIn("PASS", self.run_validator(passing_record()).stdout)
+        result = self.run_validator(passing_record())
+        self.assertIn("SCHEMA_VALID", result.stdout)
+        self.assertIn("INDEPENDENT_VERIFICATION_REQUIRED", result.stdout)
+
+    def test_evidence_authority_is_required_and_never_inferred(self) -> None:
+        record = passing_record()
+        del record["evidence_authority"]
+        self.assertIn("SELF_DECLARED evidence", self.run_validator(record, 1).stderr)
 
     def test_expected_head_and_scope_tampering_fail(self) -> None:
         record = passing_record()
@@ -81,6 +95,38 @@ class EngineeringAssuranceTests(unittest.TestCase):
         record = passing_record()
         record["scope"]["changed"].append("private/out-of-scope.txt")
         self.assertIn("scope violation", self.run_validator(record, 1).stderr)
+
+    def test_scope_rejects_noncanonical_and_absolute_paths(self) -> None:
+        adversarial = (
+            "scripts/../private/secret.txt",
+            "scripts/../../.codex/auth.json",
+            "scripts\\..\\private\\secret.txt",
+            "/scripts/secret.txt",
+            "C:\\scripts\\secret.txt",
+            "C:scripts\\secret.txt",
+            "\\\\server\\share\\scripts\\secret.txt",
+            "scripts//secret.txt",
+            "./scripts/secret.txt",
+            "scripts/secret.txt.",
+            "scripts/secret.txt:stream",
+            "scripts/*.py",
+            "scripts/\x01secret.txt",
+        )
+        for path in adversarial:
+            with self.subTest(path=path):
+                record = passing_record()
+                record["scope"]["changed"] = [path]
+                self.assertIn("repository path", self.run_validator(record, 1).stderr)
+        record = passing_record()
+        record["scope"]["changed"] = ["scripts\\valid\\file.py"]
+        self.run_validator(record)
+
+    def test_scope_rejects_noncanonical_allowlist_patterns(self) -> None:
+        for pattern in ("scripts/../private/**", "C:\\scripts\\**", "//server/share/**"):
+            with self.subTest(pattern=pattern):
+                record = passing_record()
+                record["scope"]["allowed"] = [pattern]
+                self.assertIn("repository path", self.run_validator(record, 1).stderr)
 
     def test_stale_reused_evidence_fails(self) -> None:
         record = passing_record()
@@ -118,8 +164,47 @@ class EngineeringAssuranceTests(unittest.TestCase):
         )
         self.run_validator(record)
 
+    def test_affirmative_ground_truth_rejects_non_pass_evidence(self) -> None:
+        for status in ("FAIL", "BLOCKED", "NOT_RUN"):
+            with self.subTest(status=status):
+                record = passing_record()
+                observation = {
+                    "id": "test-observation",
+                    "kind": "observation",
+                    "status": status,
+                    "requirement": "unrelated",
+                    "reason": "bounded negative observation",
+                    "blocks_readiness": False,
+                }
+                if status in {"FAIL", "BLOCKED"}:
+                    observation.update(
+                        {
+                            "owner": "external",
+                            "resolution": "retain classified limitation",
+                            "acceptance_evidence": "independent follow-up",
+                        }
+                    )
+                else:
+                    observation["disposition"] = "UNSUPPORTED"
+                record["tests"].append(observation)
+                record["ground_truth"] = [
+                    {
+                        "claim": "operation succeeded",
+                        "classification": "AFFIRMATIVE",
+                        "evidence_id": "test-observation",
+                    }
+                ]
+                self.assertIn("affirmative claim requires PASS", self.run_validator(record, 1).stderr)
+                record["ground_truth"][0].update(
+                    {"claim": "operation was not demonstrated", "classification": "NEGATIVE_OBSERVATION"}
+                )
+                self.run_validator(record)
+
     def test_v1_failure_blocks_even_with_performance_pass(self) -> None:
         record = passing_record()
+        # Keep Ground Truth eligible so this test reaches the merge-readiness
+        # checks it is intended to exercise.
+        record["ground_truth"][0]["evidence_id"] = "test-static"
         record["tests"][1].update(
             {
                 "status": "FAIL",
