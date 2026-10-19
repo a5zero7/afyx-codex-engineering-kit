@@ -22,6 +22,8 @@ Untuk pengujian Alpha internal, `D:\Project\workspace\afyx-codex-engineering-kit
 
 Installer melakukan inventory read-only lebih dahulu untuk Efficient Coding, Odoo Engineering, Afyx Engineering Expert, Prompt Master, Afyx Graph, dan Usage Tracking. State menentukan action yang sah: `NOT INSTALLED` = Install/Skip, `HEALTHY` = Update/Skip, `INCOMPLETE`/`INVALID` = Repair/Skip, dan `UNKNOWN` = Skip saja. Mode non-interaktif selalu Skip kecuali action diberikan melalui `-ComponentAction id=...` atau `--component id=...`. `-ValidateOnly`, `-WhatIf`, dan `--dry-run` tidak membuat mutasi.
 
+Prompt Master merupakan pengecualian eksternal: Minimal, Recommended, Full, install/update legacy, dan verifikasi normal tidak mengakuisisi, mengubah, merepair, atau mewajibkannya. Instalasi dan disabled state milik pengguna dipertahankan. Operator masih dapat memilihnya secara eksplisit melalui preset Custom atau `prompt-master=install|update|repair|adopt`; tindakan tersebut tetap memakai kontrak upstream terpin dan tidak mengubah ownership menjadi Afyx.
+
 Phase 6 menambahkan desired-state preset pada engine yang sama: `minimal`,
 `recommended`, `full`, atau `custom`. Gunakan `-Preset minimal` / `--preset minimal`;
 untuk Custom tambahkan `-CustomComponent <id>` / `--custom-component <id>`. Komponen
@@ -36,7 +38,7 @@ Afyx Graph saat ini merupakan Technical Alpha prerelease, bukan Stable v1. Insta
 
 Identitas artifact juga mencatat source revision/build identity dan extraction version. Cache lokal dengan semver yang sama tetapi revision berbeda diklasifikasikan sebagai valid-but-stale dan tidak dipasang diam-diam. Archive eksternal tanpa revision terverifikasi tetap dilaporkan `UNKNOWN`. `-ValidateOnly` / `--validate-only` membandingkan runtime terpasang dengan checkout tanpa mengubah keduanya; revision drift dilaporkan sebagai `UPDATE AVAILABLE — REVISION MISMATCH`.
 
-Gunakan `-Offline` / `--offline` untuk mencegah self-update/lookup jaringan dan memakai cache/fallback Graph lokal. Karena Prompt Master dimiliki upstream dan tidak dibundel, action install/update Prompt Master ditolak dalam mode offline. Gunakan `-NoBuildFallback` / `--no-build-fallback` untuk gagal tegas bila artifact tidak tersedia. Source dirty ditolak untuk fallback; `-AllowDirtySource` / `--allow-dirty-source` adalah opt-in eksplisit yang harus dipakai hanya saat provenance perubahan lokal telah dipahami.
+Gunakan `-Offline` / `--offline` untuk mencegah self-update/lookup jaringan dan memakai cache/fallback Graph lokal. Semua preset default beroperasi tanpa fetch Prompt Master. Jika Prompt Master dipilih secara eksplisit melalui Custom/action, install/update tetap ditolak dalam mode offline. Gunakan `-NoBuildFallback` / `--no-build-fallback` untuk gagal tegas bila artifact tidak tersedia. Source dirty ditolak untuk fallback; `-AllowDirtySource` / `--allow-dirty-source` adalah opt-in eksplisit yang harus dipakai hanya saat provenance perubahan lokal telah dipahami.
 
 ## Ownership, backup, dan pemulihan
 
@@ -46,7 +48,7 @@ Backup skill disimpan di `${AFYX_BACKUP_ROOT}` bila diatur, atau secara default 
 
 Instalasi legacy sebelum marker dapat diadopsi secara eksplisit per komponen dengan `-ComponentAction efficient-coding=adopt` / `--component efficient-coding=adopt` (gunakan ID `odoo-engineering` atau `prompt-master` untuk komponen lain). Jalankan `-WhatIf` / `--dry-run` lebih dahulu untuk preview read-only. Adoption hanya menambahkan metadata setelah provenance cocok dan backup diverifikasi; isi skill tidak diganti, di-upgrade, atau dihapus. Efficient Coding/Odoo Engineering harus cocok byte-for-byte dengan digest distribusi historis 1.1.0. Prompt Master 1.8.0 harus berupa checkout Git bersih pada origin resmi dan revision allowlist tepat—nama/version saja tidak cukup. Afyx Engineering Expert 0.1.0 tidak memiliki distribusi legacy dan tidak dapat diadopsi. State `MODIFIED`, `FOREIGN`, `UNKNOWN`, path tidak aman, atau backup gagal selalu ditolak; `-Force` / `--force` bukan pengganti verifikasi adoption.
 
-Prompt Master tetap dimiliki upstream dan tidak dibundel. Default acquisition dipin ke commit yang tercatat di `scripts/components.json`; installer fetch commit tersebut, memverifikasi `HEAD`, struktur skill, remote, dan clean state sebelum promosi. Perubahan revision harus berupa perubahan contract yang direview. Mode offline tidak mengklaim dapat memasang/update komponen ini.
+Prompt Master tetap dimiliki upstream dan tidak dibundel. Hanya acquisition eksplisit yang memakai commit tercatat di `scripts/components.json`; installer memverifikasi `HEAD`, struktur skill, remote, dan clean state sebelum promosi. Perubahan revision harus berupa perubahan contract yang direview. Mode offline tidak mengklaim dapat memasang/update komponen ini.
 
 ## Integritas dan trust artifact
 
@@ -54,7 +56,7 @@ Prompt Master tetap dimiliki upstream dan tidak dibundel. Default acquisition di
 
 ## Verifikasi
 
-Jalankan `./verify.ps1` pada Windows atau `./verify.sh` pada Linux/macOS. Core environment valid jika tersedia Codex CLI, ekstensi ChatGPT/Codex VS Code, atau keduanya. Verifier juga memeriksa tiga skill core serta melaporkan Headroom CLI, proxy/provider routing, dan MCP sebagai capability optional yang terpisah. Semua pemeriksaan bersifat read-only; absennya capability optional tidak menyebabkan core readiness gagal.
+Jalankan `./verify.ps1` pada Windows atau `./verify.sh` pada Linux/macOS. Core environment valid jika tersedia Codex CLI, ekstensi ChatGPT/Codex VS Code, atau keduanya. Verifier memeriksa Efficient Coding dan Odoo Engineering sebagai skill core; Prompt Master tidak mandatory. Headroom CLI, proxy/provider routing, dan MCP dilaporkan sebagai capability optional yang terpisah. Semua pemeriksaan bersifat read-only; absennya capability optional tidak menyebabkan core readiness gagal.
 
 Jika Afyx Graph dipilih, installer dapat mendaftarkan MCP melalui antarmuka native `codex mcp` dengan entry point Node absolut dari runtime terpasang. Registrasi ini consented, idempotent, dan tidak menulis TOML sendiri. Entry Afyx-owned yang stale dapat diperbarui secara terkendali; entry yang conflicting atau tidak terbukti Afyx-owned dipertahankan dan dilaporkan. Gunakan `-SkipGraphMcp` / `--skip-graph-mcp` untuk melewati integrasi. Verifier membedakan `GRAPH_INSTALLED`, `CLI_REACHABLE`, `MCP_NOT_CONFIGURED`, `MCP_CONFIGURED`, `MCP_REACHABLE`, `MCP_BLOCKED`, dan `MCP_HANDSHAKE_FAILED` melalui initialize + tools/list nyata.
 

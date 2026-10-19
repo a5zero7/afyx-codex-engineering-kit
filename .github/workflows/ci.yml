@@ -33,7 +33,9 @@ jobs:
       - name: Validate Afyx Graph identity and metadata
         run: python scripts/validate-afyx-graph.py
       - name: Validate the component contract
-        run: python scripts/validate-components.py
+        run: |
+          python scripts/validate-components.py
+          python scripts/validate-engineering-assurance.py
       - name: Operational independence audit (legacy references must be legal or negative tests only)
         run: python scripts/audit-legacy-identity.py
       - name: Compile and validate evaluation assets
@@ -90,6 +92,7 @@ jobs:
         run: |
           python scripts/validate-afyx-graph.py
           python scripts/validate-components.py
+          python scripts/validate-engineering-assurance.py
           python scripts/audit-legacy-identity.py
           python -m py_compile evals/forge/validate.py
           python evals/forge/validate.py --check-fixtures
@@ -102,6 +105,8 @@ jobs:
           python scripts/tests/test_lifecycle.py
           python scripts/tests/test_skill_lifecycle_security.py
           python scripts/tests/test_skill_legacy_adoption.py
+          python scripts/tests/test_control_plane.py
+          python scripts/tests/test_engineering_assurance.py
           python scripts/tests/test_artifact_identity.py
           python scripts/tests/test_project_detect.py
           python scripts/tests/test_doctor.py
@@ -129,26 +134,28 @@ jobs:
       - name: Verifier on a staged skills root (system /bin/bash)
         run: |
           root="$RUNNER_TEMP/skills"
-          mkdir -p "$root/prompt-master"
+          mkdir -p "$root"
           cp -R skills/efficient-coding skills/odoo-engineering "$root/"
-          printf -- '---\nname: prompt-master\ndescription: stub\n---\n' > "$root/prompt-master/SKILL.md"
-          # Core skills must verify; the overall exit may be non-zero only because no Codex host exists on a CI runner.
+          # Default skills must verify without Prompt Master; the overall exit may be non-zero only because no Codex host exists on a CI runner.
           /bin/bash ./verify.sh --skills-root "$root" | tee verify.out || true
           grep -q '^\[OK\] Efficient Coding' verify.out
           grep -q '^\[OK\] Odoo Engineering' verify.out
-          grep -q '^\[OK\] Prompt Master' verify.out
-          ! grep -q '^\[FAIL\] \(Efficient Coding\|Odoo Engineering\|Prompt Master\)' verify.out
+          ! grep -q '^\[FAIL\] \(Efficient Coding\|Odoo Engineering\)' verify.out
+          ! grep -q '^\[FAIL\] Prompt Master' verify.out
           rm -f verify.out
       - name: Component contract and project detector (system /bin/bash)
         run: |
           export PATH="/bin:$PATH"
           python3 scripts/validate-components.py
+          python3 scripts/validate-engineering-assurance.py
           python3 -m py_compile evals/forge/validate.py
           python3 evals/forge/validate.py --check-fixtures
           python3 scripts/tests/test_components.py
           python3 scripts/tests/test_lifecycle.py
           python3 scripts/tests/test_skill_lifecycle_security.py
           python3 scripts/tests/test_skill_legacy_adoption.py
+          python3 scripts/tests/test_control_plane.py
+          python3 scripts/tests/test_engineering_assurance.py
           python3 scripts/tests/test_artifact_identity.py
           python3 scripts/tests/test_project_detect.py
       - name: Verify repository remains clean

@@ -123,6 +123,7 @@ component_action() {
     elif [[ "$AFYX_REPAIR" == REPAIR ]]; then action=repair
     elif [[ "$state" == HEALTHY && -n "$available" && -n "$installed" ]] && version_lt "$installed" "$available"; then action=update
     else action=skip; fi
+  elif [[ "$id" == prompt-master ]]; then action=skip
   elif "$force"; then
     if [[ "$state" == UNKNOWN ]]; then printf '%s ownership is unknown; --force cannot take ownership.\n' "$label" >&2; return 2
     elif [[ "$state" == 'NOT INSTALLED' ]]; then action=install
@@ -301,7 +302,7 @@ if [[ -n "$preset" ]]; then
 fi
 
 if ! "$codex_cli_detected" && ! "$vscode_extension_detected"; then printf 'Neither Codex CLI nor the ChatGPT/Codex VS Code extension was detected.\n' >&2; exit 1; fi
-command -v git >/dev/null 2>&1 || { printf 'Git is required for Prompt Master.\n' >&2; exit 1; }
+command -v git >/dev/null 2>&1 || { printf 'Git is required for Afyx source validation and lifecycle updates.\n' >&2; exit 1; }
 run mkdir -p "$skills_root"
 
 efficient_action="$(component_action efficient-coding 'Efficient Coding' "$efficient_state" "$(component_version efficient-coding)")"

@@ -2,7 +2,7 @@
 
 Installer PowerShell dan Bash untuk workflow Codex yang rapi dan aman di Windows, Linux, dan macOS.
 
-Paket ini memasang `efficient-coding` dan `odoo-engineering`, serta mengambil `prompt-master` dari upstream resminya. Ia sengaja **tidak** mengubah model, provider, kredensial, atau MCP Codex yang sudah ada.
+Paket ini memasang `efficient-coding` dan `odoo-engineering`; preset Recommended juga memasang Afyx Engineering Expert. Prompt Master tidak lagi menjadi dependency/default dan hanya tetap tersedia sebagai pilihan Custom eksternal yang eksplisit. Kit sengaja **tidak** mengubah model, provider, kredensial, atau MCP Codex yang sudah ada.
 
 ## Komponen
 
@@ -11,12 +11,12 @@ Paket ini memasang `efficient-coding` dan `odoo-engineering`, serta mengambil `p
 | Efficient Coding | Salinan utuh dari `~/.agents/skills/efficient-coding`, termasuk `references/` | Dipasang ke skill root yang dipilih tanpa mengubah isinya |
 | Odoo Engineering | Dibundel di repositori ini | Stable Odoo 10–20 |
 | Afyx Engineering Expert | Original Afyx instruction-only skill di `skills/afyx-engineering-expert/` | Skill opsional adaptif: satu orchestrator, 13 reference, enam workflow, dan result template |
-| Prompt Master | [nidhinjs/prompt-master](https://github.com/nidhinjs/prompt-master) | Dipasang atau diganti melalui staging, validasi, backup, dan swap aman |
+| Prompt Master | [nidhinjs/prompt-master](https://github.com/nidhinjs/prompt-master) | EXTERNAL; tidak dipasang/update/diverifikasi secara mandatory oleh workflow default; pilihan Custom eksplisit tetap memakai staging, validasi, backup, dan swap aman |
 | Afyx Graph | Komponen Afyx, dibundel di `afyx-graph/` | Komponen opsional untuk structural intelligence lokal; memerlukan Node.js eksternal 22.5.0 atau lebih baru |
 | Headroom | [headroomlabs-ai/headroom](https://github.com/headroomlabs-ai/headroom) | Enhancement eksternal opsional; hanya dideteksi |
 | Usage Tracking | Dibundel di `tools/codex-usage/` | Opsional, Windows; ringkasan token/cost otomatis melalui global Stop hook |
 
-**Core:** Efficient Coding, Odoo Engineering, dan Prompt Master. **Komponen opsional Afyx:** Afyx Engineering Expert, Afyx Graph, dan Usage Tracking. **Enhancement eksternal:** Headroom. Core skill tetap berfungsi tanpa komponen opsional atau eksternal. Distribusi saat ini adalah **Technical Alpha prerelease**, bukan Stable v1 atau public release yang sudah dijamin tersedia.
+**Core:** Efficient Coding dan Odoo Engineering. **Komponen opsional Afyx:** Afyx Engineering Expert, Afyx Graph, dan Usage Tracking. **Komponen eksternal:** Prompt Master dan Headroom. Core skill tetap berfungsi tanpa komponen opsional atau eksternal. Distribusi saat ini adalah **Technical Alpha prerelease**, bukan Stable v1 atau public release yang sudah dijamin tersedia.
 
 ## Pilih installer sesuai sistem operasi
 
@@ -47,7 +47,7 @@ Secara default skill dipasang ke `~/.agents/skills`, yaitu lokasi skill personal
 
 Installer mendeteksi Codex CLI, ekstensi ChatGPT/Codex VS Code, atau keduanya. Ketiganya memakai skill root personal yang sama secara default; gunakan `-SkillsRoot` / `--skills-root` hanya untuk lingkungan terisolasi yang memang Anda kelola sendiri.
 
-Setelah selesai, buka sesi Codex baru. Skill akan aktif hanya pada task yang sesuai: Efficient Coding untuk implementasi/debugging, Odoo Engineering untuk bukti teknis versi-spesifik Odoo, Prompt Master saat Anda meminta pembuatan/perbaikan prompt, dan Afyx Engineering Expert bila dipasang untuk analisis lintas-disiplin yang substantif. Pertanyaan sederhana tidak memicu routing Expert yang berat.
+Setelah selesai, buka sesi Codex baru. Skill akan aktif hanya pada task yang sesuai: Efficient Coding untuk implementasi/debugging, Odoo Engineering untuk bukti teknis versi-spesifik Odoo, dan Afyx Engineering Expert bila dipasang untuk analisis lintas-disiplin yang substantif. Prompt Master yang sudah dikelola pengguna tetap dipertahankan dan dapat digunakan secara independen; Afyx tidak lagi mengakuisisinya melalui workflow default.
 
 `odoo-engineering` hanya aktif untuk pekerjaan Odoo. Referensi Odoo 10–20 berstatus stable dan tetap harus dipilih berdasarkan evidence repository versi target.
 
@@ -61,7 +61,7 @@ Installer tidak pernah menulis atau mengganti:
 - `%USERPROFILE%\.codex\auth.json`
 - provider model, Headroom proxy, server MCP, atau plugin Codex
 
-Installer melakukan inventory sebelum mutasi untuk enam komponen selectable: Efficient Coding, Odoo Engineering, Afyx Engineering Expert, Prompt Master, Afyx Graph, dan Usage Tracking. Pilihan mengikuti state: belum terpasang = Install/Skip, sehat = Update/Skip, incomplete/invalid = Repair/Skip, sedangkan ownership tidak dikenal selalu ditolak. Mode non-interaktif selalu memilih Skip kecuali action disebut eksplisit. Update/repair memakai staging, validasi, backup, swap, dan rollback bila pemasangan gagal.
+Installer melakukan inventory sebelum mutasi untuk enam komponen selectable: Efficient Coding, Odoo Engineering, Afyx Engineering Expert, Prompt Master, Afyx Graph, dan Usage Tracking. Prompt Master selalu Skip kecuali dipilih melalui Custom atau action komponen eksplisit; instalasi/user-disabled state yang ada dipertahankan. Komponen lain mengikuti state: belum terpasang = Install/Skip, sehat = Update/Skip, incomplete/invalid = Repair/Skip, sedangkan ownership tidak dikenal selalu ditolak. Update/repair memakai staging, validasi, backup, swap, dan rollback bila pemasangan gagal.
 
 Desired-state mode menggunakan source of truth yang sama: `-Preset minimal|recommended|full|custom`
 atau `--preset ...`. Install, update, dan verify menyelesaikan plan identik; komponen

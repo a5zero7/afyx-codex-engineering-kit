@@ -94,7 +94,7 @@ for extension in "$HOME"/.vscode/extensions/openai.chatgpt-*; do [[ -d "$extensi
 if "$extension_detected"; then result OK 'VS Code extension' 'detected'; else result INFO 'VS Code extension' 'not detected'; fi
 if ! "$codex_detected" && ! "$extension_detected"; then core_failure=true; fi
 
-required_skill_ids='efficient-coding odoo-engineering prompt-master'
+required_skill_ids='efficient-coding odoo-engineering'
 if [[ -n "$preset" ]]; then
   required_skill_ids=
   for component_id in $(afyx_component_ids); do
