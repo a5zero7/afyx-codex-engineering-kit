@@ -1,5 +1,14 @@
 # Afyx Alpha Integration Roadmap
 
+## Current T09 checkpoint — 2026-10-19
+
+T09 A4-A8 is **PUBLIC IMPLEMENTATION READY / OWNER INTEGRATION PENDING**.
+All seven owner/evaluator authorization gates remain unresolved, so the formal
+campaign is **BLOCKED — 0/36** and A8 remains **NO GO DECISION**. The exact
+acceptance matrix and next executable boundary are documented in
+[AFYX_FORGE_T09_A4_A8_OWNER_HANDOFF.md](AFYX_FORGE_T09_A4_A8_OWNER_HANDOFF.md).
+Historical checkpoints below are retained as dated evidence.
+
 Status: **T01 documentation contract complete; benchmark readiness remains provisional**
 Observed: **2026-10-15**
 Canonical milestone source: [AFYX_V1_MASTER_ROADMAP.md](AFYX_V1_MASTER_ROADMAP.md)
