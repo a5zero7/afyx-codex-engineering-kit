@@ -634,14 +634,17 @@ program
       const cg = AfyxGraph.openSync(projectPath);
       cg.uninitialize();
 
-      // Clean up any git sync hooks we installed (no-op if none / not a repo).
-      try {
-        const { removeGitSyncHook } = await import('../sync/git-hooks');
-        const removed = removeGitSyncHook(projectPath);
-        if (removed.installed.length > 0) {
-          info(`Removed git ${removed.installed.join(', ')} sync hook${removed.installed.length > 1 ? 's' : ''}`);
-        }
-      } catch { /* non-fatal */ }
+      // External-state mode promises a byte-stable source repository, including
+      // .git/hooks. Local-state uninit preserves its historical hook cleanup.
+      if (!usesExternalStateDir()) {
+        try {
+          const { removeGitSyncHook } = await import('../sync/git-hooks');
+          const removed = removeGitSyncHook(projectPath);
+          if (removed.installed.length > 0) {
+            info(`Removed git ${removed.installed.join(', ')} sync hook${removed.installed.length > 1 ? 's' : ''}`);
+          }
+        } catch { /* non-fatal */ }
+      }
 
       success(`Removed Afyx Graph from ${projectPath}`);
 

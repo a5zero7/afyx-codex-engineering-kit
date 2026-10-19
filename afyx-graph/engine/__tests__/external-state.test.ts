@@ -3,6 +3,7 @@ import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { AfyxGraph } from '../src';
 import {
   EXTERNAL_STATE_DIR_ENV,
@@ -14,6 +15,31 @@ import { getDaemonPidPath, getDaemonSocketCandidates } from '../src/mcp/daemon-p
 import { deregisterDaemon, getRegistryDir, listDaemons, registerDaemon } from '../src/mcp/daemon-registry';
 import { watchdogProgressPaths } from '../src/mcp';
 import { resolveServerRoot } from '../src/directory';
+
+const BIN = path.resolve(__dirname, '../dist/bin/afyx-graph.js');
+
+function runCli(args: string[], cwd: string): { status: number; stdout: string; stderr: string } {
+  const result = spawnSync(process.execPath, [BIN, ...args], {
+    cwd,
+    encoding: 'utf8',
+    timeout: 120_000,
+    windowsHide: true,
+    env: {
+      ...process.env,
+      AFYX_GRAPH_ALLOW_UNSAFE_NODE: '1',
+      AFYX_GRAPH_NO_DAEMON: '1',
+      AFYX_GRAPH_NO_WATCH: '1',
+      DO_NOT_TRACK: '1',
+      NO_COLOR: '1',
+      FORCE_COLOR: '0',
+    },
+  });
+  return {
+    status: result.status ?? -1,
+    stdout: result.stdout ?? '',
+    stderr: result.stderr ?? '',
+  };
+}
 
 function treeDigest(root: string): string {
   const hash = crypto.createHash('sha256');
@@ -93,6 +119,64 @@ describe('external Afyx Graph state', () => {
     } finally {
       recovered.close();
     }
+  });
+
+  it('keeps a watcher-disabled Git corpus and its hooks byte-identical across CLI init, repeat, installer init, and uninit', () => {
+    const gitInit = spawnSync('git', ['init', '-q'], {
+      cwd: source,
+      encoding: 'utf8',
+      windowsHide: true,
+    });
+    expect(gitInit.status, gitInit.stderr).toBe(0);
+
+    const hooksResult = spawnSync('git', ['rev-parse', '--git-path', 'hooks'], {
+      cwd: source,
+      encoding: 'utf8',
+      windowsHide: true,
+    });
+    expect(hooksResult.status, hooksResult.stderr).toBe(0);
+    const hooksDir = path.resolve(source, hooksResult.stdout.trim());
+    const sourceBeforeInit = treeDigest(source);
+    const hooksBeforeInit = treeDigest(hooksDir);
+
+    const first = runCli(['init', '--yes'], source);
+    expect(first.status, first.stdout + first.stderr).toBe(0);
+    expect(first.stdout).toContain('External-state mode does not modify source Git hooks');
+    expect(treeDigest(source)).toBe(sourceBeforeInit);
+    expect(treeDigest(hooksDir)).toBe(hooksBeforeInit);
+    expect(fs.existsSync(path.join(state, 'afyx-graph.db'))).toBe(true);
+    expect(fs.existsSync(path.join(source, '.afyx-graph'))).toBe(false);
+
+    const repeated = runCli(['init', '--yes'], source);
+    expect(repeated.status, repeated.stdout + repeated.stderr).toBe(0);
+    expect(repeated.stdout).toContain('Already initialized');
+    expect(repeated.stdout).toContain('External-state mode does not modify source Git hooks');
+    expect(treeDigest(source)).toBe(sourceBeforeInit);
+    expect(treeDigest(hooksDir)).toBe(hooksBeforeInit);
+
+    const installerInit = runCli(['install', '--yes', '--target', 'none', '--init'], source);
+    expect(installerInit.status, installerInit.stdout + installerInit.stderr).toBe(0);
+    expect(installerInit.stdout).toContain('Already initialized');
+    expect(installerInit.stdout).toContain('External-state mode does not modify source Git hooks');
+    expect(treeDigest(source)).toBe(sourceBeforeInit);
+    expect(treeDigest(hooksDir)).toBe(hooksBeforeInit);
+
+    // A pre-existing managed-looking hook must also survive external-state
+    // uninit byte-for-byte; the command owns only the bound state directory.
+    const sentinelHook = path.join(hooksDir, 'post-commit');
+    fs.writeFileSync(
+      sentinelHook,
+      '#!/bin/sh\n# >>> afyx-graph sync hook >>>\necho keep-me\n# <<< afyx-graph sync hook <<<\n',
+    );
+    const sourceBeforeUninit = treeDigest(source);
+    const hooksBeforeUninit = treeDigest(hooksDir);
+
+    const uninit = runCli(['uninit', '--force'], source);
+    expect(uninit.status, uninit.stdout + uninit.stderr).toBe(0);
+    expect(treeDigest(source)).toBe(sourceBeforeUninit);
+    expect(treeDigest(hooksDir)).toBe(hooksBeforeUninit);
+    expect(fs.existsSync(state)).toBe(false);
+    expect(fs.existsSync(path.join(source, '.afyx-graph'))).toBe(false);
   });
 
   it('binds one external state directory to exactly one canonical corpus', () => {

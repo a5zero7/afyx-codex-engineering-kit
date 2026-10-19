@@ -16,6 +16,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { execFileSync } from 'child_process';
+import { usesExternalStateDir } from '../directory';
 
 const HOOK_BLOCK_START = '# >>> afyx-graph sync hook >>>';
 const HOOK_BLOCK_END = '# <<< afyx-graph sync hook <<<';
@@ -122,6 +123,9 @@ export function installGitSyncHook(
   projectRoot: string,
   hooks: readonly GitHookName[] = DEFAULT_SYNC_HOOKS,
 ): GitHookResult {
+  if (usesExternalStateDir()) {
+    return { installed: [], hooksDir: null, skipped: 'external-state mode does not modify source git hooks' };
+  }
   const hooksDir = resolveHooksDir(projectRoot);
   if (!hooksDir) return { installed: [], hooksDir: null, skipped: 'not a git repository' };
 
@@ -157,6 +161,9 @@ export function removeGitSyncHook(
   projectRoot: string,
   hooks: readonly GitHookName[] = DEFAULT_SYNC_HOOKS,
 ): GitHookResult {
+  if (usesExternalStateDir()) {
+    return { installed: [], hooksDir: null, skipped: 'external-state mode does not modify source git hooks' };
+  }
   const hooksDir = resolveHooksDir(projectRoot);
   if (!hooksDir) return { installed: [], hooksDir: null, skipped: 'not a git repository' };
 
