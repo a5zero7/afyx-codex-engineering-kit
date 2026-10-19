@@ -7,7 +7,7 @@ config="$codex_home/config.toml"
 graph_root="${AFYX_GRAPH_RUNTIME_ROOT:-$HOME/.afyx/graph}"
 core_failure=false
 preset=
-custom_components=()
+custom_component_list=
 
 usage() {
   printf '%s\n' 'Usage: ./verify.sh [--skills-root PATH] [--preset minimal|recommended|full|custom] [--custom-component ID]'
@@ -17,7 +17,7 @@ while (($#)); do
   case "$1" in
     --skills-root) skills_root="$2"; shift 2 ;;
     --preset) preset="$2"; shift 2 ;;
-    --custom-component) custom_components+=("$2"); shift 2 ;;
+    --custom-component) custom_component_list="${custom_component_list:+$custom_component_list;}$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) printf 'Unknown option: %s\n' "$1" >&2; usage >&2; exit 2 ;;
   esac
@@ -34,12 +34,12 @@ result() {
 # shellcheck source=scripts/lib/afyx-skill-lifecycle.sh
 . "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/scripts/lib/afyx-skill-lifecycle.sh"
 if [[ -n "$preset" ]] && ! afyx_preset_valid "$preset"; then printf 'Unknown preset: %s\n' "$preset" >&2; exit 2; fi
-if ((${#custom_components[@]})) && [[ "$preset" != custom ]]; then printf '%s\n' '--custom-component requires --preset custom.' >&2; exit 2; fi
-custom_component_list=
-for custom_id in "${custom_components[@]}"; do
+if [[ -n "$custom_component_list" && "$preset" != custom ]]; then printf '%s\n' '--custom-component requires --preset custom.' >&2; exit 2; fi
+old_ifs=$IFS; IFS=';'
+for custom_id in $custom_component_list; do
   case "$custom_id" in efficient-coding|odoo-engineering|afyx-engineering-expert|prompt-master|afyx-graph|codex-usage-tracking) ;; *) printf 'Unknown custom component: %s\n' "$custom_id" >&2; exit 2 ;; esac
-  custom_component_list="${custom_component_list:+$custom_component_list;}$custom_id"
 done
+IFS=$old_ifs
 
 verify_component_evaluate() {
   local id="$1" owner target

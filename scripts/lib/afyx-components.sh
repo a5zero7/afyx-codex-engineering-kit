@@ -100,14 +100,13 @@ afyx_control_classify() {
 }
 
 afyx_control_plan_identity() {
-  local preset="$1" custom="${2:-}" id desired=() separator=
+  local preset="$1" custom="${2:-}" id desired= separator=
   afyx_preset_valid "$preset" || return 2
   for id in $(afyx_component_ids); do
     [[ "$(afyx_component_field "$id" type)" == detected-cli ]] && continue
-    if afyx_component_desired "$id" "$preset" "$custom"; then desired+=("$id"); fi
+    if afyx_component_desired "$id" "$preset" "$custom"; then desired="${desired}${separator}${id}"; separator=,; fi
   done
-  printf 'v1|%s|codex|' "$preset"
-  for id in "${desired[@]}"; do printf '%s%s' "$separator" "$id"; separator=,; done
+  printf 'v1|%s|codex|%s' "$preset" "$desired"
 }
 
 afyx_platform() {

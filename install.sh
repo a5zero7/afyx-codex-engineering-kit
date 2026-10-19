@@ -13,8 +13,9 @@ validate_only=false
 dry_run=false
 update_installed=false
 component_actions=()
+component_action_count=0
 preset=
-custom_components=()
+custom_component_list=
 offline=false
 no_build_fallback=false
 allow_dirty_source=false
@@ -28,9 +29,9 @@ while (($#)); do
   case "$1" in
     --skills-root) (($# >= 2)) || { printf '%s\n' '--skills-root requires a value.' >&2; exit 2; }; skills_root="$2"; shift 2 ;;
     --force) force=true; shift ;;
-    --component) (($# >= 2)) || { printf '%s\n' '--component requires a value.' >&2; exit 2; }; component_actions+=("$2"); shift 2 ;;
+    --component) (($# >= 2)) || { printf '%s\n' '--component requires a value.' >&2; exit 2; }; component_actions+=("$2"); component_action_count=$((component_action_count + 1)); shift 2 ;;
     --preset) (($# >= 2)) || { printf '%s\n' '--preset requires a value.' >&2; exit 2; }; preset="$2"; shift 2 ;;
-    --custom-component) (($# >= 2)) || { printf '%s\n' '--custom-component requires a value.' >&2; exit 2; }; custom_components+=("$2"); shift 2 ;;
+    --custom-component) (($# >= 2)) || { printf '%s\n' '--custom-component requires a value.' >&2; exit 2; }; custom_component_list="${custom_component_list:+$custom_component_list;}$2"; shift 2 ;;
     --update-installed) update_installed=true; shift ;;
     --offline) offline=true; shift ;;
     --no-build-fallback) no_build_fallback=true; shift ;;
@@ -53,15 +54,15 @@ valid_manifest() { [[ -s "$1/SKILL.md" ]] && [[ "$(head -n 1 "$1/SKILL.md")" == 
 . "$PACKAGE_ROOT/scripts/lib/afyx-skill-lifecycle.sh"
 PROMPT_MASTER_REVISION="$(afyx_component_field prompt-master source_revision)"
 if [[ -n "$preset" ]] && ! afyx_preset_valid "$preset"; then printf 'Unknown preset: %s\n' "$preset" >&2; exit 2; fi
-if ((${#custom_components[@]})) && [[ "$preset" != custom ]]; then printf '%s\n' '--custom-component requires --preset custom.' >&2; exit 2; fi
-if [[ -n "$preset" ]] && { ((${#component_actions[@]})) || [[ "$force" == true ]]; }; then
+if [[ -n "$custom_component_list" && "$preset" != custom ]]; then printf '%s\n' '--custom-component requires --preset custom.' >&2; exit 2; fi
+if [[ -n "$preset" ]] && { ((component_action_count)) || [[ "$force" == true ]]; }; then
   printf '%s\n' 'A preset is immutable for one operation; do not combine it with --component or --force.' >&2; exit 2
 fi
-custom_component_list=
-for custom_id in "${custom_components[@]}"; do
+old_ifs=$IFS; IFS=';'
+for custom_id in $custom_component_list; do
   case "$custom_id" in efficient-coding|odoo-engineering|afyx-engineering-expert|prompt-master|afyx-graph|codex-usage-tracking) ;; *) printf 'Unknown custom component: %s\n' "$custom_id" >&2; exit 2 ;; esac
-  custom_component_list="${custom_component_list:+$custom_component_list;}$custom_id"
 done
+IFS=$old_ifs
 component_state() {
   local id="$1" owner target
   afyx_component_evaluate "$id"
@@ -101,7 +102,7 @@ version_lt() {
 
 explicit_action() {
   local wanted="$1" specification id action
-  for specification in "${component_actions[@]}"; do
+  for specification in ${component_actions[@]+"${component_actions[@]}"}; do
     case "$specification" in *=*) id="${specification%%=*}"; action="${specification#*=}" ;; *) printf 'Invalid --component value: %s\n' "$specification" >&2; return 2 ;; esac
     case "$id" in efficient-coding|odoo-engineering|afyx-engineering-expert|prompt-master|afyx-graph|codex-usage-tracking) ;; *) printf 'Unknown selectable component: %s\n' "$id" >&2; return 2 ;; esac
     case "$action" in skip|install|update|repair|adopt) ;; *) printf 'Invalid action for %s: %s\n' "$id" "$action" >&2; return 2 ;; esac
@@ -176,7 +177,7 @@ replacement_authorized() {
   local id="$1" specification
   "$force" && return 0
   if [[ -n "$preset" ]] && afyx_component_desired "$id" "$preset" "$custom_component_list"; then return 0; fi
-  for specification in "${component_actions[@]}"; do
+  for specification in ${component_actions[@]+"${component_actions[@]}"}; do
     [[ "$specification" == "$id="* && "$specification" != "$id=skip" ]] && return 0
   done
   return 1
