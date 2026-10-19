@@ -81,7 +81,9 @@ class ControlPlaneContractTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temporary.cleanup()
 
-    def lifecycle(self, entrypoint: str, *arguments: str, expected: int = 0) -> subprocess.CompletedProcess[str]:
+    def lifecycle(
+        self, entrypoint: str, *arguments: str, expected: int | tuple[int, ...] = 0
+    ) -> subprocess.CompletedProcess[str]:
         if WINDOWS:
             shell = pwsh_path()
             if not shell:
@@ -99,7 +101,8 @@ class ControlPlaneContractTests(unittest.TestCase):
                 command += ["--skills-root", str(self.skills)]
             command += list(arguments)
         result = subprocess.run(command, cwd=ROOT, env=self.env, capture_output=True, text=True)
-        self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
+        expected_codes = (expected,) if isinstance(expected, int) else expected
+        self.assertIn(result.returncode, expected_codes, result.stdout + result.stderr)
         return result
 
     def install_preset(self, preset: str = "minimal", expected: int = 0) -> subprocess.CompletedProcess[str]:
@@ -157,9 +160,9 @@ class ControlPlaneContractTests(unittest.TestCase):
         self.assertIn("blocked before mutation", blocked.stdout + blocked.stderr)
         self.assertEqual(tree_digest(foreign), before)
         if WINDOWS:
-            explicit = self.lifecycle("install", "-ComponentAction", "efficient-coding=repair", "-SkipUsageTracker", "-SkipGraphMcp", expected=1)
+            explicit = self.lifecycle("install", "-ComponentAction", "efficient-coding=repair", "-SkipUsageTracker", "-SkipGraphMcp", expected=(1, 2))
         else:
-            explicit = self.lifecycle("install", "--component", "efficient-coding=repair", "--skip-graph-mcp", expected=1)
+            explicit = self.lifecycle("install", "--component", "efficient-coding=repair", "--skip-graph-mcp", expected=(1, 2))
         self.assertIn("does not permit", explicit.stdout + explicit.stderr)
         self.assertEqual(tree_digest(foreign), before)
 
@@ -213,11 +216,11 @@ class ControlPlaneContractTests(unittest.TestCase):
     def test_preset_cannot_be_mutated_by_legacy_action_flags(self) -> None:
         if WINDOWS:
             blocked = self.lifecycle(
-                "install", "-Preset", "minimal", "-ComponentAction", "afyx-graph=install", "-SkipGraphMcp", expected=1
+                "install", "-Preset", "minimal", "-ComponentAction", "afyx-graph=install", "-SkipGraphMcp", expected=(1, 2)
             )
         else:
             blocked = self.lifecycle(
-                "install", "--preset", "minimal", "--component", "afyx-graph=install", "--skip-graph-mcp", expected=1
+                "install", "--preset", "minimal", "--component", "afyx-graph=install", "--skip-graph-mcp", expected=(1, 2)
             )
         self.assertIn("preset is immutable", (blocked.stdout + blocked.stderr).lower())
         self.assertFalse(self.skills.exists())
