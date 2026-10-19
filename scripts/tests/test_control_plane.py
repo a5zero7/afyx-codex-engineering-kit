@@ -134,6 +134,17 @@ class ControlPlaneContractTests(unittest.TestCase):
             {"efficient-coding", "odoo-engineering"},
         )
 
+    def test_legacy_verify_keeps_structural_compatibility(self) -> None:
+        shutil.copytree(ROOT / "skills/efficient-coding", self.skills / "efficient-coding")
+        shutil.copytree(ROOT / "skills/odoo-engineering", self.skills / "odoo-engineering")
+        prompt = self.skills / "prompt-master"
+        prompt.mkdir()
+        (prompt / "SKILL.md").write_text("---\nname: prompt-master\ndescription: structural fixture\n---\n", encoding="utf-8")
+        legacy = self.lifecycle("verify")
+        self.assertIn("Efficient Coding", legacy.stdout)
+        self.assertIn("Core readiness", legacy.stdout)
+        self.assertFalse((self.skills / "efficient-coding" / ".afyx-install.json").exists())
+
     def test_minimal_install_verify_is_idempotent_and_preserves_config(self) -> None:
         first = self.install_preset()
         self.assertIn("v1|minimal|codex|efficient-coding,odoo-engineering", first.stdout)

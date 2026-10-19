@@ -23,14 +23,16 @@ Import-Module (Join-Path $PSScriptRoot 'scripts\lib\AfyxSkillLifecycle.psm1') -F
 $componentContext = New-AfyxComponentContext -SkillsRoot $SkillsRoot -GraphRoot $graphRoot -CodexHome $codexHome
 $componentStates = @{}
 foreach ($componentState in (Get-AfyxComponentStates -Context $componentContext)) { $componentStates[$componentState.Id] = $componentState }
-foreach ($component in (Get-AfyxComponentContract | Where-Object { $_.type -eq 'skill' })) {
-    $state = $componentStates[[string]$component.id]
-    if ($state.State -eq 'NOT INSTALLED') { continue }
-    $installedOwnership = Get-AfyxSkillOwnership -Target $state.Path -Component ([string]$component.id) -ExpectedOwner ([string]$component.ownership)
-    if ($installedOwnership -eq 'AFYX_OWNED_MODIFIED') {
-        $state.State = 'DRIFTED'; $state.Detail = 'Afyx ownership verified but installed content was modified'
-    } elseif ($installedOwnership -notin @('AFYX_OWNED_UNMODIFIED', 'EXTERNAL_UPSTREAM')) {
-        $state.State = 'UNKNOWN'; $state.Detail = "installed ownership is $installedOwnership"
+if ($Preset) {
+    foreach ($component in (Get-AfyxComponentContract | Where-Object { $_.type -eq 'skill' })) {
+        $state = $componentStates[[string]$component.id]
+        if ($state.State -eq 'NOT INSTALLED') { continue }
+        $installedOwnership = Get-AfyxSkillOwnership -Target $state.Path -Component ([string]$component.id) -ExpectedOwner ([string]$component.ownership)
+        if ($installedOwnership -eq 'AFYX_OWNED_MODIFIED') {
+            $state.State = 'DRIFTED'; $state.Detail = 'Afyx ownership verified but installed content was modified'
+        } elseif ($installedOwnership -notin @('AFYX_OWNED_UNMODIFIED', 'EXTERNAL_UPSTREAM')) {
+            $state.State = 'UNKNOWN'; $state.Detail = "installed ownership is $installedOwnership"
+        }
     }
 }
 if ($Preset -and $Preset -notin @('minimal', 'recommended', 'full', 'custom')) { throw "Unknown preset: $Preset" }

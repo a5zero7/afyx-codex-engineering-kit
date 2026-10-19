@@ -103,7 +103,7 @@ same plan and state classifier read-only.
 | Independent review and merge to `dev` | PENDING |
 | Active-runtime replacement, Alpha activation, stable release | NOT AUTHORIZED |
 
-Local evidence before review: control plane 9/9, component contract 9/9, lifecycle
+Local evidence before review: control plane 10/10, component contract 9/9, lifecycle
 8/8, ownership transactions 6/6, legacy adoption 4/4, static component validation,
 PowerShell import/syntax, and Bash syntax all PASS. Exact-head remote CI must be
 reported from the Draft PR and must not be inferred from these local results.

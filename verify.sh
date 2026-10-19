@@ -44,7 +44,7 @@ IFS=$old_ifs
 verify_component_evaluate() {
   local id="$1" owner target
   afyx_component_evaluate "$id"
-  if [[ "$(afyx_component_field "$id" type)" == skill && "$AFYX_STATE" != 'NOT INSTALLED' ]]; then
+  if [[ -n "$preset" && "$(afyx_component_field "$id" type)" == skill && "$AFYX_STATE" != 'NOT INSTALLED' ]]; then
     owner="$(afyx_component_field "$id" ownership)"; target="$(afyx_component_root "$id")"
     afyx_classify_skill "$target" "$id" "$owner"
     case "$AFYX_OWNERSHIP_STATE" in
