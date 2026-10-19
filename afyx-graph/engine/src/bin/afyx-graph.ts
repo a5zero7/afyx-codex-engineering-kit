@@ -36,13 +36,15 @@ import { CLI_NAME, PRODUCT_NAME } from '../product';
 // worker-boot latency per bulk index; harmless no-op when unavailable.
 try {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  (require('node:module') as { enableCompileCache?: () => void }).enableCompileCache?.();
+  if (process.env.AFYX_GRAPH_STATE_DIR === undefined) {
+    (require('node:module') as { enableCompileCache?: () => void }).enableCompileCache?.();
+  }
 } catch { /* cache is best-effort */ }
 
 import { AfyxCli } from './cli-parser';
 import * as path from 'path';
 import * as fs from 'fs';
-import { getAfyxGraphDir, isInitialized, unsafeIndexRootReason, findNearestAfyxGraphRoot, planFrontload, hasStructuralKeyword, extractCodeTokens, capPromptHookInjection } from '../directory';
+import { getAfyxGraphDir, isInitialized, unsafeIndexRootReason, findNearestAfyxGraphRoot, planFrontload, hasStructuralKeyword, extractCodeTokens, capPromptHookInjection, usesExternalStateDir } from '../directory';
 import { extractProseCandidates } from '../search/identifier-segments';
 import { detectWorktreeIndexMismatch, worktreeMismatchWarning } from '../sync/worktree';
 import { createShimmerProgress } from '../ui/shimmer-progress';
@@ -338,7 +340,7 @@ function printIndexResult(clack: AfyxTerminal, result: IndexResult, projectPath?
 
     if (projectPath) {
       writeErrorLog(projectPath, result.errors);
-      clack.log.info('See .afyx-graph/errors.log for details');
+      clack.log.info(`See ${path.join(getAfyxGraphDir(projectPath), 'errors.log')} for details`);
     }
 
     if (result.filesIndexed > 0) {
@@ -349,7 +351,7 @@ function printIndexResult(clack: AfyxTerminal, result: IndexResult, projectPath?
     // carries the per-file detail behind the one-line summary above.
     if (result.errors.some((e) => e.code === 'salvaged_stripped')) {
       writeErrorLog(projectPath, result.errors);
-      clack.log.info('See .afyx-graph/errors.log for details');
+      clack.log.info(`See ${path.join(getAfyxGraphDir(projectPath), 'errors.log')} for details`);
     } else {
       const logPath = path.join(getAfyxGraphDir(projectPath), 'errors.log');
       if (fs.existsSync(logPath)) {
@@ -405,7 +407,9 @@ async function offerIndexIgnoredRepos(
     clack.log.info(`  ${snippet}`);
   };
 
-  if (!opts.interactive || !process.stdin.isTTY) {
+  // External-state mode is explicitly read-only with respect to the corpus.
+  // Never let the convenience prompt create/update afyx-graph.json there.
+  if (usesExternalStateDir() || !opts.interactive || !process.stdin.isTTY) {
     manualHint();
     return;
   }
@@ -597,7 +601,7 @@ program
  */
 program
    .route(cliCommand('uninit', '[path]'))
-   .summary('Remove Afyx Graph from a project (deletes .afyx-graph/ directory)')
+   .summary('Remove Afyx Graph from a project (deletes its effective state directory)')
    .flag('-f, --force', 'Skip confirmation prompt')
    .handle(async (pathArg: string | undefined, options: { force?: boolean }) => {
     const projectPath = resolveProjectPath(pathArg);
@@ -630,14 +634,17 @@ program
       const cg = AfyxGraph.openSync(projectPath);
       cg.uninitialize();
 
-      // Clean up any git sync hooks we installed (no-op if none / not a repo).
-      try {
-        const { removeGitSyncHook } = await import('../sync/git-hooks');
-        const removed = removeGitSyncHook(projectPath);
-        if (removed.installed.length > 0) {
-          info(`Removed git ${removed.installed.join(', ')} sync hook${removed.installed.length > 1 ? 's' : ''}`);
-        }
-      } catch { /* non-fatal */ }
+      // External-state mode promises a byte-stable source repository, including
+      // .git/hooks. Local-state uninit preserves its historical hook cleanup.
+      if (!usesExternalStateDir()) {
+        try {
+          const { removeGitSyncHook } = await import('../sync/git-hooks');
+          const removed = removeGitSyncHook(projectPath);
+          if (removed.installed.length > 0) {
+            info(`Removed git ${removed.installed.join(', ')} sync hook${removed.installed.length > 1 ? 's' : ''}`);
+          }
+        } catch { /* non-fatal */ }
+      }
 
       success(`Removed Afyx Graph from ${projectPath}`);
 
@@ -1205,7 +1212,7 @@ program
 
     try {
       if (!isInitialized(projectPath)) {
-        error(`Afyx Graph isn't available here — no .afyx-graph/ index exists in ${projectPath}. If you are an AI agent: continue with your usual tools; indexing is the user's decision, do not run it yourself. (The project owner can enable Afyx Graph with 'afyx-graph init'.)`);
+    error(`Afyx Graph isn't available here — no local or externally bound index exists for ${projectPath}. If you are an AI agent: continue with your usual tools; indexing is the user's decision, do not run it yourself. (The project owner can enable Afyx Graph with 'afyx-graph init'.)`);
         process.exit(1);
       }
 
@@ -1468,7 +1475,7 @@ program
 
     try {
       if (!isInitialized(projectPath)) {
-        error(`Afyx Graph isn't available here — no .afyx-graph/ index exists in ${projectPath}. If you are an AI agent: continue with your usual tools; indexing is the user's decision, do not run it yourself. (The project owner can enable Afyx Graph with 'afyx-graph init'.)`);
+    error(`Afyx Graph isn't available here — no local or externally bound index exists for ${projectPath}. If you are an AI agent: continue with your usual tools; indexing is the user's decision, do not run it yourself. (The project owner can enable Afyx Graph with 'afyx-graph init'.)`);
         process.exit(1);
       }
 

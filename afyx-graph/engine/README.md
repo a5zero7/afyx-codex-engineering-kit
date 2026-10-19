@@ -12,13 +12,35 @@ Regression gates, all local and deterministic (no model calls):
 - `npm test` runs the unit suites and first refuses stale build artifacts
   (`scripts/check-dist-clean.mjs`).
 
-Project state lives in `.afyx-graph/` (database `afyx-graph.db`, override the
-directory name with `AFYX_GRAPH_DIR`). An optional, committed `afyx-graph.json`
-at the project root maps custom file extensions to supported languages.
+Project state lives in `.afyx-graph/` by default (database
+`afyx-graph.db`). `AFYX_GRAPH_DIR` remains the backward-compatible override
+for a single directory name inside the project root.
+
+For a read-only corpus, set `AFYX_GRAPH_STATE_DIR` to a dedicated absolute
+directory outside the corpus before every CLI or MCP invocation:
+
+```powershell
+$env:AFYX_GRAPH_STATE_DIR = 'D:\AfyxState\my-project'
+afyx-graph init 'D:\Source\my-project' --yes
+afyx-graph status 'D:\Source\my-project'
+```
+
+The first initialization writes `project.json` into that state directory and
+binds it to the corpus's canonical path. CLI, MCP, daemon, watchdog, freshness,
+locks, logs, database/WAL, saved trails, and daemon discovery then use the same
+external location. The directory must be absolute, outside and non-overlapping
+with the corpus, writable, free of path aliases/reparse points, and either empty
+or already bound to that exact corpus. Invalid, unavailable, unbound non-empty,
+or cross-project state fails closed; it never falls back to `.afyx-graph/`. Use
+one state directory and one MCP process configuration per corpus. External-state
+mode never auto-writes `afyx-graph.json` into the corpus.
+
+An optional, committed `afyx-graph.json` at the project root maps custom file
+extensions to supported languages.
 The shipped product requires external Node.js 22.5.0 or newer on `PATH`; release
 archives do not bundle Node or a `node_modules` dependency tree.
 `afyx-graph status` reports index freshness (`MISSING`, `FRESH`, `STALE`,
-`INVALID`, `UNKNOWN`) from `.afyx-graph/freshness.json`, which the engine
+`INVALID`, `UNKNOWN`) from `freshness.json` in the effective state, which the engine
 rewrites after every successful index or sync. Afyx Graph makes no outbound network
 requests and collects no telemetry.
 

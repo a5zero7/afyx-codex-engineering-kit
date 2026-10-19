@@ -77,6 +77,8 @@ export {
   isInitialized,
   findNearestAfyxGraphRoot,
   AFYX_GRAPH_DIR,
+  EXTERNAL_STATE_DIR_ENV,
+  usesExternalStateDir,
 } from './directory';
 export { IndexProgress, IndexResult, SyncResult } from './extraction';
 export { detectLanguage, isLanguageSupported, getSupportedLanguages } from './extraction';
