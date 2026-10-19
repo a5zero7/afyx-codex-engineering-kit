@@ -6,14 +6,18 @@ codex_home="${CODEX_HOME:-$HOME/.codex}"
 config="$codex_home/config.toml"
 graph_root="${AFYX_GRAPH_RUNTIME_ROOT:-$HOME/.afyx/graph}"
 core_failure=false
+preset=
+custom_component_list=
 
 usage() {
-  printf '%s\n' 'Usage: ./verify.sh [--skills-root PATH]'
+  printf '%s\n' 'Usage: ./verify.sh [--skills-root PATH] [--preset minimal|recommended|full|custom] [--custom-component ID]'
 }
 
 while (($#)); do
   case "$1" in
     --skills-root) skills_root="$2"; shift 2 ;;
+    --preset) preset="$2"; shift 2 ;;
+    --custom-component) custom_component_list="${custom_component_list:+$custom_component_list;}$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) printf 'Unknown option: %s\n' "$1" >&2; usage >&2; exit 2 ;;
   esac
@@ -27,12 +31,48 @@ result() {
 # One component truth: scripts/components.json, read through the shared library.
 # shellcheck source=scripts/lib/afyx-components.sh
 . "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/scripts/lib/afyx-components.sh"
+# shellcheck source=scripts/lib/afyx-skill-lifecycle.sh
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/scripts/lib/afyx-skill-lifecycle.sh"
+if [[ -n "$preset" ]] && ! afyx_preset_valid "$preset"; then printf 'Unknown preset: %s\n' "$preset" >&2; exit 2; fi
+if [[ -n "$custom_component_list" && "$preset" != custom ]]; then printf '%s\n' '--custom-component requires --preset custom.' >&2; exit 2; fi
+old_ifs=$IFS; IFS=';'
+for custom_id in $custom_component_list; do
+  case "$custom_id" in efficient-coding|odoo-engineering|afyx-engineering-expert|prompt-master|afyx-graph|codex-usage-tracking) ;; *) printf 'Unknown custom component: %s\n' "$custom_id" >&2; exit 2 ;; esac
+done
+IFS=$old_ifs
+
+verify_component_evaluate() {
+  local id="$1" owner target
+  afyx_component_evaluate "$id"
+  if [[ -n "$preset" && "$(afyx_component_field "$id" type)" == skill && "$AFYX_STATE" != 'NOT INSTALLED' ]]; then
+    owner="$(afyx_component_field "$id" ownership)"; target="$(afyx_component_root "$id")"
+    afyx_classify_skill "$target" "$id" "$owner"
+    case "$AFYX_OWNERSHIP_STATE" in
+      AFYX_OWNED_UNMODIFIED|EXTERNAL_UPSTREAM) ;;
+      AFYX_OWNED_MODIFIED) AFYX_STATE=DRIFTED; AFYX_DETAIL='Afyx ownership verified but installed content was modified' ;;
+      *) AFYX_STATE=UNKNOWN; AFYX_DETAIL="installed ownership is $AFYX_OWNERSHIP_STATE" ;;
+    esac
+  fi
+}
 
 mcp_configured() {
   [[ -f "$config" ]] && grep -Eq "^\\[mcp_servers\\.$1\\][[:space:]]*$" "$config"
 }
 
 printf 'Afyx Codex Engineering Kit — readiness verification (Linux/macOS Bash)\n'
+for provider_id in $(afyx_provider_ids); do
+  result INFO "Provider adapter: $(afyx_provider_field "$provider_id" name)" "primary=$(afyx_provider_field "$provider_id" primary); ownership=$(afyx_provider_field "$provider_id" ownership_class); capabilities=$(afyx_provider_field "$provider_id" capabilities); policy=$(afyx_provider_field "$provider_id" configuration_policy)"
+done
+if [[ -n "$preset" ]]; then
+  result INFO 'Desired state plan' "$(afyx_control_plan_identity "$preset" "$custom_component_list")"
+  for plan_id in $(afyx_component_ids); do
+    verify_component_evaluate "$plan_id"; plan_state="$AFYX_STATE"
+    afyx_control_classify "$plan_id" "$plan_state" "$preset" "$custom_component_list"
+    if [[ "$AFYX_DRIFT" == IN_SYNC ]]; then result OK "Plan/$plan_id" IN_SYNC
+    elif [[ "$AFYX_DRIFT" == NOT_APPLICABLE || "$AFYX_DESIRED" != true ]]; then result INFO "Plan/$plan_id" "$AFYX_DRIFT; preserved"
+    else result FAIL "Plan/$plan_id" "$AFYX_DRIFT; ownership=$AFYX_ACTUAL_OWNERSHIP; repair=$AFYX_REPAIR"; core_failure=true; fi
+  done
+fi
 case "$(uname -s)" in Darwin) verify_os=macOS ;; Linux) verify_os=Linux ;; *) verify_os="$(uname -s)"; core_failure=true ;; esac
 result OK 'OS/architecture [REQUIRED]' "$verify_os / $(uname -m)"
 result OK 'Platform shell [REQUIRED]' "Bash ${BASH_VERSION}"
@@ -54,21 +94,29 @@ for extension in "$HOME"/.vscode/extensions/openai.chatgpt-*; do [[ -d "$extensi
 if "$extension_detected"; then result OK 'VS Code extension' 'detected'; else result INFO 'VS Code extension' 'not detected'; fi
 if ! "$codex_detected" && ! "$extension_detected"; then core_failure=true; fi
 
-for component_id in efficient-coding odoo-engineering prompt-master; do
-  afyx_component_evaluate "$component_id"
+required_skill_ids='efficient-coding odoo-engineering prompt-master'
+if [[ -n "$preset" ]]; then
+  required_skill_ids=
+  for component_id in $(afyx_component_ids); do
+    [[ "$(afyx_component_field "$component_id" type)" == skill ]] || continue
+    afyx_component_desired "$component_id" "$preset" "$custom_component_list" && required_skill_ids="${required_skill_ids:+$required_skill_ids }$component_id"
+  done
+fi
+for component_id in $required_skill_ids; do
+  verify_component_evaluate "$component_id"
   component_name="$(afyx_component_field "$component_id" name)"
   if [[ "$AFYX_STATE" == HEALTHY ]]; then result OK "$component_name" "$AFYX_DETAIL"
   else result FAIL "$component_name" "$AFYX_STATE: $AFYX_DETAIL"; core_failure=true; fi
 done
 
-afyx_component_evaluate afyx-engineering-expert
+verify_component_evaluate afyx-engineering-expert
 case "$AFYX_STATE" in
   HEALTHY) result OK 'Afyx Engineering Expert' "$AFYX_VERSION; optional skill valid" ;;
   'NOT INSTALLED') result INFO 'Afyx Engineering Expert' 'not installed (optional)' ;;
   *) result WARN 'Afyx Engineering Expert' "$AFYX_STATE: $AFYX_DETAIL (optional)" ;;
 esac
 
-afyx_component_evaluate afyx-graph
+verify_component_evaluate afyx-graph
 case "$AFYX_STATE" in
   'NOT INSTALLED') result INFO 'Afyx Graph' 'not installed (optional)' ;;
   HEALTHY)

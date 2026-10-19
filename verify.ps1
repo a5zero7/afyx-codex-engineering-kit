@@ -1,6 +1,8 @@
 [CmdletBinding()]
 param(
-    [string]$SkillsRoot = (Join-Path $env:USERPROFILE '.agents\skills')
+    [string]$SkillsRoot = (Join-Path $env:USERPROFILE '.agents\skills'),
+    [string]$Preset = '',
+    [string[]]$CustomComponent = @()
 )
 
 Set-StrictMode -Version Latest
@@ -17,9 +19,25 @@ function Write-Result([string]$State, [string]$Name, [string]$Detail = '') {
 
 # One component truth: scripts/components.json, read through the shared module.
 Import-Module (Join-Path $PSScriptRoot 'scripts\lib\AfyxComponents.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'scripts\lib\AfyxSkillLifecycle.psm1') -Force
 $componentContext = New-AfyxComponentContext -SkillsRoot $SkillsRoot -GraphRoot $graphRoot -CodexHome $codexHome
 $componentStates = @{}
 foreach ($componentState in (Get-AfyxComponentStates -Context $componentContext)) { $componentStates[$componentState.Id] = $componentState }
+if ($Preset) {
+    foreach ($component in (Get-AfyxComponentContract | Where-Object { $_.type -eq 'skill' })) {
+        $state = $componentStates[[string]$component.id]
+        if ($state.State -eq 'NOT INSTALLED') { continue }
+        $installedOwnership = Get-AfyxSkillOwnership -Target $state.Path -Component ([string]$component.id) -ExpectedOwner ([string]$component.ownership)
+        if ($installedOwnership -eq 'AFYX_OWNED_MODIFIED') {
+            $state.State = 'DRIFTED'; $state.Detail = 'Afyx ownership verified but installed content was modified'
+        } elseif ($installedOwnership -notin @('AFYX_OWNED_UNMODIFIED', 'EXTERNAL_UPSTREAM')) {
+            $state.State = 'UNKNOWN'; $state.Detail = "installed ownership is $installedOwnership"
+        }
+    }
+}
+if ($Preset -and $Preset -notin @('minimal', 'recommended', 'full', 'custom')) { throw "Unknown preset: $Preset" }
+if (-not $Preset -and $CustomComponent.Count) { throw '-CustomComponent requires -Preset custom.' }
+$controlPlan = if ($Preset) { Get-AfyxControlPlan -Preset $Preset -CustomComponent $CustomComponent -Context $componentContext -StateById $componentStates } else { $null }
 
 function Test-McpEntry([string]$Name) {
     if (-not (Test-Path -LiteralPath $configPath -PathType Leaf)) { return $false }
@@ -27,6 +45,17 @@ function Test-McpEntry([string]$Name) {
 }
 
 Write-Host 'Afyx Codex Engineering Kit — readiness verification (Windows PowerShell)'
+foreach ($provider in (Get-AfyxProviderRegistry)) {
+    Write-Result 'INFO' "Provider adapter: $($provider.name)" "primary=$($provider.primary); ownership=$($provider.ownership_class); capabilities=$($provider.capabilities); policy=$($provider.configuration_policy)"
+}
+if ($controlPlan) {
+    Write-Result 'INFO' 'Desired state plan' $controlPlan.Identity
+    foreach ($item in $controlPlan.Components) {
+        if ($item.Drift -eq 'IN_SYNC') { Write-Result 'OK' "Plan/$($item.Id)" 'IN_SYNC' }
+        elseif ($item.Drift -eq 'NOT_APPLICABLE' -or -not $item.Desired) { Write-Result 'INFO' "Plan/$($item.Id)" "$($item.Drift); preserved" }
+        else { Write-Result 'FAIL' "Plan/$($item.Id)" "$($item.Drift); ownership=$($item.ActualOwnership); repair=$($item.Repair)"; $coreFailure = $true }
+    }
+}
 $git = Get-Command git -ErrorAction SilentlyContinue
 $node = Get-Command node -ErrorAction SilentlyContinue
 $npm = Get-Command npm -ErrorAction SilentlyContinue
@@ -55,7 +84,8 @@ if ($codex) {
 if ($extension) { Write-Result 'OK' 'VS Code extension' 'detected' } else { Write-Result 'INFO' 'VS Code extension' 'not detected' }
 if (-not $codex -and -not $extension) { $coreFailure = $true }
 
-foreach ($component in ($componentStates.Values | Where-Object { $_.Tier -eq 'core' } | Sort-Object { @('efficient-coding', 'odoo-engineering', 'prompt-master').IndexOf($_.Id) })) {
+$requiredIds = if ($controlPlan) { @($controlPlan.DesiredComponents) } else { @('efficient-coding', 'odoo-engineering', 'prompt-master') }
+foreach ($component in ($componentStates.Values | Where-Object { $_.Id -in $requiredIds -and $_.Type -eq 'skill' } | Sort-Object { $requiredIds.IndexOf($_.Id) })) {
     if ($component.State -eq 'HEALTHY') { Write-Result 'OK' $component.Name $component.Detail }
     else { Write-Result 'FAIL' $component.Name "$($component.State): $($component.Detail)"; $coreFailure = $true }
 }

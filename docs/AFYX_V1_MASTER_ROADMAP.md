@@ -1414,7 +1414,12 @@ Release:
 
 ## Phase 6 — Unified Kit & Provider Control Plane
 
-Status: **PLANNED**
+Status: **IMPLEMENTED / LOCAL VALIDATION PASS / REVIEW AND CI PENDING**
+
+Implementation evidence and the exact achieved-versus-pending matrix are maintained
+in [AFYX_PHASE6_UNIFIED_CONTROL_PLANE.md](AFYX_PHASE6_UNIFIED_CONTROL_PLANE.md).
+The control plane extends the existing component lifecycle; it does not create a
+second installer, claim Alpha activation, or authorize production Forge.
 
 Contract items:
 
