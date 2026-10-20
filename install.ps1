@@ -102,6 +102,7 @@ function Get-ComponentAction([string]$Id, [string]$Label) {
             $action = if ($state.State -eq 'HEALTHY' -and $available -and (Compare-AfyxVersion $state.Version $available) -lt 0) { 'update' } else { 'skip' }
         }
     }
+    elseif ($Id -eq 'prompt-master') { $action = 'skip' }
     elseif ($Force) {
         if ($state.State -eq 'UNKNOWN') { throw "$Label ownership is unknown; -Force cannot take ownership." }
         $action = if ($state.State -eq 'NOT INSTALLED') { 'install' } elseif ($state.State -in @('INCOMPLETE', 'INVALID', 'DRIFTED')) { 'repair' } else { 'update' }
@@ -315,7 +316,7 @@ if ($controlPlan) {
 }
 
 if (-not $codexCliDetected -and -not $vscodeExtensionDetected) { throw 'Neither Codex CLI nor the ChatGPT/Codex VS Code extension was detected. Install one before installing skills.' }
-if (-not (Get-Command git -ErrorAction SilentlyContinue)) { throw 'Git is required to install Prompt Master.' }
+if (-not (Get-Command git -ErrorAction SilentlyContinue)) { throw 'Git is required for Afyx source validation and lifecycle updates.' }
 
 $summary = [ordered]@{}
 foreach ($component in @(

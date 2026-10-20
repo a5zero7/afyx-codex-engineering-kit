@@ -100,8 +100,8 @@ for component in components:
 by_id = {component["id"]: component for component in components}
 expected_presets = {
     "minimal": {"efficient-coding", "odoo-engineering"},
-    "recommended": {"efficient-coding", "odoo-engineering", "afyx-engineering-expert", "prompt-master"},
-    "full": set(EXPECTED_IDS) - {"headroom"},
+    "recommended": {"efficient-coding", "odoo-engineering", "afyx-engineering-expert"},
+    "full": {"efficient-coding", "odoo-engineering", "afyx-engineering-expert", "afyx-graph", "codex-usage-tracking"},
 }
 for preset, expected in expected_presets.items():
     actual = {component["id"] for component in components if preset in component["presets"].split(";")}
@@ -109,6 +109,8 @@ for preset, expected in expected_presets.items():
         fail(f"{preset}: component membership mismatch")
 if by_id["prompt-master"]["ownership_class"] != "EXTERNAL" or by_id["headroom"]["ownership_class"] != "EXTERNAL":
     fail("Prompt Master and Headroom must remain EXTERNAL")
+if by_id["prompt-master"]["tier"] != "external" or by_id["prompt-master"]["presets"]:
+    fail("Prompt Master must be external and absent from every default preset")
 
 # Bundled skills must ship exactly what the contract requires.
 for cid in ("efficient-coding", "odoo-engineering", "afyx-engineering-expert"):

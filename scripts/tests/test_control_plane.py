@@ -133,6 +133,16 @@ class ControlPlaneContractTests(unittest.TestCase):
             {item["id"] for item in contract["components"] if "minimal" in item["presets"].split(";")},
             {"efficient-coding", "odoo-engineering"},
         )
+        self.assertEqual(
+            {item["id"] for item in contract["components"] if "recommended" in item["presets"].split(";")},
+            {"efficient-coding", "odoo-engineering", "afyx-engineering-expert"},
+        )
+        self.assertEqual(
+            {item["id"] for item in contract["components"] if "full" in item["presets"].split(";")},
+            {"efficient-coding", "odoo-engineering", "afyx-engineering-expert", "afyx-graph", "codex-usage-tracking"},
+        )
+        self.assertEqual(by_id["prompt-master"]["tier"], "external")
+        self.assertEqual(by_id["prompt-master"]["presets"], "")
 
     def test_legacy_verify_keeps_structural_compatibility(self) -> None:
         shutil.copytree(ROOT / "skills/efficient-coding", self.skills / "efficient-coding")
@@ -177,16 +187,57 @@ class ControlPlaneContractTests(unittest.TestCase):
         self.assertIn("does not permit", explicit.stdout + explicit.stderr)
         self.assertEqual(tree_digest(foreign), before)
 
-    def test_external_dependency_drift_blocks_entire_plan_before_mutation(self) -> None:
+    def test_recommended_preserves_user_prompt_master_without_fetch(self) -> None:
         prompt = self.skills / "prompt-master"
         prompt.mkdir(parents=True)
-        (prompt / "SKILL.md").write_text("---\nname: prompt-master\ndescription: local external copy\n---\nbody\n", encoding="utf-8")
-        before = tree_digest(self.skills)
-        blocked = self.install_preset("recommended", expected=1)
-        self.assertIn("prompt-master:UNVERIFIED:USER", blocked.stdout + blocked.stderr)
-        self.assertEqual(tree_digest(self.skills), before)
-        self.assertFalse((self.skills / "efficient-coding").exists())
+        (prompt / "SKILL.md").write_text(
+            "---\nname: prompt-master\ndescription: user-managed copy\n---\nprivate local state\n", encoding="utf-8"
+        )
+        prompt_before = tree_digest(prompt)
+        git_log = self.base / "git.log"
+        self.env["AFYX_TEST_GIT_LOG"] = str(git_log)
+        self.env["AFYX_PROMPT_MASTER_REPOSITORY"] = "https://example.invalid/must-not-fetch.git"
+        if WINDOWS:
+            (self.fake_bin / "git.cmd").write_text(
+                "@echo %*>>\"%AFYX_TEST_GIT_LOG%\"\r\n"
+                "@if \"%1\"==\"--version\" echo git version 2.45.0\r\n"
+                "@if \"%1\"==\"--version\" exit /b 0\r\n"
+                "@exit /b 1\r\n",
+                encoding="utf-8",
+            )
+            installed = self.lifecycle("install", "-Preset", "recommended", "-Offline", "-SkipGraphMcp")
+        else:
+            git = self.fake_bin / "git"
+            git.write_text(
+                "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$AFYX_TEST_GIT_LOG\"\n"
+                "if [ \"${1:-}\" = --version ]; then echo 'git version 2.45.0'; exit 0; fi\nexit 1\n",
+                encoding="utf-8",
+            )
+            git.chmod(git.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+            installed = self.lifecycle("install", "--preset", "recommended", "--offline", "--skip-graph-mcp")
+        self.assertIn("v1|recommended|codex|efficient-coding,odoo-engineering,afyx-engineering-expert", installed.stdout)
+        self.assertNotIn("prompt-master", installed.stdout.split("Desired State Plan:", 1)[-1].splitlines()[0])
+        self.assertEqual(tree_digest(prompt), prompt_before)
+        git_calls = git_log.read_text(encoding="utf-8") if git_log.exists() else ""
+        self.assertNotIn("fetch", git_calls)
+        self.assertNotIn("clone", git_calls)
+        self.assertTrue((self.skills / "efficient-coding").is_dir())
+        self.assertTrue((self.skills / "afyx-engineering-expert").is_dir())
         self.assertEqual((self.codex / "config.toml").read_bytes(), self.config_before)
+
+    def test_custom_prompt_master_selection_remains_explicit_and_offline_fail_closed(self) -> None:
+        if WINDOWS:
+            result = self.lifecycle(
+                "install", "-Preset", "custom", "-CustomComponent", "prompt-master", "-Offline", "-SkipGraphMcp", expected=1
+            )
+        else:
+            result = self.lifecycle(
+                "install", "--preset", "custom", "--custom-component", "prompt-master", "--offline", "--skip-graph-mcp", expected=1
+            )
+        combined = result.stdout + result.stderr
+        self.assertIn("v1|custom|codex|prompt-master", combined)
+        self.assertIn("Offline mode cannot install or update upstream-owned Prompt Master", combined)
+        self.assertFalse((self.skills / "prompt-master").exists())
 
     def test_foreign_graph_runtime_blocks_full_plan_before_mutation(self) -> None:
         (self.graph / "current/bin").mkdir(parents=True)

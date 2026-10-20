@@ -84,7 +84,7 @@ if ($codex) {
 if ($extension) { Write-Result 'OK' 'VS Code extension' 'detected' } else { Write-Result 'INFO' 'VS Code extension' 'not detected' }
 if (-not $codex -and -not $extension) { $coreFailure = $true }
 
-$requiredIds = if ($controlPlan) { @($controlPlan.DesiredComponents) } else { @('efficient-coding', 'odoo-engineering', 'prompt-master') }
+$requiredIds = if ($controlPlan) { @($controlPlan.DesiredComponents) } else { @('efficient-coding', 'odoo-engineering') }
 foreach ($component in ($componentStates.Values | Where-Object { $_.Id -in $requiredIds -and $_.Type -eq 'skill' } | Sort-Object { $requiredIds.IndexOf($_.Id) })) {
     if ($component.State -eq 'HEALTHY') { Write-Result 'OK' $component.Name $component.Detail }
     else { Write-Result 'FAIL' $component.Name "$($component.State): $($component.Detail)"; $coreFailure = $true }

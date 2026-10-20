@@ -1,6 +1,6 @@
 # Phase 6 — Unified Kit & Provider Control Plane
 
-Status: **IMPLEMENTED / LOCAL VALIDATION PASS / REVIEW AND CI PENDING**
+Status: **IMPLEMENTED / LOCAL VALIDATION PASS / EXACT-HEAD 3OS CI PASS / OWNER MERGE DECISION PENDING**
 
 Development baseline: `dev` at `dcebee5a08d3b958d757d056336a3eef7e9653e9`.
 This is a development contract only. It does not activate Alpha, replace an active
@@ -31,12 +31,16 @@ selection.
 
 ## Presets
 
+The table below includes the Phase 7 frozen-v1 policy amendment proposed for owner
+review: Prompt Master is retired from default presets but remains an explicit Custom
+EXTERNAL component. This stacked change does not rewrite the reviewed Phase 6 commit.
+
 | Preset | Desired components |
 |---|---|
 | Minimal | Efficient Coding, Odoo Engineering |
-| Recommended | Minimal plus Afyx Engineering Expert and externally owned Prompt Master |
+| Recommended | Minimal plus Afyx Engineering Expert |
 | Full | Recommended plus Afyx Graph and platform-applicable Usage Tracking |
-| Custom | Exact ordered subset supplied by the operator |
+| Custom | Exact ordered subset supplied by the operator; may explicitly include external Prompt Master |
 
 Windows-only components resolve as `NOT_APPLICABLE` on Linux/macOS. Headroom is an
 external observed adapter and is not silently installed by any preset.
@@ -80,7 +84,8 @@ Bash:
 ./install.sh --preset custom --custom-component efficient-coding --custom-component afyx-graph
 ```
 
-Omitting a preset preserves the existing interactive/component-action interface.
+Omitting a preset preserves the existing interactive/component-action interface, except
+that Prompt Master defaults to Skip and requires an explicit Custom or component action.
 Update forwards the selected plan to the same installer, while verification uses the
 same plan and state classifier read-only.
 
@@ -99,14 +104,15 @@ same plan and state classifier read-only.
 | Interrupted transaction recovery and rollback | PASS, reused affected lifecycle regression |
 | Windows local focused/regression validation | PASS |
 | Full repository suite on native Windows | FAIL: 25 environment errors in three POSIX/WSL Forge modules; no Phase 6 assertion failure |
-| Linux/macOS exact-head CI | PENDING |
+| Exact-head CI run `39227026045` | PASS on Windows, Linux, and macOS for `b7fddb76264244803d723cca5537f9e2ddc0238c` |
+| Owner-supplied isolated Windows install/post-install/idempotency evidence | NOT VERIFIED in the public PR evidence available to this review |
 | Independent review and merge to `dev` | PENDING |
 | Active-runtime replacement, Alpha activation, stable release | NOT AUTHORIZED |
 
 Local evidence before review: control plane 10/10, component contract 9/9, lifecycle
 8/8, ownership transactions 6/6, legacy adoption 4/4, static component validation,
-PowerShell import/syntax, and Bash syntax all PASS. Exact-head remote CI must be
-reported from the Draft PR and must not be inferred from these local results.
+PowerShell import/syntax, and Bash syntax all PASS. Exact-head remote CI is recorded
+separately above and is not inferred from these local results.
 
 The broader repository run executed 227 tests and returned FAIL with 25 environment
 errors: three synthetic-image cases rejected a non-absolute compiler executable,

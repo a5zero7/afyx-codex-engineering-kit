@@ -2947,3 +2947,46 @@ fingerprints remain unchanged. T07 formal A1/B1 is blocked until an independent
 owner-controlled evaluator returns a sanitized, identity-bound `KEEP`, `REVISE`,
 or `REJECT` conclusion. No model run, candidate freeze, Alpha promotion, release,
 or Jira status change occurred.
+
+### 2026-10-19 — Phase 7 Engineering Assurance candidate
+
+Status: **IMPLEMENTED / FOCUSED LOCAL VALIDATION PASS / STACKED REVIEW AND
+EXACT-HEAD CI PENDING**.
+
+Phase 7 is stacked on Phase 6 PR #79 exact HEAD
+`b7fddb76264244803d723cca5537f9e2ddc0238c`; PR #79 remains Draft and unmerged.
+Its CI run `39227026045` is independently observed SUCCESS on Windows, Linux, and
+macOS. The previously reported 25 native-Windows Forge POSIX/WSL environment
+errors remain historical FAIL evidence. Separate owner-provided isolated Windows
+installation evidence was not attributable in the available public PR record and
+is therefore `NOT VERIFIED`, not inferred.
+
+The frozen-v1 preset amendment removes Prompt Master from Minimal, Recommended,
+Full, normal verification, and implicit legacy update/repair paths. Prompt Master
+remains an upstream-owned EXTERNAL Custom component; existing user state is
+preserved and explicit acquisition retains pinned provenance, backup, rollback,
+and offline fail-closed behavior. This retirement does not claim a Forge-native
+replacement.
+
+The lightweight machine-readable engineering-assurance contract validates the
+schema of self-declared Task, Baseline, Scope, Ground Truth, risk Levels 1/2/3,
+adaptive validation budget,
+conditional mutation/differential/performance proof, failed/skipped classification,
+evidence reuse, CI, documentation, and merge readiness. Unknown status, stale or
+mismatched evidence, unjustified skip, out-of-scope change, and required-v1 failure
+all fail closed. Canonical repository-relative paths reject traversal, absolute,
+drive-qualified, UNC, and malformed input before allowlist matching. Affirmative
+Ground Truth requires PASS evidence; negative observations are separately classified.
+Source/diff/CI identities still require independent verification before acceptance.
+Correctness and security remain higher priority than performance or efficiency. The
+lifecycle remains `PLANNED → ANALYZED → IMPLEMENTED → VALIDATED
+→ DOCUMENTED → MERGE_READY`.
+
+Focused evidence at implementation time is component contract PASS,
+engineering-assurance 13/13 PASS, and control-plane 11/11 PASS. The current
+native-Windows scripts suite executed 240 tests with zero assertion failures and 15
+environment errors in the same synthetic-image/WSL-container/WSL-lab Forge modules;
+it remains `FAIL`, separate from the historical 25-error run. Exact-head CI,
+independent review, owner merge decisions, and retargeting after Phase 6 merge remain
+pending. Active runtime, Alpha, T05 Adit, and T09 Forge campaign were not changed;
+T09 remains `BLOCKED — 0/36` and A8 remains without GO.
