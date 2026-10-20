@@ -1,11 +1,19 @@
 # Phase 7 — Engineering Assurance and Prompt Master Default Retirement
 
-Status: **IMPLEMENTED / FOCUSED LOCAL VALIDATION PASS / EXACT-HEAD CI PENDING / OWNER REVIEW PENDING**
+Status (2026-10-20): **FROZEN IMPLEMENTATION ACCEPTED BY OWNER / FOCUSED VALIDATION PASS / OWNER MERGE DECISION PENDING**.
 
-Stacked baseline: Phase 6 PR #79 at
-`b7fddb76264244803d723cca5537f9e2ddc0238c`. The Phase 7 branch must remain
-stacked on the Phase 6 branch until PR #79 is merged and its ancestry/effective
-diff is reconciled. No automatic merge or Alpha promotion is authorized.
+Phase 6 PR #79 was merged into `dev` as merge commit
+`8e7220499dd44cda5d80636078cae97129a7adf4`. Its tree SHA
+`46d819827fa8873b18dd0e19307df5e1fae9b603` exactly matches the reviewed
+Phase 6 HEAD `b7fddb76264244803d723cca5537f9e2ddc0238c` tree. Phase 7 PR #80
+was retargeted to `dev`, preserving its Phase 7-only effective diff. Earlier exact-source
+CI [39285510592](https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/39285510592)
+was SUCCESS on Windows, Linux, and macOS at source HEAD
+`325107b2f4689066e3d900e319875a6467712f45`. That evidence predates this
+status-only documentation correction; final exact-head CI must be checked against
+the current PR HEAD and its GitHub checks, not inferred from this document.
+PR #80 remains Draft/unmerged until a separate owner merge authorization.
+No automatic merge, active-runtime replacement, Alpha promotion, or Forge execution is authorized.
 
 ## Phase 6 boundary review
 
@@ -14,9 +22,9 @@ diff is reconciled. No automatic merge or Alpha promotion is authorized.
 | PR #79 exact source identity | PASS — `b7fddb76264244803d723cca5537f9e2ddc0238c` |
 | CI run `39227026045` | PASS — Windows, Linux, macOS |
 | Ownership-aware scope and preservation | PASS from reviewed source and focused evidence |
-| Owner isolated Windows install/post-install/idempotency evidence | NOT VERIFIED — no separately attributable public evidence was available in PR #79 |
+| Owner isolated Windows install/post-install/idempotency evidence | OWNER_OBSERVED_PASS; independently attributable installed-runtime attestation NOT VERIFIED |
 | Native-Windows repository suite | FAIL retained — 25 Forge POSIX/WSL environment errors, no Phase 6 assertion failure |
-| Independent review / owner merge decision | PENDING |
+| Independent review / owner merge decision | Independent-person review WAIVED_BY_OWNER / NOT_PERFORMED for Phase 6; PR #79 owner-authorized merge completed |
 
 ## Frozen-v1 preset amendment
 
@@ -89,7 +97,7 @@ PLANNED → ANALYZED → IMPLEMENTED → VALIDATED → DOCUMENTED → MERGE_READ
 | CI / docs / merge readiness | Explicit gates tied to canonical lifecycle | PASS |
 | Prompt Master default retirement | Unified component plan and lifecycle entrypoints | PASS |
 | Daily-runtime compatibility | PASS in disposable focused workflows; active user runtime NOT TOUCHED |
-| Exact-head cross-platform CI | PENDING |
+| Exact-source cross-platform CI | PASS at prior source HEAD `325107b2f4689066e3d900e319875a6467712f45` (run `39285510592`); post-documentation HEAD must have its own verified result |
 
 Local focused evidence: component contract PASS; engineering-assurance 13/13 PASS;
 control-plane 11/11 PASS. The current native-Windows scripts suite executed 240
@@ -98,14 +106,41 @@ POSIX/WSL modules: three synthetic-image compiler-path cases, six WSL-container
 identity cases, and six WSL-lab identity cases. This current result is `FAIL`; the
 earlier 25-error run remains separate historical `FAIL` evidence and is not rewritten.
 Broader unchanged regression evidence may be reused only where its source and
-acceptance scope remain valid. Exact-head CI and final SHA are recorded on the
-stacked Draft PR, not inferred here.
+acceptance scope remain valid. Historical source validation and final current-head
+checks are tracked on PR #80, not inferred from static documentation.
+
+## Owner acceptance and separate residual scope (2026-10-20)
+
+Under the Solo-Maintainer policy, the owner accepts the frozen Phase 7 implementation
+and explicitly accepts the following broader legacy outcomes as **outside this
+frozen Phase 7 merge acceptance**, with separate tracking. Acceptance is not a PASS,
+completion, or cancellation of any residual; scheduling and entry-gate applicability
+must be evaluated separately before their relevant downstream acceptance decisions:
+
+| Residual | Jira | Actual evidence | Disposition |
+|---|---|---|---|
+| Formal comprehensive security assessment | AFYX-58 | NOT_RUN; targeted guards/regressions PASS only | Deferred from frozen Phase 7 merge acceptance; remains open |
+| Broader runtime reliability and recovery campaign | AFYX-59 | NOT_RUN; bounded transaction/rollback regressions reused | Deferred from frozen Phase 7 merge acceptance; remains open |
+| Resource / peak-memory measurement | AFYX-62 | NOT_RUN | Deferred from frozen Phase 7 merge acceptance; remains open |
+| Actual representative performance benchmark | AFYX-63 | NOT_RUN; threshold schema fixture PASS is not measured benchmark | Deferred from frozen Phase 7 merge acceptance; remains open |
+
+Phase 7 independent-person review is `WAIVED_BY_OWNER / NOT_PERFORMED`; the owner
+accepts the corresponding review-independence risk. No formal independent GitHub
+APPROVE is claimed, and repository branch protection, actual test evidence, and
+Forge independent-evaluator/holdout isolation gates are not waived. This is frozen
+scope acceptance **only**, not owner authorization to merge PR #80. The prior
+native-Windows 240-test repository result remains FAIL with 15 Forge POSIX/WSL
+environment errors and zero assertion failures; the earlier 227-test/25-error run
+remains a distinct historical FAIL.
 
 ## Limits and Phase 8 handoff
 
-Phase 7 is development assurance only. It does not self-approve an independent
-review, merge Phase 6/7, replace the active runtime, activate Alpha, or authorize a
-release. T05 Adit remains `DEFERRED BY OWNER`. T09 remains `BLOCKED — 0/36`; A8 has
-no GO decision and production Forge is not implemented. Phase 8 may begin only from
-the separately approved merged ancestry and must reuse this exact assurance evidence
-unless relevant source, acceptance criteria, or failures change.
+Phase 7 is development assurance only. Phase 6 has merged into `dev`; Phase 7
+is frozen-scope owner-accepted but PR #80 has **not** merged and requires a separate
+owner merge instruction. Solo-Maintainer waiver does not create independent review.
+Neither this acceptance nor Prompt Master default retirement replaces the active
+runtime, activates Alpha, or authorizes a release. T05 Adit remains
+`DEFERRED BY OWNER`. T09 remains `BLOCKED — 0/36`; A8 has no GO decision and
+production Forge is not implemented. Phase 8 begins only after accepted integration
+and the relevant entry gate, using this evidence where source, acceptance, and failure
+identity remain applicable.
