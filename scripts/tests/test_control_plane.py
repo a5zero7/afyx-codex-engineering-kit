@@ -239,6 +239,76 @@ class ControlPlaneContractTests(unittest.TestCase):
         self.assertIn("Offline mode cannot install or update upstream-owned Prompt Master", combined)
         self.assertFalse((self.skills / "prompt-master").exists())
 
+    @unittest.skipUnless(WINDOWS, "Windows installer destination contract")
+    def test_windows_full_forwards_external_graph_root_and_preserves_user_path(self) -> None:
+        active_graph = self.base / ".afyx" / "graph"
+        active_graph.mkdir(parents=True)
+        active_sentinel = active_graph / "active-runtime-sentinel.txt"
+        active_sentinel.write_text("preserve\n", encoding="utf-8")
+        unrelated_sentinel = self.base / "unrelated-sentinel.txt"
+        unrelated_sentinel.write_text("preserve\n", encoding="utf-8")
+        active_before = tree_digest(active_graph)
+        config_before = tree_digest(self.codex)
+
+        path_probe = [
+            pwsh_path(),
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "[Environment]::GetEnvironmentVariable('Path','User')",
+        ]
+        user_path_before = subprocess.run(
+            path_probe, cwd=ROOT, env=self.env, text=True, capture_output=True, check=True
+        ).stdout
+
+        validated = self.lifecycle(
+            "install",
+            "-Preset", "full",
+            "-SkipGraphMcp",
+            "-SkipGraphPathUpdate",
+            "-ValidateOnly",
+        )
+        self.assertIn("AfyxGraphRuntimeRoot", validated.stdout)
+
+        planned = self.lifecycle(
+            "install",
+            "-Preset", "full",
+            "-Offline",
+            "-SkipGraphMcp",
+            "-SkipGraphPathUpdate",
+            "-WhatIf",
+        )
+        combined = planned.stdout + planned.stderr
+        self.assertIn(str(self.graph), combined)
+        self.assertNotIn(str(active_graph), combined)
+
+        updated = self.lifecycle(
+            "update",
+            "-SkipSelfUpdate",
+            "-Preset", "full",
+            "-Offline",
+            "-SkipGraphMcp",
+            "-SkipGraphPathUpdate",
+            "-WhatIf",
+        )
+        self.assertIn(str(self.graph), updated.stdout + updated.stderr)
+
+        user_path_after = subprocess.run(
+            path_probe, cwd=ROOT, env=self.env, text=True, capture_output=True, check=True
+        ).stdout
+        self.assertEqual(user_path_after, user_path_before)
+        self.assertFalse(self.graph.exists())
+        self.assertFalse(self.skills.exists())
+        self.assertEqual(tree_digest(active_graph), active_before)
+        self.assertEqual(tree_digest(self.codex), config_before)
+        self.assertEqual(unrelated_sentinel.read_text(encoding="utf-8"), "preserve\n")
+
+        installer_source = (ROOT / "install.ps1").read_text(encoding="utf-8")
+        updater_source = (ROOT / "update.ps1").read_text(encoding="utf-8")
+        self.assertIn("$arguments.RuntimeRoot = $graphRuntimeRoot", installer_source)
+        self.assertIn("$arguments.SkipPathUpdate = $true", installer_source)
+        self.assertIn("-SkipGraphPathUpdate:$SkipGraphPathUpdate", updater_source)
+
     def test_foreign_graph_runtime_blocks_full_plan_before_mutation(self) -> None:
         (self.graph / "current/bin").mkdir(parents=True)
         (self.graph / "metadata.json").write_text(
