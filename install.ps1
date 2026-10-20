@@ -13,7 +13,8 @@ param(
     [switch]$AllowDirtySource,
     [switch]$InstallUsageTracker,
     [switch]$SkipUsageTracker,
-    [switch]$SkipGraphMcp
+    [switch]$SkipGraphMcp,
+    [switch]$SkipGraphPathUpdate
 )
 
 Set-StrictMode -Version Latest
@@ -296,6 +297,7 @@ if ($ValidateOnly) {
         InstalledAfyxGraph = $states['Afyx Graph'] -eq 'HEALTHY'
         AfyxGraphState = $states['Afyx Graph']
         AfyxGraphVersion = $graphMetadata.product_version
+        AfyxGraphRuntimeRoot = $graphRuntimeRoot
         InstalledUsageTracker = $states['Usage Tracking'] -eq 'HEALTHY'
         UsageTrackerState = $states['Usage Tracking']
         HeadroomAvailable = [bool](Get-Command headroom -ErrorAction SilentlyContinue)
@@ -375,9 +377,11 @@ $graphAction = Get-ComponentAction 'afyx-graph' 'Afyx Graph'
 if ($graphAction -eq 'skip') { $summary['Afyx Graph'] = 'skipped' }
 else {
     $arguments = if ($graphState -eq 'NOT INSTALLED') { @{} } elseif ($graphAction -eq 'update') { @{ Update = $true } } else { @{ Replace = $true } }
+    $arguments.RuntimeRoot = $graphRuntimeRoot
     if ($Offline) { $arguments.Offline = $true }
     if ($NoBuildFallback) { $arguments.NoBuildFallback = $true }
     if ($AllowDirtySource) { $arguments.AllowDirtySource = $true }
+    if ($SkipGraphPathUpdate) { $arguments.SkipPathUpdate = $true }
     if ($SkipGraphMcp) { $arguments.SkipMcp = $true } else { $arguments.ConfigureMcp = $true }
     & $graphInstaller -Confirm:$false -WhatIf:$WhatIfPreference @arguments
     if (-not $?) { throw 'Afyx Graph installation failed.' }

@@ -40,6 +40,8 @@ Identitas artifact juga mencatat source revision/build identity dan extraction v
 
 Gunakan `-Offline` / `--offline` untuk mencegah self-update/lookup jaringan dan memakai cache/fallback Graph lokal. Semua preset default beroperasi tanpa fetch Prompt Master. Jika Prompt Master dipilih secara eksplisit melalui Custom/action, install/update tetap ditolak dalam mode offline. Gunakan `-NoBuildFallback` / `--no-build-fallback` untuk gagal tegas bila artifact tidak tersedia. Source dirty ditolak untuk fallback; `-AllowDirtySource` / `--allow-dirty-source` adalah opt-in eksplisit yang harus dipakai hanya saat provenance perubahan lokal telah dipahami.
 
+Pada Windows, `AFYX_GRAPH_RUNTIME_ROOT` menentukan root Graph yang sama untuk control plan dan eksekusi installer anak. Untuk acceptance terisolasi atau instalasi yang tidak boleh mengubah User PATH, gunakan `-SkipGraphPathUpdate`; opsi ini diteruskan ke lifecycle Graph tanpa mengubah default instalasi normal. Contoh: `$env:AFYX_GRAPH_RUNTIME_ROOT = 'D:\owned\disposable-graph'; .\install.ps1 -Preset full -SkipGraphPathUpdate -SkipGraphMcp`.
+
 ## Ownership, backup, dan pemulihan
 
 Skill yang dipasang oleh Afyx memiliki `.afyx-install.json` berisi identitas komponen dan digest konten. Update, repair, dan uninstall memverifikasi containment canonical, menolak symlink/reparse point, lalu membedakan target Afyx yang tidak berubah, target Afyx yang telah dimodifikasi, integrasi upstream tervalidasi, dan target asing/tidak terbukti. Target modified/foreign dipertahankan secara default; replacement memerlukan action komponen eksplisit atau `-Force`/`--force`. Uninstall selalu menolak target yang ownership-nya tidak dapat dibuktikan.
