@@ -5,17 +5,41 @@ import { AceError, assertNonEmpty } from './errors.js';
 
 const STATE_FORMAT = 'ace.state/v1';
 const SESSION_FORMAT = 'ace.session/v1';
+const MAX_STATE_METADATA_BYTES = 65_536;
+const MAX_SESSION_METADATA_BYTES = 16_777_216;
+const MAX_SESSION_CONTENT = 100_000;
+const MAX_OBSERVATIONS_PER_CONTENT = 256;
+const MAX_IDENTITY_BYTES = 512;
+const MAX_CONTENT_BLOB_BYTES = 1_048_576;
 
 export const sha256 = (value) => crypto.createHash('sha256').update(value).digest('hex');
 
-function atomicJson(file, value) {
+function jsonText(value, maxBytes) {
+  const text = `${JSON.stringify(value, null, 2)}\n`;
+  if (Buffer.byteLength(text, 'utf8') > maxBytes) {
+    throw new AceError('RESOURCE_LIMIT', `ACE metadata exceeds the ${maxBytes} byte limit`);
+  }
+  return text;
+}
+
+function atomicText(file, content) {
   const temporary = `${file}.${process.pid}.${crypto.randomUUID()}.tmp`;
+  let handle;
   try {
-    fs.writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' });
+    handle = fs.openSync(temporary, 'wx', 0o600);
+    fs.writeFileSync(handle, content, { encoding: 'utf8' });
+    fs.fsyncSync(handle);
+    fs.closeSync(handle);
+    handle = undefined;
     fs.renameSync(temporary, file);
   } finally {
+    if (handle !== undefined) fs.closeSync(handle);
     fs.rmSync(temporary, { force: true });
   }
+}
+
+function atomicJson(file, value, maxBytes) {
+  atomicText(file, jsonText(value, maxBytes));
 }
 
 function assertNoAliases(target) {
@@ -44,11 +68,24 @@ function assertRegularFile(target) {
   }
 }
 
+function readContentFile(target) {
+  assertRegularFile(target);
+  if (fs.statSync(target).size > MAX_CONTENT_BLOB_BYTES) {
+    throw new AceError('RESOURCE_LIMIT', `stored content exceeds the ${MAX_CONTENT_BLOB_BYTES} byte limit`);
+  }
+  return fs.readFileSync(target, 'utf8');
+}
+
 export class ContextStore {
-  constructor({ stateDir, ownerId, sessionId }) {
+  constructor({ stateDir, ownerId, sessionId } = {}) {
     assertNonEmpty(stateDir, 'stateDir');
     assertNonEmpty(ownerId, 'ownerId');
     assertNonEmpty(sessionId, 'sessionId');
+    if (stateDir.includes('\0')) throw new AceError('UNSAFE_STATE_PATH', 'stateDir contains a NUL character');
+    if (Buffer.byteLength(stateDir, 'utf8') > 32_767) throw new AceError('RESOURCE_LIMIT', 'stateDir exceeds the 32767 byte limit');
+    if (Buffer.byteLength(ownerId, 'utf8') > MAX_IDENTITY_BYTES || Buffer.byteLength(sessionId, 'utf8') > MAX_IDENTITY_BYTES) {
+      throw new AceError('RESOURCE_LIMIT', `ownerId and sessionId are limited to ${MAX_IDENTITY_BYTES} bytes each`);
+    }
     if (!path.isAbsolute(stateDir)) {
       throw new AceError('UNSAFE_STATE_PATH', 'stateDir must be absolute');
     }
@@ -63,7 +100,7 @@ export class ContextStore {
   #initialize() {
     const manifestPath = path.join(this.stateDir, 'state.json');
     if (fs.existsSync(manifestPath)) {
-      const manifest = this.#readJson(manifestPath, 'INVALID_STATE');
+      const manifest = this.#readJson(manifestPath, 'INVALID_STATE', MAX_STATE_METADATA_BYTES);
       if (manifest.format !== STATE_FORMAT || manifest.ownerHash !== this.ownerHash) {
         throw new AceError('FOREIGN_STATE', 'state belongs to a different owner or format');
       }
@@ -72,7 +109,7 @@ export class ContextStore {
       if (entries.length !== 0) {
         throw new AceError('AMBIGUOUS_STATE', 'state directory is non-empty and has no ACE ownership manifest');
       }
-      atomicJson(manifestPath, { format: STATE_FORMAT, ownerHash: this.ownerHash });
+      atomicJson(manifestPath, { format: STATE_FORMAT, ownerHash: this.ownerHash }, MAX_STATE_METADATA_BYTES);
     }
 
     this.contentDir = path.join(this.stateDir, 'content');
@@ -82,10 +119,7 @@ export class ContextStore {
     ensureDirectory(this.sessionDir);
     this.sessionPath = path.join(this.sessionDir, 'session.json');
     if (fs.existsSync(this.sessionPath)) {
-      const session = this.#readJson(this.sessionPath, 'INVALID_SESSION');
-      if (session.format !== SESSION_FORMAT || session.ownerHash !== this.ownerHash || session.sessionHash !== this.sessionHash || !Array.isArray(session.content) || !session.records || typeof session.records !== 'object') {
-        throw new AceError('INVALID_SESSION', 'session metadata is invalid or does not match this owner/session');
-      }
+      this.#readSession();
     } else {
       atomicJson(this.sessionPath, {
         format: SESSION_FORMAT,
@@ -93,13 +127,16 @@ export class ContextStore {
         sessionHash: this.sessionHash,
         content: [],
         records: {},
-      });
+      }, MAX_SESSION_METADATA_BYTES);
     }
   }
 
-  #readJson(file, code) {
+  #readJson(file, code, maxBytes) {
     try {
       assertRegularFile(file);
+      if (fs.statSync(file).size > maxBytes) {
+        throw new AceError('RESOURCE_LIMIT', `${path.basename(file)} exceeds the ${maxBytes} byte limit`);
+      }
       return JSON.parse(fs.readFileSync(file, 'utf8'));
     } catch (error) {
       if (error instanceof AceError) throw error;
@@ -107,27 +144,49 @@ export class ContextStore {
     }
   }
 
+  #readSession() {
+    const session = this.#readJson(this.sessionPath, 'INVALID_SESSION', MAX_SESSION_METADATA_BYTES);
+    if (session.format !== SESSION_FORMAT || session.ownerHash !== this.ownerHash || session.sessionHash !== this.sessionHash
+      || !Array.isArray(session.content) || !session.records || typeof session.records !== 'object' || Array.isArray(session.records)) {
+      throw new AceError('INVALID_SESSION', 'session metadata is invalid or does not match this owner/session');
+    }
+    if (session.content.length > MAX_SESSION_CONTENT) {
+      throw new AceError('RESOURCE_LIMIT', `session exceeds the ${MAX_SESSION_CONTENT} content limit`);
+    }
+    const known = new Set();
+    for (const digest of session.content) {
+      if (typeof digest !== 'string' || !/^[0-9a-f]{64}$/.test(digest) || known.has(digest)) {
+        throw new AceError('INVALID_SESSION', 'session content identities are malformed or duplicated');
+      }
+      known.add(digest);
+    }
+    for (const [digest, observations] of Object.entries(session.records)) {
+      if (!known.has(digest) || !Array.isArray(observations) || observations.length > MAX_OBSERVATIONS_PER_CONTENT) {
+        throw new AceError('INVALID_SESSION', 'session provenance records are malformed');
+      }
+      for (const observation of observations) {
+        if (!observation || typeof observation !== 'object' || typeof observation.id !== 'string'
+          || typeof observation.classification !== 'string' || !observation.provenance
+          || typeof observation.provenance !== 'object' || Array.isArray(observation.provenance)) {
+          throw new AceError('INVALID_SESSION', 'session provenance observation is malformed');
+        }
+      }
+    }
+    return session;
+  }
+
   knownDigests() {
-    return new Set(this.#readJson(this.sessionPath, 'INVALID_SESSION').content);
+    return new Set(this.#readSession().content);
   }
 
   persist(segments) {
-    const session = this.#readJson(this.sessionPath, 'INVALID_SESSION');
+    const session = this.#readSession();
     const known = new Set(session.content);
     const records = { ...session.records };
+    const pending = [];
     for (const segment of segments) {
       const { content } = segment;
       const digest = sha256(content);
-      const target = path.join(this.contentDir, `${digest}.txt`);
-      if (fs.existsSync(target)) {
-        assertRegularFile(target);
-        const existing = fs.readFileSync(target, 'utf8');
-        if (sha256(existing) !== digest || existing !== content) {
-          throw new AceError('CONTENT_INTEGRITY', 'stored original content failed integrity validation');
-        }
-      } else {
-        fs.writeFileSync(target, content, { encoding: 'utf8', flag: 'wx' });
-      }
       known.add(digest);
       const observation = {
         id: segment.id,
@@ -136,10 +195,33 @@ export class ContextStore {
       };
       const observations = Array.isArray(records[digest]) ? records[digest] : [];
       const encoded = JSON.stringify(observation);
-      if (!observations.some((item) => JSON.stringify(item) === encoded)) observations.push(observation);
+      if (!observations.some((item) => JSON.stringify(item) === encoded)) {
+        if (observations.length >= MAX_OBSERVATIONS_PER_CONTENT) {
+          throw new AceError('RESOURCE_LIMIT', `content provenance exceeds the ${MAX_OBSERVATIONS_PER_CONTENT} observation limit`);
+        }
+        observations.push(observation);
+      }
       records[digest] = observations;
+      pending.push({ content, digest, target: path.join(this.contentDir, `${digest}.txt`) });
     }
-    atomicJson(this.sessionPath, { ...session, content: [...known].sort(), records });
+    if (known.size > MAX_SESSION_CONTENT) {
+      throw new AceError('RESOURCE_LIMIT', `session exceeds the ${MAX_SESSION_CONTENT} content limit`);
+    }
+    const nextSession = { ...session, content: [...known].sort(), records };
+    jsonText(nextSession, MAX_SESSION_METADATA_BYTES);
+    const missing = [];
+    for (const { content, digest, target } of pending) {
+      if (fs.existsSync(target)) {
+        const existing = readContentFile(target);
+        if (sha256(existing) !== digest || existing !== content) {
+          throw new AceError('CONTENT_INTEGRITY', 'stored original content failed integrity validation');
+        }
+      } else {
+        missing.push({ content, target });
+      }
+    }
+    for (const { content, target } of missing) atomicText(target, content);
+    atomicJson(this.sessionPath, nextSession, MAX_SESSION_METADATA_BYTES);
   }
 
   reference(content) {
@@ -157,8 +239,7 @@ export class ContextStore {
     const target = path.join(this.contentDir, `${match[3]}.txt`);
     let content;
     try {
-      assertRegularFile(target);
-      content = fs.readFileSync(target, 'utf8');
+      content = readContentFile(target);
     } catch (error) {
       if (error instanceof AceError) throw error;
       throw new AceError('MISSING_ORIGINAL', 'referenced original content is unavailable');
@@ -172,7 +253,7 @@ export class ContextStore {
   retrieveRecord(reference) {
     const content = this.retrieve(reference);
     const digest = sha256(content);
-    const session = this.#readJson(this.sessionPath, 'INVALID_SESSION');
+    const session = this.#readSession();
     return {
       reference,
       digest,

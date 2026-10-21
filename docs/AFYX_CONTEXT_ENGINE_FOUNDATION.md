@@ -1,6 +1,6 @@
 # AFYX-290 — Native Afyx Context Engine Foundation
 
-Status: **IMPLEMENTED; REVIEW AND EXACT-HEAD CI PENDING**
+Status: **REVIEW CORRECTIONS IMPLEMENTED; NEW EXACT-HEAD CI PENDING**
 
 ## Architecture decision
 
@@ -58,15 +58,33 @@ and [v0.37.0 release record](https://github.com/headroomlabs-ai/headroom/release
 - Every item retains its digest, provenance object, classification, disposition,
   and stable recovery reference. Originals are verified during retrieval.
 
+- Optional-adapter validation is inside the failure boundary. Malformed input,
+  unavailable ACE, and engine failure return a bounded fallback rather than a
+  raw exception; `originalInput` preserves the supplied input and
+  `originalComplete` identifies whether its rendered form is complete.
+- Explicit request, identity, CLI, metadata, blob, session-content, and
+  observation limits bound the standalone surface. Invalid CLI input is
+  rejected before any state directory is created.
+- Original blobs and metadata use owned temporary files, `fsync`, and rename.
+  Existing blobs are integrity-preflighted before new writes. A complete orphan
+  blob from an interrupted metadata commit is adopted on retry; truncated
+  metadata remains unchanged and fails closed.
+
 ## Verification baseline
 
 The deterministic synthetic fixture contains one exact security diagnostic and
 twelve identical large tool-output segments. The raw rendered baseline is
 34,242 characters. Native ACE produces 4,289 characters, saving 29,953
 characters (87.4744%), while every reduced original is recovered byte-for-byte.
-The observed single Windows run completed in 19.3674 ms with process RSS
-62,849,024 bytes. RSS is a process snapshot that includes Node startup/runtime;
+The post-review single Windows run completed in 26.9226 ms with process RSS
+62,963,712 bytes. RSS is a process snapshot that includes Node startup/runtime;
 it is not incremental ACE memory or a cross-host performance claim.
+
+The focused suite contains 22 passing tests for standalone behavior,
+ownership/session/integrity boundaries, malformed-adapter fallback, resource
+limits, CLI prevalidation, interrupted metadata commit and retry, corrupt-blob
+preflight, and truncated-metadata fail-closed behavior. Exact-head CI for
+`4f5abc1` predates these corrections and is historical only.
 
 External Headroom A/B is **NOT_RUN**: the live installation uses existing
 provider/proxy routing, and no equivalent isolated API/harness was available

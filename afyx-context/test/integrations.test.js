@@ -6,6 +6,7 @@ import test from 'node:test';
 import {
   ACE_INTEGRATION_CONTRACT,
   SUPPORTED_COMPONENTS,
+  ACE_LIMITS,
   createOptionalIntegrationAdapter,
 } from '../src/index.js';
 
@@ -33,7 +34,58 @@ test('consumer remains functional with exact original content when ACE fails', (
     assert.equal(result.status, 'fallback');
     assert.equal(result.failureCode, 'ACE_UNAVAILABLE');
     assert.ok(result.renderedContext.includes('retain this exactly'));
+    assert.equal(result.originalInput, request.segments);
+    assert.equal(result.originalComplete, true);
   }
+});
+
+test('malformed adapter requests never throw before original fallback', () => {
+  const adapter = createOptionalIntegrationAdapter({ component: 'graph' });
+  const stringInput = adapter.process({
+    contract: ACE_INTEGRATION_CONTRACT,
+    component: 'graph',
+    segments: 'original bytes',
+  });
+  assert.equal(stringInput.status, 'fallback');
+  assert.equal(stringInput.failureCode, 'INVALID_INPUT');
+  assert.equal(stringInput.renderedContext, 'original bytes');
+  assert.equal(stringInput.originalInput, 'original bytes');
+  assert.equal(stringInput.originalComplete, true);
+
+  const malformed = [null, { id: 'kept', content: 'recoverable original' }];
+  const partial = adapter.process({
+    contract: ACE_INTEGRATION_CONTRACT,
+    component: 'graph',
+    segments: malformed,
+  });
+  assert.equal(partial.status, 'fallback');
+  assert.equal(partial.failureCode, 'INVALID_INPUT');
+  assert.equal(partial.originalInput, malformed);
+  assert.equal(partial.originalComplete, false);
+  assert.match(partial.renderedContext, /recoverable original/);
+
+  const incompatible = adapter.process({ ...request, contract: 'ace.integration/v2' });
+  assert.equal(incompatible.status, 'fallback');
+  assert.equal(incompatible.failureCode, 'INVALID_INTEGRATION');
+  assert.match(incompatible.renderedContext, /retain this exactly/);
+  assert.doesNotThrow(() => adapter.process(null));
+
+  const throwingRequest = new Proxy({}, { get() { throw new Error('synthetic getter failure'); } });
+  assert.doesNotThrow(() => adapter.process(throwingRequest));
+  assert.equal(adapter.process(throwingRequest).status, 'fallback');
+
+  const repeated = 'x'.repeat(ACE_LIMITS.maxSegmentBytes);
+  const oversized = Array.from({ length: 9 }, (_, index) => ({ id: `item-${index}`, content: repeated }));
+  const bounded = adapter.process({
+    contract: ACE_INTEGRATION_CONTRACT,
+    component: 'graph',
+    segments: oversized,
+  });
+  assert.equal(bounded.status, 'fallback');
+  assert.equal(bounded.failureCode, 'RESOURCE_LIMIT');
+  assert.equal(bounded.renderedContext, '');
+  assert.equal(bounded.originalInput, oversized);
+  assert.equal(bounded.originalComplete, false);
 });
 
 test('adapter uses native ACE when the optional engine is available', (t) => {
@@ -51,8 +103,7 @@ test('adapter uses native ACE when the optional engine is available', (t) => {
   assert.equal(result.renderedContext, result.result.renderedContext);
 });
 
-test('adapter rejects an unknown component and incompatible contract', () => {
+test('adapter construction rejects an unknown component', () => {
   assert.throws(() => createOptionalIntegrationAdapter({ component: 'unknown' }), /unsupported optional component/);
-  const adapter = createOptionalIntegrationAdapter({ component: 'graph' });
-  assert.throws(() => adapter.process({ ...request, contract: 'ace.integration/v2' }), /request contract/);
+  assert.throws(() => createOptionalIntegrationAdapter(), /unsupported optional component/);
 });

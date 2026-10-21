@@ -1,5 +1,5 @@
 export { AceError } from './errors.js';
-export { AfyxContextEngine, classifications, classifyContent } from './engine.js';
+export { ACE_LIMITS, AfyxContextEngine, classifications, classifyContent, validateContextRequest } from './engine.js';
 export {
   ACE_INTEGRATION_CONTRACT,
   SUPPORTED_COMPONENTS,

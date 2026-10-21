@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { AfyxContextEngine, AceError, classifyContent } from '../src/index.js';
+import { ACE_LIMITS, AfyxContextEngine, AceError, classifyContent } from '../src/index.js';
 
 function lab(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-context-test-'));
@@ -148,4 +149,87 @@ test('validates all segments before writing content', (t) => {
     (error) => error instanceof AceError && error.code === 'INVALID_INPUT',
   );
   assert.deepEqual(fs.readdirSync(path.join(stateDir, 'content')), before);
+});
+
+test('rejects oversized content before writing original blobs', (t) => {
+  const stateDir = lab(t);
+  const engine = new AfyxContextEngine({ stateDir, ownerId: 'owner', sessionId: 'limits' });
+  const contentDir = path.join(stateDir, 'content');
+  assert.throws(
+    () => engine.reduce({ segments: [{ id: 'large', content: 'x'.repeat(ACE_LIMITS.maxSegmentBytes + 1) }] }),
+    (error) => error instanceof AceError && error.code === 'RESOURCE_LIMIT',
+  );
+  assert.deepEqual(fs.readdirSync(contentDir), []);
+});
+
+test('recovers complete orphan blob after injected metadata-commit interruption', (t) => {
+  const stateDir = lab(t);
+  const ownerId = 'owner';
+  const sessionId = 'interrupted';
+  const engine = new AfyxContextEngine({ stateDir, ownerId, sessionId });
+  const content = 'complete original written before interrupted session commit';
+  const digest = crypto.createHash('sha256').update(content).digest('hex');
+  const blob = path.join(stateDir, 'content', `${digest}.txt`);
+  const sessionHash = crypto.createHash('sha256').update(sessionId).digest('hex');
+  const sessionPath = path.join(stateDir, 'sessions', sessionHash, 'session.json');
+  const sessionBefore = fs.readFileSync(sessionPath);
+  const renameSync = fs.renameSync;
+  let injected = false;
+  fs.renameSync = (source, destination) => {
+    if (!injected && destination === sessionPath) {
+      injected = true;
+      throw new Error('synthetic metadata commit interruption');
+    }
+    return renameSync(source, destination);
+  };
+  try {
+    assert.throws(
+      () => engine.reduce({ segments: [{ id: 'interrupted', content }] }),
+      /synthetic metadata commit interruption/,
+    );
+  } finally {
+    fs.renameSync = renameSync;
+  }
+  assert.equal(injected, true);
+  assert.equal(fs.readFileSync(blob, 'utf8'), content);
+  assert.deepEqual(fs.readFileSync(sessionPath), sessionBefore);
+  assert.equal(fs.readdirSync(path.dirname(sessionPath)).some((entry) => entry.endsWith('.tmp')), false);
+
+  // The complete orphan is safe to adopt; the retry commits ownership metadata.
+  const reopened = new AfyxContextEngine({ stateDir, ownerId, sessionId });
+  const result = reopened.reduce({ segments: [{ id: 'recovered', content }] });
+  assert.equal(reopened.retrieve(result.items[0].reference), content);
+  assert.equal(fs.readFileSync(blob, 'utf8'), content);
+});
+
+test('fails closed on truncated session metadata without rewriting it', (t) => {
+  const stateDir = lab(t);
+  const ownerId = 'owner';
+  const sessionId = 'truncated';
+  new AfyxContextEngine({ stateDir, ownerId, sessionId });
+  const sessionHash = crypto.createHash('sha256').update(sessionId).digest('hex');
+  const sessionPath = path.join(stateDir, 'sessions', sessionHash, 'session.json');
+  fs.writeFileSync(sessionPath, '{"format":"ace.session/v1"');
+  const before = fs.readFileSync(sessionPath);
+  assert.throws(
+    () => new AfyxContextEngine({ stateDir, ownerId, sessionId }),
+    (error) => error instanceof AceError && error.code === 'INVALID_SESSION',
+  );
+  assert.deepEqual(fs.readFileSync(sessionPath), before);
+});
+
+test('preflights corrupt existing blobs before writing unrelated originals', (t) => {
+  const stateDir = lab(t);
+  const engine = new AfyxContextEngine({ stateDir, ownerId: 'owner', sessionId: 'preflight' });
+  const expected = 'expected original';
+  const expectedDigest = crypto.createHash('sha256').update(expected).digest('hex');
+  fs.writeFileSync(path.join(stateDir, 'content', `${expectedDigest}.txt`), 'corrupt bytes');
+  const newContent = 'must not be written before preflight completes';
+  const newDigest = crypto.createHash('sha256').update(newContent).digest('hex');
+  assert.throws(
+    () => engine.reduce({ segments: [{ id: 'new', content: newContent }, { id: 'existing', content: expected }] }),
+    (error) => error instanceof AceError && error.code === 'CONTENT_INTEGRITY',
+  );
+  assert.equal(fs.existsSync(path.join(stateDir, 'content', `${newDigest}.txt`)), false);
+  assert.equal(fs.readFileSync(path.join(stateDir, 'content', `${expectedDigest}.txt`), 'utf8'), 'corrupt bytes');
 });

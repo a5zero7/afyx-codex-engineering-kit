@@ -34,7 +34,10 @@ original content in `passthrough` mode.
 
 The state directory must be absolute, empty or already bound to the same
 owner, and not itself a symbolic link. References are bound to both owner and
-session. A content hash is verified on every retrieval.
+session. A content hash is verified on every retrieval. Original blobs and
+session metadata are committed through owned temporary files followed by
+`fsync` and rename. A retry can adopt a complete orphan blob left by an
+interruption; malformed metadata and corrupt existing blobs fail closed.
 
 ## CLI
 
@@ -59,6 +62,16 @@ Engineering Expert, Forge, and Kit consumers. `createOptionalIntegrationAdapter`
 catches an unavailable/failed ACE and returns original content, so the consumer
 remains independently functional. The foundation does not install adapters into
 those products or add ACE to a Kit preset.
+
+Malformed or unavailable optional integration requests return a bounded
+fallback. `originalInput` retains the supplied input, and `originalComplete`
+states whether `renderedContext` contains its complete render.
+
+The v1 boundary accepts at most 1,024 segments, 1 MiB content and 64 KiB
+provenance per segment, 8 MiB aggregate request content, 512-byte segment and
+owner/session identities, and 10 MiB CLI input. State/session metadata are
+bounded at 64 KiB/16 MiB; a stored blob is bounded at 1 MiB, a session at
+100,000 unique contents, and provenance at 256 observations per digest.
 
 Current operational limitation: the state format supports one writer at a time;
 cross-process write coordination is not yet provided. Stored content is local

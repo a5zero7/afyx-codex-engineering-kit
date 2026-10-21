@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 import process from 'node:process';
-import { AfyxContextEngine } from './engine.js';
+import { ACE_LIMITS, AfyxContextEngine, validateContextRequest } from './engine.js';
 import { AceError } from './errors.js';
 
 const VERSION = '0.1.0';
@@ -41,6 +41,35 @@ function engineFrom(parsed) {
   });
 }
 
+function readBoundedInput(inputPath) {
+  if (inputPath !== '-') {
+    let stat;
+    try {
+      stat = fs.statSync(inputPath);
+    } catch {
+      throw new AceError('INVALID_INPUT', `input file is unavailable: ${inputPath}`);
+    }
+    if (!stat.isFile()) throw new AceError('INVALID_INPUT', `input path is not a file: ${inputPath}`);
+    if (stat.size > ACE_LIMITS.maxCliInputBytes) {
+      throw new AceError('RESOURCE_LIMIT', `input exceeds the ${ACE_LIMITS.maxCliInputBytes} byte CLI limit`);
+    }
+    return fs.readFileSync(inputPath, 'utf8');
+  }
+  const chunks = [];
+  let size = 0;
+  while (true) {
+    const chunk = Buffer.allocUnsafe(65_536);
+    const count = fs.readSync(0, chunk, 0, chunk.length, null);
+    if (count === 0) break;
+    size += count;
+    if (size > ACE_LIMITS.maxCliInputBytes) {
+      throw new AceError('RESOURCE_LIMIT', `stdin exceeds the ${ACE_LIMITS.maxCliInputBytes} byte CLI limit`);
+    }
+    chunks.push(chunk.subarray(0, count));
+  }
+  return Buffer.concat(chunks, size).toString('utf8');
+}
+
 function main() {
   const [command, ...rest] = process.argv.slice(2);
   if (!command || command === '--help' || command === 'help') {
@@ -52,17 +81,19 @@ function main() {
     return;
   }
   const parsed = options(rest);
-  const engine = engineFrom(parsed);
   if (command === 'reduce') {
     const inputPath = required(parsed, 'input');
-    const source = inputPath === '-' ? fs.readFileSync(0, 'utf8') : fs.readFileSync(inputPath, 'utf8');
+    const source = readBoundedInput(inputPath);
     let request;
     try { request = JSON.parse(source); } catch { throw new AceError('INVALID_INPUT', 'input must be valid JSON'); }
     if (parsed.budget !== undefined) request.budgetChars = Number(parsed.budget);
+    validateContextRequest(request);
+    const engine = engineFrom(parsed);
     process.stdout.write(`${JSON.stringify(engine.reduce(request), null, 2)}\n`);
     return;
   }
   if (command === 'get') {
+    const engine = engineFrom(parsed);
     process.stdout.write(engine.retrieve(required(parsed, 'reference')));
     return;
   }
