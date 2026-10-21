@@ -23,6 +23,14 @@ Both official Graph installers now use the deterministic sibling recovery path
 4. keep validation and uninstall non-mutating while interrupted state exists; and
 5. retain rollback to the prior runtime when staging, swap, or post-swap verification fails.
 
+The `product_name` field is an Afyx lifecycle ownership marker used to decide whether
+the installer may move the recovery directory. It is not a cryptographic publisher
+attestation and must not be reported as one.
+
+If interruption leaves both the new runtime and the recovery path present, refusing
+both paths for manual resolution is the designed fail-closed limitation; the installer
+does not guess which copy is authoritative.
+
 No Graph engine semantics, index format, user corpus, active runtime, MCP registration,
 PATH, or global configuration changed.
 

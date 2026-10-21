@@ -257,6 +257,51 @@ class ArtifactIdentityTests(unittest.TestCase):
             self.assertTrue(runtime.is_dir())
             self.assertTrue(recovery.is_dir())
 
+            def tree_fingerprint(root: Path) -> str:
+                if not root.exists():
+                    return "MISSING"
+                digest = hashlib.sha256()
+                for entry in sorted(root.rglob("*"), key=lambda item: item.relative_to(root).as_posix()):
+                    relative = entry.relative_to(root).as_posix().encode("utf-8")
+                    if entry.is_dir():
+                        digest.update(b"D\0" + relative + b"\0")
+                    elif entry.is_file():
+                        digest.update(b"F\0" + relative + b"\0" + entry.read_bytes() + b"\0")
+                    else:
+                        digest.update(b"O\0" + relative + b"\0")
+                return digest.hexdigest()
+
+            ownership_cases = {
+                "foreign": json.dumps({"product_name": "External Graph", "product_version": "0.9.0"}),
+                "missing": None,
+                "invalid": "{not-json",
+            }
+            for case, metadata_text in ownership_cases.items():
+                case_runtime = base / case / "runtime"
+                case_recovery = Path(f"{case_runtime}.afyx-old")
+                write(case_recovery / "sentinel.bin", f"preserve-{case}\n")
+                if metadata_text is not None:
+                    write(case_recovery / "metadata.json", metadata_text)
+                if os.name == "nt":
+                    write(case_recovery / "current/bin/afyx-graph.cmd", "@echo off\r\nexit /b 0\r\n")
+                    case_update = [shell, "-NoProfile", "-NonInteractive", "-File", str(installer),
+                                   "-RuntimeRoot", str(case_runtime), "-SkipPathUpdate", "-Update",
+                                   "-Offline", "-ArchivePath", str(base / "missing.zip")]
+                else:
+                    write(case_recovery / "current/bin/afyx-graph", "#!/bin/sh\nexit 0\n", executable=True)
+                    case_update = [shell, str(installer), "--update", "--offline", "--archive",
+                                   str(base / "missing.tar.gz")]
+
+                recovery_before = tree_fingerprint(case_recovery)
+                runtime_before = tree_fingerprint(case_runtime)
+                case_env = env.copy()
+                case_env["AFYX_GRAPH_RUNTIME_ROOT"] = str(case_runtime)
+                refused = subprocess.run(case_update, cwd=ROOT, env=case_env, capture_output=True, text=True)
+                self.assertNotEqual(refused.returncode, 0, case)
+                self.assertIn("ownership cannot be verified", (refused.stdout + refused.stderr).lower(), case)
+                self.assertEqual(tree_fingerprint(case_recovery), recovery_before, case)
+                self.assertEqual(tree_fingerprint(case_runtime), runtime_before, case)
+
     def test_explicit_archive_preserves_unknown_revision_truthfully(self) -> None:
         installer = ROOT / "scripts" / ("install-afyx-graph.ps1" if os.name == "nt" else "install-afyx-graph.sh")
         shell = shutil.which("pwsh") if os.name == "nt" else (shutil.which("bash") or "/bin/bash")
