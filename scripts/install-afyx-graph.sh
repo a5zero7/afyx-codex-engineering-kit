@@ -7,6 +7,7 @@ DISTRIBUTION_PRODUCT="$PACKAGE_ROOT/afyx-graph/engine/scripts/distribution-produ
 ARTIFACT_IDENTITY="$PACKAGE_ROOT/scripts/afyx-graph-artifact.mjs"
 RELEASE_ROOT="${AFYX_GRAPH_RELEASE_ROOT:-$PACKAGE_ROOT/afyx-graph/engine/release}"
 RUNTIME_ROOT="${AFYX_GRAPH_RUNTIME_ROOT:-$HOME/.afyx/graph}"
+RECOVERY_ROOT="${RUNTIME_ROOT}.afyx-old"
 BIN_DIR="${AFYX_GRAPH_BIN_DIR:-$HOME/.local/bin}"
 mode=install
 archive_path=
@@ -162,10 +163,30 @@ graph_state() {
   printf '%s' 'HEALTHY'
 }
 
-graph_owned() {
-  [[ -f "$RUNTIME_ROOT/metadata.json" ]] &&
-    grep -q '"product_name"[[:space:]]*:[[:space:]]*"Afyx Graph"' "$RUNTIME_ROOT/metadata.json"
+graph_owned_at() {
+  local root="$1"
+  [[ -f "$root/metadata.json" ]] &&
+    grep -q '"product_name"[[:space:]]*:[[:space:]]*"Afyx Graph"' "$root/metadata.json"
 }
+
+graph_owned() { graph_owned_at "$RUNTIME_ROOT"; }
+
+if [[ -e "$RECOVERY_ROOT" ]]; then
+  if [[ -e "$RUNTIME_ROOT" ]]; then
+    printf 'Interrupted Graph transaction is ambiguous: both %s and %s exist. Refusing to modify either path.\n' "$RUNTIME_ROOT" "$RECOVERY_ROOT" >&2
+    exit 1
+  fi
+  if [[ "$mode" == validate || "$mode" == uninstall ]]; then
+    printf 'Interrupted Graph transaction found at %s. Retry the original install/update operation to restore it before validation or removal.\n' "$RECOVERY_ROOT" >&2
+    exit 1
+  fi
+  graph_owned_at "$RECOVERY_ROOT" || {
+    printf 'Refusing to restore %s because Afyx Graph ownership cannot be verified.\n' "$RECOVERY_ROOT" >&2
+    exit 1
+  }
+  mv "$RECOVERY_ROOT" "$RUNTIME_ROOT"
+  printf 'Recovered interrupted Afyx Graph transaction at %s.\n' "$RUNTIME_ROOT"
+fi
 
 state="$(graph_state)"
 if [[ "$mode" == validate ]]; then
@@ -233,7 +254,7 @@ require_host_runtime
 parent="$(dirname "$RUNTIME_ROOT")"
 mkdir -p "$parent"
 transaction="$(mktemp -d "$parent/.graph-stage.XXXXXX")"
-backup="$parent/.graph-backup.$$"
+backup="$RECOVERY_ROOT"
 cleanup() { rm -rf -- "$transaction"; }
 trap cleanup EXIT
 

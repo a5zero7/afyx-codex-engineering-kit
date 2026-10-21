@@ -183,6 +183,11 @@ class ArtifactIdentityTests(unittest.TestCase):
             self.assertEqual(metadata["build_provenance"], "COMMIT_BOUND_MANIFEST")
             self.assertEqual(len(metadata["archive_sha256"]), 64)
 
+            update_command = command + (["-Update"] if os.name == "nt" else ["--update"])
+            updated = subprocess.run(update_command, cwd=ROOT, env=env, capture_output=True, text=True)
+            self.assertEqual(updated.returncode, 0, updated.stdout + updated.stderr)
+            self.assertFalse(Path(f"{runtime}.afyx-old").exists())
+
             metadata["source_revision"] = "b" * 40
             write(runtime / "metadata.json", json.dumps(metadata))
             validate = ([shell, "-NoProfile", "-NonInteractive", "-File", str(installer), "-RuntimeRoot", str(runtime), "-SkipPathUpdate", "-ValidateOnly"]
@@ -201,6 +206,56 @@ class ArtifactIdentityTests(unittest.TestCase):
             self.assertIn("valid but stale", (stale.stdout + stale.stderr).lower())
             preserved = json.loads((runtime / "metadata.json").read_text(encoding="utf-8-sig"))
             self.assertEqual(preserved["sentinel"], "preserve-me")
+
+    def test_interrupted_graph_swap_recovers_owned_runtime_and_fails_closed(self) -> None:
+        installer = ROOT / "scripts" / ("install-afyx-graph.ps1" if os.name == "nt" else "install-afyx-graph.sh")
+        shell = shutil.which("pwsh") if os.name == "nt" else (shutil.which("bash") or "/bin/bash")
+        if not shell:
+            self.skipTest("host lifecycle shell unavailable")
+
+        with tempfile.TemporaryDirectory() as raw:
+            base = Path(raw)
+            runtime = base / "runtime"
+            recovery = Path(f"{runtime}.afyx-old")
+            write(recovery / "metadata.json", json.dumps({
+                "product_name": "Afyx Graph",
+                "product_version": "0.9.0",
+                "sentinel": "preserve-interrupted-runtime",
+            }))
+            if os.name == "nt":
+                write(recovery / "current/bin/afyx-graph.cmd", "@echo off\r\nexit /b 0\r\n")
+                update = [shell, "-NoProfile", "-NonInteractive", "-File", str(installer),
+                          "-RuntimeRoot", str(runtime), "-SkipPathUpdate", "-Update",
+                          "-Offline", "-ArchivePath", str(base / "missing.zip")]
+                validate = [shell, "-NoProfile", "-NonInteractive", "-File", str(installer),
+                            "-RuntimeRoot", str(runtime), "-SkipPathUpdate", "-ValidateOnly"]
+            else:
+                write(recovery / "current/bin/afyx-graph", "#!/bin/sh\nexit 0\n", executable=True)
+                update = [shell, str(installer), "--update", "--offline", "--archive", str(base / "missing.tar.gz")]
+                validate = [shell, str(installer), "--validate-only"]
+
+            env = os.environ.copy()
+            env.update({"AFYX_GRAPH_RUNTIME_ROOT": str(runtime), "AFYX_GRAPH_BIN_DIR": str(base / "bin")})
+            recovered = subprocess.run(update, cwd=ROOT, env=env, capture_output=True, text=True)
+            self.assertNotEqual(recovered.returncode, 0)
+            self.assertIn("Recovered interrupted Afyx Graph transaction", recovered.stdout + recovered.stderr)
+            self.assertTrue(runtime.is_dir())
+            self.assertFalse(recovery.exists())
+            restored = json.loads((runtime / "metadata.json").read_text(encoding="utf-8-sig"))
+            self.assertEqual(restored["sentinel"], "preserve-interrupted-runtime")
+
+            runtime.rename(recovery)
+            refused_validate = subprocess.run(validate, cwd=ROOT, env=env, capture_output=True, text=True)
+            self.assertNotEqual(refused_validate.returncode, 0)
+            self.assertTrue(recovery.is_dir())
+            self.assertFalse(runtime.exists())
+
+            shutil.copytree(recovery, runtime)
+            refused_ambiguous = subprocess.run(update, cwd=ROOT, env=env, capture_output=True, text=True)
+            self.assertNotEqual(refused_ambiguous.returncode, 0)
+            self.assertIn("ambiguous", (refused_ambiguous.stdout + refused_ambiguous.stderr).lower())
+            self.assertTrue(runtime.is_dir())
+            self.assertTrue(recovery.is_dir())
 
     def test_explicit_archive_preserves_unknown_revision_truthfully(self) -> None:
         installer = ROOT / "scripts" / ("install-afyx-graph.ps1" if os.name == "nt" else "install-afyx-graph.sh")
