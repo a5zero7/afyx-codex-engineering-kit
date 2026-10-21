@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://afyx.dev/contracts/ace.integration.v1.schema.json",
+  "title": "Afyx Context Engine Optional Integration v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract", "component", "stateDir", "ownerId", "sessionId", "segments"],
+  "properties": {
+    "contract": { "const": "ace.integration/v1" },
+    "component": { "enum": ["graph", "engineering-expert", "forge", "kit"] },
+    "stateDir": { "type": "string", "minLength": 1 },
+    "ownerId": { "type": "string", "minLength": 1 },
+    "sessionId": { "type": "string", "minLength": 1 },
+    "budgetChars": { "type": "integer", "minimum": 1 },
+    "segments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "content"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "content": { "type": "string" },
+          "classification": {
+            "enum": ["normal", "diagnostic", "security", "source-evidence"]
+          },
+          "provenance": { "type": "object" }
+        }
+      }
+    }
+  }
+}

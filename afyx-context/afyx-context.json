@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "product_name": "Afyx Context Engine",
+  "product_version": "0.1.0",
+  "cli": "afyx-context",
+  "runtime": "node",
+  "ownership_class": "AFYX",
+  "standalone": true,
+  "integration_contract": "ace.integration/v1",
+  "kit_management": {
+    "contract_version": 1,
+    "lifecycle_integration": "not-implemented",
+    "default_presets": []
+  }
+}
