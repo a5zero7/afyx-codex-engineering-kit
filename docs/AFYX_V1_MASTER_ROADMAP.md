@@ -3017,3 +3017,25 @@ existing blob integrity before new writes, adopts a complete interruption orphan
 on retry, and leaves truncated metadata unchanged while failing closed. The
 focused suite passes 22 tests. Fresh exact-head CI remains required; the prior
 `4f5abc1` CI does not attest these corrections.
+
+## AFYX-291 — Native ACE comparative benchmark and acceptance
+
+Status: **BENCHMARK EXECUTED; STACKED DRAFT REVIEW AND EXACT-HEAD CI PENDING**
+
+AFYX-291 is isolated on a benchmark-only branch from frozen ACE foundation
+`594452d4722d4135ef04643639c1ad16c2c5e681`; Draft PR #84 and its dogfood
+worktree remain unchanged. Eight synthetic fixtures and seven cold plus seven
+warm repetitions per fixture produce 112 process samples with pinned
+`js-tiktoken` 1.0.21 `o200k_base` measurement. Correctness, protected-content,
+owner/session boundary, fallback, passthrough, exact recovery, and deterministic
+output checks pass.
+
+The evidence explicitly retains zero-saving outcomes and a recovery-heavy net
+regression: 76.14% cold gross reduction becomes -21.92% net after every emitted
+reference is recovered. Therefore no general savings claim is made. Headroom
+0.37.0 comparison is `BLOCKED` and its A/B is `NOT_RUN`: the installed boundary
+is a provider proxy/evaluation surface rather than an equivalent standalone
+transform, and active routing, credentials, private sessions, and global state
+were not used. Full methods and raw evidence are recorded in
+`docs/AFYX_CONTEXT_ENGINE_AFYX_291_BENCHMARK.md` and
+`docs/evidence/afyx-291/`.

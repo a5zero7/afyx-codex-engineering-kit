@@ -19,7 +19,11 @@
     "build": "node scripts/build.mjs",
     "build:clean": "node scripts/build.mjs --clean",
     "test": "node --test",
-    "test:benchmark": "node scripts/benchmark.mjs"
+    "test:benchmark": "node scripts/benchmark.mjs",
+    "test:comparative": "node scripts/comparative-benchmark.mjs"
+  },
+  "devDependencies": {
+    "js-tiktoken": "1.0.21"
   },
   "engines": {
     "node": ">=22.5.0"

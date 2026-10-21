@@ -41,6 +41,9 @@ jobs:
       - name: Unit, CLI and failure-isolation tests
         working-directory: afyx-context
         run: npm test
+      - name: Comparative benchmark harness smoke
+        working-directory: afyx-context
+        run: npm run test:comparative -- --samples 1 --summary
       - name: Package smoke
         working-directory: afyx-context
         run: npm pack --dry-run
