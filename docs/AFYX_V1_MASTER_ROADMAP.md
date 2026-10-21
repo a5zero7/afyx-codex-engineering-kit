@@ -2990,3 +2990,20 @@ it remains `FAIL`, separate from the historical 25-error run. Exact-head CI,
 independent review, owner merge decisions, and retargeting after Phase 6 merge remain
 pending. Active runtime, Alpha, T05 Adit, and T09 Forge campaign were not changed;
 T09 remains `BLOCKED — 0/36` and A8 remains without GO.
+
+## AFYX-290 — Native Afyx Context Engine Foundation
+
+Status: **IMPLEMENTED; REVIEW AND EXACT-HEAD CI PENDING**
+
+The first ACE MVP is an independently runnable, Afyx-owned package under
+`afyx-context/`. It provides conservative protected-content classification,
+exact-repeat reduction, bounded selection with byte-complete fallback, stable
+owner/session-bound references, original retrieval, provenance, and independent
+CLI/API entry points. Graph, Engineering Expert, Forge, and Kit are represented
+only through the versioned optional `ace.integration/v1` contract; their
+standalone behavior does not depend on ACE and no default Kit preset changes.
+
+The deterministic synthetic baseline and complete provenance/limitation record
+are maintained in `docs/AFYX_CONTEXT_ENGINE_FOUNDATION.md`. External Headroom
+A/B, real consumer adapters, multi-process writers, and Kit lifecycle delivery
+remain outside this foundation and must not be inferred as complete.
