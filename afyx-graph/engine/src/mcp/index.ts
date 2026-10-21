@@ -42,7 +42,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type * as net from 'net';
 import { spawn, StdioOptions } from 'child_process';
-import { resolveServerRoot, getAfyxGraphDir, getDatabasePath } from '../directory';
+import { resolveServerRoot, getAfyxGraphDir, getDatabasePath, usesExternalStateDir } from '../directory';
 import { StdioTransport } from './transport';
 import { MCPEngine } from './engine';
 import { MCPSession } from './session';
@@ -281,6 +281,10 @@ function openDaemonLogStdio(root: string): [StdioOptions, number | null] {
 function detachedDaemonEnv(): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env, [DAEMON_INTERNAL_ENV]: '1' };
   delete env[HOST_PPID_ENV];
+  if (usesExternalStateDir()) {
+    delete env.NODE_COMPILE_CACHE;
+    env.NODE_DISABLE_COMPILE_CACHE = '1';
+  }
   return env;
 }
 

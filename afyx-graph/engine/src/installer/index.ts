@@ -28,7 +28,7 @@ import { applyInstallPlan, createInstallPlan, describeInstallPlan } from './plan
 // installer must stay importable even when native modules can't load).
 import { watchDisabledReason } from '../sync/watch-policy';
 import { isGitRepo, isSyncHookInstalled, installGitSyncHook } from '../sync/git-hooks';
-import { getAfyxGraphDir, afyxGraphDirName } from '../directory';
+import { getAfyxGraphDir, afyxGraphDirName, usesExternalStateDir } from '../directory';
 import { afyxTerminal, type AfyxTerminal } from '../runtime/terminal';
 
 // Backwards-compat: keep these named exports — downstream code may
@@ -540,6 +540,14 @@ export async function offerWatchFallback(
 
   clack.log.warn(`Live file watching is disabled here — ${reason}.`);
   clack.log.info('Until you re-sync, the Afyx Graph index stays frozen — it will not pick up edits on its own.');
+
+  // An external state binding is the read-only-corpus contract. Git hooks live
+  // under the corpus repository, so even inspecting an existing managed hook
+  // must never lead to an install/update from this workflow.
+  if (usesExternalStateDir()) {
+    clack.log.info('External-state mode does not modify source Git hooks. Run `afyx-graph sync` after changing files to refresh the index.');
+    return;
+  }
 
   // No git repo → the commit-hook path doesn't apply; point at manual sync.
   if (!isGitRepo(projectPath)) {

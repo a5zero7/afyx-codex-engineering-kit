@@ -36,13 +36,13 @@ Doctor bersifat read-only dan tidak pernah membuka database Afyx Graph. Freshnes
 
 | State | Arti |
 |---|---|
-| `MISSING` | tidak ada `.afyx-graph/afyx-graph.db` |
+| `MISSING` | tidak ada database pada state efektif (`.afyx-graph/` atau binding eksternal) |
 | `INVALID` | database bukan berkas SQLite, atau `freshness.json` rusak |
 | `FRESH` | `git_head` tercatat sama dengan HEAD, tracked tree bersih, dan index dibangun dari tree bersih |
 | `STALE` | HEAD berubah, tracked file berubah, atau index dibangun dari edit yang belum di-commit |
 | `UNKNOWN` | metadata index belum tercatat, atau project bukan git working tree |
 
-Afyx Graph menulis `.afyx-graph/freshness.json` setelah setiap index atau sync yang berhasil, dan `afyx-graph status` (teks maupun `--json`) melaporkan state yang sama dengan aturan yang sama ([`src/freshness.ts`](../afyx-graph/engine/src/freshness.ts)):
+Afyx Graph menulis `freshness.json` pada state efektif setelah setiap index atau sync yang berhasil, dan `afyx-graph status` (teks maupun `--json`) melaporkan state yang sama dengan aturan yang sama ([`src/freshness.ts`](../afyx-graph/engine/src/freshness.ts)):
 
 ```json
 { "schema_version": 1, "indexed_at": "2026-01-01T00:00:00.000Z", "git_head": "<sha atau null>", "tracked_clean": true }
