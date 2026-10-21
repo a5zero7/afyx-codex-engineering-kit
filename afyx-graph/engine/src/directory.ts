@@ -9,6 +9,162 @@ import * as os from 'os';
 import * as path from 'path';
 import { STATE_DIR_NAME, DATABASE_FILE_NAME } from './product';
 
+/** Absolute, external state location for one explicitly bound corpus. */
+export const EXTERNAL_STATE_DIR_ENV = 'AFYX_GRAPH_STATE_DIR';
+export const STATE_OWNER_FILE_NAME = 'project.json';
+const STATE_OWNER_SCHEMA = 1;
+const MAX_STATE_OWNER_BYTES = 16 * 1024;
+
+interface StateOwnerRecord {
+  schema_version: number;
+  project_root: string;
+}
+
+class StateOwnerMismatchError extends Error {}
+
+function comparablePath(value: string): string {
+  const normalized = path.normalize(value);
+  return process.platform === 'win32' || process.platform === 'darwin'
+    ? normalized.toLowerCase()
+    : normalized;
+}
+
+function isWithin(parent: string, child: string): boolean {
+  const relative = path.relative(parent, child);
+  return relative === '' || (!relative.startsWith('..' + path.sep) && relative !== '..' && !path.isAbsolute(relative));
+}
+
+function canonicalExistingPath(value: string, label: string): string {
+  let resolved = path.resolve(value);
+  let existing = resolved;
+  const tail: string[] = [];
+  while (!fs.existsSync(existing)) {
+    const parent = path.dirname(existing);
+    if (parent === existing) throw new Error(`${label} has no accessible existing ancestor: ${resolved}`);
+    tail.unshift(path.basename(existing));
+    existing = parent;
+  }
+
+  const stat = fs.lstatSync(existing);
+  if (stat.isSymbolicLink()) throw new Error(`${label} must not use a symbolic link or reparse point: ${existing}`);
+  const realExisting = fs.realpathSync(existing);
+  if (comparablePath(realExisting) !== comparablePath(existing)) {
+    throw new Error(`${label} must not use a path alias or reparse-point ancestor: ${existing}`);
+  }
+  resolved = path.join(realExisting, ...tail);
+  return resolved;
+}
+
+function configuredExternalStateDir(): string | null {
+  const configured = process.env[EXTERNAL_STATE_DIR_ENV];
+  if (configured === undefined) return null;
+  const raw = configured.trim();
+  if (!raw) throw new Error(`${EXTERNAL_STATE_DIR_ENV} must not be empty`);
+  if (!path.isAbsolute(raw)) throw new Error(`${EXTERNAL_STATE_DIR_ENV} must be an absolute path`);
+  if (raw.split(/[\\/]+/).includes('..')) {
+    throw new Error(`${EXTERNAL_STATE_DIR_ENV} must not contain ".." traversal segments`);
+  }
+  return canonicalExistingPath(raw, EXTERNAL_STATE_DIR_ENV);
+}
+
+function canonicalProjectRoot(projectRoot: string): string {
+  const resolved = path.resolve(projectRoot);
+  let stat: fs.Stats;
+  try {
+    stat = fs.statSync(resolved);
+  } catch {
+    throw new Error(`Project root does not exist or is inaccessible: ${resolved}`);
+  }
+  if (!stat.isDirectory()) throw new Error(`Project root is not a directory: ${resolved}`);
+  return fs.realpathSync(resolved);
+}
+
+function parseStateOwner(stateDir: string): StateOwnerRecord | null {
+  const ownerPath = path.join(stateDir, STATE_OWNER_FILE_NAME);
+  if (!fs.existsSync(ownerPath)) return null;
+  const stat = fs.lstatSync(ownerPath);
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_STATE_OWNER_BYTES) {
+    throw new Error(`External Afyx Graph state owner record is unsafe: ${ownerPath}`);
+  }
+  let parsed: Partial<StateOwnerRecord>;
+  try {
+    parsed = JSON.parse(fs.readFileSync(ownerPath, 'utf8')) as Partial<StateOwnerRecord>;
+  } catch {
+    throw new Error(`External Afyx Graph state owner record is invalid: ${ownerPath}`);
+  }
+  if (parsed.schema_version !== STATE_OWNER_SCHEMA || typeof parsed.project_root !== 'string' || !path.isAbsolute(parsed.project_root)) {
+    throw new Error(`External Afyx Graph state owner record has an unsupported schema: ${ownerPath}`);
+  }
+  return parsed as StateOwnerRecord;
+}
+
+function validateExternalState(projectRoot: string, stateDir: string): string {
+  const canonicalProject = canonicalProjectRoot(projectRoot);
+  const canonicalState = canonicalExistingPath(stateDir, EXTERNAL_STATE_DIR_ENV);
+  if (comparablePath(canonicalState) !== comparablePath(stateDir)) {
+    throw new Error(`${EXTERNAL_STATE_DIR_ENV} must not use a path alias or reparse-point ancestor`);
+  }
+  const stateComparable = comparablePath(canonicalState);
+  const projectComparable = comparablePath(canonicalProject);
+  if (isWithin(projectComparable, stateComparable) || isWithin(stateComparable, projectComparable)) {
+    throw new Error(`${EXTERNAL_STATE_DIR_ENV} must not overlap the project root`);
+  }
+
+  if (fs.existsSync(stateDir)) {
+    const stat = fs.lstatSync(stateDir);
+    if (stat.isSymbolicLink() || !stat.isDirectory()) {
+      throw new Error(`${EXTERNAL_STATE_DIR_ENV} must name a real directory, not a file, symlink, or reparse point`);
+    }
+    const owner = parseStateOwner(stateDir);
+    if (owner) {
+      const ownerRoot = canonicalProjectRoot(owner.project_root);
+      if (comparablePath(ownerRoot) !== projectComparable) {
+        throw new StateOwnerMismatchError('External Afyx Graph state belongs to a different project root');
+      }
+    } else if (fs.readdirSync(stateDir).length > 0) {
+      throw new Error('External Afyx Graph state directory is non-empty but has no valid project binding');
+    }
+  }
+  return canonicalState;
+}
+
+function bindExternalState(projectRoot: string, stateDir: string): void {
+  validateExternalState(projectRoot, stateDir);
+  const existing = parseStateOwner(stateDir);
+  if (existing) {
+    validateExternalState(projectRoot, stateDir);
+    return;
+  }
+  if (fs.readdirSync(stateDir).length > 0) {
+    throw new Error('External Afyx Graph state directory is non-empty but has no valid project binding');
+  }
+  const record: StateOwnerRecord = {
+    schema_version: STATE_OWNER_SCHEMA,
+    project_root: canonicalProjectRoot(projectRoot),
+  };
+  fs.writeFileSync(
+    path.join(stateDir, STATE_OWNER_FILE_NAME),
+    JSON.stringify(record, null, 2) + '\n',
+    { encoding: 'utf8', flag: 'wx', mode: 0o600 },
+  );
+}
+
+export function usesExternalStateDir(): boolean {
+  return process.env[EXTERNAL_STATE_DIR_ENV] !== undefined;
+}
+
+/** Resolve the configured external state without guessing a corpus root. */
+export function getBoundExternalStateDir(): string | null {
+  const external = configuredExternalStateDir();
+  if (!external || !fs.existsSync(external)) return external;
+  const owner = parseStateOwner(external);
+  if (!owner) {
+    if (fs.readdirSync(external).length === 0) return external;
+    throw new Error('External Afyx Graph state directory is non-empty but has no valid project binding');
+  }
+  return validateExternalState(owner.project_root, external);
+}
+
 let warnedBadDirName = false;
 
 /**
@@ -81,6 +237,8 @@ export function isAfyxGraphDataDir(name: string): boolean {
  * Get the .afyx-graph directory path for a project
  */
 export function getAfyxGraphDir(projectRoot: string): string {
+  const external = configuredExternalStateDir();
+  if (external) return validateExternalState(projectRoot, external);
   return path.join(projectRoot, afyxGraphDirName());
 }
 
@@ -98,7 +256,13 @@ export function getDatabasePath(projectRoot: string): string {
  * Requires both .afyx-graph/ directory AND afyx-graph.db to exist
  */
 export function isInitialized(projectRoot: string): boolean {
-  const afyxGraphDir = getAfyxGraphDir(projectRoot);
+  let afyxGraphDir: string;
+  try {
+    afyxGraphDir = getAfyxGraphDir(projectRoot);
+  } catch (error) {
+    if (error instanceof StateOwnerMismatchError) return false;
+    throw error;
+  }
   if (!fs.existsSync(afyxGraphDir) || !fs.statSync(afyxGraphDir).isDirectory()) {
     return false;
   }
@@ -747,6 +911,8 @@ export function createDirectory(projectRoot: string): void {
 
   // Create main directory (if it doesn't exist)
   fs.mkdirSync(afyxGraphDir, { recursive: true });
+
+  if (usesExternalStateDir()) bindExternalState(projectRoot, afyxGraphDir);
 
   // Write .gitignore inside .afyx-graph (create if absent, upgrade a stale
   // pre-wildcard default left by an older version — issue #788).

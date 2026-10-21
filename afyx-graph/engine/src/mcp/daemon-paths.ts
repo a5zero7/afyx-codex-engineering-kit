@@ -33,17 +33,23 @@
  */
 
 import * as crypto from 'crypto';
+import * as fs from 'fs';
 import * as net from 'net';
 import * as os from 'os';
 import * as path from 'path';
-import { getAfyxGraphDir } from '../directory';
+import { getAfyxGraphDir, usesExternalStateDir } from '../directory';
 
 /** Soft ceiling for an in-project socket path before it's considered too long to risk. */
 const POSIX_SOCKET_PATH_LIMIT = 100;
 
 /** Short, stable, project-scoped identifier — the basis for both the tmpdir path and the Windows pipe name. */
 function projectHash(projectRoot: string): string {
-  return crypto.createHash('sha256').update(path.resolve(projectRoot)).digest('hex').slice(0, 16);
+  const resolvedRoot = path.resolve(projectRoot);
+  const canonicalRoot = usesExternalStateDir() ? fs.realpathSync(resolvedRoot) : resolvedRoot;
+  const identity = usesExternalStateDir()
+    ? `${canonicalRoot}\0${getAfyxGraphDir(canonicalRoot)}`
+    : canonicalRoot;
+  return crypto.createHash('sha256').update(identity).digest('hex').slice(0, 16);
 }
 
 function windowsPipeName(projectRoot: string): string {
@@ -87,6 +93,9 @@ function inProjectSocketPath(projectRoot: string): string {
 export function getDaemonSocketCandidates(projectRoot: string): string[] {
   if (process.platform === 'win32') return [windowsPipeName(projectRoot)];
   const inProject = inProjectSocketPath(projectRoot);
+  // An explicit external-state contract must never spill a socket into the OS
+  // temp directory. A too-long socket path therefore fails at bind time.
+  if (usesExternalStateDir()) return [inProject];
   if (inProject.length > POSIX_SOCKET_PATH_LIMIT) return [tmpdirSocketPath(projectRoot)];
   return [inProject, tmpdirSocketPath(projectRoot)];
 }

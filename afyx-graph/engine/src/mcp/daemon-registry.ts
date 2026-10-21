@@ -25,6 +25,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import { getAfyxGraphDir, getBoundExternalStateDir, usesExternalStateDir } from '../directory';
 import {
   getDaemonPidPath,
   getDaemonSocketCandidates,
@@ -47,17 +48,22 @@ export interface DaemonRecord {
 }
 
 /**
- * The registry directory itself, `~/.afyx-graph/daemons`, keyed off the home
- * directory — genuinely global, unlike the per-project index dir: setting
- * `AFYX_GRAPH_DIR` renames that one, but has no effect here.
+ * The registry directory is global by default (`~/.afyx-graph/daemons`). Under
+ * the explicit external-state contract it lives beneath that bound state so no
+ * discovery metadata escapes the selected state location.
  */
-export function getRegistryDir(): string {
+export function getRegistryDir(projectRoot?: string): string {
+  if (usesExternalStateDir()) {
+    const stateDir = projectRoot ? getAfyxGraphDir(projectRoot) : getBoundExternalStateDir();
+    if (!stateDir) throw new Error('External Afyx Graph state directory is not configured');
+    return path.join(stateDir, 'daemons');
+  }
   return path.join(os.homedir(), '.afyx-graph', 'daemons');
 }
 
 function recordPath(root: string): string {
   const hash = crypto.createHash('sha256').update(path.resolve(root)).digest('hex').slice(0, 16);
-  return path.join(getRegistryDir(), `${hash}.json`);
+  return path.join(getRegistryDir(root), `${hash}.json`);
 }
 
 /**
@@ -72,7 +78,7 @@ export const isProcessAlive = isValidPidAlive;
 /** Drop a discovery record for this daemon so `list`/`stop --all` can find it. Best-effort. */
 export function registerDaemon(rec: DaemonRecord): void {
   try {
-    fs.mkdirSync(getRegistryDir(), { recursive: true });
+    fs.mkdirSync(getRegistryDir(rec.root), { recursive: true });
     fs.writeFileSync(recordPath(rec.root), JSON.stringify(rec, null, 2) + '\n', { mode: 0o600 });
   } catch {
     /* a missing record is fine — the next liveness prune just won't see it */

@@ -72,7 +72,7 @@ di luar plan serta konfigurasi USER/EXTERNAL dipertahankan. Custom memakai
 
 Afyx Graph dipasang sebagai runtime opsional di `~/.afyx/graph/`; ia tidak ditempatkan di direktori skill. Identitasnya: paket `@a5zero7/afyx-graph`, CLI `afyx-graph`, API `AfyxGraph`, project state `.afyx-graph/` (database `afyx-graph.db`), environment prefix `AFYX_GRAPH_*`, dan identitas MCP `afyx_graph` dengan tool `afyx_graph_*`.
 
-Afyx Graph hanya mengenali `.afyx-graph/` sebagai state project; direktori state lain tidak dibaca, dimigrasikan, atau diubah. Tidak ada alias CLI, environment, maupun tool MCP selain identitas di atas.
+Afyx Graph memakai `.afyx-graph/` sebagai state project secara default. Untuk corpus read-only, owner dapat menetapkan `AFYX_GRAPH_STATE_DIR` ke direktori absolut eksternal yang kosong atau sudah terikat ke canonical corpus yang sama; konfigurasi invalid gagal tertutup dan tidak jatuh kembali ke state lokal. `AFYX_GRAPH_DIR` tetap tersedia hanya untuk mengganti nama direktori state di dalam project.
 
 Instalasi normal tidak mengubah konfigurasi MCP. Installer mencari artifact Technical Alpha yang cocok dengan versi, OS, dan arsitektur, memverifikasi SHA-256 serta metadata, lalu otomatis melakukan clean local build dari checkout Git tervalidasi bila release belum tersedia. Windows memakai packaging PowerShell native dan tidak memerlukan Bash/WSL. Build fallback memerlukan npm; runtime artifact tetap memakai Node.js eksternal >=22.5. Checkout dirty ditolak kecuali pengguna secara eksplisit memilih `-AllowDirtySource` / `--allow-dirty-source`. Afyx Graph dikelola sebagai komponen Afyx yang mandiri; instalasi lain di mesin yang sama tidak dideteksi dan tidak dikelola.
 

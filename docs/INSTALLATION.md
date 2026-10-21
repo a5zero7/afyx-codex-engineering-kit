@@ -96,7 +96,7 @@ Folder skill yang sama tetap kompatibel sebagai ZIP berisi satu top-level folder
 
 ## Konfigurasi Codex yang sengaja tidak diubah
 
-Installer tidak memodifikasi `auth.json`, Headroom, plugin, sandbox, model, provider, atau MCP server lain. Hanya ketika integrasi Graph dipilih, installer meminta Codex CLI mengelola entry MCP Afyx-owned; entry conflicting/unproven tidak ditimpa. Afyx Graph memasang runtime mandiri dan CLI `afyx-graph` di `~/.afyx/graph/`; Headroom tetap eksternal dan hanya dideteksi. Project state memakai `.afyx-graph/` (database `afyx-graph.db`); direktori state lain tidak dibaca atau diubah.
+Installer tidak memodifikasi `auth.json`, Headroom, plugin, sandbox, model, provider, atau MCP server lain. Hanya ketika integrasi Graph dipilih, installer meminta Codex CLI mengelola entry MCP Afyx-owned; entry conflicting/unproven tidak ditimpa. Afyx Graph memasang runtime mandiri dan CLI `afyx-graph` di `~/.afyx/graph/`; Headroom tetap eksternal dan hanya dideteksi. Project state memakai `.afyx-graph/` (database `afyx-graph.db`) secara default. Corpus read-only dapat memakai `AFYX_GRAPH_STATE_DIR` absolut di luar corpus; lokasi itu harus kosong atau sudah terikat ke canonical corpus yang sama dan konfigurasi invalid tidak pernah jatuh kembali ke state lokal.
 
 ## Pembaruan
 

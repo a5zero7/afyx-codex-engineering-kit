@@ -12,7 +12,7 @@ const BIN = path.resolve(__dirname, '../dist/bin/afyx-graph.js');
 const PACKAGE_VERSION = JSON.parse(
   fs.readFileSync(path.resolve(__dirname, '../package.json'), 'utf8'),
 ).version as string;
-const ROOT_HELP_SHA256 = 'be58c0d1fae7fc27b682fe90e9fc280357549df5b355c4785d9013967a3cacb9';
+const ROOT_HELP_SHA256 = '2d60cf29026867dcb1404400689db24f0bc3522e554a4d6a21b7cb6278b6daed';
 const QUERY_HELP_SHA256 = '0ce2d5d2c93401f903871589a0db50b588e969524eb405253488bc81618b8bcd';
 
 interface CliRun {

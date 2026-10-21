@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
+import { usesExternalStateDir } from '../directory';
 
 export interface WatchdogHandle {
   stop(): void;
@@ -34,6 +35,11 @@ export function startWatchdogRuntime(
   dependencies: WatchdogRuntimeDependencies = {},
 ): WatchdogHandle | null {
   const spawnProcess = dependencies.spawnProcess ?? spawn;
+  let childEnv: NodeJS.ProcessEnv | undefined;
+  if (usesExternalStateDir()) {
+    childEnv = { ...process.env, NODE_DISABLE_COMPILE_CACHE: '1' };
+    delete childEnv.NODE_COMPILE_CACHE;
+  }
   let child: ChildProcess;
   try {
     child = spawnProcess(
@@ -49,6 +55,7 @@ export function startWatchdogRuntime(
         stdio: ['pipe', 'ignore', 'inherit'],
         windowsHide: true,
         cwd: dependencies.cwd ?? os.tmpdir(),
+        env: childEnv,
       },
     );
   } catch (error) {
