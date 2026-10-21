@@ -34,6 +34,7 @@ $rootMetadata = Join-Path $RuntimeRoot 'metadata.json'
 $launcher = Join-Path $current 'bin\afyx-graph.cmd'
 $publicBin = Join-Path $RuntimeRoot 'bin'
 $publicLauncher = Join-Path $publicBin 'afyx-graph.cmd'
+$recoveryRoot = "$RuntimeRoot.afyx-old"
 $engineRoot = Join-Path $kitRoot 'afyx-graph\engine'
 $contractPath = Join-Path $engineRoot 'scripts\distribution-contract.mjs'
 $artifactIdentityTool = Join-Path $kitRoot 'scripts\afyx-graph-artifact.mjs'
@@ -183,12 +184,15 @@ function Get-State {
     return 'HEALTHY'
 }
 
-function Test-AfyxOwnership {
-    if (-not (Test-Path -LiteralPath $rootMetadata -PathType Leaf)) { return $false }
+function Test-AfyxOwnershipAt([string]$Path) {
+    $metadataAtPath = Join-Path $Path 'metadata.json'
+    if (-not (Test-Path -LiteralPath $metadataAtPath -PathType Leaf)) { return $false }
     try {
-        return (Get-Content -Raw -LiteralPath $rootMetadata -Encoding utf8 | ConvertFrom-Json).product_name -eq 'Afyx Graph'
+        return (Get-Content -Raw -LiteralPath $metadataAtPath -Encoding utf8 | ConvertFrom-Json).product_name -eq 'Afyx Graph'
     } catch { return $false }
 }
+
+function Test-AfyxOwnership { return Test-AfyxOwnershipAt -Path $RuntimeRoot }
 
 function Resolve-Archive {
     if ($ArchivePath) {
@@ -302,6 +306,20 @@ function Test-StagedRuntimeIdentity([string]$Path) {
     }
 }
 
+if (Test-Path -LiteralPath $recoveryRoot) {
+    if (Test-Path -LiteralPath $RuntimeRoot) {
+        throw "Interrupted Graph transaction is ambiguous: both $RuntimeRoot and $recoveryRoot exist. Refusing to modify either path."
+    }
+    if ($ValidateOnly -or $Uninstall -or $WhatIfPreference) {
+        throw "Interrupted Graph transaction found at $recoveryRoot. Retry the original install/update operation to restore it before validation or removal."
+    }
+    if (-not (Test-AfyxOwnershipAt -Path $recoveryRoot)) {
+        throw "Refusing to restore $recoveryRoot because Afyx Graph ownership cannot be verified."
+    }
+    Move-Item -LiteralPath $recoveryRoot -Destination $RuntimeRoot
+    Write-Host "Recovered interrupted Afyx Graph transaction at $RuntimeRoot."
+}
+
 $state = Get-State
 if ($ValidateOnly) {
     $installedMetadata = if (Test-Path -LiteralPath $rootMetadata) { Get-Content -Raw $rootMetadata | ConvertFrom-Json } else { $null }
@@ -366,7 +384,6 @@ New-Item -ItemType Directory -Force -Path $parent | Out-Null
 $transaction = Join-Path $parent ".graph-stage-$([guid]::NewGuid().ToString('N'))"
 $extract = Join-Path $transaction 'extract'
 $prepared = Join-Path $transaction 'prepared'
-$backup = Join-Path $parent ".graph-backup-$([guid]::NewGuid().ToString('N'))"
 $swapped = $false
 try {
     New-Item -ItemType Directory -Force -Path $extract, $prepared | Out-Null
@@ -405,7 +422,7 @@ try {
 @echo off
 @call "%~dp0..\current\bin\afyx-graph.cmd" %*
 "@ | Set-Content -LiteralPath (Join-Path $stagedPublicBin 'afyx-graph.cmd') -Encoding ascii
-    if (Test-Path -LiteralPath $RuntimeRoot) { Move-Item -LiteralPath $RuntimeRoot -Destination $backup }
+    if (Test-Path -LiteralPath $RuntimeRoot) { Move-Item -LiteralPath $RuntimeRoot -Destination $recoveryRoot }
     try {
         Move-Item -LiteralPath $prepared -Destination $RuntimeRoot
         $swapped = $true
@@ -418,14 +435,14 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'Installed Afyx Graph help command failed.' }
     } catch {
         if (Test-Path -LiteralPath $RuntimeRoot) { Remove-Item -LiteralPath $RuntimeRoot -Recurse -Force }
-        if (Test-Path -LiteralPath $backup) { Move-Item -LiteralPath $backup -Destination $RuntimeRoot }
+        if (Test-Path -LiteralPath $recoveryRoot) { Move-Item -LiteralPath $recoveryRoot -Destination $RuntimeRoot }
         throw
     }
-    if (Test-Path -LiteralPath $backup) { Remove-Item -LiteralPath $backup -Recurse -Force }
+    if (Test-Path -LiteralPath $recoveryRoot) { Remove-Item -LiteralPath $recoveryRoot -Recurse -Force }
 } finally {
     if (Test-Path -LiteralPath $transaction) { Remove-Item -LiteralPath $transaction -Recurse -Force }
-    if (-not $swapped -and (Test-Path -LiteralPath $backup) -and -not (Test-Path -LiteralPath $RuntimeRoot)) {
-        Move-Item -LiteralPath $backup -Destination $RuntimeRoot
+    if (-not $swapped -and (Test-Path -LiteralPath $recoveryRoot) -and -not (Test-Path -LiteralPath $RuntimeRoot)) {
+        Move-Item -LiteralPath $recoveryRoot -Destination $RuntimeRoot
     }
 }
 
