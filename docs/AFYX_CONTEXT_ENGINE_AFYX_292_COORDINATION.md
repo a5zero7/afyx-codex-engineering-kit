@@ -34,11 +34,12 @@ retrieval, and provenance reads. The synchronous public API remains unchanged;
 `lockTimeoutMs` and `lockRetryMs` are optional bounded constructor controls with
 defaults of 5,000 ms and 25 ms.
 
-Acquisition prepares a private candidate directory containing bounded
-`ace.lock/v1` ownership metadata, then promotes it atomically to `.ace-lock`.
+Acquisition creates `.ace-lock` atomically, then commits bounded `ace.lock/v1`
+ownership metadata through a private temporary file inside that owned directory.
 Metadata binds a random token to the canonical state-root hash, owner hash,
-hostname, PID, and creation time. Release verifies the token and exact artifact
-shape before removing only the owned lock files.
+hostname, PID, and creation time. A concurrent process waits within the bounded
+timeout while owner metadata is being committed. Release verifies the token and
+exact artifact shape before removing only the owned lock files.
 
 Contention returns deterministic `LOCK_TIMEOUT`. Recovery does not use age or a
 PID-reuse guess. The portable Node process-presence check must prove that the
@@ -94,7 +95,7 @@ gate and is recorded on the Draft PR after execution.
 | Gate | Status | Evidence |
 |---|---|---|
 | `ACE_MULTI_PROCESS_EXCLUSION` | PASS | Concurrent initialization/session/shared-store child-process tests |
-| `ACE_LOCK_LIFECYCLE` | PASS | Atomic candidate, token-checked release, bounded timeout, fail-closed recovery |
+| `ACE_LOCK_LIFECYCLE` | PASS | Atomic lock creation, token-checked release, bounded timeout, fail-closed recovery |
 | `ACE_CRASH_RECOVERY` | PASS | Killed writer at metadata boundary; prior commit intact; orphan verified on retry |
 | `ACE_READ_INTEGRITY` | PASS | Contended read timeout, invisible uncommitted reference, exact recovery |
 | `ACE_FOUNDATION_NONREGRESSION` | PASS | Complete local ACE suite and build |

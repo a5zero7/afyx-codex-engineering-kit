@@ -15,7 +15,6 @@ const DEFAULT_RETRY_MS = 25;
 const MAX_TIMEOUT_MS = 60_000;
 const MAX_RETRY_MS = 1_000;
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
-const CANDIDATE = new RegExp(`^\\.ace-lock\\.candidate\\.(${UUID})$`, 'i');
 const ABANDONED = new RegExp(`^\\.ace-lock\\.abandoned\\.(${UUID})$`, 'i');
 const sleeper = new Int32Array(new SharedArrayBuffer(4));
 
@@ -97,7 +96,7 @@ export class StateCoordinator {
   }
 
   isCoordinationEntry(name) {
-    return name === LOCK_NAME || CANDIDATE.test(name) || ABANDONED.test(name);
+    return name === LOCK_NAME || ABANDONED.test(name);
   }
 
   withLock(action) {
@@ -207,31 +206,31 @@ export class StateCoordinator {
     fs.rmdirSync(directory);
   }
 
-  #makeCandidate() {
+  #tryAcquire() {
     const owner = this.#identity(LOCK_FORMAT);
-    const candidate = path.join(this.stateDir, `.ace-lock.candidate.${owner.token}`);
-    fs.mkdirSync(candidate, { mode: 0o700 });
     try {
-      writeExclusiveJson(path.join(candidate, OWNER_FILE), owner);
-      return { candidate, owner };
+      fs.mkdirSync(this.lockPath, { mode: 0o700 });
     } catch (error) {
-      try { fs.rmdirSync(candidate); } catch { /* preserve the original failure */ }
+      if (error?.code === 'EEXIST') return null;
       throw error;
     }
-  }
-
-  #tryAcquire() {
-    const { candidate, owner } = this.#makeCandidate();
+    const temporary = path.join(this.lockPath, `.owner.${owner.token}.tmp`);
     try {
-      fs.renameSync(candidate, this.lockPath);
+      writeExclusiveJson(temporary, owner);
+      fs.renameSync(temporary, path.join(this.lockPath, OWNER_FILE));
       return owner;
     } catch (error) {
-      try { this.#removeDirectory(candidate, owner.token); } catch (cleanupError) {
-        throw coordinationError(`failed to clean an owned lock candidate: ${cleanupError.message}`);
+      try {
+        if (fs.existsSync(temporary)) {
+          const stat = fs.lstatSync(temporary);
+          if (stat.isSymbolicLink() || !stat.isFile()) throw coordinationError('owned lock temporary changed type');
+          fs.unlinkSync(temporary);
+        }
+        fs.rmdirSync(this.lockPath);
+      } catch (cleanupError) {
+        throw coordinationError(`failed to clean an incomplete owned lock: ${cleanupError.message}`);
       }
-      if (!fs.existsSync(this.lockPath)
-        && !['EACCES', 'EPERM', 'EEXIST', 'ENOTEMPTY'].includes(error?.code)) throw error;
-      return null;
+      throw error;
     }
   }
 
@@ -274,9 +273,8 @@ export class StateCoordinator {
 
   #cleanupArtifacts() {
     for (const entry of fs.readdirSync(this.stateDir).sort()) {
-      const candidateMatch = CANDIDATE.exec(entry);
       const abandonedMatch = ABANDONED.exec(entry);
-      if (!candidateMatch && !abandonedMatch) {
+      if (!abandonedMatch) {
         if (entry.startsWith('.ace-lock.') && entry !== LOCK_NAME) {
           throw coordinationError(`unrecognized coordination artifact: ${entry}`);
         }
@@ -284,23 +282,19 @@ export class StateCoordinator {
       }
       const target = path.join(this.stateDir, entry);
       const metadata = this.#readDirectory(target, {
-        claim: abandonedMatch ? 'required' : 'forbidden',
+        claim: 'required',
         allowMissing: true,
       });
       if (!metadata) continue;
-      if (candidateMatch && metadata.owner.token.toLowerCase() !== candidateMatch[1].toLowerCase()) {
-        throw coordinationError('lock candidate name does not match its ownership token');
-      }
-      if (abandonedMatch && metadata.recovery.token.toLowerCase() !== abandonedMatch[1].toLowerCase()) {
+      if (metadata.recovery.token.toLowerCase() !== abandonedMatch[1].toLowerCase()) {
         throw coordinationError('abandoned lock name does not match its recovery token');
       }
-      const responsible = abandonedMatch ? metadata.recovery : metadata.owner;
-      const state = this.#liveness(responsible);
+      const state = this.#liveness(metadata.recovery);
       if (state === 'alive') continue;
       if (state === 'unknown') {
         throw coordinationError(`coordination artifact owner cannot be verified: ${entry}`);
       }
-      this.#removeDirectory(target, metadata.owner.token, metadata.recovery?.token ?? null);
+      this.#removeDirectory(target, metadata.owner.token, metadata.recovery.token);
     }
   }
 
@@ -328,8 +322,15 @@ export class StateCoordinator {
           `ACE state lock timed out after ${this.timeoutMs} ms (${detail})`,
         );
       }
-      if (this.#recoverAbandonedLock()) {
-        recovered = true;
+      try {
+        if (this.#recoverAbandonedLock()) {
+          recovered = true;
+          continue;
+        }
+      } catch (error) {
+        if (!(error instanceof AceError) || error.code !== 'LOCK_RECOVERY_UNSAFE') throw error;
+        if (Date.now() - started >= this.timeoutMs) throw error;
+        sleep(Math.min(this.retryMs, Math.max(1, this.timeoutMs - (Date.now() - started))));
         continue;
       }
       sleep(Math.min(this.retryMs, Math.max(1, this.timeoutMs - (Date.now() - started))));

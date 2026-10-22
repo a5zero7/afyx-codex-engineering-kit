@@ -3045,7 +3045,7 @@ were not used. Full methods and raw evidence are recorded in
 Status: **IMPLEMENTED AND LOCALLY VALIDATED; STACKED DRAFT REVIEW AND EXACT-HEAD CI PENDING**
 
 AFYX-292 extends the standalone ACE store with one bounded exclusive lock per
-local state root. Atomic candidate promotion, state/owner binding, token-checked
+local state root. Atomic lock-directory creation, state/owner binding, token-checked
 release, and conservative same-host PID-presence checks protect concurrent first
 initialization, same-session writers, cross-session shared blobs, and retrieval.
 Abandoned ownership is reclaimed only after defensible liveness verification;
