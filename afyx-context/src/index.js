@@ -5,3 +5,8 @@ export {
   SUPPORTED_COMPONENTS,
   createOptionalIntegrationAdapter,
 } from './integrations.js';
+export {
+  GRAPH_ACE_CONSUMER_CONTRACT,
+  createGraphAceConsumer,
+  deriveGraphAceIdentity,
+} from './graph-integration.js';

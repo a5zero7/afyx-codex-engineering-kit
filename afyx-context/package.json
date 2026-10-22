@@ -20,7 +20,8 @@
     "build:clean": "node scripts/build.mjs --clean",
     "test": "node --test",
     "test:benchmark": "node scripts/benchmark.mjs",
-    "test:comparative": "node scripts/comparative-benchmark.mjs"
+    "test:comparative": "node scripts/comparative-benchmark.mjs",
+    "test:graph-integration": "node scripts/graph-integration-e2e.mjs"
   },
   "devDependencies": {
     "js-tiktoken": "1.0.21"

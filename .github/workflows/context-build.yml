@@ -35,6 +35,12 @@ jobs:
       - name: Install locked package metadata
         working-directory: afyx-context
         run: npm ci
+      - name: Install locked Graph package metadata
+        working-directory: afyx-graph/engine
+        run: npm ci
+      - name: Build Graph real-consumer dependency
+        working-directory: afyx-graph/engine
+        run: npm run build:clean
       - name: Clean build
         working-directory: afyx-context
         run: npm run build:clean
@@ -44,6 +50,9 @@ jobs:
       - name: Comparative benchmark harness smoke
         working-directory: afyx-context
         run: npm run test:comparative -- --samples 1 --summary
+      - name: Graph ACE real-consumer integration
+        working-directory: afyx-context
+        run: npm run test:graph-integration
       - name: Package smoke
         working-directory: afyx-context
         run: npm pack --dry-run
