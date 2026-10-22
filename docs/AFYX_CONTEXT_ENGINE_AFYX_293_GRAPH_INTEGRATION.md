@@ -1,6 +1,6 @@
 # AFYX-293 — Controlled opt-in Graph–ACE real-consumer integration
 
-Status: **IMPLEMENTED AND LOCALLY VALIDATED; EXACT-HEAD CI PENDING**
+Status: **IMPLEMENTED AND VALIDATED; DRAFT OWNER REVIEW PENDING**
 
 ## Source and boundary
 
@@ -116,7 +116,7 @@ the consumer call. Graph remains independently usable and its response is always
 the fallback. Deleting retained ACE state is an owner retention decision and is
 not performed by the bridge.
 
-## Acceptance state before exact-head CI
+## Acceptance state
 
 | Gate | Status | Evidence |
 |---|---|---|
@@ -127,7 +127,12 @@ not performed by the bridge.
 | `GRAPH_ACE_FAILURE_ISOLATION` | PASS | Missing/throw/timeout/malformed/corrupt negative coverage |
 | `GRAPH_ACE_BOUNDARY_AND_SECURITY` | PASS | Protected evidence inline; foreign boundaries denied |
 | `GRAPH_ACE_COST_AND_SELECTIVITY` | PASS | Gross and net costs include negative recovery result |
-| `CROSS_PLATFORM_EXACT_HEAD` | NOT_RUN | Final Windows/Linux/macOS CI must run on the committed HEAD |
+| `CROSS_PLATFORM_EXACT_HEAD` | PASS | Context Build and repository CI completed on Windows/Linux/macOS; exact run identities are published in the PR closure evidence |
+
+The first cross-platform attempt exposed that macOS presents its temporary root
+through `/var`, an alias of `/private/var`. The E2E harness now canonicalizes the
+temporary root before creating external Graph state. Graph's fail-closed alias
+validation was not weakened. The corrected exact-head run passed all three OSes.
 
 Historical AFYX-291 evidence and its hashes remain unchanged. This result does
 not authorize merge, deployment, default enablement, Alpha promotion, or a claim
