@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { StateCoordinator } from './coordination.js';
 import { AceError, assertNonEmpty } from './errors.js';
 
 const STATE_FORMAT = 'ace.state/v1';
@@ -11,6 +12,10 @@ const MAX_SESSION_CONTENT = 100_000;
 const MAX_OBSERVATIONS_PER_CONTENT = 256;
 const MAX_IDENTITY_BYTES = 512;
 const MAX_CONTENT_BLOB_BYTES = 1_048_576;
+const TEMP_UUID = '[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
+const STATE_TEMP = new RegExp(`^state\\.json\\.[0-9]+\\.${TEMP_UUID}\\.tmp$`, 'i');
+const SESSION_TEMP = new RegExp(`^session\\.json\\.[0-9]+\\.${TEMP_UUID}\\.tmp$`, 'i');
+const CONTENT_TEMP = new RegExp(`^([0-9a-f]{64})\\.txt\\.[0-9]+\\.${TEMP_UUID}\\.tmp$`, 'i');
 
 export const sha256 = (value) => crypto.createHash('sha256').update(value).digest('hex');
 
@@ -77,7 +82,7 @@ function readContentFile(target) {
 }
 
 export class ContextStore {
-  constructor({ stateDir, ownerId, sessionId } = {}) {
+  constructor({ stateDir, ownerId, sessionId, lockTimeoutMs, lockRetryMs } = {}) {
     assertNonEmpty(stateDir, 'stateDir');
     assertNonEmpty(ownerId, 'ownerId');
     assertNonEmpty(sessionId, 'sessionId');
@@ -93,8 +98,49 @@ export class ContextStore {
     this.ownerHash = sha256(ownerId);
     this.sessionHash = sha256(sessionId);
     assertNoAliases(this.stateDir);
+    this.coordinator = new StateCoordinator({
+      stateDir: this.stateDir,
+      ownerHash: this.ownerHash,
+      lockTimeoutMs,
+      lockRetryMs,
+    });
     ensureDirectory(this.stateDir);
-    this.#initialize();
+    this.coordinator.withLock(({ recovered }) => {
+      this.#recoverStateManifestTemporary();
+      this.#initialize();
+      if (recovered) this.#recoverOwnedTemporaries();
+    });
+  }
+
+  withExclusiveAccess(action) {
+    if (typeof action !== 'function') throw new AceError('INVALID_INPUT', 'exclusive action must be a function');
+    return this.coordinator.withLock(({ recovered }) => {
+      if (recovered) this.#recoverOwnedTemporaries();
+      return action();
+    });
+  }
+
+  #recoverStateManifestTemporary() {
+    const manifestPath = path.join(this.stateDir, 'state.json');
+    const temporaries = fs.readdirSync(this.stateDir).filter((entry) => STATE_TEMP.test(entry)).sort();
+    if (temporaries.length > 1) {
+      throw new AceError('INVALID_STATE', 'multiple interrupted state manifests require manual inspection');
+    }
+    if (temporaries.length === 0) return;
+    const temporary = path.join(this.stateDir, temporaries[0]);
+    const manifest = this.#readJson(temporary, 'INVALID_STATE', MAX_STATE_METADATA_BYTES);
+    if (manifest.format !== STATE_FORMAT || manifest.ownerHash !== this.ownerHash) {
+      throw new AceError('INVALID_STATE', 'interrupted state manifest is foreign or invalid');
+    }
+    if (fs.existsSync(manifestPath)) {
+      const committed = this.#readJson(manifestPath, 'INVALID_STATE', MAX_STATE_METADATA_BYTES);
+      if (committed.format !== STATE_FORMAT || committed.ownerHash !== this.ownerHash) {
+        throw new AceError('FOREIGN_STATE', 'state belongs to a different owner or format');
+      }
+      fs.unlinkSync(temporary);
+    } else {
+      fs.renameSync(temporary, manifestPath);
+    }
   }
 
   #initialize() {
@@ -105,7 +151,8 @@ export class ContextStore {
         throw new AceError('FOREIGN_STATE', 'state belongs to a different owner or format');
       }
     } else {
-      const entries = fs.readdirSync(this.stateDir);
+      const entries = fs.readdirSync(this.stateDir)
+        .filter((entry) => !this.coordinator.isCoordinationEntry(entry));
       if (entries.length !== 0) {
         throw new AceError('AMBIGUOUS_STATE', 'state directory is non-empty and has no ACE ownership manifest');
       }
@@ -146,6 +193,10 @@ export class ContextStore {
 
   #readSession() {
     const session = this.#readJson(this.sessionPath, 'INVALID_SESSION', MAX_SESSION_METADATA_BYTES);
+    return this.#validateSession(session);
+  }
+
+  #validateSession(session) {
     if (session.format !== SESSION_FORMAT || session.ownerHash !== this.ownerHash || session.sessionHash !== this.sessionHash
       || !Array.isArray(session.content) || !session.records || typeof session.records !== 'object' || Array.isArray(session.records)) {
       throw new AceError('INVALID_SESSION', 'session metadata is invalid or does not match this owner/session');
@@ -175,11 +226,54 @@ export class ContextStore {
     return session;
   }
 
+  #recoverOwnedTemporaries() {
+    for (const entry of fs.readdirSync(this.contentDir).sort()) {
+      const match = CONTENT_TEMP.exec(entry);
+      if (!match) continue;
+      const temporary = path.join(this.contentDir, entry);
+      const content = readContentFile(temporary);
+      const digest = match[1].toLowerCase();
+      if (sha256(content) !== digest) {
+        throw new AceError('CONTENT_INTEGRITY', `interrupted content artifact failed integrity validation: ${entry}`);
+      }
+      const target = path.join(this.contentDir, `${digest}.txt`);
+      if (fs.existsSync(target)) {
+        const committed = readContentFile(target);
+        if (committed !== content || sha256(committed) !== digest) {
+          throw new AceError('CONTENT_INTEGRITY', 'committed content conflicts with an interrupted artifact');
+        }
+        fs.unlinkSync(temporary);
+      } else {
+        fs.renameSync(temporary, target);
+      }
+    }
+
+    for (const entry of fs.readdirSync(this.sessionDir).sort()) {
+      if (!SESSION_TEMP.test(entry)) continue;
+      const temporary = path.join(this.sessionDir, entry);
+      const session = this.#readJson(temporary, 'INVALID_SESSION', MAX_SESSION_METADATA_BYTES);
+      this.#validateSession(session);
+      fs.unlinkSync(temporary);
+    }
+  }
+
   knownDigests() {
-    return new Set(this.#readSession().content);
+    return this.withExclusiveAccess(() => new Set(this.#readSession().content));
+  }
+
+  snapshotAndPersist(segments) {
+    return this.withExclusiveAccess(() => {
+      const knownBefore = new Set(this.#readSession().content);
+      this.#persist(segments);
+      return knownBefore;
+    });
   }
 
   persist(segments) {
+    return this.withExclusiveAccess(() => this.#persist(segments));
+  }
+
+  #persist(segments) {
     const session = this.#readSession();
     const known = new Set(session.content);
     const records = { ...session.records };
@@ -229,12 +323,16 @@ export class ContextStore {
   }
 
   retrieve(reference) {
+    return this.withExclusiveAccess(() => this.#retrieve(reference));
+  }
+
+  #retrieve(reference) {
     const match = /^ace:v1:([0-9a-f]{16}):([0-9a-f]{16}):([0-9a-f]{64})$/.exec(reference);
     if (!match) throw new AceError('INVALID_REFERENCE', 'reference is not an ACE v1 reference');
     if (match[1] !== this.ownerHash.slice(0, 16) || match[2] !== this.sessionHash.slice(0, 16)) {
       throw new AceError('REFERENCE_BOUNDARY', 'reference belongs to a different owner or session');
     }
-    const known = this.knownDigests();
+    const known = new Set(this.#readSession().content);
     if (!known.has(match[3])) throw new AceError('REFERENCE_BOUNDARY', 'reference is not owned by this session');
     const target = path.join(this.contentDir, `${match[3]}.txt`);
     let content;
@@ -251,14 +349,16 @@ export class ContextStore {
   }
 
   retrieveRecord(reference) {
-    const content = this.retrieve(reference);
-    const digest = sha256(content);
-    const session = this.#readSession();
-    return {
-      reference,
-      digest,
-      content,
-      observations: session.records[digest] ?? [],
-    };
+    return this.withExclusiveAccess(() => {
+      const content = this.#retrieve(reference);
+      const digest = sha256(content);
+      const session = this.#readSession();
+      return {
+        reference,
+        digest,
+        content,
+        observations: session.records[digest] ?? [],
+      };
+    });
   }
 }

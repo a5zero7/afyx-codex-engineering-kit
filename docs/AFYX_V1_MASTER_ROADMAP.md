@@ -3039,3 +3039,23 @@ transform, and active routing, credentials, private sessions, and global state
 were not used. Full methods and raw evidence are recorded in
 `docs/AFYX_CONTEXT_ENGINE_AFYX_291_BENCHMARK.md` and
 `docs/evidence/afyx-291/`.
+
+## AFYX-292 — Native ACE multi-process coordination and crash-safe local state
+
+Status: **IMPLEMENTED AND LOCALLY VALIDATED; STACKED DRAFT REVIEW AND EXACT-HEAD CI PENDING**
+
+AFYX-292 extends the standalone ACE store with one bounded exclusive lock per
+local state root. Atomic candidate promotion, state/owner binding, token-checked
+release, and conservative same-host PID-presence checks protect concurrent first
+initialization, same-session writers, cross-session shared blobs, and retrieval.
+Abandoned ownership is reclaimed only after defensible liveness verification;
+age, PID alone, malformed metadata, and foreign artifacts never authorize
+deletion. Interrupted session commits retain the prior metadata, while complete
+content artifacts are adopted only after digest verification.
+
+Focused deterministic child-process tests cover concurrency, contention,
+hard-kill recovery, invisible partial commits, exact retrieval, release after
+failure, and ambiguous lock evidence. The full contract and limitations are in
+`docs/AFYX_CONTEXT_ENGINE_AFYX_292_COORDINATION.md`. Real Graph/MCP consumers,
+distributed coordination, authentication, deployment, and preset activation
+remain separate future boundaries.

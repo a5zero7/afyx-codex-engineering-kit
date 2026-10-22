@@ -7,6 +7,12 @@
   "ownership_class": "AFYX",
   "standalone": true,
   "integration_contract": "ace.integration/v1",
+  "local_coordination": {
+    "contract_version": 1,
+    "scope": "state-root-exclusive",
+    "default_timeout_ms": 5000,
+    "recovery": "same-host-pid-absence-fail-closed"
+  },
   "kit_management": {
     "contract_version": 1,
     "lifecycle_integration": "not-implemented",
