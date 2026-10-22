@@ -47,7 +47,11 @@ async function main() {
   if (!fs.existsSync(path.join(graphDist, 'index.js'))) {
     throw new Error('Afyx Graph dist is missing; run its clean build before this E2E');
   }
-  const lab = fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-293-real-consumer-'));
+  // macOS exposes /var as an alias to /private/var. Graph correctly rejects
+  // aliased external-state ancestors, so create the disposable lab beneath the
+  // canonical temp root rather than weakening that safety boundary.
+  const canonicalTempRoot = fs.realpathSync.native(os.tmpdir());
+  const lab = fs.mkdtempSync(path.join(canonicalTempRoot, 'afyx-293-real-consumer-'));
   const projectRoot = path.join(lab, 'tracked-fixture-copy');
   const graphState = path.join(lab, 'graph-state');
   const trackedFixtureBefore = fingerprint(fixtureSource);
