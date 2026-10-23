@@ -22,7 +22,7 @@
   },
   "kit_management": {
     "contract_version": 1,
-    "lifecycle_integration": "not-implemented",
+    "lifecycle_integration": "managed-optional",
     "default_presets": []
   }
 }

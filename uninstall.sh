@@ -5,6 +5,8 @@ root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 skills_root="${CODEX_SKILLS_ROOT:-$HOME/.agents/skills}"
 remove_prompt_master=false
 remove_afyx_graph=false
+remove_afyx_context=false
+context_root="${AFYX_CONTEXT_RUNTIME_ROOT:-$HOME/.afyx/context}"
 dry_run=false
 selected_components=()
 selected_component_count=0
@@ -12,15 +14,17 @@ selected_component_count=0
 printf 'Afyx Codex Engineering Kit — Linux/macOS uninstaller (Bash)\n'
 
 usage() {
-  printf '%s\n' 'Usage: ./uninstall.sh [--skills-root PATH] [--component AFYX-SKILL-ID] [--remove-prompt-master] [--remove-afyx-graph] [--dry-run]'
+  printf '%s\n' 'Usage: ./uninstall.sh [--skills-root PATH] [--context-runtime-root PATH] [--component AFYX-SKILL-ID] [--remove-prompt-master] [--remove-afyx-graph] [--remove-afyx-context] [--dry-run]'
 }
 
 while (($#)); do
   case "$1" in
     --skills-root) (($# >= 2)) || { printf '%s\n' '--skills-root requires a value.' >&2; exit 2; }; skills_root="$2"; shift 2 ;;
     --component) (($# >= 2)) || { printf '%s\n' '--component requires a value.' >&2; exit 2; }; selected_components+=("$2"); selected_component_count=$((selected_component_count + 1)); shift 2 ;;
+    --context-runtime-root) (($# >= 2)) || { printf '%s\n' '--context-runtime-root requires a value.' >&2; exit 2; }; context_root="$2"; shift 2 ;;
     --remove-prompt-master) remove_prompt_master=true; shift ;;
     --remove-afyx-graph) remove_afyx_graph=true; shift ;;
+    --remove-afyx-context) remove_afyx_context=true; shift ;;
     --dry-run) dry_run=true; shift ;;
     -h|--help) usage; exit 0 ;;
     *) printf 'Unknown option: %s\n' "$1" >&2; usage >&2; exit 2 ;;
@@ -72,4 +76,8 @@ if [[ -e "$graph_root" ]]; then
     if "$dry_run"; then printf '+ scripts/install-afyx-graph.sh --uninstall\n'; else "$root/scripts/install-afyx-graph.sh" --uninstall; fi
   else printf 'Afyx Graph: kept\n'; fi
 fi
-printf 'Project indexes, Headroom, and Codex configuration were not changed.\n'
+if "$remove_afyx_context"; then
+  if "$dry_run"; then "$root/scripts/install-afyx-context.sh" --runtime-root "$context_root" --validate-only
+  else "$root/scripts/install-afyx-context.sh" --runtime-root "$context_root" --uninstall; fi
+elif [[ -e "$context_root" ]]; then printf 'Afyx Context Engine: kept\n'; fi
+printf 'ACE user state, project indexes, Headroom, and Codex configuration were not changed.\n'

@@ -2,7 +2,8 @@
 param(
     [string]$SkillsRoot = (Join-Path $env:USERPROFILE '.agents\skills'),
     [string]$Preset = '',
-    [string[]]$CustomComponent = @()
+    [string[]]$CustomComponent = @(),
+    [string]$ContextRuntimeRoot = $(if ($env:AFYX_CONTEXT_RUNTIME_ROOT) { $env:AFYX_CONTEXT_RUNTIME_ROOT } else { Join-Path $env:USERPROFILE '.afyx\context' })
 )
 
 Set-StrictMode -Version Latest
@@ -20,7 +21,7 @@ function Write-Result([string]$State, [string]$Name, [string]$Detail = '') {
 # One component truth: scripts/components.json, read through the shared module.
 Import-Module (Join-Path $PSScriptRoot 'scripts\lib\AfyxComponents.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'scripts\lib\AfyxSkillLifecycle.psm1') -Force
-$componentContext = New-AfyxComponentContext -SkillsRoot $SkillsRoot -GraphRoot $graphRoot -CodexHome $codexHome
+$componentContext = New-AfyxComponentContext -SkillsRoot $SkillsRoot -GraphRoot $graphRoot -ContextRoot $ContextRuntimeRoot -CodexHome $codexHome
 $componentStates = @{}
 foreach ($componentState in (Get-AfyxComponentStates -Context $componentContext)) { $componentStates[$componentState.Id] = $componentState }
 if ($Preset) {
@@ -68,6 +69,8 @@ if ($node) {
     if ($match.Success -and [version]$match.Value -ge [version]'22.5.0') { Write-Result 'OK' 'Node.js [COMPONENT_REQUIRED:Afyx Graph]' $nodeText }
     else { Write-Result 'WARN' 'Node.js [COMPONENT_REQUIRED:Afyx Graph]' "$nodeText; requires >=22.5.0" }
 } else { Write-Result 'INFO' 'Node.js [COMPONENT_REQUIRED:Afyx Graph]' 'missing; install from https://nodejs.org/ before selecting Afyx Graph' }
+if ($node) { Write-Result 'OK' 'Node.js [COMPONENT_REQUIRED:Afyx Context]' ((& node --version 2>$null) -join ' ') }
+else { Write-Result 'INFO' 'Node.js [COMPONENT_REQUIRED:Afyx Context]' 'missing; required only when Afyx Context is selected' }
 if ($npm) { Write-Result 'OK' 'npm [BUILD_ONLY:Afyx Graph]' ((& npm --version 2>$null) -join ' ') } else { Write-Result 'INFO' 'npm [BUILD_ONLY:Afyx Graph]' 'missing; required only for local artifact fallback' }
 Write-Result 'OK' 'Archive/checksum [COMPONENT_REQUIRED:Afyx Graph]' 'Expand-Archive and Get-FileHash available'
 $codex = Get-Command codex.exe -ErrorAction SilentlyContinue
@@ -126,6 +129,21 @@ if ($graph.State -eq 'HEALTHY' -and $node -and $codex) {
 } elseif (-not $codex) { Write-Result 'INFO' 'Afyx Graph MCP' 'MCP_BLOCKED: Codex CLI unavailable' }
 elseif ($graph.State -ne 'HEALTHY') { Write-Result 'INFO' 'Afyx Graph MCP' 'MCP_BLOCKED: Graph runtime unavailable' }
 else { Write-Result 'INFO' 'Afyx Graph MCP' 'MCP_NOT_CONFIGURED' }
+$context = $componentStates['afyx-context']
+switch ($context.State) {
+    'NOT INSTALLED' { Write-Result 'INFO' 'Afyx Context Engine' 'not installed (optional; explicit selection only)' }
+    'HEALTHY' {
+        $contextCli = Join-Path $context.Path 'current\bin\afyx-context.cmd'
+        try {
+            $reported = (& $contextCli --version 2>$null) -join ' '
+            if ($LASTEXITCODE -ne 0 -or $reported -notmatch [regex]::Escape([string]$context.Version)) { throw 'version mismatch' }
+            & $contextCli --help *> $null
+            if ($LASTEXITCODE -ne 0) { throw 'help command failed' }
+            Write-Result 'OK' 'Afyx Context Engine' "$reported; integrity and executable verification passed; Graph integration remains OFF"
+        } catch { Write-Result 'FAIL' 'Afyx Context Engine' "metadata is healthy but executable verification failed: $($_.Exception.Message)"; $coreFailure = $true }
+    }
+    default { Write-Result 'WARN' 'Afyx Context Engine' "$($context.State): $($context.Detail) (optional)" }
+}
 $headroom = [bool](Get-Command headroom -ErrorAction SilentlyContinue)
 $configText = if (Test-Path -LiteralPath $configPath -PathType Leaf) { Get-Content -Raw -LiteralPath $configPath -Encoding utf8 } else { '' }
 $headroomProvider = $configText -match '(?im)^\s*model_provider\s*=\s*["'']headroom["'']\s*$' -or

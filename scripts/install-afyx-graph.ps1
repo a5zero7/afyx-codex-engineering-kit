@@ -75,7 +75,7 @@ function Get-SourceRevision {
     & $git.Source -C $kitRoot rev-parse --is-inside-work-tree *> $null
     if ($LASTEXITCODE -ne 0) { return $null }
     $commit = (& $git.Source -C $kitRoot rev-parse HEAD 2>$null).Trim()
-    $branch = (& $git.Source -C $kitRoot branch --show-current 2>$null).Trim()
+    $branch = ((& $git.Source -C $kitRoot branch --show-current 2>$null) -join '').Trim()
     $dirty = [bool]((& $git.Source -C $kitRoot status --porcelain 2>$null) -join '')
     return [pscustomobject]@{ Commit = $commit; Branch = $branch; Dirty = $dirty }
 }

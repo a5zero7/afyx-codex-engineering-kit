@@ -5,17 +5,19 @@ skills_root="${CODEX_SKILLS_ROOT:-$HOME/.agents/skills}"
 codex_home="${CODEX_HOME:-$HOME/.codex}"
 config="$codex_home/config.toml"
 graph_root="${AFYX_GRAPH_RUNTIME_ROOT:-$HOME/.afyx/graph}"
+context_root="${AFYX_CONTEXT_RUNTIME_ROOT:-$HOME/.afyx/context}"
 core_failure=false
 preset=
 custom_component_list=
 
 usage() {
-  printf '%s\n' 'Usage: ./verify.sh [--skills-root PATH] [--preset minimal|recommended|full|custom] [--custom-component ID]'
+  printf '%s\n' 'Usage: ./verify.sh [--skills-root PATH] [--context-runtime-root PATH] [--preset minimal|recommended|full|custom] [--custom-component ID]'
 }
 
 while (($#)); do
   case "$1" in
     --skills-root) skills_root="$2"; shift 2 ;;
+    --context-runtime-root) context_root="$2"; shift 2 ;;
     --preset) preset="$2"; shift 2 ;;
     --custom-component) custom_component_list="${custom_component_list:+$custom_component_list;}$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
@@ -37,7 +39,7 @@ if [[ -n "$preset" ]] && ! afyx_preset_valid "$preset"; then printf 'Unknown pre
 if [[ -n "$custom_component_list" && "$preset" != custom ]]; then printf '%s\n' '--custom-component requires --preset custom.' >&2; exit 2; fi
 old_ifs=$IFS; IFS=';'
 for custom_id in $custom_component_list; do
-  case "$custom_id" in efficient-coding|odoo-engineering|afyx-engineering-expert|prompt-master|afyx-graph|codex-usage-tracking) ;; *) printf 'Unknown custom component: %s\n' "$custom_id" >&2; exit 2 ;; esac
+    case "$custom_id" in efficient-coding|odoo-engineering|afyx-engineering-expert|prompt-master|afyx-graph|afyx-context|codex-usage-tracking) ;; *) printf 'Unknown custom component: %s\n' "$custom_id" >&2; exit 2 ;; esac
 done
 IFS=$old_ifs
 
@@ -140,6 +142,17 @@ if [[ "$AFYX_STATE" == HEALTHY ]] && command -v node >/dev/null 2>&1 && command 
 elif ! command -v codex >/dev/null 2>&1; then result INFO 'Afyx Graph MCP' 'MCP_BLOCKED: Codex CLI unavailable'
 elif [[ "$AFYX_STATE" != HEALTHY ]]; then result INFO 'Afyx Graph MCP' 'MCP_BLOCKED: Graph runtime unavailable'
 else result INFO 'Afyx Graph MCP' 'MCP_NOT_CONFIGURED'; fi
+verify_component_evaluate afyx-context
+case "$AFYX_STATE" in
+  'NOT INSTALLED') result INFO 'Afyx Context Engine' 'not installed (optional; explicit selection only)' ;;
+  HEALTHY)
+    context_cli="$AFYX_PATH/current/bin/afyx-context"
+    if context_reported="$($context_cli --version 2>/dev/null)" && [[ "$context_reported" == *"$AFYX_VERSION"* ]] && "$context_cli" --help >/dev/null 2>&1; then
+      result OK 'Afyx Context Engine' "$context_reported; integrity and executable verification passed; Graph integration remains OFF"
+    else result FAIL 'Afyx Context Engine' 'metadata is healthy but executable verification failed'; core_failure=true; fi
+    ;;
+  *) result WARN 'Afyx Context Engine' "$AFYX_STATE: $AFYX_DETAIL (optional)" ;;
+esac
 result INFO 'Usage Tracking' 'not installed; Windows-only runtime'
 headroom_cli=false; command -v headroom >/dev/null 2>&1 && headroom_cli=true
 headroom_provider=false; headroom_proxy=false

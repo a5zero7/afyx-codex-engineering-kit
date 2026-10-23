@@ -21,17 +21,20 @@ function New-AfyxComponentContext {
     param(
         [string]$SkillsRoot,
         [string]$GraphRoot,
+        [string]$ContextRoot,
         [string]$CodexHome,
         [string]$Platform
     )
     $userHome = if ($env:USERPROFILE) { $env:USERPROFILE } elseif ($env:HOME) { $env:HOME } else { [Environment]::GetFolderPath('UserProfile') }
     if (-not $SkillsRoot) { $SkillsRoot = Join-Path (Join-Path $userHome '.agents') 'skills' }
     if (-not $GraphRoot) { $GraphRoot = if ($env:AFYX_GRAPH_RUNTIME_ROOT) { $env:AFYX_GRAPH_RUNTIME_ROOT } else { Join-Path (Join-Path $userHome '.afyx') 'graph' } }
+    if (-not $ContextRoot) { $ContextRoot = if ($env:AFYX_CONTEXT_RUNTIME_ROOT) { $env:AFYX_CONTEXT_RUNTIME_ROOT } else { Join-Path (Join-Path $userHome '.afyx') 'context' } }
     if (-not $CodexHome) { $CodexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $userHome '.codex' } }
     if (-not $Platform) { $Platform = Get-AfyxPlatform }
     [pscustomobject]@{
         SkillsRoot = $SkillsRoot
         GraphRoot  = $GraphRoot
+        ContextRoot = $ContextRoot
         CodexHome  = $CodexHome
         Platform   = $Platform
     }
@@ -163,6 +166,7 @@ function Get-AfyxComponentRoot {
     $root = switch (Get-AfyxField $Component 'install_root') {
         'skills_root'     { $Context.SkillsRoot }
         'afyx_graph_root' { $Context.GraphRoot }
+        'afyx_context_root' { $Context.ContextRoot }
         'codex_tools'     { Join-Path $Context.CodexHome 'tools' }
         default           { '' }
     }
@@ -212,6 +216,31 @@ function New-AfyxState {
     }
 }
 
+function Test-AfyxRuntimeIntegrity {
+    param([Parameter(Mandatory)][string]$Root, [Parameter(Mandatory)][string]$ManifestRelative, [string]$IdentityRelative = '')
+    try {
+        $rootItem = Get-Item -LiteralPath $Root -Force
+        if ($rootItem.Attributes -band [IO.FileAttributes]::ReparsePoint) { return $false }
+        $manifest = Join-Path $Root $ManifestRelative
+        $metadata = Get-Content -Raw -LiteralPath (Join-Path $Root 'metadata.json') -Encoding utf8 | ConvertFrom-Json -ErrorAction Stop
+        if ($IdentityRelative) {
+            $identity = Get-Content -Raw -LiteralPath (Join-Path $Root $IdentityRelative) -Encoding utf8 | ConvertFrom-Json -ErrorAction Stop
+            foreach ($field in @('product_name','product_version','source_revision','ownership_class','build_provenance','release_channel','integration_default')) {
+                if ([string]$metadata.$field -ne [string]$identity.$field) { return $false }
+            }
+        }
+        if ((Get-FileHash -LiteralPath $manifest -Algorithm SHA256).Hash.ToLowerInvariant() -ne [string]$metadata.artifact_digest) { return $false }
+        foreach ($line in (Get-Content -LiteralPath $manifest -Encoding utf8)) {
+            if ($line -notmatch '^([0-9a-f]{64})  (current/[A-Za-z0-9._/-]+)$' -or $Matches[2] -match '(^|/)\.\.(/|$)') { return $false }
+            $file = Join-Path $Root ($Matches[2] -replace '/', [IO.Path]::DirectorySeparatorChar)
+            if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { return $false }
+            if ((Get-Item -LiteralPath $file -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { return $false }
+            if ((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant() -ne $Matches[1]) { return $false }
+        }
+        return $true
+    } catch { return $false }
+}
+
 function Get-AfyxComponentState {
     [CmdletBinding()]
     param([Parameter(Mandatory)]$Component, [Parameter(Mandatory)]$Context)
@@ -252,6 +281,7 @@ function Get-AfyxComponentState {
             }
             'runtime' {
                 if (-not (Test-Path -LiteralPath $path)) { return New-AfyxState $Component 'NOT INSTALLED' 'not installed' '' $path }
+                if ((Get-Item -LiteralPath $path -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { return New-AfyxState $Component 'UNKNOWN' 'runtime root is a reparse point' '' $path }
                 foreach ($relative in $required) {
                     if (-not (Test-Path -LiteralPath (Join-Path $path $relative) -PathType Leaf)) { return New-AfyxState $Component 'INCOMPLETE' "missing: $relative" '' $path }
                 }
@@ -269,6 +299,10 @@ function Get-AfyxComponentState {
                     return New-AfyxState $Component 'INVALID' "$versionField missing from metadata" '' $path
                 }
                 $versionText = if ($version) { [string]$version.Value } else { '' }
+                $integrityManifest = Get-AfyxField $Component 'integrity_manifest_file'
+                if ($integrityManifest -and -not (Test-AfyxRuntimeIntegrity -Root $path -ManifestRelative $integrityManifest -IdentityRelative (Get-AfyxField $Component 'identity_file'))) {
+                    return New-AfyxState $Component 'DRIFTED' 'Afyx ownership verified but runtime integrity differs' $versionText $path
+                }
                 return New-AfyxState $Component 'HEALTHY' 'Afyx-owned runtime valid' $versionText $path
             }
             'toolset' {
