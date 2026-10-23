@@ -2,11 +2,15 @@
  * Path and identity helpers for the shared daemon's IPC surface (issue #411).
  *
  * One daemon per project root means every cooperating process needs a
- * stable, project-keyed way to find it. That surface is exactly two paths:
+ * stable, project-keyed way to find it. That surface is normally two paths:
  *
  *   - `daemon.sock` — the Unix-domain socket (a named pipe on Windows) the
  *     daemon listens on.
  *   - `daemon.pid` — the atomically-created lockfile holding its pid and version.
+ *
+ * On Windows the bound lock also advertises a dedicated named pipe for
+ * lifecycle probes and shutdown, keeping management available while the data
+ * pipe carries a long-lived MCP session.
  *
  * Both live under `.afyx-graph/`, so a project-scoped `afyx-graph uninit`
  * sweeps them up for free, with no special-casing needed.
@@ -54,6 +58,16 @@ function projectHash(projectRoot: string): string {
 
 function windowsPipeName(projectRoot: string): string {
   return `\\\\.\\pipe\\afyx-graph-${projectHash(projectRoot)}`;
+}
+
+/**
+ * Dedicated Windows management pipe. A long-lived MCP proxy can occupy the
+ * data pipe on some native Node/Windows combinations, so lifecycle probes and
+ * shutdown requests use an independent pipe instance instead of competing
+ * with application traffic. POSIX keeps its existing single-socket behavior.
+ */
+export function getDaemonControlSocketPath(projectRoot: string): string | null {
+  return process.platform === 'win32' ? `${windowsPipeName(projectRoot)}-control` : null;
 }
 
 /**
@@ -122,7 +136,13 @@ export interface DaemonLockInfo {
   pid: number;
   version: string;
   socketPath: string;
+  /** Windows-only lifecycle endpoint; absent in older and POSIX lock records. */
+  controlSocketPath?: string;
   startedAt: number;
+}
+
+function managementSocketPath(info: DaemonLockInfo): string {
+  return info.controlSocketPath || info.socketPath;
 }
 
 /**
@@ -230,7 +250,7 @@ export function probeDaemonIdentity(info: DaemonLockInfo, timeoutMs = IDENTITY_P
     timer.unref?.();
 
     try {
-      socket = net.createConnection(info.socketPath);
+      socket = net.createConnection(managementSocketPath(info));
     } catch {
       clearTimeout(timer);
       resolve(false);
@@ -320,7 +340,7 @@ export function requestDaemonShutdown(
     }), timeoutMs);
     timer.unref?.();
 
-    try { socket = net.createConnection(info.socketPath); }
+    try { socket = net.createConnection(managementSocketPath(info)); }
     catch (err) {
       clearTimeout(timer);
       resolve({ outcome: 'unavailable', detail: err instanceof Error ? err.message : String(err) });
@@ -350,7 +370,9 @@ function decodeStructuredLockInfo(parsed: unknown): DaemonLockInfo | null {
     typeof (parsed as Record<string, unknown>).pid === 'number' &&
     typeof (parsed as Record<string, unknown>).version === 'string' &&
     typeof (parsed as Record<string, unknown>).socketPath === 'string' &&
-    typeof (parsed as Record<string, unknown>).startedAt === 'number'
+    typeof (parsed as Record<string, unknown>).startedAt === 'number' &&
+    ((parsed as Record<string, unknown>).controlSocketPath === undefined ||
+      typeof (parsed as Record<string, unknown>).controlSocketPath === 'string')
   ) {
     return parsed as DaemonLockInfo;
   }

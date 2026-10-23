@@ -97,6 +97,12 @@ describe('native daemon shutdown control', () => {
 
   it('gracefully stops with an active MCP client, verifies exit, and reopens cleanly', async () => {
     const first = await startDaemon();
+    if (process.platform === 'win32') {
+      expect(first.lock.controlSocketPath).toMatch(/^\\\\\.\\pipe\\afyx-graph-[0-9a-f]+-control$/);
+      expect(first.lock.controlSocketPath).not.toBe(first.lock.socketPath);
+    } else {
+      expect(first.lock.controlSocketPath).toBeUndefined();
+    }
     const client = await connectActiveClient(first.lock);
 
     const stopped = await stopDaemonAt(root);
