@@ -13,6 +13,9 @@ const engine = new AfyxContextEngine({
   stateDir: 'C:\\owned\\absolute\\ace-state',
   ownerId: 'agent-owner',
   sessionId: 'session-1',
+  // Optional bounded coordination controls (defaults: 5000 ms / 25 ms).
+  lockTimeoutMs: 5_000,
+  lockRetryMs: 25,
 });
 
 const result = engine.reduce({
@@ -38,6 +41,22 @@ session. A content hash is verified on every retrieval. Original blobs and
 session metadata are committed through owned temporary files followed by
 `fsync` and rename. A retry can adopt a complete orphan blob left by an
 interruption; malformed metadata and corrupt existing blobs fail closed.
+
+Every state read and mutation participates in one local, state-root-wide
+exclusive lock. The deliberately coarse scope protects first initialization,
+all sessions, and the shared content-addressed store across cooperating local
+processes on Windows, Linux, and macOS. Lock acquisition is bounded; contention
+reports `LOCK_TIMEOUT`. A lock is recovered only on the same host after the OS
+proves that its recorded PID is absent. A present or unverifiable PID—including
+a possible reused PID—never authorizes removal. Missing, foreign, or ambiguous
+ownership fails closed with `LOCK_RECOVERY_UNSAFE`; lock age alone is never
+recovery evidence.
+
+After a verified process interruption, complete content temporaries are adopted
+only after SHA-256 validation. Complete uncommitted session metadata is removed
+without replacing the last committed session, so references cannot expose an
+interrupted write. Unknown files and ambiguous coordination artifacts are not
+deleted automatically.
 
 ## CLI
 
@@ -73,6 +92,7 @@ owner/session identities, and 10 MiB CLI input. State/session metadata are
 bounded at 64 KiB/16 MiB; a stored blob is bounded at 1 MiB, a session at
 100,000 unique contents, and provenance at 256 observations per digest.
 
-Current operational limitation: the state format supports one writer at a time;
-cross-process write coordination is not yet provided. Stored content is local
-plaintext and the caller owns filesystem access control and retention policy.
+Coordination is local and exclusive, not distributed. A process-liveness check
+that is unavailable, cross-host, or inconclusive requires operator inspection
+instead of automatic lock removal. Stored content remains local plaintext, and
+the caller owns filesystem access control and retention policy.

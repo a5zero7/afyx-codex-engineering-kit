@@ -128,8 +128,7 @@ export class AfyxContextEngine {
 
     // Validate everything before the first state mutation. Original bytes are
     // persisted before reduction so every emitted reference is recoverable.
-    const knownBefore = this.store.knownDigests();
-    this.store.persist(normalized);
+    const knownBefore = this.store.snapshotAndPersist(normalized);
     const mandatoryChars = normalized
       .filter((segment) => PRESERVED.has(segment.classification))
       .reduce((total, segment) => total + originalLine(segment).length + 2, 0);
