@@ -110,11 +110,14 @@ const output = await consumer.execute({
 ```
 
 The bridge runs Graph first and retains its validated result as the authoritative
-fallback. ACE runs in a terminable local worker only after explicit enablement.
-Disabled, unavailable, malformed, corrupt, or timed-out ACE returns the exact
-Graph result. `explore`, `files`, and `node` output is classified as protected
-source evidence and remains inline. References are recoverable only through the
-same owner/session; invalid or corrupt recovery fails closed. Callers should use
+fallback. ACE runs only after explicit enablement in an owned local Node child
+process with a distinct OS PID. Timeout terminates that child and waits for its
+exit before returning the exact Graph result; an unconfirmed termination fails
+closed instead of reporting completion while mutation may continue. Disabled,
+unavailable, malformed, or corrupt ACE also returns the exact Graph result.
+`explore`, `files`, and `node` output is classified as protected source evidence
+and remains inline. References are recoverable only through the same
+owner/session; invalid or corrupt recovery fails closed. Callers should use
 `deriveGraphAceIdentity` to bind an owner to the canonical project/consumer and a
 session to the exact source identity.
 

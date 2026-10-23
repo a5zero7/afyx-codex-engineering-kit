@@ -1,7 +1,8 @@
 import crypto from 'node:crypto';
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { Worker } from 'node:worker_threads';
+import { fileURLToPath } from 'node:url';
 import { AceError } from './errors.js';
 import { ACE_INTEGRATION_CONTRACT } from './integrations.js';
 
@@ -9,6 +10,7 @@ export const GRAPH_ACE_CONSUMER_CONTRACT = 'graph.ace.consumer/v1';
 
 const DEFAULT_TIMEOUT_MS = 5_000;
 const MAX_TIMEOUT_MS = 60_000;
+const TERMINATION_GRACE_MS = 5_000;
 const SOURCE_TOOLS = new Set(['afyx_graph_explore', 'afyx_graph_files', 'afyx_graph_node']);
 const DIAGNOSTIC_TOOLS = new Set(['afyx_graph_status']);
 
@@ -103,10 +105,16 @@ function publicAceResult(result) {
   };
 }
 
-function nativeAceRunner(message, { signal } = {}) {
+export function nativeAceRunner(message, { signal } = {}) {
   return new Promise((resolve, reject) => {
-    const worker = new Worker(new URL('./graph-integration-worker.js', import.meta.url));
+    const child = spawn(process.execPath, [fileURLToPath(new URL('./graph-integration-worker.js', import.meta.url))], {
+      shell: false,
+      windowsHide: true,
+      stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+    });
     let settled = false;
+    let aborting = false;
+    let response;
     const finish = (action, value) => {
       if (settled) return;
       settled = true;
@@ -114,16 +122,25 @@ function nativeAceRunner(message, { signal } = {}) {
       action(value);
     };
     const abort = () => {
-      void worker.terminate();
-      finish(reject, new AceError('ACE_TIMEOUT', 'optional ACE operation timed out'));
+      if (aborting || settled) return;
+      aborting = true;
+      child.kill('SIGKILL');
     };
     signal?.addEventListener('abort', abort, { once: true });
-    worker.once('message', (value) => finish(resolve, value));
-    worker.once('error', (error) => finish(reject, error));
-    worker.once('exit', (code) => {
-      if (code !== 0) finish(reject, new Error(`ACE worker exited with code ${code}`));
+    child.once('message', (value) => { response = value; });
+    child.once('error', (error) => finish(reject, error));
+    child.once('exit', (code, exitSignal) => {
+      if (aborting) {
+        finish(reject, new AceError('ACE_TIMEOUT', 'optional ACE operation timed out'));
+      } else if (code === 0 && response !== undefined) {
+        finish(resolve, response);
+      } else {
+        finish(reject, new Error(`ACE worker exited with code ${code ?? 'null'} (${exitSignal ?? 'no signal'})`));
+      }
     });
-    worker.postMessage(message);
+    child.send(message, (error) => {
+      if (error) finish(reject, error);
+    });
     if (signal?.aborted) abort();
   });
 }
@@ -131,17 +148,29 @@ function nativeAceRunner(message, { signal } = {}) {
 async function invokeBounded(runner, message, timeoutMs) {
   const controller = new AbortController();
   let timer;
-  const timeout = new Promise((_, reject) => {
-    timer = setTimeout(() => {
-      controller.abort();
-      reject(new AceError('ACE_TIMEOUT', 'optional ACE operation timed out'));
-    }, timeoutMs);
-    timer.unref?.();
+  let terminationTimer;
+  const termination = new Promise((_, reject) => {
+    controller.signal.addEventListener('abort', () => {
+      terminationTimer = setTimeout(() => {
+        reject(new AceError(
+          'ACE_TERMINATION_UNCONFIRMED',
+          'optional ACE operation did not confirm termination within the bounded grace period',
+        ));
+      }, TERMINATION_GRACE_MS);
+    }, { once: true });
   });
+  timer = setTimeout(() => {
+    controller.abort();
+  }, timeoutMs);
+  timer.unref?.();
   try {
-    return await Promise.race([runner(message, { signal: controller.signal }), timeout]);
+    return await Promise.race([
+      Promise.resolve().then(() => runner(message, { signal: controller.signal })),
+      termination,
+    ]);
   } finally {
     clearTimeout(timer);
+    clearTimeout(terminationTimer);
   }
 }
 
@@ -248,6 +277,7 @@ export function createGraphAceConsumer(options = {}) {
     try {
       response = await invokeBounded(runner, { operation: 'reduce', request }, timeoutMs);
     } catch (error) {
+      if (error instanceof AceError && error.code === 'ACE_TERMINATION_UNCONFIRMED') throw error;
       const code = error instanceof AceError ? error.code : 'ACE_UNAVAILABLE';
       return exactGraphFallback(graphResult, 'fallback', code);
     }

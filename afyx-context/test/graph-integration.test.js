@@ -9,6 +9,7 @@ import {
   createGraphAceConsumer,
   deriveGraphAceIdentity,
 } from '../src/index.js';
+import { nativeAceRunner } from '../src/graph-integration.js';
 
 const graphText = 'Inventory fact line with stable provenance.\n'.repeat(80);
 const graphResult = () => ({ content: [{ type: 'text', text: graphText }] });
@@ -37,6 +38,14 @@ function enabledConsumer(t, overrides = {}) {
       ...overrides,
     }),
   };
+}
+
+async function waitFor(predicate, message, timeoutMs = 5_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() >= deadline) throw new Error(message);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
 }
 
 test('default OFF returns the exact Graph result and never invokes ACE', async () => {
@@ -90,6 +99,62 @@ test('native opt-in reduces a repeated Graph result and recovers exact original 
   assert.equal(recovered.observations[0].provenance.projectRoot, fs.realpathSync.native(query.projectRoot));
 });
 
+for (const phase of ['after-lock-acquired', 'before-session-commit', 'after-session-commit']) {
+  test(`actual native worker interruption at ${phase} permits safe same-state retry`, async (t) => {
+    const root = lab(t);
+    const stateDir = path.join(root, 'ace-state');
+    const readyPath = path.join(root, `${phase}.ready`);
+    const stable = graphResult();
+    const interruptedOriginal = {
+      content: [{ type: 'text', text: `${phase} interrupted original\n`.repeat(80) }],
+    };
+    const base = {
+      enabled: true,
+      stateDir,
+      ownerId: 'graph-owner',
+      sessionId: 'graph-session',
+      timeoutMs: 2_000,
+    };
+    const healthy = createGraphAceConsumer(base);
+    const established = await healthy.execute({ ...query, executeGraph: async () => stable });
+    assert.equal(established.status, 'optimized');
+    const stableReference = established.ace.items[0].reference;
+
+    const interrupted = createGraphAceConsumer({
+      ...base,
+      aceRunner: (message, options) => nativeAceRunner({
+        ...message,
+        testControl: { phase, readyPath },
+      }, options),
+    });
+    const pending = interrupted.execute({
+      ...query,
+      args: { ...query.args, interruption: phase },
+      executeGraph: async () => interruptedOriginal,
+    });
+    await waitFor(() => fs.existsSync(readyPath), `worker did not reach ${phase}`);
+    const lockOwner = JSON.parse(fs.readFileSync(path.join(stateDir, '.ace-lock', 'owner.json'), 'utf8'));
+    assert.equal(lockOwner.pid, Number(fs.readFileSync(readyPath, 'utf8').trim()));
+    assert.notEqual(lockOwner.pid, process.pid);
+    const fallback = await pending;
+    assert.equal(fallback.status, 'fallback');
+    assert.equal(fallback.failureCode, 'ACE_TIMEOUT');
+    assert.deepEqual(fallback.consumerResult, interruptedOriginal);
+
+    const retried = await createGraphAceConsumer({ ...base, timeoutMs: 5_000 }).execute({
+      ...query,
+      args: { ...query.args, interruption: phase },
+      executeGraph: async () => interruptedOriginal,
+    });
+    assert.equal(retried.status, 'optimized');
+    const reference = retried.ace.items[0].reference;
+    assert.equal((await healthy.recover(stableReference)).content, graphText);
+    assert.equal((await healthy.recover(reference)).content, interruptedOriginal.content[0].text);
+    assert.equal(fs.existsSync(path.join(stateDir, '.ace-lock')), false);
+    assert.equal(fs.readdirSync(stateDir, { recursive: true }).some((entry) => String(entry).endsWith('.tmp')), false);
+  });
+}
+
 test('source-bearing Graph tools remain protected and inline', async (t) => {
   const { consumer } = enabledConsumer(t);
   const result = await consumer.execute({
@@ -128,6 +193,21 @@ test('unavailable, throwing, timed-out, malformed, and incomplete ACE all preser
     assert.equal(result.failureCode, failureCode, name);
     assert.deepEqual(result.consumerResult, original, name);
   }
+});
+
+test('unconfirmed runner termination rejects instead of reporting fallback completion', async () => {
+  const consumer = createGraphAceConsumer({
+    enabled: true,
+    stateDir: path.join(os.tmpdir(), 'afyx-295-unconfirmed-termination'),
+    ownerId: 'owner',
+    sessionId: 'session',
+    timeoutMs: 10,
+    aceRunner: async () => new Promise(() => {}),
+  });
+  await assert.rejects(
+    consumer.execute({ ...query, executeGraph: async () => graphResult() }),
+    (error) => error instanceof AceError && error.code === 'ACE_TERMINATION_UNCONFIRMED',
+  );
 });
 
 test('Graph error remains authoritative and bypasses ACE', async () => {

@@ -181,3 +181,42 @@ for (const [name, ownerMetadata] of [
     );
   });
 }
+
+for (const [name, expectedCode, metadataFor] of [
+  ['foreign owner', 'LOCK_RECOVERY_UNSAFE', (stateDir) => ({
+    format: 'ace.lock/v1',
+    token: crypto.randomUUID(),
+    stateRootHash: crypto.createHash('sha256').update(stateDir).digest('hex'),
+    ownerHash: crypto.createHash('sha256').update('other-owner').digest('hex'),
+    host: os.hostname(),
+    pid: process.pid,
+    createdAt: new Date().toISOString(),
+  })],
+  ['cross-host owner with inconclusive liveness', 'LOCK_TIMEOUT', (stateDir) => ({
+    format: 'ace.lock/v1',
+    token: crypto.randomUUID(),
+    stateRootHash: crypto.createHash('sha256').update(stateDir).digest('hex'),
+    ownerHash: crypto.createHash('sha256').update('owner').digest('hex'),
+    host: `${os.hostname()}-other-host`,
+    pid: process.pid,
+    createdAt: new Date().toISOString(),
+  })],
+]) {
+  test(`preserves a ${name} lock and fails recovery closed`, (t) => {
+    const stateDir = lab(t);
+    const established = new AfyxContextEngine({ stateDir, ownerId: 'owner', sessionId: 'session' });
+    established.reduce({ segments: [{ id: 'stable', content: 'preserved state' }] });
+    const lockDir = path.join(stateDir, '.ace-lock');
+    fs.mkdirSync(lockDir);
+    fs.writeFileSync(path.join(lockDir, 'owner.json'), `${JSON.stringify(metadataFor(stateDir), null, 2)}\n`);
+    const lockBefore = fs.readFileSync(path.join(lockDir, 'owner.json'));
+    const manifestBefore = fs.readFileSync(path.join(stateDir, 'state.json'));
+
+    assert.throws(
+      () => new AfyxContextEngine({ stateDir, ownerId: 'owner', sessionId: 'session', lockTimeoutMs: 100 }),
+      (error) => error instanceof AceError && error.code === expectedCode,
+    );
+    assert.deepEqual(fs.readFileSync(path.join(lockDir, 'owner.json')), lockBefore);
+    assert.deepEqual(fs.readFileSync(path.join(stateDir, 'state.json')), manifestBefore);
+  });
+}
