@@ -90,26 +90,42 @@ jobs:
         run: ./install.ps1 -ValidateOnly
       - name: Validate identity, metadata and component contract
         run: |
-          python scripts/validate-afyx-graph.py
-          python scripts/validate-components.py
-          python scripts/validate-engineering-assurance.py
-          python scripts/audit-legacy-identity.py
-          python -m py_compile evals/forge/validate.py
-          python evals/forge/validate.py --check-fixtures
+          $commands = @(
+            @('scripts/validate-afyx-graph.py'),
+            @('scripts/validate-components.py'),
+            @('scripts/validate-engineering-assurance.py'),
+            @('scripts/audit-legacy-identity.py'),
+            @('-m', 'py_compile', 'evals/forge/validate.py'),
+            @('evals/forge/validate.py', '--check-fixtures')
+          )
+          $failed = $false
+          foreach ($arguments in $commands) {
+            & python @arguments
+            if ($LASTEXITCODE -ne 0) { $failed = $true }
+          }
+          if ($failed) { exit 1 }
       - name: Usage Tracker deterministic tests
         shell: pwsh
         run: ./tools/codex-usage/tests/run-tests.ps1
       - name: Component contract, project detector and doctor tests (PowerShell and Git Bash)
         run: |
-          python scripts/tests/test_components.py
-          python scripts/tests/test_lifecycle.py
-          python scripts/tests/test_skill_lifecycle_security.py
-          python scripts/tests/test_skill_legacy_adoption.py
-          python scripts/tests/test_control_plane.py
-          python scripts/tests/test_engineering_assurance.py
-          python scripts/tests/test_artifact_identity.py
-          python scripts/tests/test_project_detect.py
-          python scripts/tests/test_doctor.py
+          $commands = @(
+            @('scripts/tests/test_components.py'),
+            @('scripts/tests/test_lifecycle.py'),
+            @('scripts/tests/test_skill_lifecycle_security.py'),
+            @('scripts/tests/test_skill_legacy_adoption.py'),
+            @('scripts/tests/test_control_plane.py'),
+            @('scripts/tests/test_engineering_assurance.py'),
+            @('scripts/tests/test_artifact_identity.py'),
+            @('scripts/tests/test_project_detect.py'),
+            @('scripts/tests/test_doctor.py')
+          )
+          $failed = $false
+          foreach ($arguments in $commands) {
+            & python @arguments
+            if ($LASTEXITCODE -ne 0) { $failed = $true }
+          }
+          if ($failed) { exit 1 }
       - name: Verify repository remains clean
         shell: pwsh
         run: |

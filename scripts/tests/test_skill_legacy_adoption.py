@@ -57,6 +57,23 @@ class LegacySkillAdoptionTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temporary.cleanup()
 
+    def test_legacy_fixture_line_endings_are_pinned_for_exact_provenance(self) -> None:
+        attributes = subprocess.run(
+            [
+                "git", "check-attr", "eol", "--",
+                "scripts/tests/fixtures/legacy-efficient-coding-1.1.0/SKILL.md",
+                "scripts/tests/fixtures/legacy-odoo-engineering-1.1.0/SKILL.md",
+            ],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+        self.assertEqual(attributes.count("eol: lf"), 2, attributes)
+        for fixture in ("efficient-coding", "odoo-engineering"):
+            files = (ROOT / "scripts" / "tests" / "fixtures" / f"legacy-{fixture}-1.1.0").rglob("*")
+            self.assertTrue(all(b"\r\n" not in path.read_bytes() for path in files if path.is_file()))
+
     def run_install(self, component: str, action: str, *, dry_run: bool = False, expected: int = 0) -> subprocess.CompletedProcess[str]:
         if WINDOWS:
             command = [
