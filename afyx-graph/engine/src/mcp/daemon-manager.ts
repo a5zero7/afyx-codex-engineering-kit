@@ -90,16 +90,17 @@ export interface PickerDeps {
 function describeStopOutcome(result: StopResult, choice: string): string {
   switch (result.outcome) {
     case 'unverified':
-      return `Could not verify daemon (pid ${result.pid}); left it running with its artifacts intact — ${choice}`;
+      return `Could not verify daemon (pid ${result.pid}); left it running with its artifacts intact${result.detail ? ` — ${result.detail}` : ''} — ${choice}`;
+    case 'permission-denied':
+      return `Permission denied stopping daemon (pid ${result.pid}); run the manager under the same Windows account/integrity context as the daemon. Artifacts were preserved${result.detail ? ` — ${result.detail}` : ''} — ${choice}`;
+    case 'shutdown-failed':
+      return `Daemon (pid ${result.pid}) acknowledged shutdown but did not exit; no force-kill was attempted and artifacts were preserved${result.detail ? ` — ${result.detail}` : ''} — ${choice}`;
     case 'not-running':
       return `Daemon was no longer running; removed stale artifacts — ${choice}`;
     case 'no-daemon':
       return `No daemon was found — ${choice}`;
     case 'term':
-    case 'kill': {
-      const forced = result.outcome === 'kill' ? ', forced' : '';
-      return `Stopped daemon (pid ${result.pid}${forced}) — ${choice}`;
-    }
+      return `Stopped daemon gracefully (pid ${result.pid}) — ${choice}`;
   }
 }
 
@@ -130,7 +131,7 @@ export async function runDaemonPicker(deps: PickerDeps): Promise<void> {
 
     if (choice === STOP_ALL) {
       const results = await deps.stopAll();
-      const stoppedCount = results.filter((r) => r.outcome === 'term' || r.outcome === 'kill').length;
+      const stoppedCount = results.filter((r) => r.outcome === 'term').length;
       deps.note(`Stopped ${stoppedCount} daemon${stoppedCount === 1 ? '' : 's'}.`);
       deps.done('Done.');
       return;

@@ -40,12 +40,14 @@ import { MCPEngine } from './engine';
 import { MCPSession } from './session';
 import { SocketTransport } from './transport';
 import {
-  DaemonLockInfo,
+  type DaemonLockInfo,
+  type DaemonControlRequest,
   decodeLockInfo,
   encodeLockInfo,
   getDaemonPidPath,
   getDaemonSocketCandidates,
   getDaemonSocketPath,
+  parseDaemonControlRequestLine,
 } from './daemon-paths';
 import { AfyxGraphPackageVersion } from './version';
 import {
@@ -171,6 +173,7 @@ export class Daemon {
   private stopping = false;
   private socketPath: string;
   private pidPath: string;
+  private startedAt = 0;
 
   constructor(
     private projectRoot: string,
@@ -210,6 +213,7 @@ export class Daemon {
     this.socketPath = bound.socketPath;
 
     const lock = this.refreshLockfileAfterBind(bound.server, initialLockContents);
+    this.startedAt = lock.startedAt;
 
     // Backgrounded (see #172): only starts after bind + ownership refresh, so
     // a delayed daemon that already lost the election can never open a
@@ -400,7 +404,28 @@ export class Daemon {
     };
     socket.write(JSON.stringify(hello) + '\n');
 
-    void readClientHello(socket).then((peers) => this.acceptSession(socket, peers));
+    void readConnectionPreface(socket).then((preface) => {
+      if (preface.control) this.handleControlRequest(socket, preface.control);
+      else this.acceptSession(socket, preface.peers);
+    });
+  }
+
+  /**
+   * Accept shutdown only for the exact PID/start identity in our live lock.
+   * Host IPC permissions remain the caller-authorization boundary.
+   */
+  private handleControlRequest(socket: net.Socket, request: DaemonControlRequest): void {
+    const matches = request.pid === process.pid && request.startedAt === this.startedAt;
+    const reply = {
+      afyx_graph_control: 1,
+      status: matches ? 'accepted' : 'rejected',
+      pid: process.pid,
+      startedAt: this.startedAt,
+      ...(matches ? {} : { detail: 'control identity does not match the running daemon' }),
+    };
+    socket.end(JSON.stringify(reply) + '\n', () => {
+      if (matches) void this.stop('management request');
+    });
   }
 
   /**
@@ -679,13 +704,16 @@ export { parseClientHelloLine, peerIsDead } from './client-registry';
  * newline search is byte-based specifically so a UTF-8 sequence straddling a
  * chunk boundary in that unshifted tail can never be corrupted.
  */
-function readClientHello(socket: net.Socket): Promise<ClientPeerInfo> {
+function readConnectionPreface(socket: net.Socket): Promise<{
+  peers: ClientPeerInfo;
+  control: DaemonControlRequest | null;
+}> {
   return new Promise((resolve) => {
     let buffered: Buffer[] = [];
     let bufferedLength = 0;
     let settled = false;
 
-    const settle = (peers: ClientPeerInfo, putBack?: Buffer) => {
+    const settle = (peers: ClientPeerInfo, putBack?: Buffer, control: DaemonControlRequest | null = null) => {
       if (settled) return;
       settled = true;
       // Pause BEFORE detaching: dropping the last 'data' listener does not
@@ -709,7 +737,7 @@ function readClientHello(socket: net.Socket): Promise<ClientPeerInfo> {
       if (putBack && putBack.length > 0 && !socket.destroyed) {
         try { socket.unshift(putBack); } catch { /* stream already gone */ }
       }
-      resolve(peers);
+      resolve({ peers, control });
     };
 
     const onData = (chunk: Buffer | string) => {
@@ -725,7 +753,13 @@ function readClientHello(socket: net.Socket): Promise<ClientPeerInfo> {
         else buffered = [accumulated];
         return;
       }
-      const peers = parseClientHelloLine(accumulated.subarray(0, newlineAt).toString('utf8'));
+      const line = accumulated.subarray(0, newlineAt).toString('utf8');
+      const control = parseDaemonControlRequestLine(line);
+      if (control) {
+        settle({ pid: null, hostPid: null }, undefined, control);
+        return;
+      }
+      const peers = parseClientHelloLine(line);
       if (!peers) {
         // Not a hello (a legacy or direct client) — return the whole buffer
         // untouched so the transport parses it as the real first message.

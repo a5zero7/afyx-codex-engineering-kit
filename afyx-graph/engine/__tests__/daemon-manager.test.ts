@@ -115,6 +115,20 @@ describe('runDaemonPicker', () => {
   });
 
   it.each([
+    ['permission-denied', 'Permission denied stopping daemon (pid 42)'],
+    ['shutdown-failed', 'Daemon (pid 42) acknowledged shutdown but did not exit'],
+  ] as const)('reports %s as an actionable non-success', async (outcome, message) => {
+    const h = harness([rec('/p/a', 42, 1)], ['/p/a', CANCEL]);
+    h.deps.stop = async (root): Promise<StopResult> => ({ root, pid: 42, outcome, detail: 'bounded detail' });
+
+    await runDaemonPicker(h.deps);
+
+    expect(h.notes[0]).toContain(message);
+    expect(h.notes[0]).toContain('bounded detail');
+    expect(h.getDone()).toContain('Cancelled');
+  });
+
+  it.each([
     ['not-running', 42, 'Daemon was no longer running; removed stale artifacts — /p/a'],
     ['no-daemon', null, 'No daemon was found — /p/a'],
   ] as const)('reports the %s race outcome accurately', async (outcome, pid, message) => {
