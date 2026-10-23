@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -39,6 +41,38 @@ function enabledConsumer(t, overrides = {}) {
     }),
   };
 }
+
+test('standalone timeout remains live until exact fallback is produced', () => {
+  const moduleUrl = new URL('../src/index.js', import.meta.url).href;
+  const script = `
+    import { AceError, createGraphAceConsumer } from ${JSON.stringify(moduleUrl)};
+    const consumer = createGraphAceConsumer({
+      enabled: true,
+      stateDir: ${JSON.stringify(path.join(os.tmpdir(), 'afyx-296-standalone-timeout'))},
+      ownerId: 'owner',
+      sessionId: 'session',
+      timeoutMs: 10,
+      aceRunner: (_message, { signal }) => new Promise((_, reject) => {
+        signal.addEventListener('abort', () => reject(new AceError('ACE_TIMEOUT', 'timeout')), { once: true });
+      }),
+    });
+    const result = await consumer.execute({
+      toolName: 'afyx_graph_search',
+      args: { query: 'timeout' },
+      projectRoot: process.cwd(),
+      sourceIdentity: 'sha256:standalone-timeout',
+      executeGraph: async () => ({ content: [{ type: 'text', text: 'authoritative graph result' }] }),
+    });
+    console.log(result.failureCode, result.consumerResult.content[0].text);
+  `;
+  const result = spawnSync(process.execPath, ['--input-type=module', '--eval', script], {
+    encoding: 'utf8',
+    timeout: 3_000,
+  });
+  assert.equal(result.error, undefined);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /ACE_TIMEOUT authoritative graph result/);
+});
 
 async function waitFor(predicate, message, timeoutMs = 5_000) {
   const deadline = Date.now() + timeoutMs;
@@ -195,19 +229,153 @@ test('unavailable, throwing, timed-out, malformed, and incomplete ACE all preser
   }
 });
 
-test('unconfirmed runner termination rejects instead of reporting fallback completion', async () => {
+test('unconfirmed native child termination rejects instead of reporting fallback completion', async () => {
+  const child = new EventEmitter();
+  child.pid = 43;
+  child.exitCode = null;
+  child.signalCode = null;
+  child.send = () => true;
+  child.kill = () => false;
   const consumer = createGraphAceConsumer({
     enabled: true,
     stateDir: path.join(os.tmpdir(), 'afyx-295-unconfirmed-termination'),
     ownerId: 'owner',
     sessionId: 'session',
     timeoutMs: 10,
-    aceRunner: async () => new Promise(() => {}),
+    aceRunner: (message, options) => nativeAceRunner(message, {
+      ...options,
+      spawnChild: () => child,
+    }),
   });
   await assert.rejects(
     consumer.execute({ ...query, executeGraph: async () => graphResult() }),
     (error) => error instanceof AceError && error.code === 'ACE_TERMINATION_UNCONFIRMED',
   );
+});
+
+test('native lifecycle handles spawn failure without a child', async () => {
+  await assert.rejects(
+    nativeAceRunner({ operation: 'reduce' }, {
+      spawnChild: () => { throw new Error('synthetic spawn failure'); },
+    }),
+    /synthetic spawn failure/,
+  );
+});
+
+test('native lifecycle waits for a successful IPC child to close', async () => {
+  const events = [];
+  const child = new EventEmitter();
+  child.pid = 41;
+  child.exitCode = null;
+  child.signalCode = null;
+  child.send = () => {
+    events.push('send');
+    queueMicrotask(() => {
+      events.push('message');
+      child.emit('message', { status: 'optimized' });
+      events.push('close');
+      child.exitCode = 0;
+      child.emit('close', 0, null);
+    });
+    return true;
+  };
+  child.kill = () => { throw new Error('successful child must not be killed'); };
+
+  assert.deepEqual(
+    await nativeAceRunner({ operation: 'reduce' }, { spawnChild: () => child }),
+    { status: 'optimized' },
+  );
+  events.push('resolved');
+  assert.deepEqual(events, ['send', 'message', 'close', 'resolved']);
+});
+
+test('native IPC send failure terminates and confirms child exit before rejecting', async () => {
+  const events = [];
+  const child = new EventEmitter();
+  child.pid = 42;
+  child.exitCode = null;
+  child.signalCode = null;
+  child.send = () => {
+    events.push('send');
+    throw new TypeError('synthetic IPC serialization failure');
+  };
+  child.kill = () => {
+    events.push('kill');
+    queueMicrotask(() => {
+      events.push('close');
+      child.signalCode = 'SIGKILL';
+      child.emit('close', null, 'SIGKILL');
+    });
+    return true;
+  };
+
+  await assert.rejects(
+    nativeAceRunner({ operation: 'reduce' }, { spawnChild: () => child }),
+    (error) => {
+      events.push('rejected');
+      return error instanceof TypeError && /serialization failure/.test(error.message);
+    },
+  );
+  assert.deepEqual(events, ['send', 'kill', 'close', 'rejected']);
+});
+
+for (const [name, fail] of [
+  ['asynchronous send callback', (child, callback) => callback(new Error('synthetic send callback failure'))],
+  ['child error event', (child) => child.emit('error', new Error('synthetic child error'))],
+]) {
+  test(`native lifecycle terminates and confirms close after ${name}`, async () => {
+    const events = [];
+    const child = new EventEmitter();
+    child.pid = 44;
+    child.exitCode = null;
+    child.signalCode = null;
+    child.send = (_message, callback) => {
+      events.push('send');
+      queueMicrotask(() => fail(child, callback));
+      return true;
+    };
+    child.kill = () => {
+      events.push('kill');
+      queueMicrotask(() => {
+        events.push('close');
+        child.signalCode = 'SIGKILL';
+        child.emit('close', null, 'SIGKILL');
+      });
+      return true;
+    };
+
+    await assert.rejects(
+      nativeAceRunner({ operation: 'reduce' }, { spawnChild: () => child }),
+      /synthetic/,
+    );
+    events.push('rejected');
+    assert.deepEqual(events, ['send', 'kill', 'close', 'rejected']);
+  });
+}
+
+test('native lifecycle rejects an unexpected exit only after close', async () => {
+  const events = [];
+  const child = new EventEmitter();
+  child.pid = 45;
+  child.exitCode = null;
+  child.signalCode = null;
+  child.send = () => {
+    events.push('send');
+    queueMicrotask(() => {
+      events.push('close');
+      child.exitCode = 7;
+      child.emit('close', 7, null);
+    });
+    return true;
+  };
+  child.kill = () => { throw new Error('unexpected-exit path must not need termination'); };
+
+  await assert.rejects(
+    nativeAceRunner({ operation: 'reduce' }, { spawnChild: () => child }),
+    /exited with code 7/,
+  );
+  events.push('rejected');
+  assert.deepEqual(events, ['send', 'close', 'rejected']);
 });
 
 test('Graph error remains authoritative and bypasses ACE', async () => {

@@ -53,6 +53,9 @@ jobs:
       - name: Graph ACE real-consumer integration
         working-directory: afyx-context
         run: npm run test:graph-integration
+      - name: Integrated Graph ACE dogfood
+        working-directory: afyx-context
+        run: npm run test:integrated-dogfood
       - name: Package smoke
         working-directory: afyx-context
         run: npm pack --dry-run
