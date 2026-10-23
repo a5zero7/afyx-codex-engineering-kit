@@ -53,7 +53,8 @@ class ContextLifecycleContractTests(unittest.TestCase):
             self.assertNotIn("setx", source.lower())
             self.assertNotIn("config.toml", source.lower())
 
-    @unittest.skipUnless(shutil.which("pwsh") or shutil.which("powershell"), "PowerShell unavailable")
+    @unittest.skipUnless(os.name == "nt" and (shutil.which("pwsh") or shutil.which("powershell")),
+                         "Windows PowerShell lifecycle requires a Windows host")
     def test_windows_install_verify_repeat_repair_recovery_and_uninstall(self) -> None:
         shell = shutil.which("pwsh") or shutil.which("powershell")
         assert shell
@@ -61,6 +62,7 @@ class ContextLifecycleContractTests(unittest.TestCase):
             lab = Path(temporary)
             runtime = lab / "runtime"
             state = lab / "user-state"
+            ace_state = lab / "ace-state"
             sentinel = state / "preserve.txt"
             state.mkdir()
             sentinel.write_text("user-owned", encoding="utf-8")
@@ -99,10 +101,10 @@ class ContextLifecycleContractTests(unittest.TestCase):
             cli = runtime / "current" / "bin" / "afyx-context.cmd"
             content = "installed exact original " * 30
             request = json.dumps({"segments": [{"id": "a", "content": content}, {"id": "b", "content": content}]})
-            reduced = subprocess.run([str(cli), "reduce", "--state", str(state), "--owner", "owner", "--session", "session", "--input", "-"], input=request, text=True, capture_output=True)
+            reduced = subprocess.run([str(cli), "reduce", "--state", str(ace_state), "--owner", "owner", "--session", "session", "--input", "-"], input=request, text=True, capture_output=True)
             self.assertEqual(reduced.returncode, 0, reduced.stderr)
             reference = json.loads(reduced.stdout)["items"][1]["reference"]
-            restored = subprocess.run([str(cli), "get", "--state", str(state), "--owner", "owner", "--session", "session", "--reference", reference], text=True, capture_output=True)
+            restored = subprocess.run([str(cli), "get", "--state", str(ace_state), "--owner", "owner", "--session", "session", "--reference", reference], text=True, capture_output=True)
             self.assertEqual((restored.returncode, restored.stdout), (0, content))
 
             (runtime / "current" / "dist" / "index.js").write_text("modified", encoding="utf-8")
@@ -159,7 +161,8 @@ class ContextLifecycleContractTests(unittest.TestCase):
             self.assertEqual(subprocess.run(control_uninstall, env=environment).returncode, 0)
             self.assertFalse(runtime.exists())
 
-    @unittest.skipUnless(shutil.which("pwsh") or shutil.which("powershell"), "PowerShell unavailable")
+    @unittest.skipUnless(os.name == "nt" and (shutil.which("pwsh") or shutil.which("powershell")),
+                         "Windows PowerShell lifecycle requires a Windows host")
     def test_windows_foreign_and_ambiguous_destinations_are_nonmutating(self) -> None:
         shell = shutil.which("pwsh") or shutil.which("powershell")
         assert shell

@@ -91,7 +91,13 @@ revision="$(git -C "$PACKAGE_ROOT" rev-parse HEAD 2>/dev/null || true)"
 provenance=LOCAL_SOURCE_CLEAN; [[ -n "$(git -C "$PACKAGE_ROOT" status --porcelain --untracked-files=no)" ]] && provenance=LOCAL_SOURCE_DIRTY
 parent="$(dirname "$runtime_root")"; mkdir -p -- "$parent"
 prepared="$(mktemp -d "$parent/.afyx-context-stage.XXXXXX")"; swapped=false
-cleanup() { [[ -e "$prepared" ]] && rm -rf -- "$prepared"; }
+cleanup() {
+  local status=$?
+  if [[ -e "$prepared" ]]; then
+    rm -rf -- "$prepared" || return $?
+  fi
+  return "$status"
+}
 trap cleanup EXIT
 node "$ARTIFACT_TOOL" prepare --source "$SOURCE_ROOT" --target "$prepared/current" --metadata "$prepared/metadata.json" --manifest "$prepared/integrity.sha256" --revision "$revision" --provenance "$provenance"
 owned_runtime "$prepared" || { printf '%s\n' 'Prepared Afyx Context artifact failed integrity validation.' >&2; exit 1; }
