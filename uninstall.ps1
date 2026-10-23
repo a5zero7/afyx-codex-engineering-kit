@@ -4,7 +4,9 @@ param(
     [Alias('Component')][string[]]$SelectedComponent = @(),
     [switch]$RemovePromptMaster,
     [switch]$RemoveUsageTracker,
-    [switch]$RemoveAfyxGraph
+    [switch]$RemoveAfyxGraph,
+    [switch]$RemoveAfyxContext,
+    [string]$ContextRuntimeRoot = $(if ($env:AFYX_CONTEXT_RUNTIME_ROOT) { $env:AFYX_CONTEXT_RUNTIME_ROOT } else { Join-Path $env:USERPROFILE '.afyx\context' })
 )
 
 Set-StrictMode -Version Latest
@@ -16,7 +18,7 @@ Write-Host 'Afyx Codex Engineering Kit — Windows uninstaller (PowerShell)'
 # the upstream-owned skill (Prompt Master) only on explicit request.
 Import-Module (Join-Path $PSScriptRoot 'scripts\lib\AfyxComponents.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'scripts\lib\AfyxSkillLifecycle.psm1') -Force
-$componentContext = New-AfyxComponentContext -SkillsRoot $SkillsRoot
+$componentContext = New-AfyxComponentContext -SkillsRoot $SkillsRoot -ContextRoot $ContextRuntimeRoot
 $contract = @(Get-AfyxComponentContract)
 foreach ($id in $SelectedComponent) {
     $selected = @($contract | Where-Object { $_.id -eq $id -and $_.type -eq 'skill' -and $_.ownership -eq 'afyx' })
@@ -58,4 +60,9 @@ if (Test-Path -LiteralPath $graphRoot) {
     } else { Write-Host 'Afyx Graph: kept' }
 }
 
-Write-Host 'Project indexes, Headroom, and unrelated Codex configuration were not changed.'
+if ($RemoveAfyxContext) {
+    & (Join-Path $PSScriptRoot 'scripts\install-afyx-context.ps1') -RuntimeRoot $ContextRuntimeRoot -Uninstall -Confirm:$false -WhatIf:$WhatIfPreference
+    if (-not $?) { throw 'Afyx Context removal failed.' }
+} elseif (Test-Path -LiteralPath $ContextRuntimeRoot) { Write-Host 'Afyx Context Engine: kept' }
+
+Write-Host 'ACE user state, project indexes, Headroom, and unrelated Codex configuration were not changed.'

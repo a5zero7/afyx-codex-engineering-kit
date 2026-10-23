@@ -11,6 +11,7 @@
 AFYX_COMPONENTS_JSON="${AFYX_COMPONENTS_JSON:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)/components.json}"
 skills_root="${skills_root:-${CODEX_SKILLS_ROOT:-$HOME/.agents/skills}}"
 graph_root="${graph_root:-${AFYX_GRAPH_RUNTIME_ROOT:-$HOME/.afyx/graph}}"
+context_root="${context_root:-${AFYX_CONTEXT_RUNTIME_ROOT:-$HOME/.afyx/context}}"
 codex_home="${codex_home:-${CODEX_HOME:-$HOME/.codex}}"
 
 # One "id" per line, in contract order. The contract is one "key": "value" per line.
@@ -119,6 +120,7 @@ afyx_component_root() {
   case "$(afyx_component_field "$1" install_root)" in
     skills_root) root="$skills_root" ;;
     afyx_graph_root) root="$graph_root" ;;
+    afyx_context_root) root="$context_root" ;;
     codex_tools) root="$codex_home/tools" ;;
     *) root="" ;;
   esac
@@ -185,6 +187,7 @@ afyx_component_evaluate() {
       ;;
     runtime)
       if [[ ! -e "$path" ]]; then AFYX_STATE='NOT INSTALLED'; AFYX_DETAIL='not installed'; return 0; fi
+      if [[ -L "$path" ]]; then AFYX_STATE=UNKNOWN; AFYX_DETAIL='runtime root is a symbolic link'; return 0; fi
       if [[ ! -r "$path" ]]; then AFYX_STATE=UNKNOWN; AFYX_DETAIL='access denied while inspecting component'; return 0; fi
       local IFS=';' unix_list
       unix_list=";$(afyx_component_field "$id" required_files_unix);"
@@ -200,6 +203,31 @@ afyx_component_evaluate() {
       field="$(afyx_component_field "$id" version_source)"; field="${field#*#}"
       AFYX_VERSION="$(sed -n "s/.*\"$field\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p" "$marker_file" | head -n 1)"
       if [[ "$(afyx_component_field "$id" version_required)" == true && -z "$AFYX_VERSION" ]]; then AFYX_STATE=INVALID; AFYX_DETAIL="$field missing from metadata"; return 0; fi
+      local integrity_manifest expected_digest actual_digest line expected_hash relative actual_hash
+      integrity_manifest="$(afyx_component_field "$id" integrity_manifest_file)"
+      if [[ -n "$integrity_manifest" ]]; then
+        expected_digest="$(sed -n 's/.*"artifact_digest"[[:space:]]*:[[:space:]]*"\([0-9a-f]*\)".*/\1/p' "$marker_file")"
+        if command -v sha256sum >/dev/null 2>&1; then actual_digest="$(sha256sum "$path/$integrity_manifest" | awk '{print $1}')"
+        else actual_digest="$(shasum -a 256 "$path/$integrity_manifest" | awk '{print $1}')"; fi
+        if [[ ${#expected_digest} -ne 64 || "$actual_digest" != "$expected_digest" ]]; then AFYX_STATE=DRIFTED; AFYX_DETAIL='Afyx ownership verified but runtime integrity differs'; return 0; fi
+        while IFS= read -r line; do
+          expected_hash="${line%%  *}"; relative="${line#*  }"
+          if [[ ! "$expected_hash" =~ ^[0-9a-f]{64}$ || "$relative" != current/* || "$relative" == *../* || ! -f "$path/$relative" || -L "$path/$relative" ]]; then AFYX_STATE=DRIFTED; AFYX_DETAIL='Afyx ownership verified but runtime integrity differs'; return 0; fi
+          if command -v sha256sum >/dev/null 2>&1; then actual_hash="$(sha256sum "$path/$relative" | awk '{print $1}')"
+          else actual_hash="$(shasum -a 256 "$path/$relative" | awk '{print $1}')"; fi
+          if [[ "$actual_hash" != "$expected_hash" ]]; then AFYX_STATE=DRIFTED; AFYX_DETAIL='Afyx ownership verified but runtime integrity differs'; return 0; fi
+        done < "$path/$integrity_manifest"
+        local identity_file identity_field metadata_value identity_value
+        identity_file="$(afyx_component_field "$id" identity_file)"
+        if [[ -n "$identity_file" ]]; then
+          [[ -f "$path/$identity_file" ]] || { AFYX_STATE=DRIFTED; AFYX_DETAIL='Afyx ownership verified but runtime identity is missing'; return 0; }
+          for identity_field in product_name product_version source_revision ownership_class build_provenance release_channel integration_default; do
+            metadata_value="$(sed -n 's/.*"'"$identity_field"'"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$marker_file" | head -n 1)"
+            identity_value="$(sed -n 's/.*"'"$identity_field"'"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$path/$identity_file" | head -n 1)"
+            if [[ "$metadata_value" != "$identity_value" ]]; then AFYX_STATE=DRIFTED; AFYX_DETAIL='Afyx ownership verified but runtime identity differs'; return 0; fi
+          done
+        fi
+      fi
       AFYX_STATE=HEALTHY; AFYX_DETAIL='Afyx-owned runtime valid'
       ;;
     toolset)

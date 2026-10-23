@@ -14,7 +14,8 @@ param(
     [switch]$InstallUsageTracker,
     [switch]$SkipUsageTracker,
     [switch]$SkipGraphMcp,
-    [switch]$SkipGraphPathUpdate
+    [switch]$SkipGraphPathUpdate,
+    [string]$ContextRuntimeRoot = $(if ($env:AFYX_CONTEXT_RUNTIME_ROOT) { $env:AFYX_CONTEXT_RUNTIME_ROOT } else { Join-Path $env:USERPROFILE '.afyx\context' })
 )
 
 Set-StrictMode -Version Latest
@@ -32,6 +33,8 @@ $promptTarget = Join-Path $SkillsRoot 'prompt-master'
 $usageTrackerInstaller = Join-Path $packageRoot 'scripts\install-codex-usage-tracker.ps1'
 $graphInstaller = Join-Path $packageRoot 'scripts\install-afyx-graph.ps1'
 $graphMetadataPath = Join-Path $packageRoot 'afyx-graph\afyx-graph.json'
+$contextInstaller = Join-Path $packageRoot 'scripts\install-afyx-context.ps1'
+$contextMetadataPath = Join-Path $packageRoot 'afyx-context\afyx-context.json'
 $graphRuntimeRoot = if ($env:AFYX_GRAPH_RUNTIME_ROOT) { $env:AFYX_GRAPH_RUNTIME_ROOT } else { Join-Path $env:USERPROFILE '.afyx\graph' }
 $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' }
 
@@ -40,7 +43,7 @@ if ($InstallUsageTracker -and $SkipUsageTracker) { throw '-InstallUsageTracker a
 # One component truth: scripts/components.json, read through the shared module.
 Import-Module (Join-Path $packageRoot 'scripts\lib\AfyxComponents.psm1') -Force
 Import-Module (Join-Path $packageRoot 'scripts\lib\AfyxSkillLifecycle.psm1') -Force
-$componentContext = New-AfyxComponentContext -SkillsRoot $SkillsRoot -GraphRoot $graphRuntimeRoot -CodexHome $codexHome
+$componentContext = New-AfyxComponentContext -SkillsRoot $SkillsRoot -GraphRoot $graphRuntimeRoot -ContextRoot $ContextRuntimeRoot -CodexHome $codexHome
 $promptComponent = @(Get-AfyxComponentContract | Where-Object { $_.id -eq 'prompt-master' })[0]
 $promptMasterRevision = [string]$promptComponent.source_revision
 $componentStates = @{}
@@ -64,7 +67,7 @@ foreach ($specification in $ComponentAction) {
     }
     $componentActions[$Matches[1]] = $Matches[2]
 }
-$knownSelectable = @('efficient-coding', 'odoo-engineering', 'afyx-engineering-expert', 'prompt-master', 'afyx-graph', 'codex-usage-tracking')
+$knownSelectable = @('efficient-coding', 'odoo-engineering', 'afyx-engineering-expert', 'prompt-master', 'afyx-graph', 'afyx-context', 'codex-usage-tracking')
 foreach ($id in $componentActions.Keys) { if ($id -notin $knownSelectable) { throw "Unknown selectable component: $id" } }
 if ($Preset -and $Preset -notin @('minimal', 'recommended', 'full', 'custom')) { throw "Unknown preset: $Preset" }
 if (-not $Preset -and $CustomComponent.Count) { throw '-CustomComponent requires -Preset custom.' }
@@ -79,6 +82,7 @@ function Get-AvailableVersion([string]$Id) {
         'odoo-engineering' { return Get-AfyxSkillVersion -Directory $bundledOdooEngineering }
         'afyx-engineering-expert' { return Get-AfyxSkillVersion -Directory $bundledEngineeringExpert }
         'afyx-graph' { return (Get-Content -Raw -LiteralPath $graphMetadataPath | ConvertFrom-Json).product_version }
+        'afyx-context' { return (Get-Content -Raw -LiteralPath $contextMetadataPath | ConvertFrom-Json).product_version }
         default { return '' }
     }
 }
@@ -98,6 +102,7 @@ function Get-ComponentAction([string]$Id, [string]$Label) {
         elseif ($planItem.Repair -eq 'BLOCKED') { throw "$Label drift is $($planItem.Drift) with actual ownership $($planItem.ActualOwnership); automatic takeover is forbidden." }
         elseif ($planItem.Repair -eq 'INSTALL') { $action = 'install' }
         elseif ($planItem.Repair -eq 'REPAIR') { $action = 'repair' }
+        elseif ($Id -eq 'afyx-context' -and $state.State -eq 'HEALTHY') { $action = 'update' }
         else {
             $available = Get-AvailableVersion $Id
             $action = if ($state.State -eq 'HEALTHY' -and $available -and (Compare-AfyxVersion $state.Version $available) -lt 0) { 'update' } else { 'skip' }
@@ -110,6 +115,7 @@ function Get-ComponentAction([string]$Id, [string]$Label) {
     } elseif ($UpdateInstalled) {
         $available = Get-AvailableVersion $Id
         if ($state.State -in @('INCOMPLETE', 'INVALID', 'DRIFTED')) { $action = 'repair' }
+        elseif ($Id -eq 'afyx-context' -and $state.State -eq 'HEALTHY') { $action = 'update' }
         elseif ($state.State -eq 'HEALTHY' -and $available -and (Compare-AfyxVersion $state.Version $available) -lt 0) { $action = 'update' }
         else { $action = 'skip' }
     } elseif ($WhatIfPreference -or $env:CI -or [Console]::IsInputRedirected) { $action = 'skip' }
@@ -232,6 +238,7 @@ if (-not (Test-SkillManifest $bundledEfficientCoding)) { throw 'Bundled Efficien
 if (-not (Test-SkillManifest $bundledOdooEngineering)) { throw 'Bundled Odoo Engineering is invalid or missing.' }
 if (-not (Test-SkillManifest $bundledEngineeringExpert)) { throw 'Bundled Afyx Engineering Expert is invalid or missing.' }
 if (-not (Test-Path -LiteralPath $graphMetadataPath -PathType Leaf)) { throw 'Bundled Afyx Graph metadata is missing.' }
+if (-not (Test-Path -LiteralPath $contextMetadataPath -PathType Leaf)) { throw 'Bundled Afyx Context metadata is missing.' }
 
 $codexCliDetected = [bool](Get-Command codex -ErrorAction SilentlyContinue)
 $vscodeExtensionDetected = [bool](Get-ChildItem -Path (Join-Path $env:USERPROFILE '.vscode\extensions\openai.chatgpt-*') -Directory -ErrorAction SilentlyContinue | Select-Object -First 1)
@@ -243,12 +250,13 @@ $states = [ordered]@{
     'Afyx Engineering Expert' = $componentStates['afyx-engineering-expert'].State
     'Prompt Master' = $componentStates['prompt-master'].State
     'Afyx Graph' = $componentStates['afyx-graph'].State
+    'Afyx Context Engine' = $componentStates['afyx-context'].State
     'Usage Tracking' = $componentStates['codex-usage-tracking'].State
 }
 Write-Host ''
 Write-Host 'Component Inventory'
 foreach ($entry in $states.GetEnumerator()) {
-    $id = switch ($entry.Key) { 'Efficient Coding' { 'efficient-coding' } 'Odoo Engineering' { 'odoo-engineering' } 'Afyx Engineering Expert' { 'afyx-engineering-expert' } 'Prompt Master' { 'prompt-master' } 'Afyx Graph' { 'afyx-graph' } default { 'codex-usage-tracking' } }
+    $id = switch ($entry.Key) { 'Efficient Coding' { 'efficient-coding' } 'Odoo Engineering' { 'odoo-engineering' } 'Afyx Engineering Expert' { 'afyx-engineering-expert' } 'Prompt Master' { 'prompt-master' } 'Afyx Graph' { 'afyx-graph' } 'Afyx Context Engine' { 'afyx-context' } default { 'codex-usage-tracking' } }
     $installed = $componentStates[$id].Version
     $available = Get-AvailableVersion $id
     Write-Host ("{0}: {1}; installed={2}; available={3}; ownership={4}" -f $entry.Key, $entry.Value, $(if ($installed) { $installed } else { 'n/a' }), $(if ($available) { $available } else { 'external/n/a' }), $componentStates[$id].Ownership)
@@ -273,6 +281,7 @@ Write-Host "[REQUIRED] Codex host: $(if ($codexCliDetected -or $vscodeExtensionD
 Write-Host "[COMPONENT_REQUIRED:Afyx Graph] Node.js >=22.5.0: $(if ($nodeVersion) { $nodeVersion } else { 'MISSING — install from https://nodejs.org/' })"
 Write-Host "[BUILD_ONLY:Afyx Graph] npm: $(if ($npmVersion) { $npmVersion } else { 'MISSING — needed only for automatic local fallback' })"
 Write-Host '[COMPONENT_REQUIRED:Afyx Graph] Archive/checksum: Expand-Archive + Get-FileHash available'
+Write-Host "[COMPONENT_REQUIRED:Afyx Context] Node.js >=22.5.0: $(if ($nodeVersion) { $nodeVersion } else { 'MISSING — install from https://nodejs.org/' })"
 $sourceBranch = if ($gitVersion) { (& git -C $packageRoot branch --show-current 2>$null) -join '' } else { 'unavailable' }
 $sourceCommit = if ($gitVersion) { (& git -C $packageRoot rev-parse HEAD 2>$null) -join '' } else { 'unavailable' }
 Write-Host "Source: branch=$sourceBranch; commit=$sourceCommit; channel=$graphReleaseChannel"
@@ -298,6 +307,11 @@ if ($ValidateOnly) {
         AfyxGraphState = $states['Afyx Graph']
         AfyxGraphVersion = $graphMetadata.product_version
         AfyxGraphRuntimeRoot = $graphRuntimeRoot
+        BundledAfyxContextSource = Test-Path -LiteralPath (Join-Path $packageRoot 'afyx-context\package.json')
+        InstalledAfyxContext = $states['Afyx Context Engine'] -eq 'HEALTHY'
+        AfyxContextState = $states['Afyx Context Engine']
+        AfyxContextVersion = (Get-Content -Raw -LiteralPath $contextMetadataPath | ConvertFrom-Json).product_version
+        AfyxContextRuntimeRoot = $ContextRuntimeRoot
         InstalledUsageTracker = $states['Usage Tracking'] -eq 'HEALTHY'
         UsageTrackerState = $states['Usage Tracking']
         HeadroomAvailable = [bool](Get-Command headroom -ErrorAction SilentlyContinue)
@@ -386,6 +400,18 @@ else {
     & $graphInstaller -Confirm:$false -WhatIf:$WhatIfPreference @arguments
     if (-not $?) { throw 'Afyx Graph installation failed.' }
     $summary['Afyx Graph'] = $graphAction
+}
+
+$contextState = $states['Afyx Context Engine']
+$contextAction = Get-ComponentAction 'afyx-context' 'Afyx Context Engine'
+if ($contextAction -eq 'skip') { $summary['Afyx Context Engine'] = 'skipped' }
+else {
+    $contextArguments = @{ RuntimeRoot = $ContextRuntimeRoot }
+    if ($contextAction -eq 'update') { $contextArguments.Update = $true }
+    elseif ($contextAction -eq 'repair') { $contextArguments.Repair = $true }
+    & $contextInstaller -Confirm:$false -WhatIf:$WhatIfPreference @contextArguments
+    if (-not $?) { throw 'Afyx Context installation failed.' }
+    $summary['Afyx Context Engine'] = $contextAction
 }
 
 $usageState = $states['Usage Tracking']

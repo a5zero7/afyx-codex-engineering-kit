@@ -15,7 +15,8 @@ param(
     [switch]$InstallUsageTracker,
     [switch]$SkipUsageTracker,
     [switch]$SkipGraphMcp,
-    [switch]$SkipGraphPathUpdate
+    [switch]$SkipGraphPathUpdate,
+    [string]$ContextRuntimeRoot = $(if ($env:AFYX_CONTEXT_RUNTIME_ROOT) { $env:AFYX_CONTEXT_RUNTIME_ROOT } else { Join-Path $env:USERPROFILE '.afyx\context' })
 )
 
 Set-StrictMode -Version Latest
@@ -61,7 +62,7 @@ $usageArguments = @{}
 if ($InstallUsageTracker) { $usageArguments.InstallUsageTracker = $true }
 elseif ($SkipUsageTracker) { $usageArguments.SkipUsageTracker = $true }
 
-& $installer -SkillsRoot $SkillsRoot -UpdateInstalled -ComponentAction $ComponentAction -Preset $Preset -CustomComponent $CustomComponent -Offline:$Offline -NoBuildFallback:$NoBuildFallback -AllowDirtySource:$AllowDirtySource -SkipGraphMcp:$SkipGraphMcp -SkipGraphPathUpdate:$SkipGraphPathUpdate -Confirm:$false -WhatIf:$WhatIfPreference @usageArguments
+& $installer -SkillsRoot $SkillsRoot -UpdateInstalled -ComponentAction $ComponentAction -Preset $Preset -CustomComponent $CustomComponent -Offline:$Offline -NoBuildFallback:$NoBuildFallback -AllowDirtySource:$AllowDirtySource -SkipGraphMcp:$SkipGraphMcp -SkipGraphPathUpdate:$SkipGraphPathUpdate -ContextRuntimeRoot $ContextRuntimeRoot -Confirm:$false -WhatIf:$WhatIfPreference @usageArguments
 $installerSucceeded = $?
 $installerExitCode = 0
 if (Test-Path -LiteralPath variable:LASTEXITCODE) { $installerExitCode = [int]$LASTEXITCODE }

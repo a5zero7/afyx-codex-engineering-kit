@@ -21,9 +21,9 @@ OWNERSHIP = {"afyx", "upstream", "external"}
 OWNERSHIP_CLASSES = {"AFYX", "EXTERNAL", "USER"}
 PRESETS = {"minimal", "recommended", "full", "custom"}
 PLATFORMS = {"all", "windows"}
-INSTALL_ROOTS = {"skills_root", "afyx_graph_root", "codex_tools", ""}
+INSTALL_ROOTS = {"skills_root", "afyx_graph_root", "afyx_context_root", "codex_tools", ""}
 REQUIRED_KEYS = {"id", "name", "type", "tier", "ownership", "ownership_class", "presets", "platforms", "install_root", "install_path"}
-EXPECTED_IDS = ["efficient-coding", "odoo-engineering", "afyx-engineering-expert", "prompt-master", "afyx-graph", "codex-usage-tracking", "headroom"]
+EXPECTED_IDS = ["efficient-coding", "odoo-engineering", "afyx-engineering-expert", "prompt-master", "afyx-graph", "afyx-context", "codex-usage-tracking", "headroom"]
 LINE_RE = re.compile(r'^\s*"[a-z_]+":\s*"[^"\\]*",?\s*$')
 
 
@@ -149,6 +149,19 @@ if version_field not in metadata:
     fail("afyx-graph version_source is not a metadata field")
 if metadata["cli"] not in graph["required_files_unix"] or f"{metadata['cli']}.cmd" not in graph["required_files_windows"]:
     fail("afyx-graph launcher files must match the metadata CLI name")
+
+# ACE is first-party and explicitly selectable, but remains absent from every
+# implicit preset and default-OFF for Graph consumers.
+context = by_id["afyx-context"]
+context_metadata = json.loads((ROOT / "afyx-context" / "afyx-context.json").read_text(encoding="utf-8"))
+if context["ownership_class"] != "AFYX" or context["install_root"] != "afyx_context_root" or context["presets"]:
+    fail("afyx-context must be an AFYX-owned explicit-only runtime")
+if context_metadata["kit_management"]["lifecycle_integration"] != "managed-optional":
+    fail("afyx-context lifecycle metadata must declare managed-optional")
+if context_metadata["kit_management"]["default_presets"] or context_metadata["optional_consumers"]["graph"]["default_enabled"]:
+    fail("afyx-context must remain absent from defaults and Graph integration must remain OFF")
+if context["marker_value"] != context_metadata["product_name"] or context["marker_field"] not in context_metadata:
+    fail("afyx-context component metadata does not match its product identity")
 
 # The usage tracker contract must list files the kit actually ships.
 usage = by_id["codex-usage-tracking"]
