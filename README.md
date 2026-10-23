@@ -13,10 +13,16 @@ Paket ini memasang `efficient-coding` dan `odoo-engineering`; preset Recommended
 | Afyx Engineering Expert | Original Afyx instruction-only skill di `skills/afyx-engineering-expert/` | Skill opsional adaptif: satu orchestrator, 13 reference, enam workflow, dan result template |
 | Prompt Master | [nidhinjs/prompt-master](https://github.com/nidhinjs/prompt-master) | EXTERNAL; tidak dipasang/update/diverifikasi secara mandatory oleh workflow default; pilihan Custom eksplisit tetap memakai staging, validasi, backup, dan swap aman |
 | Afyx Graph | Komponen Afyx, dibundel di `afyx-graph/` | Komponen opsional untuk structural intelligence lokal; memerlukan Node.js eksternal 22.5.0 atau lebih baru |
+| Afyx Context Engine | Komponen Afyx mandiri di `afyx-context/` | Foundation API/CLI untuk reduksi konteks konservatif dan pemulihan original; belum menjadi preset installer |
 | Headroom | [headroomlabs-ai/headroom](https://github.com/headroomlabs-ai/headroom) | Enhancement eksternal opsional; hanya dideteksi |
 | Usage Tracking | Dibundel di `tools/codex-usage/` | Opsional, Windows; ringkasan token/cost otomatis melalui global Stop hook |
 
 **Core:** Efficient Coding dan Odoo Engineering. **Komponen opsional Afyx:** Afyx Engineering Expert, Afyx Graph, dan Usage Tracking. **Komponen eksternal:** Prompt Master dan Headroom. Core skill tetap berfungsi tanpa komponen opsional atau eksternal. Distribusi saat ini adalah **Technical Alpha prerelease**, bukan Stable v1 atau public release yang sudah dijamin tersedia.
+
+Afyx Context Engine (ACE) foundation juga tersedia sebagai paket mandiri dan
+belum menjadi komponen preset Kit. ACE tidak diperlukan oleh core, Graph,
+Engineering Expert, Forge, atau Headroom. Kontrak integrasi opsionalnya gagal
+aman ke konten original; lihat [dokumen foundation ACE](docs/AFYX_CONTEXT_ENGINE_FOUNDATION.md).
 
 ## Pilih installer sesuai sistem operasi
 
@@ -142,6 +148,7 @@ Diagnostik, kontrak komponen, dan deteksi project dijelaskan di [docs/DIAGNOSTIC
 Metodologi dan hasil campaign benchmark tersedia di [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
 Tracker penggunaan token Codex dan integrasi VS Code dijelaskan di [docs/CODEX_USAGE_TRACKER.md](docs/CODEX_USAGE_TRACKER.md).
 Kontrak arsitektur UI opsional Afyx Graph dijelaskan di [docs/AFYX_GRAPH_UI_ARCHITECTURE.md](docs/AFYX_GRAPH_UI_ARCHITECTURE.md).
+Kontrak dan bukti foundation Afyx Context Engine dijelaskan di [docs/AFYX_CONTEXT_ENGINE_FOUNDATION.md](docs/AFYX_CONTEXT_ENGINE_FOUNDATION.md).
 Evidence historis technical independence Afyx Graph tersedia di [docs/AFYX_INDEPENDENCE_PLAN.md](docs/AFYX_INDEPENDENCE_PLAN.md).
 
 ## Lisensi dan atribusi
