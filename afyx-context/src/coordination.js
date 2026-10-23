@@ -312,7 +312,18 @@ export class StateCoordinator {
           throw error;
         }
       }
+      let recoveryError;
+      try {
+        if (this.#recoverAbandonedLock()) {
+          recovered = true;
+          continue;
+        }
+      } catch (error) {
+        if (!(error instanceof AceError) || error.code !== 'LOCK_RECOVERY_UNSAFE') throw error;
+        recoveryError = error;
+      }
       if (Date.now() - started >= this.timeoutMs) {
+        if (recoveryError) throw recoveryError;
         const metadata = this.#readDirectory(this.lockPath, { allowMissing: true });
         const detail = metadata
           ? `host ${metadata.owner.host}, pid ${metadata.owner.pid}`
@@ -321,17 +332,6 @@ export class StateCoordinator {
           'LOCK_TIMEOUT',
           `ACE state lock timed out after ${this.timeoutMs} ms (${detail})`,
         );
-      }
-      try {
-        if (this.#recoverAbandonedLock()) {
-          recovered = true;
-          continue;
-        }
-      } catch (error) {
-        if (!(error instanceof AceError) || error.code !== 'LOCK_RECOVERY_UNSAFE') throw error;
-        if (Date.now() - started >= this.timeoutMs) throw error;
-        sleep(Math.min(this.retryMs, Math.max(1, this.timeoutMs - (Date.now() - started))));
-        continue;
       }
       sleep(Math.min(this.retryMs, Math.max(1, this.timeoutMs - (Date.now() - started))));
     }

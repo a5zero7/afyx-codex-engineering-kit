@@ -192,7 +192,7 @@ for (const [name, expectedCode, metadataFor] of [
     pid: process.pid,
     createdAt: new Date().toISOString(),
   })],
-  ['cross-host owner with inconclusive liveness', 'LOCK_TIMEOUT', (stateDir) => ({
+  ['cross-host owner with inconclusive liveness', 'LOCK_RECOVERY_UNSAFE', (stateDir) => ({
     format: 'ace.lock/v1',
     token: crypto.randomUUID(),
     stateRootHash: crypto.createHash('sha256').update(stateDir).digest('hex'),

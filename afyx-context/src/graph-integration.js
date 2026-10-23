@@ -105,43 +105,63 @@ function publicAceResult(result) {
   };
 }
 
-export function nativeAceRunner(message, { signal } = {}) {
+export function nativeAceRunner(message, { signal, spawnChild = spawn } = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [fileURLToPath(new URL('./graph-integration-worker.js', import.meta.url))], {
+    const child = spawnChild(process.execPath, [fileURLToPath(new URL('./graph-integration-worker.js', import.meta.url))], {
       shell: false,
       windowsHide: true,
       stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
     });
     let settled = false;
-    let aborting = false;
     let response;
+    let terminalError;
+    let terminationTimer;
     const finish = (action, value) => {
       if (settled) return;
       settled = true;
       signal?.removeEventListener('abort', abort);
+      clearTimeout(terminationTimer);
       action(value);
     };
-    const abort = () => {
-      if (aborting || settled) return;
-      aborting = true;
-      child.kill('SIGKILL');
+    const terminate = (error) => {
+      if (settled) return;
+      terminalError ??= error;
+      if (terminationTimer === undefined) {
+        terminationTimer = setTimeout(() => {
+          finish(reject, new AceError(
+            'ACE_TERMINATION_UNCONFIRMED',
+            'optional ACE child did not confirm termination within the bounded grace period',
+          ));
+        }, TERMINATION_GRACE_MS);
+      }
+      if (child.pid !== undefined && child.exitCode === null && child.signalCode === null) {
+        try { child.kill('SIGKILL'); } catch { /* bounded timer remains authoritative */ }
+      }
     };
+    const abort = () => terminate(new AceError('ACE_TIMEOUT', 'optional ACE operation timed out'));
     signal?.addEventListener('abort', abort, { once: true });
     child.once('message', (value) => { response = value; });
-    child.once('error', (error) => finish(reject, error));
-    child.once('exit', (code, exitSignal) => {
-      if (aborting) {
-        finish(reject, new AceError('ACE_TIMEOUT', 'optional ACE operation timed out'));
+    child.once('error', terminate);
+    child.once('close', (code, exitSignal) => {
+      if (terminalError) {
+        finish(reject, terminalError);
       } else if (code === 0 && response !== undefined) {
         finish(resolve, response);
       } else {
         finish(reject, new Error(`ACE worker exited with code ${code ?? 'null'} (${exitSignal ?? 'no signal'})`));
       }
     });
-    child.send(message, (error) => {
-      if (error) finish(reject, error);
-    });
-    if (signal?.aborted) abort();
+    if (signal?.aborted) {
+      abort();
+      return;
+    }
+    try {
+      child.send(message, (error) => {
+        if (error) terminate(error);
+      });
+    } catch (error) {
+      terminate(error);
+    }
   });
 }
 
@@ -162,7 +182,6 @@ async function invokeBounded(runner, message, timeoutMs) {
   timer = setTimeout(() => {
     controller.abort();
   }, timeoutMs);
-  timer.unref?.();
   try {
     return await Promise.race([
       Promise.resolve().then(() => runner(message, { signal: controller.signal })),
