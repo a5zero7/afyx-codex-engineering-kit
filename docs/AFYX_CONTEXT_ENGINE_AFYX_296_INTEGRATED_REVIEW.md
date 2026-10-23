@@ -73,10 +73,18 @@ unique facts, an XML view, and CSV access data. Its identity is
 The harness creates four separate roots: fixture source copy, external Graph
 state, ACE states, and evidence. It executes the real built Graph `ToolHandler`,
 not a mocked query, and verifies source fingerprints before and after. The
-preserved final evidence is generated under
-`.afyx-report-staging/afyx-296-integrated-<candidate>-20261023-r2/evidence/integrated-dogfood.json`;
-this task-owned local evidence is intentionally not part of the public source
-diff.
+preserved final evidence is generated under a task-owned local staging path
+that is intentionally not part of the public source diff.
+
+The authoritative run is `r3`, bound to implementation commit
+`c3bcc92a7021e492705759a2d109b7c7a584080b`, at
+`.afyx-report-staging/afyx-296-integrated-c3bcc92-20261023-r3/evidence/integrated-dogfood.json`
+with SHA-256
+`1f6757cb9e092dc66bf030fe79962e93f36c531845500ebc351ec7dae8cdcf43`.
+The earlier `r1` stopped before producing a report. The completed `r2` is
+rejected for identity evidence because its operator-supplied candidate SHA had
+an incorrect suffix; both directories remain preserved and neither was
+overwritten.
 
 Observed local outcomes:
 
@@ -97,10 +105,11 @@ Observed local outcomes:
 ## Cost and latency observation
 
 Using pinned `js-tiktoken` `1.0.21`, encoding `o200k_base`, the representative
-repeated query measured 34 raw tokens, 68 gross ACE consumer tokens, 73
+repeated query measured 34 raw tokens, 67 gross ACE consumer tokens, 72
 reference-request tokens, and 34 recovered-original tokens. Net recovery cost
-was 175 tokens: a regression of 141 tokens versus raw. One local observation
-measured 0.832 ms OFF, 125.975 ms first ON, 112.467 ms repeated ON, and 108.929
+was 173 tokens: a regression of 139 tokens versus raw. The authoritative local
+observation measured 0.817 ms OFF, 115.142 ms first ON, 108.641 ms repeated ON,
+and 107.495
 ms recovery. These values are tokenizer context accounting and local wall-clock
 observations, not provider billing or a generalized performance claim.
 
