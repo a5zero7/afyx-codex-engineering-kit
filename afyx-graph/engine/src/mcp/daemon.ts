@@ -410,7 +410,10 @@ export class Daemon {
     });
   }
 
-  /** Accept shutdown only for the exact PID/start identity in our live lock. */
+  /**
+   * Accept shutdown only for the exact PID/start identity in our live lock.
+   * Host IPC permissions remain the caller-authorization boundary.
+   */
   private handleControlRequest(socket: net.Socket, request: DaemonControlRequest): void {
     const matches = request.pid === process.pid && request.startedAt === this.startedAt;
     const reply = {

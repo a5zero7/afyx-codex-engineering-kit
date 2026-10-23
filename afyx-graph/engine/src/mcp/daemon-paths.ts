@@ -125,7 +125,11 @@ export interface DaemonLockInfo {
   startedAt: number;
 }
 
-/** Authenticated management request sent only after the daemon hello matches the lockfile. */
+/**
+ * Identity-bound management request sent only after the daemon hello matches
+ * the lockfile. This is not cryptographic authentication or OS-level caller
+ * authorization; local IPC access remains governed by the host and pipe ACLs.
+ */
 export interface DaemonControlRequest {
   afyx_graph_control: 1;
   action: 'shutdown';
@@ -187,10 +191,12 @@ export function parseDaemonControlRequestLine(line: string): DaemonControlReques
 }
 
 /**
- * Confirm that the process a lockfile names is actually the Afyx Graph
- * daemon serving the socket it claims to. A bare pid-liveness check can't
- * establish this on its own — the OS can and does reuse pids after an
- * OOM-kill or SIGKILL (#1553), so only a real socket hello proves identity.
+ * Corroborate that the endpoint named by a lockfile reports the expected Afyx
+ * Graph PID/version. This does not authenticate the caller or cryptographically
+ * prove process identity. A bare pid-liveness check can't establish even this
+ * bounded identity match on its own — the OS can and does reuse pids after an
+ * OOM-kill or SIGKILL (#1553), so the bounded match also requires a live
+ * socket hello.
  */
 export function probeDaemonIdentity(info: DaemonLockInfo, timeoutMs = IDENTITY_PROBE_TIMEOUT_MS): Promise<boolean> {
   if (!canProbeDaemonIdentity(info)) return Promise.resolve(false);

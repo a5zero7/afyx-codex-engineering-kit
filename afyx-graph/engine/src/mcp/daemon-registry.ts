@@ -151,10 +151,11 @@ export function listDaemonCandidates(opts: { prune?: boolean; roots?: string[] }
 }
 
 /**
- * Registered daemons narrowed to the ones whose socket hello actually proves
- * the recorded process is a real daemon, not just a pid that happens to be
- * alive. Every user-facing list/stop-all path goes through this, so a reused
- * pid can never masquerade as a phantom running daemon (#1553).
+ * Registered daemons narrowed to endpoints whose socket hello corroborates
+ * the recorded PID/version, rather than trusting a live PID alone. This is an
+ * identity-consistency check, not cryptographic or OS caller authentication.
+ * Every user-facing list/stop-all path goes through this, so a reused PID is
+ * not sufficient to masquerade as a running daemon (#1553).
  */
 export async function listVerifiedDaemons(opts: { prune?: boolean; roots?: string[] } = {}): Promise<DaemonRecord[]> {
   const prune = opts.prune ?? true;
@@ -320,8 +321,8 @@ export async function stopDaemonAt(root: string): Promise<StopResult> {
     return { root, pid, outcome: removed ? 'not-running' : 'unverified' };
   }
   // A live pid alone is never enough to justify signaling it — it could be an
-  // unrelated process that inherited a reused pid. The socket hello is what
-  // actually proves this pid is our daemon (#1553).
+  // unrelated process that inherited a reused pid. A matching socket hello
+  // corroborates the lock identity without authenticating the caller (#1553).
   if (!identity || !canProbeDaemonIdentity(identity)) {
     return { root, pid, outcome: 'unverified', detail: 'live PID has no probeable daemon identity; ownership artifacts were preserved' };
   }
