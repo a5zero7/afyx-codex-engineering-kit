@@ -82,6 +82,42 @@ catches an unavailable/failed ACE and returns original content, so the consumer
 remains independently functional. The foundation does not install adapters into
 those products or add ACE to a Kit preset.
 
+AFYX-293 adds the first real consumer as a separate, default-OFF bridge. It does
+not alter Graph's CLI, API, MCP tools, or default responses:
+
+```js
+import { createGraphAceConsumer, deriveGraphAceIdentity } from '@a5zero7/afyx-context';
+
+const sourceIdentity = 'git:reviewed-source-sha';
+const identity = deriveGraphAceIdentity({
+  projectRoot,
+  sourceIdentity,
+  consumerId: 'local-codex-session',
+});
+const consumer = createGraphAceConsumer({
+  enabled: true,
+  stateDir: absoluteOwnedAceState,
+  ...identity,
+  timeoutMs: 5_000,
+});
+const output = await consumer.execute({
+  executeGraph: (toolName, args) => graphToolHandler.execute(toolName, args),
+  toolName: 'afyx_graph_search',
+  args: { query: 'target symbol' },
+  projectRoot,
+  sourceIdentity,
+});
+```
+
+The bridge runs Graph first and retains its validated result as the authoritative
+fallback. ACE runs in a terminable local worker only after explicit enablement.
+Disabled, unavailable, malformed, corrupt, or timed-out ACE returns the exact
+Graph result. `explore`, `files`, and `node` output is classified as protected
+source evidence and remains inline. References are recoverable only through the
+same owner/session; invalid or corrupt recovery fails closed. Callers should use
+`deriveGraphAceIdentity` to bind an owner to the canonical project/consumer and a
+session to the exact source identity.
+
 Malformed or unavailable optional integration requests return a bounded
 fallback. `originalInput` retains the supplied input, and `originalComplete`
 states whether `renderedContext` contains its complete render.
