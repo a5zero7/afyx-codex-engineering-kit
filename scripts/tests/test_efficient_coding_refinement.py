@@ -48,7 +48,7 @@ class EfficientCodingRefinementTests(unittest.TestCase):
         text = corpus(CANDIDATE)
         for anchor in ("n+1", "memory", "i/o", "concurrency", "never invoke the deprecated external graph dependency"):
             self.assertIn(anchor, text)
-        self.assertRegex((CANDIDATE / "SKILL.md").read_text(encoding="utf-8"), r'(?m)^\s+version: "1\.2\.0"$')
+        self.assertRegex((CANDIDATE / "SKILL.md").read_text(encoding="utf-8"), r'(?m)^\s+version: "1\.2\.1"$')
 
     def test_rejected_rigid_suggestions_are_absent(self) -> None:
         text = corpus(CANDIDATE)

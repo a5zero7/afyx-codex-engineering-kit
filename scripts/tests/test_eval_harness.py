@@ -730,7 +730,7 @@ print(answer)
                 environment["skills"][name]["content_sha256"],
                 freeze.directory_content_sha256(ROOT / "skills" / name),
             )
-            if name != "afyx-engineering-expert":
+            if name not in {"afyx-engineering-expert", "efficient-coding"}:
                 self.assertEqual(
                     environment["skills"][name]["content_sha256"],
                     historical["skills"][name]["content_sha256"],
@@ -745,7 +745,11 @@ print(answer)
             environment["skills"]["afyx-engineering-expert"]["content_sha256"],
             historical["skills"]["afyx-engineering-expert"]["content_sha256"],
         )
-        self.assertEqual(environment["skills"]["efficient-coding"]["version"], "1.2.0")
+        self.assertEqual(environment["skills"]["efficient-coding"]["version"], "1.2.1")
+        self.assertNotEqual(
+            environment["skills"]["efficient-coding"]["content_sha256"],
+            historical["skills"]["efficient-coding"]["content_sha256"],
+        )
         self.assertEqual(environment["runtime"]["codex_cli"], "0.162.1")
         self.assertEqual(historical["runtime"]["codex_cli"], "0.156.1")
 
