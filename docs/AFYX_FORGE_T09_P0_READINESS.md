@@ -1,5 +1,20 @@
 # Afyx Forge T09.P0 Benchmark Readiness
 
+## Current A4-A8 closure checkpoint — 2026-10-19
+
+The Route B candidate matrix, public controller, and public evidence-retention
+contract are complete for independent integration. E4-E8 and P5 remain bounded
+public/synthetic evidence; they do not establish an independently controlled
+evaluator or authorize installation or formal execution. No further public code
+phase is justified unless integration exposes a reproducible contract defect.
+
+The actionable seven-gate matrix and stop conditions are maintained in
+[AFYX_FORGE_T09_A4_A8_OWNER_HANDOFF.md](AFYX_FORGE_T09_A4_A8_OWNER_HANDOFF.md).
+The minimum viable next boundary is owner/evaluator-controlled native Windows E1.
+The formal campaign remains **BLOCKED — 0/36**, and A8 remains **NO GO DECISION**.
+
+Historical P0-P2A evidence follows unchanged.
+
 Status: **T09.P0 PREPARATION COMPLETE / BENCHMARK EXECUTION BLOCKED**
 T09.P1 checkpoint: **PREPARATION COMPLETE / EXTERNAL GATES BLOCKED**
 T09.P2A checkpoint: **CANDIDATE MATRIX COMPLETE / CAMPAIGN AUTHORIZATION BLOCKED**
