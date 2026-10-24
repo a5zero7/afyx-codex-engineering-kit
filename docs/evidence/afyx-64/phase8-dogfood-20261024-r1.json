@@ -34,7 +34,7 @@
   ],
   "measurementBoundaries": {
     "providerBillingTokens": "NOT_AVAILABLE",
-    "legacyCodeGraphComparison": "NOT_RUN",
+    "externalHistoricalGraphComparison": "NOT_RUN",
     "humanIntervention": 0,
     "modelRunEquivalence": "NOT_CLAIMED",
     "physicalMac": "NOT_RUN",
