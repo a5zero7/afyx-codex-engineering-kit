@@ -78,7 +78,7 @@ import {
 import { BROWSER_ENV, DEFAULT_UI_PORT } from '../ui-server/constants';
 import type { UiServerHandle } from '../ui-server';
 import { lookupSymbolNodes, describeSymbolNode, groupDefinitions } from '../graph/symbol-lookup';
-import { mergeSymbolImpact, computeAffectedTests } from '../impact';
+import { analyzeAffectedTests, mergeSymbolImpact, computeAffectedTests } from '../impact';
 import type { Node, Edge } from '../types';
 import { buildIndexHealth } from '../index-health';
 
@@ -2332,8 +2332,9 @@ program
    .flag('-d, --depth <number>', 'Max dependency traversal depth', '5')
    .flag('-f, --filter <glob>', 'Custom glob filter for test files (e.g. "e2e/*.spec.ts")')
    .flag('-j, --json', 'Output as JSON')
+    .flag('--explain', 'Explain an empty result using index coverage and freshness evidence')
    .flag('-q, --quiet', 'Only output file paths, no decoration')
-   .handle(async (fileArgs: string[], options: { path?: string; stdin?: boolean; depth?: string; filter?: string; json?: boolean; quiet?: boolean }) => {
+    .handle(async (fileArgs: string[], options: { path?: string; stdin?: boolean; depth?: string; filter?: string; json?: boolean; explain?: boolean; quiet?: boolean }) => {
     const projectPath = resolveProjectPath(options.path);
 
     try {
@@ -2386,10 +2387,28 @@ program
       // `affected` reported "no tests" for whole ecosystems while `search` and
       // the MCP tools counted those very files as tests. Shared with `search`/MCP via
       // `isTestPath`, unless `--filter` replaces it entirely.
-      const { affectedTests: sortedTests, totalDependentsTraversed } = computeAffectedTests(cg, changedFiles, {
+      const affectedResult = computeAffectedTests(cg, changedFiles, {
         maxDepth,
         customFilter,
       });
+      const { affectedTests: sortedTests, totalDependentsTraversed } = affectedResult;
+      let affectedTestsAnalysis: ReturnType<typeof analyzeAffectedTests> | undefined;
+      if (options.explain) {
+        const diskChanges = cg.getChangedFiles();
+        const diskChangeCounts = {
+          added: diskChanges.added.length,
+          modified: diskChanges.modified.length,
+          removed: diskChanges.removed.length,
+        };
+        const { getFreshness } = await import('../freshness');
+        affectedTestsAnalysis = analyzeAffectedTests(
+          affectedResult,
+          changedFiles,
+          cg.getFiles(),
+          buildIndexHealth(cg, projectPath, { diskChanges: diskChangeCounts, freshness: getFreshness(projectPath) }),
+          customFilter,
+        );
+      }
 
       // Output
       if (options.json) {
@@ -2397,12 +2416,21 @@ program
           changedFiles,
           affectedTests: sortedTests,
           totalDependentsTraversed,
+          ...(affectedTestsAnalysis ? { affectedTestsAnalysis } : {}),
         }, null, 2));
       } else if (options.quiet) {
         for (const t of sortedTests) console.log(t);
       } else {
         if (sortedTests.length === 0) {
-          info('No test files affected by the changed files.');
+          if (!affectedTestsAnalysis) {
+            info('No test files affected by the changed files.');
+          } else if (affectedTestsAnalysis.emptyReason === 'NO_INDEXED_TESTS') {
+            info('No test files are indexed; affected tests cannot be identified until tests are indexed.');
+          } else if (affectedTestsAnalysis.emptyReason === 'NO_REACHABLE_INDEXED_TESTS') {
+            info('Indexed tests exist, but none are reachable from the changed files in the current graph. This is not proof that no tests are affected.');
+          } else {
+            info(`Affected tests are indeterminate because graph evidence is insufficient (${affectedTestsAnalysis.limitations.join(', ')}).`);
+          }
         } else {
           console.log(chalk.bold(`\nAffected test files (${sortedTests.length}):\n`));
           for (const t of sortedTests) {
