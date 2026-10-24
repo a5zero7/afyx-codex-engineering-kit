@@ -8,9 +8,9 @@
   },
   "skills": {
     "efficient-coding": {
-      "version": "1.2.1",
+      "version": "1.2.0",
       "source": "repository",
-      "content_sha256": "24cae4b417db527720afa7637b60aff23eea006771786652f06bc3215329e3b8"
+      "content_sha256": "deab6d987eb8af8ad2ab312f7ed9facb3be1cbda20622eeeaedc80a1db0829a4"
     },
     "odoo-engineering": {
       "version": "1.2.0",
