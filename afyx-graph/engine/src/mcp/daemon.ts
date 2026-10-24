@@ -45,6 +45,7 @@ import {
   decodeLockInfo,
   encodeLockInfo,
   getDaemonPidPath,
+  getDaemonControlSocketPath,
   getDaemonSocketCandidates,
   getDaemonSocketPath,
   parseDaemonControlRequestLine,
@@ -162,6 +163,7 @@ export interface DaemonStartResult {
  */
 export class Daemon {
   private server: net.Server | null = null;
+  private controlServer: net.Server | null = null;
   private clients = new Set<MCPSession>();
   /** Per-client peer pids from that connection's optional client-hello, for the liveness sweep. */
   private clientPeers = new Map<MCPSession, ClientPeerInfo>();
@@ -172,6 +174,7 @@ export class Daemon {
   private engine: MCPEngine;
   private stopping = false;
   private socketPath: string;
+  private controlSocketPath: string | null = null;
   private pidPath: string;
   private startedAt = 0;
 
@@ -211,6 +214,20 @@ export class Daemon {
     // cleanup and status all key off this real path from here on, never the
     // original preferred guess.
     this.socketPath = bound.socketPath;
+
+    // Native Windows keeps lifecycle traffic off the long-lived MCP data
+    // pipe. This avoids a busy data-pipe instance making a healthy daemon
+    // unmanageable while preserving the original endpoint on POSIX.
+    this.controlSocketPath = getDaemonControlSocketPath(this.projectRoot);
+    if (this.controlSocketPath) {
+      try {
+        this.controlServer = await this.listenOnControl(this.controlSocketPath);
+      } catch (err) {
+        await new Promise<void>((resolve) => bound.server.close(() => resolve()));
+        this.cleanupLockfile();
+        throw err;
+      }
+    }
 
     const lock = this.refreshLockfileAfterBind(bound.server, initialLockContents);
     this.startedAt = lock.startedAt;
@@ -321,6 +338,15 @@ export class Daemon {
     });
   }
 
+  /** Bind the Windows-only lifecycle endpoint; it never accepts MCP traffic. */
+  private listenOnControl(socketPath: string): Promise<net.Server> {
+    return new Promise<net.Server>((resolve, reject) => {
+      const server = net.createServer((socket) => this.handleControlConnection(socket));
+      server.once('error', reject);
+      server.listen(socketPath, () => resolve(server));
+    });
+  }
+
   /**
    * Rewrite the lockfile with the socket path actually bound (which may be a
    * relocated fallback). Refreshed on every successful bind, not only a
@@ -334,6 +360,7 @@ export class Daemon {
       pid: process.pid,
       version: AfyxGraphPackageVersion,
       socketPath: this.socketPath,
+      ...(this.controlSocketPath ? { controlSocketPath: this.controlSocketPath } : {}),
       startedAt: Date.now(),
     };
     try {
@@ -346,6 +373,8 @@ export class Daemon {
       return lock;
     } catch (err) {
       try { server.close(); } catch { /* best-effort */ }
+      try { this.controlServer?.close(); } catch { /* best-effort */ }
+      this.controlServer = null;
       this.cleanupLockfile();
       throw err;
     }
@@ -380,6 +409,11 @@ export class Daemon {
       this.server = null;
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
+    if (this.controlServer) {
+      const server = this.controlServer;
+      this.controlServer = null;
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
 
     this.engine.stop();
     this.cleanupLockfile();
@@ -407,6 +441,25 @@ export class Daemon {
     void readConnectionPreface(socket).then((preface) => {
       if (preface.control) this.handleControlRequest(socket, preface.control);
       else this.acceptSession(socket, preface.peers);
+    });
+  }
+
+  /**
+   * Management-only connection handler for the dedicated Windows pipe.
+   * Identity probes read the hello and disconnect; shutdown callers then send
+   * exactly one validated control request. Other traffic is rejected.
+   */
+  private handleControlConnection(socket: net.Socket): void {
+    const hello: DaemonHello = {
+      afyxGraph: AfyxGraphPackageVersion,
+      pid: process.pid,
+      socketPath: this.controlSocketPath ?? this.socketPath,
+      protocol: 1,
+    };
+    socket.write(JSON.stringify(hello) + '\n');
+    void readConnectionPreface(socket).then((preface) => {
+      if (preface.control) this.handleControlRequest(socket, preface.control);
+      else if (!socket.destroyed) socket.end();
     });
   }
 
