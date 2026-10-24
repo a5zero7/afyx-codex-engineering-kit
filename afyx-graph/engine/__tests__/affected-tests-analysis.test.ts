@@ -53,7 +53,40 @@ describe('affected-test empty-result analysis', () => {
     expect(analyzeAffectedTests(empty, ['src/service.ts'], [file('src/service.ts')], healthy())).toMatchObject({
       emptyReason: 'NO_INDEXED_TESTS',
       evidenceSufficient: true,
+      provesNoTestsAffected: false,
       indexedTestFiles: 0,
+    });
+  });
+
+  it('refuses a complete-reachability conclusion when maxDepth truncated the traversal', () => {
+    const result = analyzeAffectedTests(
+      { affectedTests: [], totalDependentsTraversed: 1, traversalTruncated: true },
+      ['src/service.ts'],
+      [file('src/service.ts'), file('src/helper.ts'), file('test/service.test.ts')],
+      healthy(),
+    );
+
+    expect(result.emptyReason).toBe('INSUFFICIENT_GRAPH_EVIDENCE');
+    expect(result.evidenceSufficient).toBe(false);
+    expect(result.provesNoTestsAffected).toBe(false);
+    expect(result.limitations).toContain('TRAVERSAL_DEPTH_LIMITED');
+  });
+
+  it('keeps recognized-test accounting independent from a custom filter', () => {
+    const result = analyzeAffectedTests(
+      empty,
+      ['src/service.ts'],
+      [file('src/service.ts'), file('test/service.test.ts')],
+      healthy(),
+      /\.spec\.ts$/,
+    );
+
+    expect(result).toMatchObject({
+      emptyReason: 'NO_REACHABLE_INDEXED_TESTS',
+      indexedTestFiles: 1,
+      candidateTestFiles: 0,
+      customFilterApplied: true,
+      provesNoTestsAffected: false,
     });
   });
 

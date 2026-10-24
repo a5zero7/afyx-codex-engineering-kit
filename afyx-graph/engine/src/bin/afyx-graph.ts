@@ -2387,10 +2387,11 @@ program
       // `affected` reported "no tests" for whole ecosystems while `search` and
       // the MCP tools counted those very files as tests. Shared with `search`/MCP via
       // `isTestPath`, unless `--filter` replaces it entirely.
-      const { affectedTests: sortedTests, totalDependentsTraversed } = computeAffectedTests(cg, changedFiles, {
+      const affectedResult = computeAffectedTests(cg, changedFiles, {
         maxDepth,
         customFilter,
       });
+      const { affectedTests: sortedTests, totalDependentsTraversed } = affectedResult;
       let affectedTestsAnalysis: ReturnType<typeof analyzeAffectedTests> | undefined;
       if (options.explain) {
         const diskChanges = cg.getChangedFiles();
@@ -2401,7 +2402,7 @@ program
         };
         const { getFreshness } = await import('../freshness');
         affectedTestsAnalysis = analyzeAffectedTests(
-          { affectedTests: sortedTests, totalDependentsTraversed },
+          affectedResult,
           changedFiles,
           cg.getFiles(),
           buildIndexHealth(cg, projectPath, { diskChanges: diskChangeCounts, freshness: getFreshness(projectPath) }),

@@ -23,6 +23,8 @@ export interface AffectedTestsResult {
   affectedTests: string[];
   /** Distinct non-root files visited while searching, test or not — a traversal-size stat. */
   totalDependentsTraversed: number;
+  /** Present only when maxDepth prevented inspection of at least one dependent. */
+  traversalTruncated?: true;
 }
 
 export type EmptyAffectedTestsReason =
@@ -35,8 +37,12 @@ export interface AffectedTestsAnalysis {
   emptyReason: EmptyAffectedTestsReason | null;
   /** Whether the empty reason is supported by a complete, current structural index. */
   evidenceSufficient: boolean;
+  /** Empty graph output never proves that behavioral testing is unnecessary. */
+  provesNoTestsAffected: false;
   indexedTestFiles: number;
+  candidateTestFiles: number;
   structurallyIndexedTestFiles: number;
+  customFilterApplied: boolean;
   /** Stable machine-readable limitations; empty when evidence is sufficient. */
   limitations: string[];
 }
@@ -58,10 +64,11 @@ export function analyzeAffectedTests(
     customFilter.lastIndex = 0;
     return customFilter.test(filePath);
   };
-  const indexedTests = files.filter((file) => classify(file.path));
-  const structuralTests = indexedTests.filter((file) => (file.indexingLevel ?? 'structural') === 'structural');
+  const indexedTests = files.filter((file) => isTestPath(file.path));
+  const candidateTests = customFilter ? files.filter((file) => classify(file.path)) : indexedTests;
+  const structuralTests = candidateTests.filter((file) => (file.indexingLevel ?? 'structural') === 'structural');
   const fileByPath = new Map(files.map((file) => [file.path, file]));
-  const relevantFiles = [...changedFiles.map((file) => fileByPath.get(file)), ...indexedTests]
+  const relevantFiles = [...changedFiles.map((file) => fileByPath.get(file)), ...candidateTests]
     .filter((file): file is FileRecord => file !== undefined);
   const limitations = new Set<string>();
 
@@ -69,6 +76,7 @@ export function analyzeAffectedTests(
   if (!health.extraction.accounting) limitations.add('INDEX_ACCOUNTING_UNAVAILABLE');
   if ((health.extraction.accounting?.failed ?? 0) > 0) limitations.add('EXTRACTION_FAILURES_PRESENT');
   if (health.compatibility.reindexRecommended) limitations.add('EXTRACTION_VERSION_STALE');
+  if (result.traversalTruncated) limitations.add('TRAVERSAL_DEPTH_LIMITED');
   if (health.pendingChanges.state !== 'CURRENT') limitations.add('INDEX_FRESHNESS_UNPROVEN');
   if (health.gitFreshness.state === 'MISSING' || health.gitFreshness.state === 'INVALID' || health.gitFreshness.state === 'STALE') {
     limitations.add('INDEX_FRESHNESS_UNPROVEN');
@@ -77,7 +85,7 @@ export function analyzeAffectedTests(
     const record = fileByPath.get(file);
     return !record || (record.indexingLevel ?? 'structural') !== 'structural';
   })) limitations.add('CHANGED_FILE_NOT_STRUCTURALLY_INDEXED');
-  if (indexedTests.some((file) => (file.indexingLevel ?? 'structural') !== 'structural')) {
+  if (candidateTests.some((file) => (file.indexingLevel ?? 'structural') !== 'structural')) {
     limitations.add('TEST_COVERAGE_NOT_STRUCTURAL');
   }
   if (relevantFiles.some((file) => file.errors?.some((entry) => entry.severity === 'error'))) {
@@ -90,7 +98,7 @@ export function analyzeAffectedTests(
   if (result.affectedTests.length === 0) {
     emptyReason = !evidenceSufficient
       ? 'INSUFFICIENT_GRAPH_EVIDENCE'
-      : indexedTests.length === 0
+      : indexedTests.length === 0 && candidateTests.length === 0
         ? 'NO_INDEXED_TESTS'
         : 'NO_REACHABLE_INDEXED_TESTS';
   }
@@ -98,8 +106,11 @@ export function analyzeAffectedTests(
   return {
     emptyReason,
     evidenceSufficient,
+    provesNoTestsAffected: false,
     indexedTestFiles: indexedTests.length,
+    candidateTestFiles: candidateTests.length,
     structurallyIndexedTestFiles: structuralTests.length,
+    customFilterApplied: customFilter !== undefined,
     limitations: stableLimitations,
   };
 }
@@ -121,8 +132,14 @@ export function computeAffectedTests(
   for (const dependent of allDependents) {
     if (classify(dependent)) affectedTests.add(dependent);
   }
+  const reachedOrChanged = new Set([...changedFiles, ...allDependents]);
+  const traversalTruncated = [...reachedOrChanged].some((filePath) => {
+    if (isTerminal(filePath)) return false;
+    return host.getFileDependents(filePath).some((dependent) => !reachedOrChanged.has(dependent));
+  });
   return {
     affectedTests: [...affectedTests].sort(),
     totalDependentsTraversed: allDependents.size,
+    ...(traversalTruncated ? { traversalTruncated: true as const } : {}),
   };
 }
