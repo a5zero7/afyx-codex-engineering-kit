@@ -6,9 +6,11 @@ from __future__ import annotations
 import copy
 import importlib.util
 import json
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -57,6 +59,38 @@ class ForgeReadinessTests(unittest.TestCase):
 
     def test_all_candidates_materialize_with_exact_identities(self) -> None:
         self.assertEqual(forge.validate_candidate_materialization(self.manifest), [])
+
+    def test_b1_snapshot_is_frozen_independently_of_active_product_source(self) -> None:
+        candidate = self.manifest["candidates"]["B1"]
+        frozen = ROOT / candidate["source"]
+        active = ROOT / "skills" / "efficient-coding"
+
+        self.assertEqual(
+            candidate["source"],
+            "evals/forge/candidates/B1/efficient-coding",
+        )
+        self.assertNotEqual(frozen.resolve(), active.resolve())
+        self.assertEqual(
+            forge.directory_sha256(frozen),
+            candidate["content_identity"],
+        )
+
+        with tempfile.TemporaryDirectory(prefix="afyx-forge-b1-tamper-") as temporary:
+            repository = Path(temporary) / "repository"
+            tampered = repository / candidate["source"]
+            shutil.copytree(frozen, tampered)
+            skill = tampered / "SKILL.md"
+            skill.write_text(
+                skill.read_text(encoding="utf-8") + "\n# tampered\n",
+                encoding="utf-8",
+            )
+            self.assertNotEqual(
+                forge.directory_sha256(tampered),
+                candidate["content_identity"],
+            )
+            with mock.patch.object(forge, "REPO_ROOT", repository):
+                violations = forge.validate_manifest(copy.deepcopy(self.manifest))
+            self.assertIn("candidate B1 content identity mismatch", violations)
 
     def test_campaign_authorization_gate_fails_closed(self) -> None:
         self.assertEqual(

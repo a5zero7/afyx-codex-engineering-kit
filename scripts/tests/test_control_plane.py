@@ -56,7 +56,10 @@ class ControlPlaneContractTests(unittest.TestCase):
         self.backups = self.base / "backups"
         self.fake_bin.mkdir()
         self.codex.mkdir()
-        (self.codex / "config.toml").write_text('[unrelated]\nvalue = "preserve"\n', encoding="utf-8")
+        (self.codex / "config.toml").write_text(
+            '[unrelated]\nvalue = "preserve"\n\n[mcp_servers.headroom]\nurl = "http://127.0.0.1:9999/mcp"\n',
+            encoding="utf-8",
+        )
         self.config_before = (self.codex / "config.toml").read_bytes()
         self.env = os.environ.copy()
         self.env.update(
@@ -123,12 +126,11 @@ class ControlPlaneContractTests(unittest.TestCase):
     def test_registry_presets_and_ownership_boundaries(self) -> None:
         contract = json.loads((ROOT / "scripts/components.json").read_text(encoding="utf-8"))
         self.assertEqual(contract["default_provider"], "codex")
-        self.assertEqual([item["provider"] for item in contract["providers"]], ["codex", "headroom"])
+        self.assertEqual([item["provider"] for item in contract["providers"]], ["codex"])
         self.assertEqual(contract["providers"][0]["configuration_policy"], "merge-afyx-owned-entries-only")
-        self.assertEqual(contract["providers"][1]["configuration_policy"], "observe-only")
         by_id = {item["id"]: item for item in contract["components"]}
-        self.assertEqual(by_id["prompt-master"]["ownership_class"], "EXTERNAL")
-        self.assertEqual(by_id["headroom"]["ownership_class"], "EXTERNAL")
+        self.assertNotIn("prompt-master", by_id)
+        self.assertNotIn("headroom", by_id)
         self.assertEqual(
             {item["id"] for item in contract["components"] if "minimal" in item["presets"].split(";")},
             {"efficient-coding", "odoo-engineering"},
@@ -141,18 +143,18 @@ class ControlPlaneContractTests(unittest.TestCase):
             {item["id"] for item in contract["components"] if "full" in item["presets"].split(";")},
             {"efficient-coding", "odoo-engineering", "afyx-engineering-expert", "afyx-graph", "codex-usage-tracking"},
         )
-        self.assertEqual(by_id["prompt-master"]["tier"], "external")
-        self.assertEqual(by_id["prompt-master"]["presets"], "")
-
-    def test_legacy_verify_keeps_structural_compatibility(self) -> None:
+    def test_legacy_verify_preserves_retired_external_skill(self) -> None:
         shutil.copytree(ROOT / "skills/efficient-coding", self.skills / "efficient-coding")
         shutil.copytree(ROOT / "skills/odoo-engineering", self.skills / "odoo-engineering")
         prompt = self.skills / "prompt-master"
         prompt.mkdir()
         (prompt / "SKILL.md").write_text("---\nname: prompt-master\ndescription: structural fixture\n---\n", encoding="utf-8")
+        before = tree_digest(prompt)
         legacy = self.lifecycle("verify")
         self.assertIn("Efficient Coding", legacy.stdout)
         self.assertIn("Core readiness", legacy.stdout)
+        self.assertNotIn("Prompt Master", legacy.stdout)
+        self.assertEqual(tree_digest(prompt), before)
         self.assertFalse((self.skills / "efficient-coding" / ".afyx-install.json").exists())
 
     def test_minimal_install_verify_is_idempotent_and_preserves_config(self) -> None:
@@ -187,7 +189,7 @@ class ControlPlaneContractTests(unittest.TestCase):
         self.assertIn("does not permit", explicit.stdout + explicit.stderr)
         self.assertEqual(tree_digest(foreign), before)
 
-    def test_recommended_preserves_user_prompt_master_without_fetch(self) -> None:
+    def test_recommended_preserves_retired_external_skill_without_fetch(self) -> None:
         prompt = self.skills / "prompt-master"
         prompt.mkdir(parents=True)
         (prompt / "SKILL.md").write_text(
@@ -196,7 +198,6 @@ class ControlPlaneContractTests(unittest.TestCase):
         prompt_before = tree_digest(prompt)
         git_log = self.base / "git.log"
         self.env["AFYX_TEST_GIT_LOG"] = str(git_log)
-        self.env["AFYX_PROMPT_MASTER_REPOSITORY"] = "https://example.invalid/must-not-fetch.git"
         if WINDOWS:
             (self.fake_bin / "git.cmd").write_text(
                 "@echo %*>>\"%AFYX_TEST_GIT_LOG%\"\r\n"
@@ -225,19 +226,42 @@ class ControlPlaneContractTests(unittest.TestCase):
         self.assertTrue((self.skills / "afyx-engineering-expert").is_dir())
         self.assertEqual((self.codex / "config.toml").read_bytes(), self.config_before)
 
-    def test_custom_prompt_master_selection_remains_explicit_and_offline_fail_closed(self) -> None:
-        if WINDOWS:
-            result = self.lifecycle(
-                "install", "-Preset", "custom", "-CustomComponent", "prompt-master", "-Offline", "-SkipGraphMcp", expected=1
-            )
-        else:
-            result = self.lifecycle(
-                "install", "--preset", "custom", "--custom-component", "prompt-master", "--offline", "--skip-graph-mcp", expected=1
-            )
-        combined = result.stdout + result.stderr
-        self.assertIn("v1|custom|codex|prompt-master", combined)
-        self.assertIn("Offline mode cannot install or update upstream-owned Prompt Master", combined)
-        self.assertFalse((self.skills / "prompt-master").exists())
+    def test_retired_component_requests_fail_without_mutating_external_state(self) -> None:
+        prompt = self.skills / "prompt-master"
+        prompt.mkdir(parents=True)
+        (prompt / "SKILL.md").write_text(
+            "---\nname: prompt-master\ndescription: user-managed copy\n---\nprivate local state\n",
+            encoding="utf-8",
+        )
+        external_before = tree_digest(prompt)
+        config_before = (self.codex / "config.toml").read_bytes()
+
+        for component in ("prompt-master", "headroom"):
+            if WINDOWS:
+                commands = (
+                    ("install", "-Preset", "custom", "-CustomComponent", component, "-SkipGraphMcp"),
+                    ("install", "-ComponentAction", f"{component}=install", "-SkipGraphMcp"),
+                    ("update", "-Preset", "custom", "-CustomComponent", component, "-SkipGraphMcp"),
+                    ("update", "-ComponentAction", f"{component}=update", "-SkipGraphMcp"),
+                    ("verify", "-Preset", "custom", "-CustomComponent", component),
+                    ("uninstall", "-SkillsRoot", str(self.skills), "-Component", component),
+                )
+            else:
+                commands = (
+                    ("install", "--preset", "custom", "--custom-component", component, "--skip-graph-mcp"),
+                    ("install", "--component", f"{component}=install", "--skip-graph-mcp"),
+                    ("update", "--preset", "custom", "--custom-component", component, "--skip-graph-mcp"),
+                    ("update", "--component", f"{component}=update", "--skip-graph-mcp"),
+                    ("verify", "--preset", "custom", "--custom-component", component),
+                    ("uninstall", "--skills-root", str(self.skills), "--component", component),
+                )
+            for command in commands:
+                result = self.lifecycle(*command, expected=(1, 2))
+                combined = result.stdout + result.stderr
+                self.assertIn(f"Component '{component}' is retired from Afyx Kit", combined)
+                self.assertIn("no changes were made", combined)
+                self.assertEqual(tree_digest(prompt), external_before)
+                self.assertEqual((self.codex / "config.toml").read_bytes(), config_before)
 
     @unittest.skipUnless(WINDOWS, "Windows installer destination contract")
     def test_windows_full_forwards_external_graph_root_and_preserves_user_path(self) -> None:

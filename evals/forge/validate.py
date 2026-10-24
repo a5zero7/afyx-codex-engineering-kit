@@ -36,6 +36,12 @@ EXPECTED_COMPARISON_ROLES = {
     "B4": "deduplicated_refined_convergence",
     "B5": "independent_a3_native_behavior_contract",
 }
+EXPECTED_B1_PROVENANCE = {
+    "repository": "a5zero7/afyx-codex-engineering-kit",
+    "commit": "42caee21083c8e08774344dd698adffe1b38790e",
+    "path": "skills/efficient-coding",
+    "version": "1.2.0",
+}
 EXPECTED_ACTIVATION = {
     "B0": "none",
     "B1": "implicit host skill routing; successful SKILL.md read must be observed",
@@ -58,7 +64,7 @@ EXPECTED_MATERIALIZATION = {
     },
     "B1": {
         "kind": "copy_tree",
-        "source": "skills/efficient-coding",
+        "source": "evals/forge/candidates/B1/efficient-coding",
         "destination": ".agents/skills/efficient-coding",
         "identity_root": ".agents/skills/efficient-coding",
     },
@@ -256,6 +262,10 @@ def validate_manifest(manifest: dict) -> list[str]:
         ).hexdigest()
         if b0.get("content_identity") != expected_b0 or b0.get("source") is not None:
             violations.append("B0 empty-directive identity mismatch")
+
+        b1 = candidates["B1"]
+        if b1.get("provenance") != EXPECTED_B1_PROVENANCE:
+            violations.append("B1 frozen snapshot provenance mismatch")
 
         for candidate_id in ("B1", "B2", "B4", "B5"):
             candidate = candidates[candidate_id]

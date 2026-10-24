@@ -39,7 +39,11 @@ if [[ -n "$preset" ]] && ! afyx_preset_valid "$preset"; then printf 'Unknown pre
 if [[ -n "$custom_component_list" && "$preset" != custom ]]; then printf '%s\n' '--custom-component requires --preset custom.' >&2; exit 2; fi
 old_ifs=$IFS; IFS=';'
 for custom_id in $custom_component_list; do
-    case "$custom_id" in efficient-coding|odoo-engineering|afyx-engineering-expert|prompt-master|afyx-graph|afyx-context|codex-usage-tracking) ;; *) printf 'Unknown custom component: %s\n' "$custom_id" >&2; exit 2 ;; esac
+    case "$custom_id" in
+      prompt-master|headroom) printf "Component '%s' is retired from Afyx Kit and remains externally/user managed; no changes were made.\n" "$custom_id" >&2; exit 2 ;;
+      efficient-coding|odoo-engineering|afyx-engineering-expert|afyx-graph|afyx-context|codex-usage-tracking) ;;
+      *) printf 'Unknown custom component: %s\n' "$custom_id" >&2; exit 2 ;;
+    esac
 done
 IFS=$old_ifs
 
@@ -55,10 +59,6 @@ verify_component_evaluate() {
       *) AFYX_STATE=UNKNOWN; AFYX_DETAIL="installed ownership is $AFYX_OWNERSHIP_STATE" ;;
     esac
   fi
-}
-
-mcp_configured() {
-  [[ -f "$config" ]] && grep -Eq "^\\[mcp_servers\\.$1\\][[:space:]]*$" "$config"
 }
 
 printf 'Afyx Codex Engineering Kit — readiness verification (Linux/macOS Bash)\n'
@@ -154,14 +154,6 @@ case "$AFYX_STATE" in
   *) result WARN 'Afyx Context Engine' "$AFYX_STATE: $AFYX_DETAIL (optional)" ;;
 esac
 result INFO 'Usage Tracking' 'not installed; Windows-only runtime'
-headroom_cli=false; command -v headroom >/dev/null 2>&1 && headroom_cli=true
-headroom_provider=false; headroom_proxy=false
-if [[ -f "$config" ]] && grep -Eiq "^[[:space:]]*model_provider[[:space:]]*=[[:space:]]*['\"]headroom['\"][[:space:]]*$|^[[:space:]]*\[model_providers\.headroom\][[:space:]]*$" "$config"; then headroom_provider=true; fi
-if "$headroom_provider" || { [[ -f "$config" ]] && grep -Eiq '^[[:space:]]*headroom_(endpoint|base_url|proxy_url)[[:space:]]*=' "$config"; }; then headroom_proxy=true; fi
-if "$headroom_cli"; then result OK 'Headroom CLI' 'detected'; else result INFO 'Headroom CLI' 'not found'; fi
-if "$headroom_proxy"; then [[ "$headroom_provider" == true ]] && result OK 'Headroom proxy/provider' 'provider routing configured' || result OK 'Headroom proxy/provider' 'endpoint configured'; else result INFO 'Headroom proxy/provider' 'not configured'; fi
-if mcp_configured headroom; then result OK 'Headroom MCP' 'configured (optional)'; else result INFO 'Headroom MCP' 'not configured; optional for proxy mode'; fi
-
 if [[ -f "$config" ]]; then result OK 'Codex config' 'read-only check completed'; else result WARN 'Codex config' 'not found; optional MCP entries unavailable'; fi
 
 if "$core_failure"; then result FAIL 'Core readiness'; exit 1; fi

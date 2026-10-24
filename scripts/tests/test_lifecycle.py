@@ -20,7 +20,6 @@ SELECTABLE = [
     "efficient-coding",
     "odoo-engineering",
     "afyx-engineering-expert",
-    "prompt-master",
     "afyx-graph",
     "afyx-context",
     "codex-usage-tracking",
@@ -51,14 +50,12 @@ def write(path: Path, text: str, executable: bool = False) -> None:
 
 
 class LifecycleContractTests(unittest.TestCase):
-    def test_seven_selectable_components_and_prerequisite_classes(self) -> None:
+    def test_six_selectable_components_and_prerequisite_classes(self) -> None:
         contract = json.loads((ROOT / "scripts/components.json").read_text(encoding="utf-8"))
-        actual = [item["id"] for item in contract["components"] if item["id"] != "headroom"]
+        actual = [item["id"] for item in contract["components"]]
         self.assertEqual(actual, SELECTABLE)
         classes = {item["class"] for item in contract["prerequisites"]}
-        self.assertEqual(classes, {"REQUIRED", "COMPONENT_REQUIRED", "BUILD_ONLY", "OPTIONAL"})
-        headroom = next(item for item in contract["components"] if item["id"] == "headroom")
-        self.assertEqual((headroom["ownership"], headroom["tier"]), ("external", "external"))
+        self.assertEqual(classes, {"REQUIRED", "COMPONENT_REQUIRED", "BUILD_ONLY"})
 
     def test_update_entrypoints_do_not_apply_blanket_force(self) -> None:
         powershell = (ROOT / "update.ps1").read_text(encoding="utf-8")
@@ -68,15 +65,11 @@ class LifecycleContractTests(unittest.TestCase):
         self.assertIn("--update-installed", bash)
         self.assertNotIn('install.sh" --force', bash)
 
-    def test_offline_mode_skips_self_update_and_refuses_upstream_clone(self) -> None:
+    def test_offline_mode_skips_self_update(self) -> None:
         ps_update = (ROOT / "update.ps1").read_text(encoding="utf-8")
         sh_update = (ROOT / "update.sh").read_text(encoding="utf-8")
-        ps_install = (ROOT / "install.ps1").read_text(encoding="utf-8")
-        sh_install = (ROOT / "install.sh").read_text(encoding="utf-8")
         self.assertIn("Offline mode: self-update skipped", ps_update)
         self.assertIn("Offline mode: self-update skipped", sh_update)
-        self.assertIn("Offline mode cannot install or update upstream-owned Prompt Master", ps_install)
-        self.assertIn("Offline mode cannot install or update upstream-owned Prompt Master", sh_install)
 
     def test_release_channel_is_distribution_metadata(self) -> None:
         operational = json.loads((ROOT / "afyx-graph/afyx-graph.json").read_text(encoding="utf-8"))

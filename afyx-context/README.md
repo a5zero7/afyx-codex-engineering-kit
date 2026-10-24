@@ -2,7 +2,7 @@
 
 Afyx Context Engine (ACE) is an Afyx-owned, standalone Node.js component for
 conservative context reduction with byte-exact original recovery. It does not
-require Afyx Graph, Forge, Engineering Expert, Headroom, or the Kit installer.
+require Afyx Graph, Forge, Engineering Expert, an external proxy, or the Kit installer.
 
 ## API
 
@@ -79,8 +79,9 @@ npm run test:benchmark
 `contracts/integration-v1.schema.json` defines `ace.integration/v1` for Graph,
 Engineering Expert, Forge, and Kit consumers. `createOptionalIntegrationAdapter`
 catches an unavailable/failed ACE and returns original content, so the consumer
-remains independently functional. The foundation does not install adapters into
-those products or add ACE to a Kit preset.
+remains independently functional. The Kit can install, update, verify, repair,
+and uninstall ACE as a managed explicit component, but ACE is absent from all
+implicit presets and installation never enables a consumer integration.
 
 AFYX-293 adds the first real consumer as a separate, default-OFF bridge. It does
 not alter Graph's CLI, API, MCP tools, or default responses:

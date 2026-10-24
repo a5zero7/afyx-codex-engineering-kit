@@ -1,156 +1,247 @@
-# Afyx Codex Engineering Kit
+# Afyx Code Engineering Kit
 
-Installer PowerShell dan Bash untuk workflow Codex yang rapi dan aman di Windows, Linux, dan macOS.
+**Engineering intelligence and assurance for evidence-driven software work.**
 
-Paket ini memasang `efficient-coding` dan `odoo-engineering`; preset Recommended juga memasang Afyx Engineering Expert. Prompt Master tidak lagi menjadi dependency/default dan hanya tetap tersedia sebagai pilihan Custom eksternal yang eksplisit. Kit sengaja **tidak** mengubah model, provider, kredensial, atau MCP Codex yang sudah ada.
+> **Individually Reliable. Collectively Solid.**
+>
+> **Best Verified Output. Maximum Accuracy & Precision. Peak Performance. Minimum Effort.**
+>
+> **Standalone by Design. Integrated by Contract.**
 
-## Komponen
+Afyx Code Engineering Kit is a local-first ecosystem for understanding code,
+orchestrating engineering decisions, validating changes, and managing supporting
+tools safely. It is not a prompt collection, a replacement for tests, or a
+promise of universal token savings.
 
-| Komponen | Sumber | Perilaku installer |
+The Kit combines four primary product components with focused supporting skills
+and lifecycle tooling. Each primary component has an independent operating
+boundary; integrations are explicit, versioned, and designed to fall back safely.
+
+## Why Afyx
+
+Ordinary coding assistants can generate plausible changes while leaving the
+engineer to establish repository structure, impact, version-specific behavior,
+and acceptance evidence. Afyx adds reusable engineering controls around that
+workflow:
+
+- **Structural repository intelligence** with verifiable file, symbol, call-path,
+  dependency, impact, and index-health evidence.
+- **Cross-disciplinary engineering orchestration** that selects only the product,
+  architecture, security, data, reliability, implementation, ERP, or QA guidance
+  relevant to the task.
+- **Fail-closed evaluation contracts** for controlled engineering comparison and
+  evidence handling.
+- **Optional context reduction with exact-original recovery**, never replacing the
+  original when doing so would be unsafe or more expensive.
+- **Transactional installation and recovery** with ownership boundaries, preview,
+  verification, backup, update, and uninstall behavior shared across platforms.
+
+Afyx is aimed at engineers and technical owners who value source evidence,
+bounded change, explicit limitations, and reproducible acceptance more than
+unqualified automation claims.
+
+## Primary components
+
+| Component | What it does today | Independence and maturity |
 |---|---|---|
-| Efficient Coding | Salinan utuh dari `~/.agents/skills/efficient-coding`, termasuk `references/` | Dipasang ke skill root yang dipilih tanpa mengubah isinya |
-| Odoo Engineering | Dibundel di repositori ini | Stable Odoo 10–20 |
-| Afyx Engineering Expert | Original Afyx instruction-only skill di `skills/afyx-engineering-expert/` | Skill opsional adaptif: satu orchestrator, 13 reference, enam workflow, dan result template |
-| Prompt Master | [nidhinjs/prompt-master](https://github.com/nidhinjs/prompt-master) | EXTERNAL; tidak dipasang/update/diverifikasi secara mandatory oleh workflow default; pilihan Custom eksplisit tetap memakai staging, validasi, backup, dan swap aman |
-| Afyx Graph | Komponen Afyx, dibundel di `afyx-graph/` | Komponen opsional untuk structural intelligence lokal; memerlukan Node.js eksternal 22.5.0 atau lebih baru |
-| Afyx Context Engine | Komponen Afyx mandiri di `afyx-context/` | Foundation API/CLI untuk reduksi konteks konservatif dan pemulihan original; belum menjadi preset installer |
-| Headroom | [headroomlabs-ai/headroom](https://github.com/headroomlabs-ai/headroom) | Enhancement eksternal opsional; hanya dideteksi |
-| Usage Tracking | Dibundel di `tools/codex-usage/` | Opsional, Windows; ringkasan token/cost otomatis melalui global Stop hook |
+| [Afyx Graph](afyx-graph/engine/README.md) | Local structural indexing; CLI and optional MCP discovery, navigation, query, inventory, impact, affected-test, freshness, and daemon capabilities | Standalone Node.js runtime; **Technical Alpha** |
+| [Afyx Engineering Expert](skills/afyx-engineering-expert/README.md) | Adaptive engineering skill spanning 13 disciplines and six optional workflows | Standalone instruction skill; v0.1.1; final D.6 substantive acceptance is not claimed |
+| [Afyx Forge](docs/COMPONENTS.md#afyx-forge) | Public deterministic fixtures, candidate contracts, validation, isolation prototypes, and a fail-closed campaign controller | Engineering/evaluation foundation; campaign authorization and native acceptance remain incomplete |
+| [Afyx Context Engine (ACE)](afyx-context/README.md) | Conservative context reduction, local crash-safe storage, and byte-exact original recovery | Standalone Node.js v0.1.0; managed explicit Kit opt-in; Graph integration default **OFF** |
 
-**Core:** Efficient Coding dan Odoo Engineering. **Komponen opsional Afyx:** Afyx Engineering Expert, Afyx Graph, dan Usage Tracking. **Komponen eksternal:** Prompt Master dan Headroom. Core skill tetap berfungsi tanpa komponen opsional atau eksternal. Distribusi saat ini adalah **Technical Alpha prerelease**, bukan Stable v1 atau public release yang sudah dijamin tersedia.
+Supporting components are [Efficient Coding](skills/efficient-coding/SKILL.md),
+[Odoo Engineering](skills/odoo-engineering/SKILL.md), the cross-platform Kit
+lifecycle, and optional Windows [Usage Tracking](docs/CODEX_USAGE_TRACKER.md).
 
-Afyx Context Engine (ACE) foundation juga tersedia sebagai paket mandiri dan
-belum menjadi komponen preset Kit. ACE tidak diperlukan oleh core, Graph,
-Engineering Expert, Forge, atau Headroom. Kontrak integrasi opsionalnya gagal
-aman ke konten original; lihat [dokumen foundation ACE](docs/AFYX_CONTEXT_ENGINE_FOUNDATION.md).
+## How the pieces fit
 
-## Pilih installer sesuai sistem operasi
+```mermaid
+flowchart LR
+    U[Engineer / Codex host]
+    K[Kit lifecycle<br/>install · update · verify · doctor]
+    E[Engineering Expert]
+    G[Afyx Graph]
+    F[Afyx Forge]
+    A[ACE]
+    S[Supporting skills<br/>Efficient Coding · Odoo Engineering]
 
-| Sistem operasi | Installer | Shell |
-|---|---|---|
-| Windows 10/11 | `install.ps1` | Windows PowerShell 5.1 atau PowerShell 7 |
-| Linux | `install.sh` | Bash |
-| macOS | `install.sh` | Bash |
+    K -->|managed components| E
+    K -->|managed runtime| G
+    K -->|explicit opt-in only| A
+    K -->|managed skills| S
+    U --> E
+    U --> G
+    U --> S
+    E -. optional repository evidence .-> G
+    G -. graph.ace.consumer/v1<br/>default OFF .-> A
+    F -. evaluation contracts;<br/>not a default runtime path .-> E
+```
 
-## Instalasi Windows
+Solid lines are implemented normal-use paths. Dashed lines are optional or
+evaluation contracts; they are not prerequisites for standalone operation.
+
+## Current product status
+
+This repository is a **Technical Alpha prerelease**. It is not Stable v1, no
+formal public Alpha approval is implied, and publisher authenticity remains
+unverified unless an artifact has an independently verified attestation.
+
+- Graph, the Kit lifecycle, ACE standalone operation, and the supporting skills
+  have executable implementations and regression evidence.
+- ACE can be installed and managed by the Kit only through explicit component
+  selection; it is absent from Minimal, Recommended, and Full.
+- Graph–ACE integration is opt-in and disabled by default. Measurements include
+  both positive and negative net-context cases; no universal savings claim is made.
+- Forge has executable preparation/validation surfaces, but its full candidate
+  campaign and native acceptance gates are not complete.
+- Engineering Expert is usable as a skill, while final D.6 substantive review is
+  still outside the accepted claims.
+
+See [Product Vision](docs/PRODUCT_VISION.md) for the maintained product contract
+and [Component Guide](docs/COMPONENTS.md) for capability and limitation details.
+
+## Quick start
+
+### Prerequisites
+
+- Git.
+- Windows PowerShell 5.1+ / PowerShell 7, or Bash 3.2+ on Linux/macOS.
+- Codex CLI or the ChatGPT/Codex VS Code extension.
+- Node.js 22.5+ when selecting Afyx Graph or ACE.
+- npm only when a local build fallback is needed.
+
+### 1. Clone and preview
+
+Windows:
 
 ```powershell
 git clone https://github.com/a5zero7/afyx-codex-engineering-kit.git
 Set-Location afyx-codex-engineering-kit
-.\install.ps1
+.\install.ps1 -ValidateOnly
+.\install.ps1 -WhatIf -Preset recommended
 ```
 
-## Instalasi Linux dan macOS
+Linux or macOS:
 
 ```bash
 git clone https://github.com/a5zero7/afyx-codex-engineering-kit.git
 cd afyx-codex-engineering-kit
-chmod +x install.sh update.sh uninstall.sh
-./install.sh
+./install.sh --validate-only
+./install.sh --dry-run --preset recommended
 ```
 
-Secara default skill dipasang ke `~/.agents/skills`, yaitu lokasi skill personal yang digunakan setup ini.
+Preview is non-mutating. Inspect every destination and planned action before
+continuing.
 
-Installer mendeteksi Codex CLI, ekstensi ChatGPT/Codex VS Code, atau keduanya. Ketiganya memakai skill root personal yang sama secara default; gunakan `-SkillsRoot` / `--skills-root` hanya untuk lingkungan terisolasi yang memang Anda kelola sendiri.
+### 2. Select an actual preset
 
-Setelah selesai, buka sesi Codex baru. Skill akan aktif hanya pada task yang sesuai: Efficient Coding untuk implementasi/debugging, Odoo Engineering untuk bukti teknis versi-spesifik Odoo, dan Afyx Engineering Expert bila dipasang untuk analisis lintas-disiplin yang substantif. Prompt Master yang sudah dikelola pengguna tetap dipertahankan dan dapat digunakan secara independen; Afyx tidak lagi mengakuisisinya melalui workflow default.
+| Preset | Desired components |
+|---|---|
+| `minimal` | Efficient Coding, Odoo Engineering |
+| `recommended` | Minimal + Afyx Engineering Expert |
+| `full` | Recommended + Afyx Graph + Windows-only Usage Tracking |
+| `custom` | Only components repeated with `CustomComponent` / `--custom-component` |
 
-`odoo-engineering` hanya aktif untuk pekerjaan Odoo. Referensi Odoo 10–20 berstatus stable dan tetap harus dipilih berdasarkan evidence repository versi target.
-
-Skill menggunakan progressive disclosure: entrypoint berisi routing dan batasan, sedangkan guidance investigasi/tool dan deteksi versi berada di `references/`. Efficient Coding membedakan target yang sudah diketahui, target yang perlu ditemukan, dan perubahan cross-cutting. Odoo memuat `common.md`, lalu satu reference versi yang dibuktikan; migration dapat memerlukan source dan target secara terpisah.
-
-## Tidak bentrok dengan Codex
-
-Installer tidak pernah menulis atau mengganti:
-
-- `%USERPROFILE%\.codex\config.toml`
-- `%USERPROFILE%\.codex\auth.json`
-- provider model, Headroom proxy, server MCP, atau plugin Codex
-
-Installer melakukan inventory sebelum mutasi untuk enam komponen selectable: Efficient Coding, Odoo Engineering, Afyx Engineering Expert, Prompt Master, Afyx Graph, dan Usage Tracking. Prompt Master selalu Skip kecuali dipilih melalui Custom atau action komponen eksplisit; instalasi/user-disabled state yang ada dipertahankan. Komponen lain mengikuti state: belum terpasang = Install/Skip, sehat = Update/Skip, incomplete/invalid = Repair/Skip, sedangkan ownership tidak dikenal selalu ditolak. Update/repair memakai staging, validasi, backup, swap, dan rollback bila pemasangan gagal.
-
-Desired-state mode menggunakan source of truth yang sama: `-Preset minimal|recommended|full|custom`
-atau `--preset ...`. Install, update, dan verify menyelesaikan plan identik; komponen
-di luar plan serta konfigurasi USER/EXTERNAL dipertahankan. Custom memakai
-`-CustomComponent` / `--custom-component` berulang untuk subset yang eksplisit.
-
-### Afyx Graph
-
-Afyx Graph dipasang sebagai runtime opsional di `~/.afyx/graph/`; ia tidak ditempatkan di direktori skill. Identitasnya: paket `@a5zero7/afyx-graph`, CLI `afyx-graph`, API `AfyxGraph`, project state `.afyx-graph/` (database `afyx-graph.db`), environment prefix `AFYX_GRAPH_*`, dan identitas MCP `afyx_graph` dengan tool `afyx_graph_*`.
-
-Afyx Graph memakai `.afyx-graph/` sebagai state project secara default. Untuk corpus read-only, owner dapat menetapkan `AFYX_GRAPH_STATE_DIR` ke direktori absolut eksternal yang kosong atau sudah terikat ke canonical corpus yang sama; konfigurasi invalid gagal tertutup dan tidak jatuh kembali ke state lokal. `AFYX_GRAPH_DIR` tetap tersedia hanya untuk mengganti nama direktori state di dalam project.
-
-Instalasi normal tidak mengubah konfigurasi MCP. Installer mencari artifact Technical Alpha yang cocok dengan versi, OS, dan arsitektur, memverifikasi SHA-256 serta metadata, lalu otomatis melakukan clean local build dari checkout Git tervalidasi bila release belum tersedia. Windows memakai packaging PowerShell native dan tidak memerlukan Bash/WSL. Build fallback memerlukan npm; runtime artifact tetap memakai Node.js eksternal >=22.5. Checkout dirty ditolak kecuali pengguna secara eksplisit memilih `-AllowDirtySource` / `--allow-dirty-source`. Afyx Graph dikelola sebagai komponen Afyx yang mandiri; instalasi lain di mesin yang sama tidak dideteksi dan tidak dikelola.
-
-## Perintah
+ACE is absent from all implicit presets. Install ACE explicitly
+without enabling Graph integration:
 
 ```powershell
-.\install.ps1 -ValidateOnly
-.\install.ps1 -WhatIf
-.\install.ps1 -SkillsRoot "$env:USERPROFILE\.agents\skills"
-.\install.ps1 -ComponentAction efficient-coding=install -ComponentAction afyx-graph=install -Confirm:$false
-.\install.ps1 -ComponentAction afyx-engineering-expert=install -Confirm:$false
-.\install.ps1 -Offline -ComponentAction afyx-graph=install
-.\install.ps1 -InstallUsageTracker
-.\install.ps1 -SkipUsageTracker
-.\update.ps1 -ComponentAction afyx-graph=update
-.\uninstall.ps1
-.\uninstall.ps1 -Component afyx-engineering-expert
-.\uninstall.ps1 -RemoveUsageTracker
-.\uninstall.ps1 -RemovePromptMaster
-.\verify.ps1
+.\install.ps1 -Preset custom -CustomComponent afyx-context -Confirm:$false
 ```
-
-Linux/macOS memakai opsi yang setara:
 
 ```bash
-./install.sh --validate-only
-./install.sh --dry-run
-./install.sh --skills-root "$HOME/.agents/skills"
-./install.sh --component afyx-engineering-expert=install
-./install.sh --component efficient-coding=install --component afyx-graph=install
-./install.sh --offline --component afyx-graph=install
-./update.sh --component afyx-graph=update
-./uninstall.sh --remove-prompt-master
-./verify.sh
-./uninstall.sh --component afyx-engineering-expert
+./install.sh --preset custom --custom-component afyx-context
 ```
 
-Updater melakukan self-update kit dengan `git pull --ff-only` hanya pada checkout bersih, lalu memilih update berdasarkan state/version; ia tidak lagi memaksa replacement seluruh komponen. Pilihan per komponen dapat diberikan dengan `-ComponentAction id=skip|install|update|repair` atau `--component id=skip|install|update|repair`. Jika worktree memiliki perubahan lokal, updater berhenti sebelum installer dijalankan; gunakan `git status` untuk menanganinya atau `-SkipSelfUpdate` / `--skip-self-update` untuk secara sengaja memakai current checkout.
+Install Recommended:
 
-Backup dibuat di folder `backups\` di clone lokal dan tidak diunggah ke Git.
+```powershell
+.\install.ps1 -Preset recommended
+```
 
-Pada instalasi PowerShell interaktif, Usage Tracking ditawarkan sebagai komponen opsional. Gunakan `-InstallUsageTracker` untuk opt-in tanpa prompt atau `-SkipUsageTracker` untuk melewatinya; instalasi non-interaktif tanpa opt-in akan melewatinya dengan aman. Menolak update tidak menghapus tracker yang sudah terpasang. Setelah instalasi, tinjau dan trust hook melalui `/hooks`.
+```bash
+./install.sh --preset recommended
+```
 
-Mode utama menampilkan Usage Summary otomatis di UI Codex setelah turn selesai. VS Code User Task `Codex: Watch Token Usage` tetap tersedia sebagai fallback/debug dan tidak perlu dijalankan untuk penggunaan normal.
+Open a new Codex session after skill installation.
 
-## Headroom
+### 3. Verify
 
-Headroom bersifat opsional. CLI, proxy/provider routing, dan MCP adalah capability terpisah; MCP tidak diperlukan untuk mode proxy. Instal dan konfigurasikan mengikuti dokumentasi upstream: <https://github.com/headroomlabs-ai/headroom>.
+```powershell
+.\verify.ps1 -Preset recommended
+.\scripts\afyx-doctor.ps1 -ProjectPath .
+```
 
-Jika Headroom sudah ada, installer hanya menampilkan statusnya. Ini mencegah konflik dengan provider, proxy, port, atau metode login Codex yang sudah Anda gunakan.
+```bash
+./verify.sh --preset recommended
+./scripts/afyx-doctor.sh --project .
+```
 
-## Verifikasi
+`verify` checks the desired lifecycle state. `doctor` reports local environment
+and project diagnostics without installing, repairing, or calling a model.
 
-`verify.ps1` dan `verify.sh` membedakan `OK`, `WARN`, dan `FAIL`. Kegagalan core menghasilkan exit code non-zero; Afyx Engineering Expert, Afyx Graph, dan Headroom yang tidak tersedia atau belum dikonfigurasi tidak menggagalkan core readiness.
+## First useful workflows
 
-Sebagai pemeriksaan manual opsional, jalankan `python scripts/check-reference-staleness.py` untuk menampilkan `WARN` bila header `Last verified` pada reference Odoo lebih lama dari enam bulan. Pemeriksaan ini selalu exit `0`, tidak dijalankan oleh installer, verifier, atau CI, dan bukan klaim bahwa isi reference valid atau tidak valid.
+### Discover and navigate a repository
 
-## Diagnostik tanpa token
+```bash
+afyx-graph init . --yes
+afyx-graph query getAfyxGraphDir --path .
+afyx-graph explore "external state database lifecycle" --path . --max-files 4
+```
 
-`scripts/afyx-doctor.ps1` dan `scripts/afyx-doctor.sh` adalah doctor read-only untuk komponen, environment, dan project saat ini (versi Odoo, freshness index Afyx Graph). `scripts/afyx-project.ps1` / `.sh` mendeteksi konteks project, dan `python evals/harness/routing.py` memvalidasi routing skill secara statis. Semuanya lokal dan tanpa model; lihat [docs/DIAGNOSTICS.md](docs/DIAGNOSTICS.md).
+### Review change impact
 
-## Dokumentasi
+```bash
+afyx-graph impact getAfyxGraphDir --path . --depth 2
+afyx-graph affected --path . src/directory.ts
+```
 
-Roadmap canonical menuju Afyx v1 tersedia di [docs/AFYX_V1_MASTER_ROADMAP.md](docs/AFYX_V1_MASTER_ROADMAP.md).
-Panduan lengkap, perilaku konflik, dan pemulihan ada di [docs/INSTALLATION.md](docs/INSTALLATION.md).
-Diagnostik, kontrak komponen, dan deteksi project dijelaskan di [docs/DIAGNOSTICS.md](docs/DIAGNOSTICS.md).
-Metodologi dan hasil campaign benchmark tersedia di [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
-Tracker penggunaan token Codex dan integrasi VS Code dijelaskan di [docs/CODEX_USAGE_TRACKER.md](docs/CODEX_USAGE_TRACKER.md).
-Kontrak arsitektur UI opsional Afyx Graph dijelaskan di [docs/AFYX_GRAPH_UI_ARCHITECTURE.md](docs/AFYX_GRAPH_UI_ARCHITECTURE.md).
-Kontrak dan bukti foundation Afyx Context Engine dijelaskan di [docs/AFYX_CONTEXT_ENGINE_FOUNDATION.md](docs/AFYX_CONTEXT_ENGINE_FOUNDATION.md).
-Evidence historis technical independence Afyx Graph tersedia di [docs/AFYX_INDEPENDENCE_PLAN.md](docs/AFYX_INDEPENDENCE_PLAN.md).
+Graph output is static repository evidence. It does not prove runtime behavior;
+run the relevant tests and runtime checks before accepting a change.
 
-## Lisensi dan atribusi
+### Ask for a cross-disciplinary review
 
-Wrapper installer, Efficient Coding, Afyx Engineering Expert, dan Afyx Graph dilisensikan MIT. Afyx Engineering Expert adalah draft instruksi original tanpa implementation pihak ketiga, runtime dependency, atau download tersembunyi. Prompt Master tidak dibundel; paket ini mengambilnya dari upstream yang memiliki lisensi sendiri. Headroom hanya dideteksi dan tetap dikelola secara eksternal. Bukti historis sebelum penutupan independensi dipertahankan dalam dokumentasi Phase 5 dan riwayat Git, bukan sebagai notice release aktif.
+```text
+Use afyx-engineering-expert to review this authentication change. Cover the
+architecture, threat boundary, operational failure modes, and acceptance tests;
+load only the relevant disciplines.
+```
+
+For Odoo implementation facts, pair Expert with Odoo Engineering and establish
+the target Odoo major version from repository or runtime evidence.
+
+### Reduce and recover exact content with ACE
+
+```bash
+afyx-context reduce --state /absolute/owned/ace-state --owner local-owner \
+  --session reviewed-source-sha --input request.json --budget 16000
+afyx-context get --state /absolute/owned/ace-state --owner local-owner \
+  --session reviewed-source-sha --reference 'ace:v1:...'
+```
+
+ACE state is local plaintext and must be protected by host filesystem controls.
+References are owner/session-bound, and retrieval verifies the stored digest.
+
+## Lifecycle and safety
+
+The installer inventories before mutation and distinguishes `NOT INSTALLED`,
+`HEALTHY`, `INCOMPLETE`, `INVALID`, `DRIFTED`, and `UNKNOWN`. Unknown or foreign
+ownership is not silently adopted. Update/repair uses staging, validation,
+backup, atomic promotion, and rollback. Project Graph indexes, credentials,
+providers, models, unrelated MCP entries, and external tools are preserved.
+
+- Safe installation, update, uninstall, and recovery: [Installation Guide](docs/INSTALLATION.md)
+- Component capabilities and troubleshooting: [Component Guide](docs/COMPONENTS.md)
+- Read-only diagnostics: [Diagnostics](docs/DIAGNOSTICS.md)
+- Product principles and maturity: [Product Vision](docs/PRODUCT_VISION.md)
+- Canonical development plan: [Afyx v1 Master Roadmap](docs/AFYX_V1_MASTER_ROADMAP.md)
+- Benchmark scope and interpretation: [Benchmarks](docs/BENCHMARKS.md)
+
+## License and third-party boundaries
+
+The repository's Afyx-owned code and documentation are distributed under the
+[MIT License](LICENSE). Graph and ACE include their own MIT license files in
+their package roots. External software remains governed by its own terms and is
+outside the Kit's ownership boundary. Historical independence, attribution, and
+license evidence remains preserved in Phase 5 documentation and Git history.
