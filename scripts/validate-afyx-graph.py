@@ -29,6 +29,7 @@ obsolete_legal_paths = (
     GRAPH / "THIRD_PARTY_NOTICES.md",
 )
 bundle_script_path = ENGINE / "scripts" / "build-bundle.sh"
+archive_script_path = ENGINE / "scripts" / "deterministic-archive.mjs"
 distribution_product_path = ENGINE / "scripts" / "distribution-product.json"
 release_dir = ENGINE / "release"
 installer_paths = (ROOT / "scripts" / "install-afyx-graph.ps1", ROOT / "scripts" / "install-afyx-graph.sh")
@@ -164,6 +165,10 @@ for installer in installer_paths:
             fail(f"{installer.name} still references obsolete legal payload {obsolete_name}")
 if "legal-files" not in bundle_script:
     fail("build-bundle.sh does not consume the artifact plan's legal files")
+if "npm run build:clean" not in bundle_script:
+    fail("build-bundle.sh must not reuse a stale dist directory")
+if "deterministic-archive.mjs" not in bundle_script or not archive_script_path.is_file():
+    fail("build-bundle.sh does not use the deterministic archive writer")
 
 # Any locally built bundle must contain the current license and no obsolete
 # historical-only legal payload.
