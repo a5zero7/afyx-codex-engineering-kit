@@ -14,7 +14,7 @@ selected_component_count=0
 printf 'Afyx Codex Engineering Kit — Linux/macOS uninstaller (Bash)\n'
 
 usage() {
-  printf '%s\n' 'Usage: ./uninstall.sh [--skills-root PATH] [--context-runtime-root PATH] [--component AFYX-SKILL-ID] [--remove-prompt-master] [--remove-afyx-graph] [--remove-afyx-context] [--dry-run]'
+  printf '%s\n' 'Usage: ./uninstall.sh [--skills-root PATH] [--context-runtime-root PATH] [--component AFYX-SKILL-ID] [--remove-afyx-graph] [--remove-afyx-context] [--dry-run]'
 }
 
 while (($#)); do
@@ -31,11 +31,15 @@ while (($#)); do
   esac
 done
 
-# One component truth: scripts/components.json. Afyx-owned skills are always removed;
-# the upstream-owned skill (Prompt Master) only on explicit request.
+# One component truth: scripts/components.json. Only Afyx-owned skills are removable.
 # shellcheck source=scripts/lib/afyx-components.sh
 . "$root/scripts/lib/afyx-components.sh"
 . "$root/scripts/lib/afyx-skill-lifecycle.sh"
+retired_component_error() {
+  printf "Component '%s' is retired from Afyx Kit and remains externally/user managed; no changes were made.\n" "$1" >&2
+  exit 2
+}
+"$remove_prompt_master" && retired_component_error prompt-master
 component_selected() {
   local wanted="$1" selected
   ((selected_component_count == 0)) && return 0
@@ -44,6 +48,7 @@ component_selected() {
 }
 if ((selected_component_count > 0)); then
   for selected in "${selected_components[@]}"; do
+    case "$selected" in prompt-master|headroom) retired_component_error "$selected" ;; esac
     [[ "$(afyx_component_field "$selected" type)" == skill && "$(afyx_component_field "$selected" ownership)" == afyx ]] || {
       printf 'Unknown or non-removable Afyx skill component: %s\n' "$selected" >&2
       exit 2
@@ -53,7 +58,7 @@ fi
 for component_id in $(afyx_component_ids); do
   [[ "$(afyx_component_field "$component_id" type)" == skill ]] || continue
   ownership="$(afyx_component_field "$component_id" ownership)"
-  if { [[ "$ownership" == afyx ]] && component_selected "$component_id"; } || { [[ "$ownership" == upstream ]] && "$remove_prompt_master"; }; then
+  if [[ "$ownership" == afyx ]] && component_selected "$component_id"; then
     target="$(afyx_component_root "$component_id")"
     if "$dry_run"; then
       afyx_classify_skill "$target" "$component_id" "$ownership"
@@ -80,4 +85,4 @@ if "$remove_afyx_context"; then
   if "$dry_run"; then "$root/scripts/install-afyx-context.sh" --runtime-root "$context_root" --validate-only
   else "$root/scripts/install-afyx-context.sh" --runtime-root "$context_root" --uninstall; fi
 elif [[ -e "$context_root" ]]; then printf 'Afyx Context Engine: kept\n'; fi
-printf 'ACE user state, project indexes, Headroom, and Codex configuration were not changed.\n'
+printf 'ACE user state, project indexes, external software, and Codex configuration were not changed.\n'

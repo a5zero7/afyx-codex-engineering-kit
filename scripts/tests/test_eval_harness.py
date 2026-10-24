@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import copy
 import importlib
 import json
 import os
@@ -721,11 +722,13 @@ print(answer)
             source,
         )
 
-    def test_current_fingerprint_matches_repository_sources(self) -> None:
+    def test_frozen_and_current_fingerprints_are_independently_verified(self) -> None:
         manifest = run.load_json(ROOT / "evals" / "manifest.json")
         environment = run.load_json(ROOT / "evals" / manifest["environment"])
         historical = run.load_json(ROOT / "evals" / "environment-expert-v0.1.0.json")
         for name in freeze.REPOSITORY_SKILLS:
+            if name == "efficient-coding":
+                continue
             self.assertEqual(
                 environment["skills"][name]["content_sha256"],
                 freeze.directory_content_sha256(ROOT / "skills" / name),
@@ -745,7 +748,38 @@ print(answer)
             environment["skills"]["afyx-engineering-expert"]["content_sha256"],
             historical["skills"]["afyx-engineering-expert"]["content_sha256"],
         )
-        self.assertEqual(environment["skills"]["efficient-coding"]["version"], "1.2.0")
+        frozen_efficient = environment["skills"]["efficient-coding"]
+        frozen_source = ROOT / "evals" / "forge" / "candidates" / "B1" / "efficient-coding"
+        self.assertEqual(frozen_efficient["version"], "1.2.0")
+        self.assertEqual(
+            frozen_efficient["content_sha256"],
+            historical["skills"]["efficient-coding"]["content_sha256"],
+        )
+        self.assertEqual(
+            frozen_efficient["content_sha256"],
+            freeze.directory_content_sha256(frozen_source),
+        )
+
+        current_source = ROOT / "skills" / "efficient-coding"
+        current_hash = freeze.directory_content_sha256(current_source)
+        self.assertNotEqual(current_hash, frozen_efficient["content_sha256"])
+        self.assertRegex(
+            (current_source / "SKILL.md").read_text(encoding="utf-8"),
+            r'(?m)^\s+version: "1\.2\.1"$',
+        )
+
+        preflight_environment = copy.deepcopy(environment)
+        prompt_entry = preflight_environment["skills"]["prompt-master"]
+        prompt_entry.pop("git_origin", None)
+        prompt_entry.pop("clean", None)
+        with mock.patch.object(
+            run, "prompt_master_git_sha", return_value=prompt_entry["git_sha"]
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError, "efficient-coding: content SHA256 mismatch"
+            ):
+                run.verify_frozen_environment(preflight_environment)
+
         self.assertEqual(environment["runtime"]["codex_cli"], "0.162.1")
         self.assertEqual(historical["runtime"]["codex_cli"], "0.156.1")
 

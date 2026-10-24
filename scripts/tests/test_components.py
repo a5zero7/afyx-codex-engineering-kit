@@ -115,7 +115,7 @@ class ComponentContractTests(unittest.TestCase):
     def test_skill_healthy_and_versioned(self) -> None:
         self.install_skill("efficient-coding")
         for shell, states in self.shells().items():
-            self.assertEqual(states["efficient-coding"], ("HEALTHY", "1.2.0"), shell)
+            self.assertEqual(states["efficient-coding"], ("HEALTHY", "1.2.1"), shell)
 
     def test_skill_incomplete_when_a_reference_is_missing(self) -> None:
         (self.install_skill("efficient-coding") / "references" / "tool-routing.md").unlink()
@@ -131,10 +131,6 @@ class ComponentContractTests(unittest.TestCase):
     def test_skill_invalid_without_frontmatter(self) -> None:
         write(self.skills / "odoo-engineering" / "SKILL.md", "no frontmatter here\n")
         self.assert_state("odoo-engineering", "INVALID")
-
-    def test_upstream_skill_needs_only_a_valid_manifest(self) -> None:
-        write(self.skills / "prompt-master" / "SKILL.md", "---\nname: prompt-master\ndescription: Writes prompts\n---\nBody\n")
-        self.assert_state("prompt-master", "HEALTHY")
 
     def test_graph_states(self) -> None:
         self.assert_state("afyx-graph", "NOT INSTALLED")
@@ -168,8 +164,6 @@ class ComponentContractTests(unittest.TestCase):
             self.skipTest("only one shell available; cross-shell agreement not testable")
         first, second = active.values()
         for component in first:
-            if component == "headroom":
-                continue  # depends on the machine, not on the fixture
             self.assertEqual(first[component], second[component], component)
 
 

@@ -23,7 +23,7 @@ PRESETS = {"minimal", "recommended", "full", "custom"}
 PLATFORMS = {"all", "windows"}
 INSTALL_ROOTS = {"skills_root", "afyx_graph_root", "afyx_context_root", "codex_tools", ""}
 REQUIRED_KEYS = {"id", "name", "type", "tier", "ownership", "ownership_class", "presets", "platforms", "install_root", "install_path"}
-EXPECTED_IDS = ["efficient-coding", "odoo-engineering", "afyx-engineering-expert", "prompt-master", "afyx-graph", "afyx-context", "codex-usage-tracking", "headroom"]
+EXPECTED_IDS = ["efficient-coding", "odoo-engineering", "afyx-engineering-expert", "afyx-graph", "afyx-context", "codex-usage-tracking"]
 LINE_RE = re.compile(r'^\s*"[a-z_]+":\s*"[^"\\]*",?\s*$')
 
 
@@ -41,15 +41,15 @@ if set(document.get("supported_presets", "").split(";")) != PRESETS:
     fail("supported_presets must contain minimal, recommended, full and custom")
 providers = document.get("providers", [])
 provider_ids = [provider.get("provider") for provider in providers]
-if provider_ids != ["codex", "headroom"] or document.get("default_provider") != "codex":
-    fail("provider registry must declare Codex primary and Headroom external")
+if provider_ids != ["codex"] or document.get("default_provider") != "codex":
+    fail("provider registry must declare Codex as the only active provider")
 for provider in providers:
     if provider.get("ownership_class") not in OWNERSHIP_CLASSES:
         fail(f"provider {provider.get('provider')}: invalid ownership_class")
     if provider.get("configuration_policy") not in {"merge-afyx-owned-entries-only", "observe-only"}:
         fail(f"provider {provider.get('provider')}: unsafe configuration_policy")
-if providers[0].get("primary") != "true" or providers[1].get("primary") != "false":
-    fail("only Codex may be the primary v1 provider")
+if providers[0].get("primary") != "true":
+    fail("Codex must be the primary v1 provider")
 components = document["components"]
 
 # The Bash reader parses one scalar "key": "value" per line inside each object.
@@ -107,10 +107,6 @@ for preset, expected in expected_presets.items():
     actual = {component["id"] for component in components if preset in component["presets"].split(";")}
     if actual != expected:
         fail(f"{preset}: component membership mismatch")
-if by_id["prompt-master"]["ownership_class"] != "EXTERNAL" or by_id["headroom"]["ownership_class"] != "EXTERNAL":
-    fail("Prompt Master and Headroom must remain EXTERNAL")
-if by_id["prompt-master"]["tier"] != "external" or by_id["prompt-master"]["presets"]:
-    fail("Prompt Master must be external and absent from every default preset")
 
 # Bundled skills must ship exactly what the contract requires.
 for cid in ("efficient-coding", "odoo-engineering", "afyx-engineering-expert"):
@@ -132,10 +128,6 @@ for cid in ("efficient-coding", "odoo-engineering", "afyx-engineering-expert"):
         fail(f"{cid}: legacy adoption evidence must identify the verified 1.1.0 baseline")
     if not re.fullmatch(r"[0-9a-f]{64}", component.get("legacy_content_digest", "")) or not re.fullmatch(r"[0-9a-f]{64}", component.get("legacy_content_digest_bash", "")):
         fail(f"{cid}: legacy adoption digests must be exact SHA-256 values")
-if by_id["prompt-master"]["ownership"] != "upstream" or not by_id["prompt-master"].get("source", "").endswith(".git"):
-    fail("prompt-master must be upstream-owned with a git source")
-if by_id["prompt-master"].get("legacy_version") != "1.8.0" or not re.fullmatch(r"[0-9a-f]{40}", by_id["prompt-master"].get("source_revision", "")):
-    fail("prompt-master legacy adoption requires exact version and pinned Git revision evidence")
 
 # The graph component must agree with the operational metadata.
 graph = by_id["afyx-graph"]

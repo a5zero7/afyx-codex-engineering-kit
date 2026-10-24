@@ -3,6 +3,7 @@ set -euo pipefail
 
 readonly ENGINE_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 readonly CONTRACT="$ENGINE_ROOT/scripts/distribution-contract.mjs"
+readonly ARCHIVE_BUILDER="$ENGINE_ROOT/scripts/deterministic-archive.mjs"
 readonly ARTIFACT_IDENTITY="$ENGINE_ROOT/../../scripts/afyx-graph-artifact.mjs"
 readonly TARGET="${1:?usage: build-bundle.sh <target>}"
 readonly RELEASE_ROOT="$ENGINE_ROOT/release"
@@ -21,7 +22,7 @@ validate_target() {
   node "$CONTRACT" plan --target "$TARGET" >/dev/null
 }
 
-build_application() { echo "[bundle] building app"; (cd "$ENGINE_ROOT" && npm run build >/dev/null); }
+build_application() { echo "[bundle] building app from a clean dist"; (cd "$ENGINE_ROOT" && npm run build:clean >/dev/null); }
 
 stage_application() {
   mkdir -p "$STAGE/lib" "$STAGE/bin"
@@ -65,16 +66,10 @@ archive_bundle() {
   mkdir -p "$RELEASE_ROOT"
   if [ "$FAMILY" = "win32" ]; then
     ARCHIVE="$RELEASE_ROOT/$BUNDLE_NAME.zip"
-    rm -f "$ARCHIVE"
-    if command -v zip >/dev/null 2>&1; then (cd "$TEMP_ROOT" && zip -rqX "$ARCHIVE" "$BUNDLE_NAME")
-    elif command -v python3 >/dev/null 2>&1; then
-      python3 -c 'import pathlib,sys,zipfile; root=pathlib.Path(sys.argv[1]); source=root/sys.argv[2]; out=zipfile.ZipFile(sys.argv[3],"w",zipfile.ZIP_DEFLATED); [out.write(p,p.relative_to(root)) for p in sorted(source.rglob("*"))]; out.close()' "$TEMP_ROOT" "$BUNDLE_NAME" "$ARCHIVE"
-    else echo "[bundle] zip or python3 is required for Windows archives" >&2; exit 1; fi
   else
     ARCHIVE="$RELEASE_ROOT/$BUNDLE_NAME.tar.gz"
-    rm -f "$ARCHIVE"
-    case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) tar --no-xattrs --mode=755 -czf "$ARCHIVE" -C "$TEMP_ROOT" "$BUNDLE_NAME" ;; *) tar --no-xattrs -czf "$ARCHIVE" -C "$TEMP_ROOT" "$BUNDLE_NAME" ;; esac
   fi
+  node "$ARCHIVE_BUILDER" --source "$STAGE" --target "$TARGET" --output "$ARCHIVE" >/dev/null
   echo "[bundle] wrote $ARCHIVE ($(du -h "$ARCHIVE" | cut -f1))"
 }
 

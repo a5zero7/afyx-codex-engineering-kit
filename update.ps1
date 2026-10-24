@@ -29,6 +29,17 @@ if ($InstallUsageTracker -and $SkipUsageTracker) {
     exit 1
 }
 
+foreach ($id in $CustomComponent) {
+    if ($id -in @('prompt-master', 'headroom')) {
+        throw "Component '$id' is retired from Afyx Kit and remains externally/user managed; no changes were made."
+    }
+}
+foreach ($specification in $ComponentAction) {
+    if ($specification -match '^([a-z0-9-]+)=' -and $Matches[1] -in @('prompt-master', 'headroom')) {
+        throw "Component '$($Matches[1])' is retired from Afyx Kit and remains externally/user managed; no changes were made."
+    }
+}
+
 Write-Host 'Afyx Codex Engineering Kit — Windows updater (PowerShell)'
 
 if ($Offline -and -not $SkipSelfUpdate) {

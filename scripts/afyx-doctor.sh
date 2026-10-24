@@ -57,7 +57,7 @@ graph_freshness() {
 printf 'Afyx Engineering Doctor\n'
 
 printf '\nCORE\n'
-for id in efficient-coding odoo-engineering prompt-master; do
+for id in efficient-coding odoo-engineering; do
   afyx_component_evaluate "$id"
   name="$(afyx_component_field "$id" name)"
   if [[ "$AFYX_STATE" == HEALTHY ]]; then line OK "$name" "$AFYX_VERSION"; else line FAIL "$name" "$AFYX_STATE: $AFYX_DETAIL"; fi
@@ -82,9 +82,6 @@ case "$AFYX_STATE" in
   'NOT INSTALLED') if [[ "$AFYX_DETAIL" == 'not installed' ]]; then line INFO 'Codex Usage Tracking' 'not installed (optional)'; else line INFO 'Codex Usage Tracking' "$AFYX_DETAIL"; fi ;;
   *) line WARN 'Codex Usage Tracking' "$AFYX_STATE: $AFYX_DETAIL" ;;
 esac
-afyx_component_evaluate headroom
-if [[ "$AFYX_STATE" == HEALTHY ]]; then line OK 'Headroom' 'detected (externally managed)'; else line INFO 'Headroom' 'not detected (externally managed, optional)'; fi
-
 printf '\nENVIRONMENT\n'
 codex_version="$(tool_version codex --version || true)"
 extension_detected=false
@@ -93,7 +90,7 @@ if [[ -n "$codex_version" ]]; then line OK 'Codex CLI' "$codex_version"; else li
 if "$extension_detected"; then line OK 'VS Code extension' 'detected'; else line INFO 'VS Code extension' 'not detected'; fi
 if [[ -z "$codex_version" ]] && ! "$extension_detected"; then line FAIL 'Codex host' 'neither Codex CLI nor the ChatGPT/Codex VS Code extension was detected'; fi
 git_version="$(tool_version git --version || true)"
-if [[ -n "$git_version" ]]; then line OK 'Git' "$git_version"; else line WARN 'Git' 'not found; required to install Prompt Master and for freshness checks'; fi
+if [[ -n "$git_version" ]]; then line OK 'Git' "$git_version"; else line WARN 'Git' 'not found; required for source and freshness checks'; fi
 python_version="$(tool_version python3 --version || tool_version python --version || true)"
 if [[ -n "$python_version" ]]; then line OK 'Python' "$python_version (optional: validators and evals)"; else line INFO 'Python' 'not found (optional: validators and evals)'; fi
 line OK 'Bash' "${BASH_VERSION:-unknown} ($(afyx_platform))"
