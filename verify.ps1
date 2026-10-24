@@ -3,6 +3,10 @@ param(
     [string]$SkillsRoot = (Join-Path $env:USERPROFILE '.agents\skills'),
     [string]$Preset = '',
     [string[]]$CustomComponent = @(),
+    [string[]]$Provider = @('codex'),
+    [ValidateSet('global', 'workspace')][string]$ProviderScope = 'global',
+    [string]$WorkspaceRoot = (Get-Location).Path,
+    [string]$GeminiHome = $(if ($env:AFYX_GEMINI_HOME) { $env:AFYX_GEMINI_HOME } else { Join-Path $env:USERPROFILE '.gemini' }),
     [string]$ContextRuntimeRoot = $(if ($env:AFYX_CONTEXT_RUNTIME_ROOT) { $env:AFYX_CONTEXT_RUNTIME_ROOT } else { Join-Path $env:USERPROFILE '.afyx\context' })
 )
 
@@ -21,6 +25,18 @@ function Write-Result([string]$State, [string]$Name, [string]$Detail = '') {
 # One component truth: scripts/components.json, read through the shared module.
 Import-Module (Join-Path $PSScriptRoot 'scripts\lib\AfyxComponents.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'scripts\lib\AfyxSkillLifecycle.psm1') -Force
+$providerIds = @(Get-AfyxProviderRegistry | ForEach-Object { [string]$_.provider })
+$unknownProviders = @($Provider | Where-Object { $_ -notin $providerIds })
+if ($unknownProviders.Count) { throw "Unknown provider(s): $($unknownProviders -join ', ')" }
+if (-not $PSBoundParameters.ContainsKey('SkillsRoot') -and $ProviderScope -eq 'workspace' -and 'antigravity' -in $Provider) {
+    $SkillsRoot = Join-Path $WorkspaceRoot '.agents\skills'
+}
+$additionalSkillRoots = @()
+if ($ProviderScope -eq 'global' -and 'antigravity' -in $Provider) {
+    $antigravitySkillRoots = @((Join-Path $GeminiHome 'config\skills'), (Join-Path $GeminiHome 'antigravity-cli\skills'))
+    if (-not $PSBoundParameters.ContainsKey('SkillsRoot') -and $Provider.Count -eq 1) { $SkillsRoot = $antigravitySkillRoots[0] }
+    $additionalSkillRoots = @($antigravitySkillRoots | Where-Object { [System.IO.Path]::GetFullPath($_) -ne [System.IO.Path]::GetFullPath($SkillsRoot) })
+}
 $componentContext = New-AfyxComponentContext -SkillsRoot $SkillsRoot -GraphRoot $graphRoot -ContextRoot $ContextRuntimeRoot -CodexHome $codexHome
 $componentStates = @{}
 foreach ($componentState in (Get-AfyxComponentStates -Context $componentContext)) { $componentStates[$componentState.Id] = $componentState }
@@ -43,11 +59,25 @@ foreach ($id in $CustomComponent) {
         throw "Component '$id' is retired from Afyx Kit and remains externally/user managed; no changes were made."
     }
 }
-$controlPlan = if ($Preset) { Get-AfyxControlPlan -Preset $Preset -CustomComponent $CustomComponent -Context $componentContext -StateById $componentStates } else { $null }
+$controlPlan = if ($Preset) { Get-AfyxControlPlan -Preset $Preset -CustomComponent $CustomComponent -Provider $Provider -Context $componentContext -StateById $componentStates } else { $null }
 
 Write-Host 'Afyx Codex Engineering Kit — readiness verification (Windows PowerShell)'
-foreach ($provider in (Get-AfyxProviderRegistry)) {
-    Write-Result 'INFO' "Provider adapter: $($provider.name)" "primary=$($provider.primary); ownership=$($provider.ownership_class); capabilities=$($provider.capabilities); policy=$($provider.configuration_policy)"
+foreach ($providerRecord in (Get-AfyxProviderRegistry)) {
+    Write-Result 'INFO' "Provider adapter: $($providerRecord.name)" "primary=$($providerRecord.primary); ownership=$($providerRecord.ownership_class); capabilities=$($providerRecord.capabilities); policy=$($providerRecord.configuration_policy)"
+}
+if ('antigravity' -in $Provider) {
+    $nodeCommand = Get-Command node -ErrorAction SilentlyContinue
+    $entry = Join-Path $graphRoot 'current\lib\dist\bin\afyx-graph.js'
+    if ($nodeCommand -and (Test-Path -LiteralPath $entry -PathType Leaf)) {
+        $providerTool = Join-Path $PSScriptRoot 'scripts\afyx-provider-integration.mjs'
+        $providerJson = (& $nodeCommand.Source $providerTool --providers antigravity --scope $ProviderScope --workspace-root $WorkspaceRoot --gemini-home $GeminiHome --node $nodeCommand.Source --entry $entry) -join ''
+        try {
+            $providerResult = $providerJson | ConvertFrom-Json -Depth 20
+            $level = if ($providerResult.status -in @('READY', 'CONFIGURED_RESTART_REQUIRED')) { 'OK' } elseif ($providerResult.status -eq 'BLOCKED') { 'FAIL' } else { 'INFO' }
+            Write-Result $level 'Antigravity MCP' "$($providerResult.status): $($providerResult.providers[0].detail)"
+            if ($level -eq 'FAIL') { $coreFailure = $true }
+        } catch { Write-Result 'FAIL' 'Antigravity MCP' 'provider status was not valid JSON'; $coreFailure = $true }
+    } else { Write-Result 'INFO' 'Antigravity MCP' 'BLOCKED: Graph runtime or Node.js unavailable' }
 }
 if ($controlPlan) {
     Write-Result 'INFO' 'Desired state plan' $controlPlan.Identity
@@ -55,6 +85,16 @@ if ($controlPlan) {
         if ($item.Drift -eq 'IN_SYNC') { Write-Result 'OK' "Plan/$($item.Id)" 'IN_SYNC' }
         elseif ($item.Drift -eq 'NOT_APPLICABLE' -or -not $item.Desired) { Write-Result 'INFO' "Plan/$($item.Id)" "$($item.Drift); preserved" }
         else { Write-Result 'FAIL' "Plan/$($item.Id)" "$($item.Drift); ownership=$($item.ActualOwnership); repair=$($item.Repair)"; $coreFailure = $true }
+    }
+}
+foreach ($additionalRoot in $additionalSkillRoots) {
+    foreach ($component in Get-AfyxComponentContract | Where-Object { $_.type -eq 'skill' -and $_.ownership -eq 'afyx' }) {
+        $desired = -not $controlPlan -or [string]$component.id -in $controlPlan.DesiredComponents
+        $target = Join-Path $additionalRoot ([string]$component.install_path)
+        $ownership = Get-AfyxSkillOwnership -Target $target -Component ([string]$component.id) -ExpectedOwner ([string]$component.ownership)
+        if ($ownership -eq 'AFYX_OWNED_UNMODIFIED') { Write-Result 'OK' "Antigravity skill/$($component.id)" "$additionalRoot; ownership verified" }
+        elseif ($ownership -eq 'NOT_INSTALLED' -and -not $desired) { Write-Result 'INFO' "Antigravity skill/$($component.id)" "$additionalRoot; not selected" }
+        elseif ($desired) { Write-Result 'FAIL' "Antigravity skill/$($component.id)" "$additionalRoot; $ownership"; $coreFailure = $true }
     }
 }
 $git = Get-Command git -ErrorAction SilentlyContinue

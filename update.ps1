@@ -16,6 +16,11 @@ param(
     [switch]$SkipUsageTracker,
     [switch]$SkipGraphMcp,
     [switch]$SkipGraphPathUpdate,
+    [string[]]$Provider = @(),
+    [ValidateSet('global', 'workspace')][string]$ProviderScope = 'global',
+    [string]$WorkspaceRoot = (Get-Location).Path,
+    [string]$GeminiHome = $(if ($env:AFYX_GEMINI_HOME) { $env:AFYX_GEMINI_HOME } else { Join-Path $env:USERPROFILE '.gemini' }),
+    [switch]$SkipProviderConfiguration,
     [string]$ContextRuntimeRoot = $(if ($env:AFYX_CONTEXT_RUNTIME_ROOT) { $env:AFYX_CONTEXT_RUNTIME_ROOT } else { Join-Path $env:USERPROFILE '.afyx\context' })
 )
 
@@ -23,6 +28,9 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $installer = Join-Path $PSScriptRoot 'install.ps1'
 $root = $PSScriptRoot
+if (-not $PSBoundParameters.ContainsKey('SkillsRoot') -and $ProviderScope -eq 'workspace' -and 'antigravity' -in $Provider) {
+    $SkillsRoot = Join-Path $WorkspaceRoot '.agents\skills'
+}
 
 if ($InstallUsageTracker -and $SkipUsageTracker) {
     Write-Error '-InstallUsageTracker and -SkipUsageTracker cannot be used together.'
@@ -73,7 +81,7 @@ $usageArguments = @{}
 if ($InstallUsageTracker) { $usageArguments.InstallUsageTracker = $true }
 elseif ($SkipUsageTracker) { $usageArguments.SkipUsageTracker = $true }
 
-& $installer -SkillsRoot $SkillsRoot -UpdateInstalled -ComponentAction $ComponentAction -Preset $Preset -CustomComponent $CustomComponent -Offline:$Offline -NoBuildFallback:$NoBuildFallback -AllowDirtySource:$AllowDirtySource -SkipGraphMcp:$SkipGraphMcp -SkipGraphPathUpdate:$SkipGraphPathUpdate -ContextRuntimeRoot $ContextRuntimeRoot -Confirm:$false -WhatIf:$WhatIfPreference @usageArguments
+& $installer -SkillsRoot $SkillsRoot -UpdateInstalled -ComponentAction $ComponentAction -Preset $Preset -CustomComponent $CustomComponent -Offline:$Offline -NoBuildFallback:$NoBuildFallback -AllowDirtySource:$AllowDirtySource -SkipGraphMcp:$SkipGraphMcp -SkipGraphPathUpdate:$SkipGraphPathUpdate -Provider $Provider -ProviderScope $ProviderScope -WorkspaceRoot $WorkspaceRoot -GeminiHome $GeminiHome -SkipProviderConfiguration:$SkipProviderConfiguration -ContextRuntimeRoot $ContextRuntimeRoot -Confirm:$false -WhatIf:$WhatIfPreference @usageArguments
 $installerSucceeded = $?
 $installerExitCode = 0
 if (Test-Path -LiteralPath variable:LASTEXITCODE) { $installerExitCode = [int]$LASTEXITCODE }

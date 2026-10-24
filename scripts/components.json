@@ -10,6 +10,22 @@
       "primary": "true",
       "ownership_class": "USER",
       "capabilities": "skills;mcp;hooks;provider-routing",
+      "host_commands": "codex",
+      "surfaces": "cli;ide",
+      "mcp_scopes": "global",
+      "skill_scopes": "global;workspace",
+      "configuration_policy": "merge-afyx-owned-entries-only"
+    },
+    {
+      "provider": "antigravity",
+      "name": "Antigravity",
+      "primary": "false",
+      "ownership_class": "USER",
+      "capabilities": "skills;mcp",
+      "host_commands": "agy;antigravity",
+      "surfaces": "cli;ide",
+      "mcp_scopes": "global;workspace",
+      "skill_scopes": "ide-global;cli-global;workspace",
       "configuration_policy": "merge-afyx-owned-entries-only"
     }
   ],
@@ -131,6 +147,7 @@
       "install_path": "",
       "version_source": "",
       "version_required": "false",
+      "providers": "codex",
       "required_files": "CodexUsage.psm1;codex-usage-stop.ps1;codex-usage-watch.ps1;codex-usage-doctor.ps1;codex-usage-pricing.json"
     }
   ]

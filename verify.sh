@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+PACKAGE_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
 skills_root="${CODEX_SKILLS_ROOT:-$HOME/.agents/skills}"
+skills_root_explicit=false
 codex_home="${CODEX_HOME:-$HOME/.codex}"
 config="$codex_home/config.toml"
 graph_root="${AFYX_GRAPH_RUNTIME_ROOT:-$HOME/.afyx/graph}"
@@ -9,21 +12,44 @@ context_root="${AFYX_CONTEXT_RUNTIME_ROOT:-$HOME/.afyx/context}"
 core_failure=false
 preset=
 custom_component_list=
+provider_list=codex
+provider_scope=global
+workspace_root="$PWD"
+gemini_home="${AFYX_GEMINI_HOME:-$HOME/.gemini}"
 
 usage() {
-  printf '%s\n' 'Usage: ./verify.sh [--skills-root PATH] [--context-runtime-root PATH] [--preset minimal|recommended|full|custom] [--custom-component ID]'
+  printf '%s\n' 'Usage: ./verify.sh [--skills-root PATH] [--context-runtime-root PATH] [--provider codex|antigravity[,..]] [--provider-scope global|workspace] [--workspace-root PATH] [--gemini-home PATH] [--preset minimal|recommended|full|custom] [--custom-component ID]'
 }
 
 while (($#)); do
   case "$1" in
-    --skills-root) skills_root="$2"; shift 2 ;;
+    --skills-root) skills_root="$2"; skills_root_explicit=true; shift 2 ;;
     --context-runtime-root) context_root="$2"; shift 2 ;;
     --preset) preset="$2"; shift 2 ;;
     --custom-component) custom_component_list="${custom_component_list:+$custom_component_list;}$2"; shift 2 ;;
+    --provider) provider_list="$2"; shift 2 ;;
+    --provider-scope) provider_scope="$2"; shift 2 ;;
+    --workspace-root) workspace_root="$2"; shift 2 ;;
+    --gemini-home) gemini_home="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) printf 'Unknown option: %s\n' "$1" >&2; usage >&2; exit 2 ;;
   esac
 done
+case "$provider_scope" in global|workspace) ;; *) printf 'Unknown provider scope: %s\n' "$provider_scope" >&2; exit 2 ;; esac
+old_ifs=$IFS; IFS=','
+for provider_id in $provider_list; do case "$provider_id" in codex|antigravity) ;; *) printf 'Unknown provider: %s\n' "$provider_id" >&2; exit 2 ;; esac; done
+IFS=$old_ifs
+if [[ "$skills_root_explicit" == false && "$provider_scope" == workspace && ",$provider_list," == *,antigravity,* ]]; then
+  skills_root="$workspace_root/.agents/skills"
+fi
+additional_skill_roots=()
+if [[ "$provider_scope" == global && ",$provider_list," == *,antigravity,* ]]; then
+  antigravity_ide_skills="$gemini_home/config/skills"
+  antigravity_cli_skills="$gemini_home/antigravity-cli/skills"
+  if [[ "$skills_root_explicit" == false && "$provider_list" == antigravity ]]; then skills_root="$antigravity_ide_skills"; fi
+  [[ "$skills_root" == "$antigravity_ide_skills" ]] || additional_skill_roots+=("$antigravity_ide_skills")
+  [[ "$skills_root" == "$antigravity_cli_skills" ]] || additional_skill_roots+=("$antigravity_cli_skills")
+fi
 
 result() {
   local state="$1" label="$2" detail="${3:-}"
@@ -66,15 +92,27 @@ for provider_id in $(afyx_provider_ids); do
   result INFO "Provider adapter: $(afyx_provider_field "$provider_id" name)" "primary=$(afyx_provider_field "$provider_id" primary); ownership=$(afyx_provider_field "$provider_id" ownership_class); capabilities=$(afyx_provider_field "$provider_id" capabilities); policy=$(afyx_provider_field "$provider_id" configuration_policy)"
 done
 if [[ -n "$preset" ]]; then
-  result INFO 'Desired state plan' "$(afyx_control_plan_identity "$preset" "$custom_component_list")"
+  result INFO 'Desired state plan' "$(afyx_control_plan_identity "$preset" "$custom_component_list" "$provider_list")"
   for plan_id in $(afyx_component_ids); do
     verify_component_evaluate "$plan_id"; plan_state="$AFYX_STATE"
-    afyx_control_classify "$plan_id" "$plan_state" "$preset" "$custom_component_list"
+    afyx_control_classify "$plan_id" "$plan_state" "$preset" "$custom_component_list" "$provider_list"
     if [[ "$AFYX_DRIFT" == IN_SYNC ]]; then result OK "Plan/$plan_id" IN_SYNC
     elif [[ "$AFYX_DRIFT" == NOT_APPLICABLE || "$AFYX_DESIRED" != true ]]; then result INFO "Plan/$plan_id" "$AFYX_DRIFT; preserved"
     else result FAIL "Plan/$plan_id" "$AFYX_DRIFT; ownership=$AFYX_ACTUAL_OWNERSHIP; repair=$AFYX_REPAIR"; core_failure=true; fi
   done
 fi
+for additional_root in ${additional_skill_roots[@]+"${additional_skill_roots[@]}"}; do
+  for component_id in $(afyx_component_ids); do
+    [[ "$(afyx_component_field "$component_id" type)" == skill && "$(afyx_component_field "$component_id" ownership)" == afyx ]] || continue
+    target="$additional_root/$(afyx_component_field "$component_id" install_path)"
+    desired=false
+    if [[ -n "$preset" ]]; then afyx_component_desired "$component_id" "$preset" "$custom_component_list" "$provider_list" && desired=true || :; elif [[ -e "$target" ]]; then desired=true; fi
+    afyx_classify_skill "$target" "$component_id" afyx
+    if [[ "$AFYX_OWNERSHIP_STATE" == AFYX_OWNED_UNMODIFIED ]]; then result OK "Antigravity skill/$component_id" "$additional_root; ownership verified"
+    elif [[ "$desired" == true ]]; then result FAIL "Antigravity skill/$component_id" "$additional_root; $AFYX_OWNERSHIP_STATE"; core_failure=true
+    else result INFO "Antigravity skill/$component_id" "$additional_root; not selected"; fi
+  done
+done
 case "$(uname -s)" in Darwin) verify_os=macOS ;; Linux) verify_os=Linux ;; *) verify_os="$(uname -s)"; core_failure=true ;; esac
 result OK 'OS/architecture [REQUIRED]' "$verify_os / $(uname -m)"
 result OK 'Platform shell [REQUIRED]' "Bash ${BASH_VERSION}"
@@ -101,7 +139,7 @@ if [[ -n "$preset" ]]; then
   required_skill_ids=
   for component_id in $(afyx_component_ids); do
     [[ "$(afyx_component_field "$component_id" type)" == skill ]] || continue
-    afyx_component_desired "$component_id" "$preset" "$custom_component_list" && required_skill_ids="${required_skill_ids:+$required_skill_ids }$component_id"
+    afyx_component_desired "$component_id" "$preset" "$custom_component_list" "$provider_list" && required_skill_ids="${required_skill_ids:+$required_skill_ids }$component_id"
   done
 fi
 for component_id in $required_skill_ids; do
@@ -142,6 +180,15 @@ if [[ "$AFYX_STATE" == HEALTHY ]] && command -v node >/dev/null 2>&1 && command 
 elif ! command -v codex >/dev/null 2>&1; then result INFO 'Afyx Graph MCP' 'MCP_BLOCKED: Codex CLI unavailable'
 elif [[ "$AFYX_STATE" != HEALTHY ]]; then result INFO 'Afyx Graph MCP' 'MCP_BLOCKED: Graph runtime unavailable'
 else result INFO 'Afyx Graph MCP' 'MCP_NOT_CONFIGURED'; fi
+if [[ ",$provider_list," == *,antigravity,* && "$AFYX_STATE" == HEALTHY ]] && command -v node >/dev/null 2>&1; then
+  set +e
+  provider_json="$(node "$PACKAGE_ROOT/scripts/afyx-provider-integration.mjs" --providers antigravity --scope "$provider_scope" --workspace-root "$workspace_root" --gemini-home "$gemini_home" --node "$(command -v node)" --entry "$AFYX_PATH/current/lib/dist/bin/afyx-graph.js" 2>/dev/null)"; provider_exit=$?
+  set -e
+  provider_state="$(printf '%s' "$provider_json" | sed -n 's/.*"status":"\([^"]*\)".*/\1/p')"
+  case "$provider_state" in READY|CONFIGURED_RESTART_REQUIRED) result OK 'Antigravity MCP' "$provider_state" ;; BLOCKED) result FAIL 'Antigravity MCP' "$provider_json"; core_failure=true ;; *) result INFO 'Antigravity MCP' "${provider_state:-UNAVAILABLE}" ;; esac
+  : "$provider_exit"
+fi
+
 verify_component_evaluate afyx-context
 case "$AFYX_STATE" in
   'NOT INSTALLED') result INFO 'Afyx Context Engine' 'not installed (optional; explicit selection only)' ;;

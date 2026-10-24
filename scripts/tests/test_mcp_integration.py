@@ -60,7 +60,7 @@ console.log(JSON.stringify([classifyEntry(null,expected),classifyEntry(current,e
 
             fake_codex = launcher_dir / "fake-codex.mjs"
             fake_codex.write_text(
-                """import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+                """import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 const home = process.env.CODEX_HOME;
 const state = resolve(home, 'fixture-state.json');
@@ -79,7 +79,8 @@ if (action === 'get') {
   writeFileSync(state, JSON.stringify({ transport: { type: 'stdio', command: command[0], args: command.slice(1) } }));
   writeFileSync(config, '[mcp_servers.afyx_graph]\\n');
 } else if (action === 'remove') {
-  process.exit(0);
+  rmSync(state, { force: true });
+  rmSync(config, { force: true });
 } else {
   process.exit(8);
 }
@@ -121,6 +122,14 @@ if (action === 'get') {
             self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
             self.assertEqual(json.loads(second.stdout)["mcp"], "MCP_REACHABLE")
             self.assertFalse(json.loads(second.stdout)["changed"])
+
+            removed = subprocess.run(command + ["--uninstall"], cwd=ROOT, capture_output=True, text=True)
+            self.assertEqual(removed.returncode, 0, removed.stdout + removed.stderr)
+            self.assertEqual(json.loads(removed.stdout)["mcp"], "MCP_NOT_CONFIGURED")
+            self.assertTrue(json.loads(removed.stdout)["changed"])
+            self.assertFalse((codex_home / ".afyx-provider-ownership.json").exists())
+            restored = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
+            self.assertEqual(restored.returncode, 0, restored.stdout + restored.stderr)
 
             (codex_home / "fixture-state.json").write_text("not json", encoding="utf-8")
             invalid = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)

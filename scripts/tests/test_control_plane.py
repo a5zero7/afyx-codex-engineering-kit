@@ -126,8 +126,9 @@ class ControlPlaneContractTests(unittest.TestCase):
     def test_registry_presets_and_ownership_boundaries(self) -> None:
         contract = json.loads((ROOT / "scripts/components.json").read_text(encoding="utf-8"))
         self.assertEqual(contract["default_provider"], "codex")
-        self.assertEqual([item["provider"] for item in contract["providers"]], ["codex"])
+        self.assertEqual([item["provider"] for item in contract["providers"]], ["codex", "antigravity"])
         self.assertEqual(contract["providers"][0]["configuration_policy"], "merge-afyx-owned-entries-only")
+        self.assertEqual(contract["providers"][1]["mcp_scopes"], "global;workspace")
         by_id = {item["id"]: item for item in contract["components"]}
         self.assertNotIn("prompt-master", by_id)
         self.assertNotIn("headroom", by_id)
@@ -143,6 +144,7 @@ class ControlPlaneContractTests(unittest.TestCase):
             {item["id"] for item in contract["components"] if "full" in item["presets"].split(";")},
             {"efficient-coding", "odoo-engineering", "afyx-engineering-expert", "afyx-graph", "codex-usage-tracking"},
         )
+        self.assertEqual(by_id["codex-usage-tracking"]["providers"], "codex")
     def test_legacy_verify_preserves_retired_external_skill(self) -> None:
         shutil.copytree(ROOT / "skills/efficient-coding", self.skills / "efficient-coding")
         shutil.copytree(ROOT / "skills/odoo-engineering", self.skills / "odoo-engineering")
@@ -396,6 +398,24 @@ class ControlPlaneContractTests(unittest.TestCase):
         )
         ps_result = subprocess.run([powershell, "-NoProfile", "-NonInteractive", "-Command", ps_script], cwd=ROOT, env=self.env, capture_output=True, text=True, check=True)
         self.assertEqual(bash_result.stdout.strip(), ps_result.stdout.strip())
+
+    def test_antigravity_full_plan_excludes_codex_only_usage_tracking(self) -> None:
+        powershell = pwsh_path()
+        if not powershell:
+            self.skipTest("PowerShell is required")
+        script = (
+            f"Import-Module '{ROOT / 'scripts/lib/AfyxComponents.psm1'}' -Force; "
+            f"$ctx=New-AfyxComponentContext -SkillsRoot '{self.skills}' -GraphRoot '{self.graph}' -CodexHome '{self.codex}'; "
+            "(Get-AfyxControlPlan -Preset full -Provider antigravity -Context $ctx).Identity"
+        )
+        result = subprocess.run(
+            [powershell, "-NoProfile", "-NonInteractive", "-Command", script],
+            cwd=ROOT, env=self.env, capture_output=True, text=True, check=True,
+        )
+        self.assertEqual(
+            result.stdout.strip(),
+            "v1|full|antigravity|efficient-coding,odoo-engineering,afyx-engineering-expert,afyx-graph",
+        )
 
 
 if __name__ == "__main__":

@@ -11,7 +11,7 @@ only selected Afyx-owned destinations, but those changes are real.
 | Git | Always | Clone, source identity, and safe fast-forward update |
 | Windows PowerShell 5.1+ or PowerShell 7 | Windows | Native Windows path; WSL is not required |
 | Bash 3.2+ | Linux/macOS | `install.sh`, `update.sh`, `verify.sh`, `uninstall.sh` |
-| Codex CLI or ChatGPT/Codex VS Code extension | Skill host | At least one supported host |
+| Codex CLI / VS Code extension or Antigravity (`agy`) | Skill/MCP host | Select only hosts that are installed |
 | Node.js 22.5+ | Graph or ACE | External runtime; not bundled in archives |
 | npm | Local build fallback/development | Not required by an already packaged runtime |
 | Archive and SHA-256 support | Graph artifact install | Platform package integrity checks |
@@ -32,6 +32,50 @@ The canonical preset membership comes from
 On Linux/macOS, Windows-only Usage Tracking is `NOT_APPLICABLE`, not a failed
 installation. ACE (`afyx-context`) is absent from all implicit presets.
 Components outside the desired plan are preserved, not removed.
+
+## Provider-aware onboarding
+
+Codex remains the default provider. Provider adapters are not Kit components, and
+shared runtimes are installed once. Select Antigravity explicitly:
+
+```powershell
+# Shared workspace skills + workspace MCP configuration
+.\install.ps1 -Preset full -Provider codex,antigravity `
+  -ProviderScope workspace -WorkspaceRoot (Get-Location)
+
+# Antigravity global IDE/CLI skills + unified global MCP configuration
+.\install.ps1 -Preset full -Provider antigravity -ProviderScope global
+```
+
+```bash
+./install.sh --preset full --provider codex,antigravity \
+  --provider-scope workspace --workspace-root "$PWD"
+./install.sh --preset full --provider antigravity --provider-scope global
+```
+
+Workspace scope uses `.agents/skills/` and `.agents/mcp_config.json`. Global
+Antigravity scope uses `~/.gemini/config/skills/`,
+`~/.gemini/antigravity-cli/skills/`, and the shared
+`~/.gemini/config/mcp_config.json`. The installer preserves unrelated JSON and
+refuses foreign `afyx_graph`, malformed, reparse-point, or ambiguous legacy
+configuration. A global MCP change requires restarting the host. Usage Tracking
+is Codex-only and is excluded when Antigravity is the only selected provider.
+
+Preview with `-WhatIf` / `--dry-run`; verification accepts the same provider and
+scope arguments. Remove provider configuration only when explicitly requested:
+
+```powershell
+.\uninstall.ps1 -RemoveProviderConfiguration -Provider antigravity -ProviderScope global
+```
+
+```bash
+./uninstall.sh --remove-provider-configuration --provider antigravity --provider-scope global
+```
+
+Removal requires a matching Afyx ownership marker. A matching but unowned entry
+is preserved and reported as blocked. Backups remain under `AFYX_BACKUP_ROOT` or
+the default `~/.afyx/backups`; restore the most recent component directory to its
+documented skill root if rollback is needed.
 
 ## Windows Native / PowerShell
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /** Consent-safe Codex MCP registration through the native `codex mcp` CLI. */
-import { copyFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
-import { basename, extname, normalize, resolve } from 'node:path';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { basename, dirname, extname, normalize, resolve } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
@@ -133,7 +133,35 @@ function removeBackup(backup) {
   if (backup?.backup) rmSync(backup.backup, { force: true });
 }
 
-async function handshake(node, entry) {
+function ownershipPath(codexHome) {
+  return resolve(codexHome, '.afyx-provider-ownership.json');
+}
+
+function readOwnership(codexHome) {
+  const file = ownershipPath(codexHome);
+  if (!existsSync(file)) return { file, document: { schemaVersion: 1, entries: {} } };
+  try {
+    const document = JSON.parse(readFileSync(file, 'utf8'));
+    if (!document || Array.isArray(document) || typeof document !== 'object') throw new Error('root is not an object');
+    document.entries ||= {};
+    return { file, document };
+  } catch (error) {
+    throw new McpIntegrationError('MCP_INVALID_OWNERSHIP', `Codex ownership marker is invalid: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+function writeOwnership(ownership) {
+  mkdirSync(dirname(ownership.file), { recursive: true });
+  const temporary = `${ownership.file}.tmp-${process.pid}`;
+  try {
+    writeFileSync(temporary, `${JSON.stringify(ownership.document, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' });
+    renameSync(temporary, ownership.file);
+  } finally {
+    rmSync(temporary, { force: true });
+  }
+}
+
+export async function probeMcp(node, entry) {
   return await new Promise((resolveHandshake) => {
     const child = spawn(node, [entry, 'serve', '--mcp'], {
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -222,12 +250,72 @@ export async function integrate(options) {
     result.detail = 'Conflicting or unproven afyx_graph entry was preserved.';
     return result;
   }
+  let ownership;
+  try {
+    ownership = readOwnership(options.codexHome);
+  } catch (error) {
+    result.reason = error instanceof McpIntegrationError ? error.reason : 'MCP_INVALID_OWNERSHIP';
+    result.detail = error instanceof Error ? error.message : String(error);
+    return result;
+  }
+  if (options.uninstall) {
+    if (!existing) {
+      result.mcp = 'MCP_NOT_CONFIGURED';
+      result.detail = 'No Codex MCP entry is configured.';
+      return result;
+    }
+    const claim = ownership.document.entries?.afyx_graph;
+    const claimedExpected = claim?.provider === 'codex' ? claim.expected : null;
+    if (!claimedExpected || classifyEntry(existing, claimedExpected) !== 'MCP_CONFIGURED') {
+      result.mcp = 'MCP_BLOCKED';
+      result.reason = 'MCP_UNOWNED_ENTRY';
+      result.detail = 'Codex afyx_graph entry lacks a matching Afyx ownership marker and was preserved.';
+      return result;
+    }
+    if (!options.apply) {
+      result.detail = 'Owned Codex MCP removal is available but was not consented.';
+      return result;
+    }
+    const backup = backupConfig(options.codexHome);
+    const markerBackup = existsSync(ownership.file) ? `${ownership.file}.afyx-backup` : null;
+    if (markerBackup) copyFileSync(ownership.file, markerBackup);
+    try {
+      requireCodexSuccess(codexRun(options.codex, options.codexHome, ['mcp', 'remove', 'afyx_graph']), 'Codex MCP removal');
+      if (readExisting(options.codex, options.codexHome).existing) throw new Error('Codex MCP removal did not persist.');
+      delete ownership.document.entries.afyx_graph;
+      if (Object.keys(ownership.document.entries).length) writeOwnership(ownership);
+      else rmSync(ownership.file, { force: true });
+      removeBackup(backup);
+      if (markerBackup) rmSync(markerBackup, { force: true });
+      result.mcp = 'MCP_NOT_CONFIGURED';
+      result.changed = true;
+      result.reason = '';
+      result.detail = 'Owned Codex MCP entry removed; unrelated configuration preserved.';
+      return result;
+    } catch (error) {
+      restoreBackup(backup);
+      if (markerBackup) { copyFileSync(markerBackup, ownership.file); rmSync(markerBackup, { force: true }); }
+      else rmSync(ownership.file, { force: true });
+      result.mcp = 'MCP_BLOCKED';
+      result.reason = 'MCP_REMOVAL_FAILED';
+      result.detail = `Codex MCP removal failed and configuration was restored: ${error instanceof Error ? error.message : String(error)}`;
+      return result;
+    }
+  }
   if (!options.apply && state !== 'MCP_CONFIGURED') {
     result.detail = 'Registration is available but was not consented.';
     return result;
   }
   if (options.apply && state !== 'MCP_CONFIGURED') {
+    const preflightProbe = await probeMcp(options.node, options.entry);
+    if (!preflightProbe.ok) {
+      result.mcp = 'MCP_HANDSHAKE_FAILED';
+      result.reason = 'MCP_HANDSHAKE_FAILED';
+      result.detail = `MCP configuration was not changed: ${preflightProbe.detail}`;
+      return result;
+    }
     const backup = backupConfig(options.codexHome);
+    const ownershipBefore = existsSync(ownership.file) ? readFileSync(ownership.file) : null;
     try {
       if (state === 'MCP_STALE_OWNED') {
         const removed = codexRun(options.codex, options.codexHome, ['mcp', 'remove', 'afyx_graph']);
@@ -241,16 +329,20 @@ export async function integrate(options) {
       if (state !== 'MCP_CONFIGURED') throw new Error('Codex MCP registration did not persist the expected direct-Node entry.');
       result.changed = true;
       result.reason = '';
+      ownership.document.entries.afyx_graph = { provider: 'codex', expected: { node: options.node, entry: options.entry } };
+      writeOwnership(ownership);
       removeBackup(backup);
     } catch (error) {
       restoreBackup(backup);
+      if (ownershipBefore === null) rmSync(ownership.file, { force: true });
+      else writeFileSync(ownership.file, ownershipBefore);
       result.mcp = 'MCP_BLOCKED';
       result.reason = error instanceof McpIntegrationError ? error.reason : 'MCP_REGISTRATION_FAILED';
       result.detail = `Graph runtime is installed; MCP registration failed and configuration was restored: ${error instanceof Error ? error.message : String(error)}`;
       return result;
     }
   }
-  const probe = await handshake(options.node, options.entry);
+  const probe = await probeMcp(options.node, options.entry);
   result.mcp = probe.ok ? 'MCP_REACHABLE' : 'MCP_HANDSHAKE_FAILED';
   result.reason = probe.ok ? '' : 'MCP_HANDSHAKE_FAILED';
   result.detail = probe.detail;
@@ -264,6 +356,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
     codex: argument('--codex') ? resolve(argument('--codex')) : '',
     codexHome: resolve(argument('--codex-home')),
     apply: process.argv.includes('--apply'),
+    uninstall: process.argv.includes('--uninstall'),
   };
   integrate(options).then((result) => {
     console.log(JSON.stringify(result));
