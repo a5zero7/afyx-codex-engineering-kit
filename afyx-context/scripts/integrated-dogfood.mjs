@@ -139,11 +139,11 @@ async function main() {
       toolName: 'afyx_graph_explore',
       args: { query: 'SaleOrder afyx_total_snapshot' },
     });
-    assert.equal(sourceProtected.ace.items[0].classification, 'source-evidence');
-    assert.equal(sourceProtected.ace.items[0].disposition, 'original');
+    assert.equal(sourceProtected.status, 'bypassed');
+    assert.equal(sourceProtected.ace, null);
     const diagnostic = await makeConsumer('diagnostic').execute({ ...base, toolName: 'afyx_graph_status', args: {} });
-    assert.equal(diagnostic.ace.items[0].classification, 'diagnostic');
-    assert.equal(diagnostic.ace.items[0].disposition, 'original');
+    assert.equal(diagnostic.status, 'bypassed');
+    assert.equal(diagnostic.ace, null);
     const security = await makeConsumer('security').execute({
       ...base,
       args: { query: 'SECURITY', limit: 100 },
@@ -260,8 +260,8 @@ async function main() {
         repeated: repeated.value.status,
         uniqueDisposition: unique.ace.items[0].disposition,
         protected: {
-          source: sourceProtected.ace.items[0].disposition,
-          diagnostic: diagnostic.ace.items[0].disposition,
+          source: sourceProtected.status,
+          diagnostic: diagnostic.status,
           security: security.ace.items[0].disposition,
         },
         recoveryExact: recovered.value.content === rawText,

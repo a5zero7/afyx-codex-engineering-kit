@@ -189,17 +189,26 @@ for (const phase of ['after-lock-acquired', 'before-session-commit', 'after-sess
   });
 }
 
-test('source-bearing Graph tools remain protected and inline', async (t) => {
-  const { consumer } = enabledConsumer(t);
-  const result = await consumer.execute({
-    ...query,
-    toolName: 'afyx_graph_explore',
-    executeGraph: async () => graphResult(),
+test('protected Graph tools bypass ACE and preserve the exact result without state', async (t) => {
+  let aceCalls = 0;
+  const { consumer, stateDir } = enabledConsumer(t, {
+    aceRunner: async () => { aceCalls += 1; throw new Error('must not run'); },
   });
-  assert.equal(result.status, 'optimized');
-  assert.equal(result.ace.items[0].classification, 'source-evidence');
-  assert.equal(result.ace.items[0].disposition, 'original');
-  assert.match(result.consumerResult.content[0].text, /Inventory fact line/);
+  const original = graphResult();
+
+  for (const toolName of ['afyx_graph_explore', 'afyx_graph_status']) {
+    const result = await consumer.execute({
+      ...query,
+      toolName,
+      executeGraph: async () => original,
+    });
+    assert.equal(result.status, 'bypassed');
+    assert.deepEqual(result.consumerResult, original);
+    assert.equal(result.ace, null);
+  }
+
+  assert.equal(aceCalls, 0);
+  assert.equal(fs.existsSync(stateDir), false);
 });
 
 test('unavailable, throwing, timed-out, malformed, and incomplete ACE all preserve exact Graph output', async () => {
