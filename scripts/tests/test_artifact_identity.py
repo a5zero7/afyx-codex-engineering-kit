@@ -142,6 +142,36 @@ class ArtifactIdentityTests(unittest.TestCase):
             )
             self.assertEqual(json.loads(verified.stdout)["status"], "VERIFIED")
 
+            metadata_record = json.loads(metadata.read_text(encoding="utf-8"))
+            metadata_record["artifact_target"] = "linux-arm64" if target != "linux-arm64" else "win32-x64"
+            metadata.write_text(json.dumps(metadata_record), encoding="utf-8")
+            wrong_target = self.run_tool(
+                "verify-release-manifest", "--manifest", str(manifest), "--archive", str(archive),
+                "--metadata", str(metadata), expected=1,
+            )
+            self.assertIn("target does not match", wrong_target.stderr)
+            metadata_record["artifact_target"] = target
+            metadata.write_text(json.dumps(metadata_record), encoding="utf-8")
+
+            manifest_record = json.loads(manifest.read_text(encoding="utf-8"))
+            manifest_record["source_revision"] = "d" * 40
+            manifest.write_text(json.dumps(manifest_record), encoding="utf-8")
+            wrong_revision = self.run_tool(
+                "verify-release-manifest", "--manifest", str(manifest), "--archive", str(archive),
+                "--metadata", str(metadata), expected=1,
+            )
+            self.assertIn("revision does not match", wrong_revision.stderr)
+            manifest_record["source_revision"] = revision
+            manifest_record["product_version"] = "9.9.9"
+            manifest.write_text(json.dumps(manifest_record), encoding="utf-8")
+            wrong_version = self.run_tool(
+                "verify-release-manifest", "--manifest", str(manifest), "--archive", str(archive),
+                "--metadata", str(metadata), expected=1,
+            )
+            self.assertIn("version does not match", wrong_version.stderr)
+            manifest_record["product_version"] = "1.0.0"
+            manifest.write_text(json.dumps(manifest_record), encoding="utf-8")
+
             archive.write_bytes(archive.read_bytes() + b"tampered")
             failed = self.run_tool(
                 "verify-release-manifest", "--manifest", str(manifest), "--archive", str(archive), "--metadata", str(metadata), expected=1
