@@ -114,8 +114,9 @@ async function main() {
       toolName: 'afyx_graph_explore',
       args: { query: 'SaleOrder synthetic_total' },
     });
-    assert.equal(protectedResult.ace.items[0].classification, 'source-evidence');
-    assert.equal(protectedResult.ace.items[0].disposition, 'original');
+    assert.equal(protectedResult.status, 'bypassed');
+    assert.equal(protectedResult.ace, null);
+    assert.match(protectedResult.consumerResult.content[0].text, /synthetic_total/);
 
     const off = createGraphAceConsumer();
     const offResult = await off.execute({ ...base, args: matchingArgs });
@@ -152,7 +153,7 @@ async function main() {
         off: offResult.status,
         repeated: repeated.status,
         mostlyUniqueDisposition: mostlyUnique.ace.items[0].disposition,
-        protectedDisposition: protectedResult.ace.items[0].disposition,
+        protectedStatus: protectedResult.status,
         recoveryExact: recovered.content === rawText,
       },
       cost: {

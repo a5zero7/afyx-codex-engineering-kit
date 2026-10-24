@@ -115,8 +115,9 @@ process with a distinct OS PID. Timeout terminates that child and waits for its
 exit before returning the exact Graph result; an unconfirmed termination fails
 closed instead of reporting completion while mutation may continue. Disabled,
 unavailable, malformed, or corrupt ACE also returns the exact Graph result.
-`explore`, `files`, and `node` output is classified as protected source evidence
-and remains inline. References are recoverable only through the same
+`explore`, `files`, `node`, and diagnostic output is protected and bypasses the
+ACE worker because it must remain inline byte-for-byte. References are
+recoverable only through the same
 owner/session; invalid or corrupt recovery fails closed. Callers should use
 `deriveGraphAceIdentity` to bind an owner to the canonical project/consumer and a
 session to the exact source identity.

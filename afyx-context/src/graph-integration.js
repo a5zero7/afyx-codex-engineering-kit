@@ -258,6 +258,12 @@ export function createGraphAceConsumer(options = {}) {
     }
 
     const classification = classificationFor(tool);
+    // ACE deliberately preserves protected Graph output byte-for-byte. Starting
+    // a worker for those tools can only add latency/state and cannot reduce the
+    // returned context, so keep the authoritative Graph result inline.
+    if (classification !== 'normal') {
+      return exactGraphFallback(graphResult, 'bypassed');
+    }
     let queryIdentity;
     try {
       const encodedQuery = JSON.stringify({ toolName: tool, args });
