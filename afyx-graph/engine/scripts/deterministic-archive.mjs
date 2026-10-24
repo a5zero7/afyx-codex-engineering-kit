@@ -181,12 +181,14 @@ export function createDeterministicArchive({ source, target, output }) {
   const bytes = family === 'win32' ? zipArchive(files) : deterministicGzip(tarArchive(files));
   mkdirSync(dirname(destination), { recursive: true });
   const temporary = `${destination}.tmp-${process.pid}`;
+  let temporaryCreated = false;
   try {
-    writeFileSync(temporary, bytes);
-    rmSync(destination, { force: true });
+    writeFileSync(temporary, bytes, { flag: 'wx' });
+    temporaryCreated = true;
     renameSync(temporary, destination);
+    temporaryCreated = false;
   } finally {
-    rmSync(temporary, { force: true });
+    if (temporaryCreated) rmSync(temporary, { force: true });
   }
   return { bytes: bytes.length, entries: files.length };
 }

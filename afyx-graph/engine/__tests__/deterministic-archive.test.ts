@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   chmodSync,
+  existsSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
@@ -82,5 +83,35 @@ describe('deterministic distribution archives', () => {
       target: 'win32-x64',
       output: join(root, 'self.zip'),
     })).toThrow(/outside the source tree/);
+  });
+
+  it('atomically replaces an existing archive', () => {
+    const root = fixture(['metadata.json'], new Date('2020-01-01T00:00:00Z'));
+    const output = join(root, '..', 'existing.zip');
+    writeFileSync(output, 'previous-archive');
+    createDeterministicArchive({ source: root, target: 'win32-x64', output });
+    expect(readFileSync(output).subarray(0, 4).toString('binary')).toBe('PK\x03\x04');
+    expect(existsSync(`${output}.tmp-${process.pid}`)).toBe(false);
+  });
+
+  it('preserves existing output and cleans its own temporary file when publication fails', () => {
+    const root = fixture(['metadata.json'], new Date('2020-01-01T00:00:00Z'));
+    const output = join(root, '..', 'occupied.zip');
+    mkdirSync(output);
+    writeFileSync(join(output, 'owner.txt'), 'external-owner');
+    expect(() => createDeterministicArchive({ source: root, target: 'win32-x64', output })).toThrow();
+    expect(readFileSync(join(output, 'owner.txt'), 'utf8')).toBe('external-owner');
+    expect(existsSync(`${output}.tmp-${process.pid}`)).toBe(false);
+  });
+
+  it('does not overwrite or remove a pre-existing temporary path', () => {
+    const root = fixture(['metadata.json'], new Date('2020-01-01T00:00:00Z'));
+    const output = join(root, '..', 'blocked.zip');
+    const temporary = `${output}.tmp-${process.pid}`;
+    writeFileSync(output, 'previous-archive');
+    writeFileSync(temporary, 'foreign-temporary');
+    expect(() => createDeterministicArchive({ source: root, target: 'win32-x64', output })).toThrow();
+    expect(readFileSync(output, 'utf8')).toBe('previous-archive');
+    expect(readFileSync(temporary, 'utf8')).toBe('foreign-temporary');
   });
 });
