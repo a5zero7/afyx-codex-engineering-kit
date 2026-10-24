@@ -64,14 +64,20 @@
       "readiness": "PREPARED_EXECUTABLE_NOT_RUN",
       "content_identity": "deab6d987eb8af8ad2ab312f7ed9facb3be1cbda20622eeeaedc80a1db0829a4",
       "identity_algorithm": "sorted POSIX-relative path and LF-normalized UTF-8 content SHA-256",
-      "source": "skills/efficient-coding",
+      "source": "evals/forge/candidates/B1/efficient-coding",
+      "provenance": {
+        "repository": "a5zero7/afyx-codex-engineering-kit",
+        "commit": "42caee21083c8e08774344dd698adffe1b38790e",
+        "path": "skills/efficient-coding",
+        "version": "1.2.0"
+      },
       "composition_order": ["efficient-coding"],
       "dependencies": [],
       "activation": "implicit host skill routing; successful SKILL.md read must be observed",
       "entry_point": "evaluated workspace .agents/skills/efficient-coding/SKILL.md",
       "materialization": {
         "kind": "copy_tree",
-        "source": "skills/efficient-coding",
+        "source": "evals/forge/candidates/B1/efficient-coding",
         "destination": ".agents/skills/efficient-coding",
         "identity_root": ".agents/skills/efficient-coding"
       }
