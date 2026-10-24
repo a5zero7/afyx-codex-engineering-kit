@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /** Consent-safe Codex MCP registration through the native `codex mcp` CLI. */
-import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { basename, dirname, extname, normalize, resolve } from 'node:path';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { basename, dirname, extname, join, normalize, resolve } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 function argument(name, fallback = '') {
@@ -163,12 +164,25 @@ function writeOwnership(ownership) {
 
 export async function probeMcp(node, entry) {
   return await new Promise((resolveHandshake) => {
+    const probeRoot = mkdtempSync(join(tmpdir(), 'afyx-mcp-probe-'));
+    const probeEnv = {
+      ...process.env,
+      AFYX_GRAPH_NO_DAEMON: '1',
+      AFYX_GRAPH_NO_WATCH: '1',
+      NODE_DISABLE_COMPILE_CACHE: '1',
+      NO_COLOR: '1',
+    };
+    // The installer probe validates the stdio/tool contract, not any caller's
+    // currently selected corpus. Inheriting an external-state binding here can
+    // make an otherwise healthy runtime inspect or bind unrelated project
+    // state before provider configuration has even been consented.
+    delete probeEnv.AFYX_GRAPH_STATE_DIR;
+    delete probeEnv.NODE_COMPILE_CACHE;
     const child = spawn(node, [entry, 'serve', '--mcp'], {
+      cwd: probeRoot,
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true,
-      // Keep the installed daemon policy: an additional Codex client should
-      // proxy the shared daemon instead of contending for its writer lock.
-      env: { ...process.env, AFYX_GRAPH_NO_WATCH: '1', NO_COLOR: '1' },
+      env: probeEnv,
     });
     let buffer = '';
     let stderr = '';
@@ -179,6 +193,11 @@ export async function probeMcp(node, entry) {
       settled = true;
       clearTimeout(timer);
       child.kill();
+      try { rmSync(probeRoot, { recursive: true, force: true }); } catch {
+        child.once('close', () => {
+          try { rmSync(probeRoot, { recursive: true, force: true }); } catch { /* best-effort temporary cleanup */ }
+        });
+      }
       resolveHandshake(result);
     };
     const configuredTimeout = Number.parseInt(process.env.AFYX_MCP_HANDSHAKE_TIMEOUT_MS || '', 10);
