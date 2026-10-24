@@ -6,6 +6,7 @@ import {
   lstatSync,
   mkdirSync,
   readFileSync,
+  realpathSync,
   renameSync,
   rmSync,
   writeFileSync,
@@ -27,8 +28,13 @@ function same(left, right) {
 }
 
 function normalizedPath(value) {
-  const absolute = resolve(String(value || ''));
+  const absolute = canonicalPath(value);
   return process.platform === 'win32' ? absolute.toLowerCase() : absolute;
+}
+
+function canonicalPath(value) {
+  const absolute = resolve(String(value || ''));
+  return existsSync(absolute) ? realpathSync.native(absolute) : absolute;
 }
 
 function entryEquivalent(actual, expected) {
@@ -46,11 +52,13 @@ function inside(base, candidate) {
 
 function assertSafePath(base, candidate) {
   if (!inside(base, candidate)) throw new Error(`PROVIDER_PATH_OUTSIDE_SCOPE: ${candidate}`);
+  const boundary = resolve(base);
   let cursor = resolve(candidate);
   for (;;) {
     if (existsSync(cursor) && lstatSync(cursor).isSymbolicLink()) {
       throw new Error(`PROVIDER_PATH_REPARSE_BLOCKED: ${cursor}`);
     }
+    if (cursor === boundary) break;
     const parent = dirname(cursor);
     if (parent === cursor) break;
     cursor = parent;
@@ -109,7 +117,7 @@ function antigravityPaths(options) {
 }
 
 function expectedEntry(options) {
-  return { command: resolve(options.node), args: [resolve(options.entry), 'serve', '--mcp'] };
+  return { command: canonicalPath(options.node), args: [canonicalPath(options.entry), 'serve', '--mcp'] };
 }
 
 function inspectAntigravity(options) {
