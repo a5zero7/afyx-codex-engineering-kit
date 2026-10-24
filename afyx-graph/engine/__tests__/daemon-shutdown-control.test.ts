@@ -90,7 +90,8 @@ describe('native daemon shutdown control', () => {
     const lock = await waitFor(() => readLock(root));
     const boundLock = await waitFor(async () => {
       const current = readLock(root);
-      return current && await probeDaemonIdentity(current) ? current : null;
+      const lifecycleEndpointPublished = process.platform !== 'win32' || Boolean(current?.controlSocketPath);
+      return current && lifecycleEndpointPublished && await probeDaemonIdentity(current) ? current : null;
     });
     return { child, lock: boundLock };
   }
@@ -157,7 +158,8 @@ describe('native daemon shutdown control', () => {
       env: { ...process.env, HOME: home, USERPROFILE: home },
     });
 
-    expect(listed).toContain('No Afyx Graph daemons running.');
+    expect(listed).toContain('No verified Afyx Graph daemons are available.');
+    expect(listed).toContain('ownership artifacts intact');
     expect(listed).not.toContain(`pid ${process.pid}`);
     expect(fs.existsSync(pidPath)).toBe(true);
   });

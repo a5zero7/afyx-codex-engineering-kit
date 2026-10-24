@@ -1766,7 +1766,7 @@ program
     const currentRoots = cwdRoot ? [cwdRoot] : [];
     const daemons = await listVerifiedDaemons({ roots: currentRoots });
     if (daemons.length === 0) {
-      info('No Afyx Graph daemons running.');
+      info('No verified Afyx Graph daemons are available. Any live candidates that could not be verified were left running with ownership artifacts intact.');
       return;
     }
 

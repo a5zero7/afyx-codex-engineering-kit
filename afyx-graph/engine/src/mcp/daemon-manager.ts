@@ -112,7 +112,7 @@ export async function runDaemonPicker(deps: PickerDeps): Promise<void> {
   while (true) {
     const daemons = await deps.list();
     if (daemons.length === 0) {
-      deps.done('All daemons stopped.');
+      deps.done('No verified daemons are available. Any live candidates that could not be verified were left running with ownership artifacts intact.');
       return;
     }
 
