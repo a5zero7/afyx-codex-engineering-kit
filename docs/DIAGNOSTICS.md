@@ -11,12 +11,16 @@ Satu sumber kebenaran: [`scripts/components.json`](../scripts/components.json). 
 | Efficient Coding | core | afyx | `<skills-root>/efficient-coding` |
 | Odoo Engineering | core | afyx | `<skills-root>/odoo-engineering` |
 | Afyx Engineering Expert | optional | afyx | `<skills-root>/afyx-engineering-expert` |
-| Prompt Master | core | upstream | `<skills-root>/prompt-master` |
+| Prompt Master | external | upstream | `<skills-root>/prompt-master` (explicit Custom/action only) |
 | Afyx Graph | optional | afyx | `~/.afyx/graph` |
+| Afyx Context Engine | optional | afyx | `~/.afyx/context` (explicit Custom/action only) |
 | Codex Usage Tracking | optional | afyx | `<codex-home>/tools` (Windows) |
 | Headroom | external | external | hanya dideteksi |
 
-Status komponen selalu salah satu dari `NOT INSTALLED`, `HEALTHY`, `INCOMPLETE`, `INVALID`, atau `UNKNOWN`. Komponen yang sudah ada menawarkan `[S] Skip` (default) atau `[R] Replace`; mode non-interaktif selalu Skip.
+Status komponen selalu salah satu dari `NOT INSTALLED`, `HEALTHY`, `INCOMPLETE`,
+`INVALID`, `DRIFTED`, atau `UNKNOWN`. Action yang tersedia bergantung pada state,
+ownership, preset, dan mode interaktif; target asing/tidak terbukti tidak diambil
+alih secara diam-diam.
 
 `python scripts/validate-components.py` memvalidasi kontrak secara statis (format satu pasangan `"key": "value"` per baris agar terbaca Bash, file yang dijanjikan benar-benar dikirim, dan konsistensi dengan metadata Afyx Graph).
 
