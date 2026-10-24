@@ -6,6 +6,7 @@ BUNDLED_EFFICIENT="$PACKAGE_ROOT/skills/efficient-coding"
 BUNDLED_ODOO="$PACKAGE_ROOT/skills/odoo-engineering"
 BUNDLED_EXPERT="$PACKAGE_ROOT/skills/afyx-engineering-expert"
 skills_root="${CODEX_SKILLS_ROOT:-$HOME/.agents/skills}"
+skills_root_explicit=false
 graph_root="${AFYX_GRAPH_RUNTIME_ROOT:-$HOME/.afyx/graph}"
 context_root="${AFYX_CONTEXT_RUNTIME_ROOT:-$HOME/.afyx/context}"
 force=false
@@ -20,14 +21,20 @@ offline=false
 no_build_fallback=false
 allow_dirty_source=false
 skip_graph_mcp=false
+provider_list=codex
+provider_explicit=false
+provider_scope=global
+workspace_root="$PWD"
+gemini_home="${AFYX_GEMINI_HOME:-$HOME/.gemini}"
+skip_provider_configuration=false
 
 usage() {
-  printf '%s\n' 'Usage: ./install.sh [--skills-root PATH] [--context-runtime-root PATH] [--preset minimal|recommended|full|custom] [--custom-component ID] [--component ID=skip|install|update|repair|adopt] [--update-installed] [--force] [--validate-only] [--dry-run]'
+  printf '%s\n' 'Usage: ./install.sh [--skills-root PATH] [--context-runtime-root PATH] [--provider codex|antigravity[,..]] [--provider-scope global|workspace] [--workspace-root PATH] [--gemini-home PATH] [--skip-provider-configuration] [--preset minimal|recommended|full|custom] [--custom-component ID] [--component ID=skip|install|update|repair|adopt] [--update-installed] [--force] [--validate-only] [--dry-run]'
 }
 
 while (($#)); do
   case "$1" in
-    --skills-root) (($# >= 2)) || { printf '%s\n' '--skills-root requires a value.' >&2; exit 2; }; skills_root="$2"; shift 2 ;;
+    --skills-root) (($# >= 2)) || { printf '%s\n' '--skills-root requires a value.' >&2; exit 2; }; skills_root="$2"; skills_root_explicit=true; shift 2 ;;
     --context-runtime-root) (($# >= 2)) || { printf '%s\n' '--context-runtime-root requires a value.' >&2; exit 2; }; context_root="$2"; shift 2 ;;
     --force) force=true; shift ;;
     --component) (($# >= 2)) || { printf '%s\n' '--component requires a value.' >&2; exit 2; }; component_actions+=("$2"); component_action_count=$((component_action_count + 1)); shift 2 ;;
@@ -38,12 +45,47 @@ while (($#)); do
     --no-build-fallback) no_build_fallback=true; shift ;;
     --allow-dirty-source) allow_dirty_source=true; shift ;;
     --skip-graph-mcp) skip_graph_mcp=true; shift ;;
+    --provider) (($# >= 2)) || { printf '%s\n' '--provider requires a value.' >&2; exit 2; }; provider_list="$2"; provider_explicit=true; shift 2 ;;
+    --provider-scope) (($# >= 2)) || { printf '%s\n' '--provider-scope requires a value.' >&2; exit 2; }; provider_scope="$2"; shift 2 ;;
+    --workspace-root) (($# >= 2)) || { printf '%s\n' '--workspace-root requires a value.' >&2; exit 2; }; workspace_root="$2"; shift 2 ;;
+    --gemini-home) (($# >= 2)) || { printf '%s\n' '--gemini-home requires a value.' >&2; exit 2; }; gemini_home="$2"; shift 2 ;;
+    --skip-provider-configuration) skip_provider_configuration=true; shift ;;
     --validate-only) validate_only=true; shift ;;
     --dry-run) dry_run=true; shift ;;
     -h|--help) usage; exit 0 ;;
     *) printf 'Unknown option: %s\n' "$1" >&2; usage >&2; exit 2 ;;
   esac
 done
+
+if [[ "$provider_explicit" == false && -t 0 && -t 1 && -z "${CI:-}" ]]; then
+  detected_providers=
+  command -v codex >/dev/null 2>&1 && detected_providers=codex
+  if command -v agy >/dev/null 2>&1 || command -v antigravity >/dev/null 2>&1; then detected_providers="${detected_providers:+$detected_providers,}antigravity"; fi
+  printf 'Provider hosts detected: %s\n' "${detected_providers:-none}"
+  read -r -p 'Provider selection: [A] All detected / [R] Recommended Codex / [C] Custom / [S] Skip [R]: ' provider_choice || provider_choice=
+  case "$provider_choice" in
+    [aA]|[aA][lL][lL]) provider_list="${detected_providers:-codex}" ;;
+    [cC]|[cC][uU][sS][tT][oO][mM]) read -r -p 'Provider ids (comma-separated): ' provider_list ;;
+    [sS]|[sS][kK][iI][pP]) provider_list=codex; skip_provider_configuration=true ;;
+    *) provider_list=codex ;;
+  esac
+fi
+
+case "$provider_scope" in global|workspace) ;; *) printf 'Unknown provider scope: %s\n' "$provider_scope" >&2; exit 2 ;; esac
+old_ifs=$IFS; IFS=','
+for provider_id in $provider_list; do case "$provider_id" in codex|antigravity) ;; *) printf 'Unknown provider: %s\n' "$provider_id" >&2; exit 2 ;; esac; done
+IFS=$old_ifs
+if [[ "$skills_root_explicit" == false && "$provider_scope" == workspace && ",$provider_list," == *,antigravity,* ]]; then
+  skills_root="$workspace_root/.agents/skills"
+fi
+additional_skill_roots=()
+if [[ "$provider_scope" == global && ",$provider_list," == *,antigravity,* ]]; then
+  antigravity_ide_skills="$gemini_home/config/skills"
+  antigravity_cli_skills="$gemini_home/antigravity-cli/skills"
+  if [[ "$skills_root_explicit" == false && "$provider_list" == antigravity ]]; then skills_root="$antigravity_ide_skills"; fi
+  [[ "$skills_root" == "$antigravity_ide_skills" ]] || additional_skill_roots+=("$antigravity_ide_skills")
+  [[ "$skills_root" == "$antigravity_cli_skills" ]] || additional_skill_roots+=("$antigravity_cli_skills")
+fi
 
 printf 'Afyx Codex Engineering Kit — Linux/macOS installer (Bash)\n'
 
@@ -125,7 +167,7 @@ component_action() {
   available="$(available_version "$id")"
   if action="$(explicit_action "$id")"; then :
   elif [[ -n "$preset" ]]; then
-    afyx_control_classify "$id" "$state" "$preset" "$custom_component_list"
+    afyx_control_classify "$id" "$state" "$preset" "$custom_component_list" "$provider_list"
     if [[ "$AFYX_DESIRED" != true || "$AFYX_DRIFT" == NOT_APPLICABLE ]]; then action=skip
     elif [[ "$AFYX_REPAIR" == BLOCKED ]]; then printf '%s drift is %s with actual ownership %s; automatic takeover is forbidden.\n' "$label" "$AFYX_DRIFT" "$AFYX_ACTUAL_OWNERSHIP" >&2; return 2
     elif [[ "$AFYX_REPAIR" == INSTALL ]]; then action=install
@@ -187,7 +229,7 @@ install_choice() {
 replacement_authorized() {
   local id="$1" specification
   "$force" && return 0
-  if [[ -n "$preset" ]] && afyx_component_desired "$id" "$preset" "$custom_component_list"; then return 0; fi
+  if [[ -n "$preset" ]] && afyx_component_desired "$id" "$preset" "$custom_component_list" "$provider_list"; then return 0; fi
   for specification in ${component_actions[@]+"${component_actions[@]}"}; do
     [[ "$specification" == "$id="* && "$specification" != "$id=skip" ]] && return 0
   done
@@ -251,15 +293,40 @@ printf 'Afyx Graph: %s; installed=%s; available=%s; ownership=afyx\n' "$afyx_gra
 printf 'Afyx Context Engine: %s; installed=%s; available=%s; ownership=afyx\n' "$afyx_context_state" "$(component_version afyx-context)" "$(available_version afyx-context)"
 printf 'Usage Tracking: NOT INSTALLED (Windows-only runtime)\n'
 if [[ -n "$preset" ]]; then
-  printf '\nDesired State Plan: %s\n' "$(afyx_control_plan_identity "$preset" "$custom_component_list")"
+  printf '\nDesired State Plan: %s\n' "$(afyx_control_plan_identity "$preset" "$custom_component_list" "$provider_list")"
   for plan_id in $(afyx_component_ids); do
     plan_state="$(component_state "$plan_id")"
-    afyx_control_classify "$plan_id" "$plan_state" "$preset" "$custom_component_list"
+    afyx_control_classify "$plan_id" "$plan_state" "$preset" "$custom_component_list" "$provider_list"
     printf '%s: desired=%s; actual=%s; drift=%s; ownership=%s; repair=%s\n' "$plan_id" "$AFYX_DESIRED" "$plan_state" "$AFYX_DRIFT" "$AFYX_ACTUAL_OWNERSHIP" "$AFYX_REPAIR"
   done
 fi
+printf '\nProvider Plan\n'
+if "$skip_provider_configuration"; then printf 'Provider configuration: skipped explicitly\n'; fi
+old_ifs=$IFS; IFS=','
+for provider_id in $provider_list; do
+  if [[ "$provider_id" == codex ]]; then provider_name=Codex; command -v codex >/dev/null 2>&1 && provider_detected=true || provider_detected=false; provider_path="${CODEX_HOME:-$HOME/.codex}/config.toml"
+  else provider_name=Antigravity; { command -v agy >/dev/null 2>&1 || command -v antigravity >/dev/null 2>&1; } && provider_detected=true || provider_detected=false; [[ "$provider_scope" == workspace ]] && provider_path="$workspace_root/.agents/mcp_config.json" || provider_path="$gemini_home/config/mcp_config.json"
+  fi
+  printf '%s: detected=%s; scope=%s; planned-config=%s\n' "$provider_name" "$provider_detected" "$provider_scope" "$provider_path"
+  if [[ "$provider_id" == antigravity ]]; then
+    if [[ "$provider_scope" == workspace ]]; then provider_skills="$workspace_root/.agents/skills"; else provider_skills="$gemini_home/config/skills;$gemini_home/antigravity-cli/skills"; fi
+    printf 'Antigravity planned skills: %s\n' "$provider_skills"
+  fi
+done
+IFS=$old_ifs
+if ! "$skip_graph_mcp" && ! "$skip_provider_configuration" && [[ ",$provider_list," == *,antigravity,* ]] && command -v node >/dev/null 2>&1; then
+  set +e
+  preflight_json="$(node "$PACKAGE_ROOT/scripts/afyx-provider-integration.mjs" --providers antigravity --scope "$provider_scope" --workspace-root "$workspace_root" --gemini-home "$gemini_home" --node "$(command -v node)" --entry "$graph_root/current/lib/dist/bin/afyx-graph.js" 2>/dev/null)"; preflight_exit=$?
+  set -e
+  preflight_reason="$(printf '%s' "$preflight_json" | sed -n 's/.*"reason":"\([^"]*\)".*/\1/p')"
+  if ((preflight_exit != 0)) && [[ "$preflight_reason" != GRAPH_RUNTIME_UNAVAILABLE ]]; then
+    printf 'Antigravity provider plan is blocked before mutation: %s\n' "$preflight_json" >&2
+    exit 1
+  fi
+fi
 
 codex_cli_detected=false; command -v codex >/dev/null 2>&1 && codex_cli_detected=true
+antigravity_detected=false; { command -v agy >/dev/null 2>&1 || command -v antigravity >/dev/null 2>&1; } && antigravity_detected=true
 vscode_extension_detected=false
 for extension in "$HOME"/.vscode/extensions/openai.chatgpt-*; do [[ -d "$extension" ]] && { vscode_extension_detected=true; break; }; done
 
@@ -268,6 +335,7 @@ printf '[REQUIRED] OS/architecture: %s / %s\n' "$(uname -s)" "$(uname -m)"
 printf '[REQUIRED] Platform shell: Bash %s\n' "$BASH_VERSION"
 if command -v git >/dev/null 2>&1; then printf '[REQUIRED] Git: %s\n' "$(git --version)"; else printf '[REQUIRED] Git: MISSING — install Git with the documented OS package manager\n'; fi
 if "$codex_cli_detected" || "$vscode_extension_detected"; then printf '[REQUIRED] Codex host: detected\n'; else printf '[REQUIRED] Codex host: MISSING — install Codex CLI or the supported VS Code extension\n'; fi
+if "$antigravity_detected"; then printf '[REQUIRED] Antigravity host: detected\n'; else printf '[REQUIRED] Antigravity host: not detected\n'; fi
 if command -v node >/dev/null 2>&1; then printf '[COMPONENT_REQUIRED:Afyx Graph] Node.js >=22.5.0: %s\n' "$(node --version)"; else printf '[COMPONENT_REQUIRED:Afyx Graph] Node.js >=22.5.0: MISSING — install from https://nodejs.org/\n'; fi
 if command -v npm >/dev/null 2>&1; then printf '[BUILD_ONLY:Afyx Graph] npm: %s\n' "$(npm --version)"; else printf '[BUILD_ONLY:Afyx Graph] npm: MISSING — needed only for automatic local fallback\n'; fi
 printf '[COMPONENT_REQUIRED:Afyx Graph] Archive/checksum: tar + SHA-256 tool required\n'
@@ -292,7 +360,7 @@ if [[ -n "$preset" ]]; then
   blocked_plan=
   for plan_id in $(afyx_component_ids); do
     plan_state="$(component_state "$plan_id")"
-    afyx_control_classify "$plan_id" "$plan_state" "$preset" "$custom_component_list"
+    afyx_control_classify "$plan_id" "$plan_state" "$preset" "$custom_component_list" "$provider_list"
     if [[ "$AFYX_DESIRED" == true && "$AFYX_REPAIR" == BLOCKED ]]; then
       blocked_plan="${blocked_plan:+$blocked_plan, }$plan_id:$AFYX_DRIFT:$AFYX_ACTUAL_OWNERSHIP"
     fi
@@ -300,13 +368,23 @@ if [[ -n "$preset" ]]; then
   [[ -z "$blocked_plan" ]] || { printf 'Desired-state plan is blocked before mutation: %s\n' "$blocked_plan" >&2; exit 1; }
 fi
 
-if ! "$codex_cli_detected" && ! "$vscode_extension_detected"; then printf 'Neither Codex CLI nor the ChatGPT/Codex VS Code extension was detected.\n' >&2; exit 1; fi
+if [[ ",$provider_list," == *,codex,* ]] && ! "$codex_cli_detected" && ! "$vscode_extension_detected"; then printf 'Selected Codex provider host was not detected.\n' >&2; exit 1; fi
+if [[ ",$provider_list," == *,antigravity,* ]] && ! "$antigravity_detected"; then printf 'Selected Antigravity provider host was not detected.\n' >&2; exit 1; fi
 command -v git >/dev/null 2>&1 || { printf 'Git is required for Afyx source validation and lifecycle updates.\n' >&2; exit 1; }
-run mkdir -p "$skills_root"
-
 efficient_action="$(component_action efficient-coding 'Efficient Coding' "$efficient_state" "$(component_version efficient-coding)")"
 odoo_action="$(component_action odoo-engineering 'Odoo Engineering' "$odoo_state" "$(component_version odoo-engineering)")"
 expert_action="$(component_action afyx-engineering-expert 'Afyx Engineering Expert' "$expert_state" "$(component_version afyx-engineering-expert)")"
+for additional_root in ${additional_skill_roots[@]+"${additional_skill_roots[@]}"}; do
+  for skill_spec in "efficient-coding|$efficient_action" "odoo-engineering|$odoo_action" "afyx-engineering-expert|$expert_action"; do
+    skill_id="${skill_spec%%|*}"; skill_action="${skill_spec#*|}"
+    if [[ -n "$preset" ]] && afyx_component_desired "$skill_id" "$preset" "$custom_component_list" "$provider_list"; then skill_action=install; fi
+    [[ "$skill_action" != skip && "$skill_action" != adopt ]] || continue
+    target="$additional_root/$skill_id"
+    afyx_classify_skill "$target" "$skill_id" afyx
+    case "$AFYX_OWNERSHIP_STATE" in NOT_INSTALLED|AFYX_OWNED_UNMODIFIED|AFYX_OWNED_MODIFIED) ;; *) printf 'Provider skill plan is blocked at %s because ownership is %s.\n' "$target" "$AFYX_OWNERSHIP_STATE" >&2; exit 1 ;; esac
+  done
+done
+run mkdir -p "$skills_root"
 efficient_result=skipped
 odoo_result=skipped
 expert_result=skipped
@@ -319,6 +397,30 @@ if [[ "$expert_action" == adopt ]]; then
   exit 1
 elif [[ "$expert_action" != skip ]]; then expert_result="$(safe_skill_install afyx-engineering-expert 'Afyx Engineering Expert' "$BUNDLED_EXPERT" "$expert_target" "$([[ "$expert_action" == install ]] && printf false || printf true)")"; fi
 
+replicate_provider_skill() {
+  local id="$1" label="$2" source="$3" action="$4" root target replace result
+  if [[ -n "$preset" ]] && afyx_component_desired "$id" "$preset" "$custom_component_list" "$provider_list"; then action=install; fi
+  [[ "$action" != skip && "$action" != adopt ]] || return 0
+  for root in ${additional_skill_roots[@]+"${additional_skill_roots[@]}"}; do
+    target="$root/$id"
+    afyx_classify_skill "$target" "$id" afyx
+    case "$AFYX_OWNERSHIP_STATE" in
+      NOT_INSTALLED) replace=false ;;
+      AFYX_OWNED_UNMODIFIED)
+        if [[ "$(afyx_skill_version "$target")" == "$(afyx_skill_version "$source")" ]]; then printf '%s [%s]: skipped\n' "$label" "$root"; continue; fi
+        replace=true
+        ;;
+      AFYX_OWNED_MODIFIED) replace=true ;;
+      *) printf 'Refusing to replace %s at provider skill root %s because ownership is %s.\n' "$label" "$root" "$AFYX_OWNERSHIP_STATE" >&2; exit 1 ;;
+    esac
+    result="$(safe_skill_install "$id" "$label" "$source" "$target" "$replace")"
+    printf '%s [%s]: %s\n' "$label" "$root" "$result"
+  done
+}
+replicate_provider_skill efficient-coding 'Efficient Coding' "$BUNDLED_EFFICIENT" "$efficient_action"
+replicate_provider_skill odoo-engineering 'Odoo Engineering' "$BUNDLED_ODOO" "$odoo_action"
+replicate_provider_skill afyx-engineering-expert 'Afyx Engineering Expert' "$BUNDLED_EXPERT" "$expert_action"
+
 graph_result=skipped
 graph_action="$(component_action afyx-graph 'Afyx Graph' "$afyx_graph_state" "$(component_version afyx-graph)")"
 if [[ "$graph_action" != skip ]]; then
@@ -328,10 +430,20 @@ if [[ "$graph_action" != skip ]]; then
   "$offline" && graph_args+=(--offline)
   "$no_build_fallback" && graph_args+=(--no-build-fallback)
   "$allow_dirty_source" && graph_args+=(--allow-dirty-source)
-  if "$skip_graph_mcp"; then graph_args+=(--skip-mcp); else graph_args+=(--configure-mcp); fi
+  if "$skip_graph_mcp" || "$skip_provider_configuration" || [[ ",$provider_list," != *,codex,* ]]; then graph_args+=(--skip-mcp); else graph_args+=(--configure-mcp); fi
   "$dry_run" && graph_args+=(--validate-only)
   "$PACKAGE_ROOT/scripts/install-afyx-graph.sh" "${graph_args[@]}"
   graph_result="$graph_action"
+fi
+
+if ! "$skip_graph_mcp" && ! "$skip_provider_configuration" && [[ ",$provider_list," == *,antigravity,* ]]; then
+  provider_args=("$PACKAGE_ROOT/scripts/afyx-provider-integration.mjs" --providers antigravity --scope "$provider_scope" --workspace-root "$workspace_root" --gemini-home "$gemini_home" --node "$(command -v node)" --entry "$graph_root/current/lib/dist/bin/afyx-graph.js")
+  if "$dry_run"; then printf 'Dry-run: would configure Antigravity MCP at %s scope.\n' "$provider_scope"
+  elif [[ -f "$graph_root/current/lib/dist/bin/afyx-graph.js" ]]; then
+    provider_json="$(node "${provider_args[@]}" --apply)" || { printf 'Antigravity provider configuration failed: %s\n' "$provider_json" >&2; exit 1; }
+    printf 'Antigravity provider: %s\n' "$(printf '%s' "$provider_json" | sed -n 's/.*"status":"\([^"]*\)".*/\1/p')"
+  elif [[ "$graph_action" != skip ]]; then printf 'Installed Graph entry is unavailable for Antigravity configuration.\n' >&2; exit 1
+  fi
 fi
 
 context_result=skipped

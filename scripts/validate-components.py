@@ -41,8 +41,10 @@ if set(document.get("supported_presets", "").split(";")) != PRESETS:
     fail("supported_presets must contain minimal, recommended, full and custom")
 providers = document.get("providers", [])
 provider_ids = [provider.get("provider") for provider in providers]
-if provider_ids != ["codex"] or document.get("default_provider") != "codex":
-    fail("provider registry must declare Codex as the only active provider")
+if provider_ids != ["codex", "antigravity"] or document.get("default_provider") != "codex":
+    fail("provider registry must declare Codex first/default and Antigravity second")
+if len(set(provider_ids)) != len(provider_ids):
+    fail("duplicate provider id")
 for provider in providers:
     if provider.get("ownership_class") not in OWNERSHIP_CLASSES:
         fail(f"provider {provider.get('provider')}: invalid ownership_class")
@@ -50,6 +52,8 @@ for provider in providers:
         fail(f"provider {provider.get('provider')}: unsafe configuration_policy")
 if providers[0].get("primary") != "true":
     fail("Codex must be the primary v1 provider")
+if any(provider.get("primary") == "true" for provider in providers[1:]):
+    fail("only Codex may be the primary provider")
 components = document["components"]
 
 # The Bash reader parses one scalar "key": "value" per line inside each object.
@@ -157,6 +161,8 @@ if context["marker_value"] != context_metadata["product_name"] or context["marke
 
 # The usage tracker contract must list files the kit actually ships.
 usage = by_id["codex-usage-tracking"]
+if usage.get("providers") != "codex":
+    fail("codex-usage-tracking must remain Codex-only")
 for relative in usage["required_files"].split(";"):
     if not (ROOT / "tools" / "codex-usage" / relative).is_file():
         fail(f"codex-usage-tracking: {relative} is not shipped in tools/codex-usage")

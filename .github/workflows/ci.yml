@@ -115,6 +115,7 @@ jobs:
             @('scripts/tests/test_skill_lifecycle_security.py'),
             @('scripts/tests/test_skill_legacy_adoption.py'),
             @('scripts/tests/test_control_plane.py'),
+            @('scripts/tests/test_provider_integration.py'),
             @('scripts/tests/test_engineering_assurance.py'),
             @('scripts/tests/test_artifact_identity.py'),
             @('scripts/tests/test_project_detect.py'),
@@ -171,6 +172,7 @@ jobs:
           python3 scripts/tests/test_skill_lifecycle_security.py
           python3 scripts/tests/test_skill_legacy_adoption.py
           python3 scripts/tests/test_control_plane.py
+          python3 scripts/tests/test_provider_integration.py
           python3 scripts/tests/test_engineering_assurance.py
           python3 scripts/tests/test_artifact_identity.py
           python3 scripts/tests/test_project_detect.py

@@ -55,23 +55,29 @@ afyx_preset_valid() {
 }
 
 afyx_component_desired() {
-  local id="$1" preset="$2" custom="${3:-}" memberships
+  local id="$1" preset="$2" custom="${3:-}" providers="${4:-codex}" memberships restriction provider
   afyx_preset_valid "$preset" || return 2
   if [[ "$preset" == custom ]]; then
-    case ";$custom;" in *";$id;"*) return 0 ;; *) return 1 ;; esac
+    case ";$custom;" in *";$id;"*) ;; *) return 1 ;; esac
+  else
+    memberships="$(afyx_component_field "$id" presets)"
+    case ";$memberships;" in *";$preset;"*) ;; *) return 1 ;; esac
   fi
-  memberships="$(afyx_component_field "$id" presets)"
-  case ";$memberships;" in *";$preset;"*) return 0 ;; *) return 1 ;; esac
+  restriction="$(afyx_component_field "$id" providers)"
+  [[ -z "$restriction" ]] && return 0
+  local old_ifs="$IFS"; IFS=','
+  for provider in $providers; do case ";$restriction;" in *";$provider;"*) IFS="$old_ifs"; return 0 ;; esac; done
+  IFS="$old_ifs"; return 1
 }
 
-# afyx_control_classify <id> <actual-state> <preset> [custom-id;list]
+# afyx_control_classify <id> <actual-state> <preset> [custom-id;list] [provider-id,list]
 # Sets a read-only desired-state comparison for callers; it never mutates disk.
 afyx_control_classify() {
-  local id="$1" actual="$2" preset="$3" custom="${4:-}" declared platform type runtime_verified=true marker field value
+  local id="$1" actual="$2" preset="$3" custom="${4:-}" providers="${5:-codex}" declared platform type runtime_verified=true marker field value
   declared="$(afyx_component_field "$id" ownership_class)"
   platform="$(afyx_component_field "$id" platforms)"
   type="$(afyx_component_field "$id" type)"
-  AFYX_DESIRED=false; afyx_component_desired "$id" "$preset" "$custom" && AFYX_DESIRED=true
+  AFYX_DESIRED=false; afyx_component_desired "$id" "$preset" "$custom" "$providers" && AFYX_DESIRED=true
   AFYX_ACTUAL_OWNERSHIP="$declared"
   [[ "$actual" == UNKNOWN ]] && AFYX_ACTUAL_OWNERSHIP=USER
   [[ "$actual" == 'NOT INSTALLED' ]] && AFYX_ACTUAL_OWNERSHIP=NONE
@@ -101,13 +107,13 @@ afyx_control_classify() {
 }
 
 afyx_control_plan_identity() {
-  local preset="$1" custom="${2:-}" id desired= separator=
+  local preset="$1" custom="${2:-}" providers="${3:-codex}" id desired= separator=
   afyx_preset_valid "$preset" || return 2
   for id in $(afyx_component_ids); do
     [[ "$(afyx_component_field "$id" type)" == detected-cli ]] && continue
-    if afyx_component_desired "$id" "$preset" "$custom"; then desired="${desired}${separator}${id}"; separator=,; fi
+    if afyx_component_desired "$id" "$preset" "$custom" "$providers"; then desired="${desired}${separator}${id}"; separator=,; fi
   done
-  printf 'v1|%s|codex|%s' "$preset" "$desired"
+  printf 'v1|%s|%s|%s' "$preset" "$providers" "$desired"
 }
 
 afyx_platform() {
