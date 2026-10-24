@@ -88,7 +88,7 @@ describe('runDaemonPicker', () => {
     const h = harness([rec('/p/a', 1, 1), rec('/p/b', 2, 2)], ['/p/a', '/p/b']);
     await runDaemonPicker(h.deps);
     expect(h.stopped).toEqual(['/p/a', '/p/b']);
-    expect(h.getDone()).toContain('All daemons stopped');
+    expect(h.getDone()).toContain('No verified daemons are available');
   });
 
   it('Stop all stops everything in one shot', async () => {

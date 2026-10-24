@@ -1755,7 +1755,7 @@ program
    .alternativeNames([...cliAliases('daemon')])
    .summary(`Manage running ${PRODUCT_NAME} background daemons — pick one and press enter to stop it`)
    .handle(async () => {
-    const { listDaemonCandidates, stopDaemonAt, stopAllDaemons } = await import('../mcp/daemon-registry');
+    const { listVerifiedDaemons, stopDaemonAt, stopAllDaemons } = await import('../mcp/daemon-registry');
     const { runDaemonPicker } = await import('../mcp/daemon-manager');
 
     // The per-project lock is authoritative. Include the current root even
@@ -1764,9 +1764,9 @@ program
     const found = findNearestAfyxGraphRoot(process.cwd());
     if (found) { try { cwdRoot = fs.realpathSync(found); } catch { cwdRoot = found; } }
     const currentRoots = cwdRoot ? [cwdRoot] : [];
-    const daemons = listDaemonCandidates({ roots: currentRoots });
+    const daemons = await listVerifiedDaemons({ roots: currentRoots });
     if (daemons.length === 0) {
-      info('No Afyx Graph daemons running.');
+      info('No verified Afyx Graph daemons are available. Any live candidates that could not be verified were left running with ownership artifacts intact.');
       return;
     }
 
@@ -1782,7 +1782,7 @@ program
     const clack = afyxTerminal;
     clack.intro(`${PRODUCT_NAME} daemons`);
     await runDaemonPicker({
-      list: () => listDaemonCandidates({ roots: currentRoots }),
+      list: () => listVerifiedDaemons({ roots: currentRoots }),
       stop: stopDaemonAt,
       stopAll: stopAllDaemons,
       cwdRoot,

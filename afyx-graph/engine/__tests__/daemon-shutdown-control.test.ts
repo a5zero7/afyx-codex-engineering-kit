@@ -90,7 +90,8 @@ describe('native daemon shutdown control', () => {
     const lock = await waitFor(() => readLock(root));
     const boundLock = await waitFor(async () => {
       const current = readLock(root);
-      return current && await probeDaemonIdentity(current) ? current : null;
+      const lifecycleEndpointPublished = process.platform !== 'win32' || Boolean(current?.controlSocketPath);
+      return current && lifecycleEndpointPublished && await probeDaemonIdentity(current) ? current : null;
     });
     return { child, lock: boundLock };
   }
@@ -138,6 +139,30 @@ describe('native daemon shutdown control', () => {
     expect(listed).toContain(`pid ${running.lock.pid}`);
     expect((await stopDaemonAt(root)).outcome).toBe('term');
   }, 20_000);
+
+  it('does not list a live PID whose daemon identity cannot be verified', () => {
+    const pidPath = getDaemonPidPath(root);
+    const missingSocket = process.platform === 'win32'
+      ? `\\\\.\\pipe\\afyx-unverified-${process.pid}-${Date.now()}`
+      : path.join(root, 'missing.sock');
+    fs.writeFileSync(pidPath, JSON.stringify({
+      pid: process.pid,
+      version: '1.0.0',
+      socketPath: missingSocket,
+      startedAt: Date.now(),
+    }));
+
+    const listed = execFileSync(process.execPath, [BIN, 'daemon'], {
+      cwd: root,
+      encoding: 'utf8',
+      env: { ...process.env, HOME: home, USERPROFILE: home },
+    });
+
+    expect(listed).toContain('No verified Afyx Graph daemons are available.');
+    expect(listed).toContain('ownership artifacts intact');
+    expect(listed).not.toContain(`pid ${process.pid}`);
+    expect(fs.existsSync(pidPath)).toBe(true);
+  });
 
   it('classifies Windows permission refusal without treating the process as stopped', () => {
     const error = Object.assign(new Error('access denied'), { code: 'EPERM' });
