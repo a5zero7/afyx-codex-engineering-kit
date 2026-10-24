@@ -38,12 +38,12 @@ if ($Preset) {
 }
 if ($Preset -and $Preset -notin @('minimal', 'recommended', 'full', 'custom')) { throw "Unknown preset: $Preset" }
 if (-not $Preset -and $CustomComponent.Count) { throw '-CustomComponent requires -Preset custom.' }
-$controlPlan = if ($Preset) { Get-AfyxControlPlan -Preset $Preset -CustomComponent $CustomComponent -Context $componentContext -StateById $componentStates } else { $null }
-
-function Test-McpEntry([string]$Name) {
-    if (-not (Test-Path -LiteralPath $configPath -PathType Leaf)) { return $false }
-    try { return (Get-Content -Raw -LiteralPath $configPath -Encoding utf8) -match "(?m)^\[mcp_servers\.$([regex]::Escape($Name))\]\s*$" } catch { return $false }
+foreach ($id in $CustomComponent) {
+    if ($id -in @('prompt-master', 'headroom')) {
+        throw "Component '$id' is retired from Afyx Kit and remains externally/user managed; no changes were made."
+    }
 }
+$controlPlan = if ($Preset) { Get-AfyxControlPlan -Preset $Preset -CustomComponent $CustomComponent -Context $componentContext -StateById $componentStates } else { $null }
 
 Write-Host 'Afyx Codex Engineering Kit — readiness verification (Windows PowerShell)'
 foreach ($provider in (Get-AfyxProviderRegistry)) {
@@ -144,16 +144,6 @@ switch ($context.State) {
     }
     default { Write-Result 'WARN' 'Afyx Context Engine' "$($context.State): $($context.Detail) (optional)" }
 }
-$headroom = [bool](Get-Command headroom -ErrorAction SilentlyContinue)
-$configText = if (Test-Path -LiteralPath $configPath -PathType Leaf) { Get-Content -Raw -LiteralPath $configPath -Encoding utf8 } else { '' }
-$headroomProvider = $configText -match '(?im)^\s*model_provider\s*=\s*["'']headroom["'']\s*$' -or
-    $configText -match '(?im)^\s*\[model_providers\.headroom\]\s*$'
-$headroomProxy = $headroomProvider -or
-    $configText -match '(?im)^\s*headroom_(endpoint|base_url|proxy_url)\s*='
-if ($headroom) { Write-Result 'OK' 'Headroom CLI' 'detected' } else { Write-Result 'INFO' 'Headroom CLI' 'not found' }
-if ($headroomProxy) { Write-Result 'OK' 'Headroom proxy/provider' ($(if ($headroomProvider) { 'provider routing configured' } else { 'endpoint configured' })) } else { Write-Result 'INFO' 'Headroom proxy/provider' 'not configured' }
-if (Test-McpEntry 'headroom') { Write-Result 'OK' 'Headroom MCP' 'configured (optional)' } else { Write-Result 'INFO' 'Headroom MCP' 'not configured; optional for proxy mode' }
-
 if (Test-Path -LiteralPath $configPath -PathType Leaf) { Write-Result 'OK' 'Codex config' 'read-only check completed' }
 else { Write-Result 'WARN' 'Codex config' 'not found; optional MCP entries unavailable' }
 

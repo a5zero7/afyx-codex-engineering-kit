@@ -1,7 +1,6 @@
 [CmdletBinding(SupportsShouldProcess)]
 param(
     [string]$SkillsRoot = (Join-Path $env:USERPROFILE '.agents\skills'),
-    [string]$PromptMasterRepository = 'https://github.com/nidhinjs/prompt-master.git',
     [switch]$Force,
     [switch]$ValidateOnly,
     [string[]]$ComponentAction = @(),
@@ -29,7 +28,6 @@ $bundledEngineeringExpert = Join-Path $packageRoot 'skills\afyx-engineering-expe
 $efficientTarget = Join-Path $SkillsRoot 'efficient-coding'
 $odooTarget = Join-Path $SkillsRoot 'odoo-engineering'
 $expertTarget = Join-Path $SkillsRoot 'afyx-engineering-expert'
-$promptTarget = Join-Path $SkillsRoot 'prompt-master'
 $usageTrackerInstaller = Join-Path $packageRoot 'scripts\install-codex-usage-tracker.ps1'
 $graphInstaller = Join-Path $packageRoot 'scripts\install-afyx-graph.ps1'
 $graphMetadataPath = Join-Path $packageRoot 'afyx-graph\afyx-graph.json'
@@ -44,8 +42,6 @@ if ($InstallUsageTracker -and $SkipUsageTracker) { throw '-InstallUsageTracker a
 Import-Module (Join-Path $packageRoot 'scripts\lib\AfyxComponents.psm1') -Force
 Import-Module (Join-Path $packageRoot 'scripts\lib\AfyxSkillLifecycle.psm1') -Force
 $componentContext = New-AfyxComponentContext -SkillsRoot $SkillsRoot -GraphRoot $graphRuntimeRoot -ContextRoot $ContextRuntimeRoot -CodexHome $codexHome
-$promptComponent = @(Get-AfyxComponentContract | Where-Object { $_.id -eq 'prompt-master' })[0]
-$promptMasterRevision = [string]$promptComponent.source_revision
 $componentStates = @{}
 foreach ($componentState in (Get-AfyxComponentStates -Context $componentContext)) { $componentStates[$componentState.Id] = $componentState }
 foreach ($component in (Get-AfyxComponentContract | Where-Object { $_.type -eq 'skill' })) {
@@ -61,16 +57,24 @@ foreach ($component in (Get-AfyxComponentContract | Where-Object { $_.type -eq '
     }
 }
 $componentActions = @{}
+$retiredComponentIds = @('prompt-master', 'headroom')
+function Assert-ActiveComponentId([string]$Id) {
+    if ($Id -in $retiredComponentIds) {
+        throw "Component '$Id' is retired from Afyx Kit and remains externally/user managed; no changes were made."
+    }
+}
 foreach ($specification in $ComponentAction) {
     if ($specification -notmatch '^([a-z0-9-]+)=(skip|install|update|repair|adopt)$') {
         throw "Invalid -ComponentAction '$specification'. Use component-id=skip|install|update|repair|adopt."
     }
+    Assert-ActiveComponentId $Matches[1]
     $componentActions[$Matches[1]] = $Matches[2]
 }
-$knownSelectable = @('efficient-coding', 'odoo-engineering', 'afyx-engineering-expert', 'prompt-master', 'afyx-graph', 'afyx-context', 'codex-usage-tracking')
+$knownSelectable = @('efficient-coding', 'odoo-engineering', 'afyx-engineering-expert', 'afyx-graph', 'afyx-context', 'codex-usage-tracking')
 foreach ($id in $componentActions.Keys) { if ($id -notin $knownSelectable) { throw "Unknown selectable component: $id" } }
 if ($Preset -and $Preset -notin @('minimal', 'recommended', 'full', 'custom')) { throw "Unknown preset: $Preset" }
 if (-not $Preset -and $CustomComponent.Count) { throw '-CustomComponent requires -Preset custom.' }
+foreach ($id in $CustomComponent) { Assert-ActiveComponentId $id }
 if ($Preset -and ($ComponentAction.Count -or $Force -or $InstallUsageTracker -or $SkipUsageTracker)) {
     throw 'A preset is immutable for one operation; do not combine it with ComponentAction, Force, InstallUsageTracker, or SkipUsageTracker.'
 }
@@ -108,7 +112,6 @@ function Get-ComponentAction([string]$Id, [string]$Label) {
             $action = if ($state.State -eq 'HEALTHY' -and $available -and (Compare-AfyxVersion $state.Version $available) -lt 0) { 'update' } else { 'skip' }
         }
     }
-    elseif ($Id -eq 'prompt-master') { $action = 'skip' }
     elseif ($Force) {
         if ($state.State -eq 'UNKNOWN') { throw "$Label ownership is unknown; -Force cannot take ownership." }
         $action = if ($state.State -eq 'NOT INSTALLED') { 'install' } elseif ($state.State -in @('INCOMPLETE', 'INVALID', 'DRIFTED')) { 'repair' } else { 'update' }
@@ -204,36 +207,6 @@ function Adopt-LegacySkillSafely([string]$Component, [string]$Name, [string]$Tar
         -SourceRepository $repository -SourceRevision $revision
 }
 
-function New-PromptMasterStage([string]$Parent) {
-    $stage = Join-Path $Parent ".prompt-master-stage-$([guid]::NewGuid().ToString('N'))"
-    New-Item -ItemType Directory -Force -Path $stage | Out-Null
-    & git -C $stage init -q
-    if ($LASTEXITCODE -ne 0) { throw 'Prompt Master staging initialization failed.' }
-    & git -C $stage remote add origin $PromptMasterRepository
-    if ($LASTEXITCODE -ne 0) { throw 'Prompt Master staging remote failed.' }
-    & git -C $stage fetch -q --depth 1 origin $promptMasterRevision
-    if ($LASTEXITCODE -ne 0) { throw "Prompt Master pinned revision $promptMasterRevision is unavailable." }
-    & git -C $stage checkout -q --detach FETCH_HEAD
-    $head = (& git -C $stage rev-parse HEAD) -join ''
-    if ($LASTEXITCODE -ne 0 -or $head -ne $promptMasterRevision -or -not (Test-SkillManifest $stage)) { throw 'Prompt Master staging or revision verification failed.' }
-    return $stage
-}
-
-function Install-PromptMasterPinned([bool]$ReplaceExisting) {
-    if ($WhatIfPreference) { Write-Host 'WhatIf: would acquire pinned Prompt Master revision'; return 'planned' }
-    Assert-AfyxSkillTarget -SkillsRoot $SkillsRoot -Target $promptTarget
-    $parent = Split-Path -Parent $promptTarget
-    New-Item -ItemType Directory -Force -Path $parent | Out-Null
-    $stage = New-PromptMasterStage -Parent $parent
-    try {
-        $authorized = $Force -or $componentActions.ContainsKey('prompt-master')
-        Install-AfyxSkillTransaction -SkillsRoot $SkillsRoot -Component 'prompt-master' -Name 'Prompt Master' -Stage $stage -Target $promptTarget -Owner upstream -SourceRepository $PromptMasterRepository -SourceRevision $promptMasterRevision -AuthorizeUnproven:$authorized
-    } finally {
-        if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue }
-    }
-    return $(if ($ReplaceExisting) { 'replaced' } else { 'installed' })
-}
-
 if (-not (Test-SkillManifest $bundledEfficientCoding)) { throw 'Bundled Efficient Coding is invalid or missing.' }
 if (-not (Test-SkillManifest $bundledOdooEngineering)) { throw 'Bundled Odoo Engineering is invalid or missing.' }
 if (-not (Test-SkillManifest $bundledEngineeringExpert)) { throw 'Bundled Afyx Engineering Expert is invalid or missing.' }
@@ -248,7 +221,6 @@ $states = [ordered]@{
     'Efficient Coding' = $componentStates['efficient-coding'].State
     'Odoo Engineering' = $componentStates['odoo-engineering'].State
     'Afyx Engineering Expert' = $componentStates['afyx-engineering-expert'].State
-    'Prompt Master' = $componentStates['prompt-master'].State
     'Afyx Graph' = $componentStates['afyx-graph'].State
     'Afyx Context Engine' = $componentStates['afyx-context'].State
     'Usage Tracking' = $componentStates['codex-usage-tracking'].State
@@ -256,12 +228,11 @@ $states = [ordered]@{
 Write-Host ''
 Write-Host 'Component Inventory'
 foreach ($entry in $states.GetEnumerator()) {
-    $id = switch ($entry.Key) { 'Efficient Coding' { 'efficient-coding' } 'Odoo Engineering' { 'odoo-engineering' } 'Afyx Engineering Expert' { 'afyx-engineering-expert' } 'Prompt Master' { 'prompt-master' } 'Afyx Graph' { 'afyx-graph' } 'Afyx Context Engine' { 'afyx-context' } default { 'codex-usage-tracking' } }
+    $id = switch ($entry.Key) { 'Efficient Coding' { 'efficient-coding' } 'Odoo Engineering' { 'odoo-engineering' } 'Afyx Engineering Expert' { 'afyx-engineering-expert' } 'Afyx Graph' { 'afyx-graph' } 'Afyx Context Engine' { 'afyx-context' } default { 'codex-usage-tracking' } }
     $installed = $componentStates[$id].Version
     $available = Get-AvailableVersion $id
     Write-Host ("{0}: {1}; installed={2}; available={3}; ownership={4}" -f $entry.Key, $entry.Value, $(if ($installed) { $installed } else { 'n/a' }), $(if ($available) { $available } else { 'external/n/a' }), $componentStates[$id].Ownership)
 }
-Write-Host "Headroom: $(if (Get-Command headroom -ErrorAction SilentlyContinue) { 'externally managed; detected' } else { 'externally managed; not detected' })"
 if ($controlPlan) {
     Write-Host ''
     Write-Host "Desired State Plan: $($controlPlan.Identity)"
@@ -300,8 +271,6 @@ if ($ValidateOnly) {
         InstalledAfyxEngineeringExpert = $states['Afyx Engineering Expert'] -eq 'HEALTHY'
         AfyxEngineeringExpertState = $states['Afyx Engineering Expert']
         AfyxEngineeringExpertVersion = $componentStates['afyx-engineering-expert'].Version
-        InstalledPromptMaster = $states['Prompt Master'] -eq 'HEALTHY'
-        PromptMasterState = $states['Prompt Master']
         BundledAfyxGraphSource = Test-Path -LiteralPath (Join-Path $packageRoot 'afyx-graph\engine\package.json')
         InstalledAfyxGraph = $states['Afyx Graph'] -eq 'HEALTHY'
         AfyxGraphState = $states['Afyx Graph']
@@ -314,7 +283,6 @@ if ($ValidateOnly) {
         AfyxContextRuntimeRoot = $ContextRuntimeRoot
         InstalledUsageTracker = $states['Usage Tracking'] -eq 'HEALTHY'
         UsageTrackerState = $states['Usage Tracking']
-        HeadroomAvailable = [bool](Get-Command headroom -ErrorAction SilentlyContinue)
         CodexCliDetected = $codexCliDetected
         VsCodeExtensionDetected = $vscodeExtensionDetected
         ControlPlanIdentity = if ($controlPlan) { $controlPlan.Identity } else { 'LEGACY_INTERACTIVE' }
@@ -345,46 +313,6 @@ foreach ($component in @(
     if ($action -eq 'adopt') { $summary[$component.Name] = Adopt-LegacySkillSafely $component.Id $component.Name $component.Target }
     else { $summary[$component.Name] = Install-ManagedSkillSafely $component.Id $component.Name $component.Source $component.Target ($action -in @('update', 'repair')) }
 }
-
-$promptAction = Get-ComponentAction 'prompt-master' 'Prompt Master'
-if ($Offline -and $promptAction -notin @('skip', 'adopt')) {
-    throw 'Offline mode cannot install or update upstream-owned Prompt Master. Choose prompt-master=skip or retry with network access.'
-}
-$promptPinnedResult = $null
-if ($promptAction -eq 'adopt') {
-    $promptPinnedResult = Adopt-LegacySkillSafely 'prompt-master' 'Prompt Master' $promptTarget
-    $promptAction = 'skip'
-} elseif ($promptAction -ne 'skip') {
-    $promptPinnedResult = Install-PromptMasterPinned (Test-Path -LiteralPath $promptTarget)
-    $promptAction = 'skip'
-}
-if (Test-Path -LiteralPath $promptTarget) {
-    if ($promptAction -eq 'skip') { $summary['Prompt Master'] = 'skipped' }
-    elseif ($WhatIfPreference) { Write-Host 'WhatIf: would stage and replace Prompt Master'; $summary['Prompt Master'] = 'planned' }
-    else {
-        if (Test-Path -LiteralPath (Join-Path $promptTarget '.git')) {
-            $dirty = & git -C $promptTarget status --porcelain
-            if ($dirty) { Write-Warning 'Prompt Master has local changes; the explicit Replace choice was accepted and a backup will be preserved.' }
-        }
-        $parent = Split-Path -Parent $promptTarget
-        $stage = Join-Path $parent ".prompt-master-stage-$([guid]::NewGuid().ToString('N'))"
-        throw 'Legacy floating Prompt Master acquisition path is disabled.'
-        if ($LASTEXITCODE -ne 0 -or -not (Test-SkillManifest $stage)) { throw 'Prompt Master staging failed.' }
-        $old = "$promptTarget.old-$([guid]::NewGuid().ToString('N'))"
-        Move-Item $promptTarget $old
-        try { Move-Item $stage $promptTarget; Remove-Item $old -Recurse -Force }
-        catch { if (Test-Path $old) { Move-Item $old $promptTarget }; throw }
-        $summary['Prompt Master'] = 'replaced'
-    }
-} elseif ($promptAction -eq 'skip') { $summary['Prompt Master'] = 'skipped' }
-elseif ($WhatIfPreference) { Write-Host 'WhatIf: would clone Prompt Master'; $summary['Prompt Master'] = 'planned' }
-else {
-    throw 'Legacy floating Prompt Master acquisition path is disabled.'
-    if ($LASTEXITCODE -ne 0 -or -not (Test-SkillManifest $promptTarget)) { throw 'Prompt Master installation failed.' }
-    $summary['Prompt Master'] = 'installed'
-}
-
-if ($promptPinnedResult) { $summary['Prompt Master'] = $promptPinnedResult }
 
 $graphState = $states['Afyx Graph']
 $graphAction = Get-ComponentAction 'afyx-graph' 'Afyx Graph'
@@ -428,6 +356,5 @@ else {
 Write-Host ''
 Write-Host 'Installation Summary'
 foreach ($entry in $summary.GetEnumerator()) { Write-Host "[$($entry.Value.ToUpperInvariant())] $($entry.Key)" }
-Write-Host '[INFO] Headroom — externally managed; unchanged'
 if ($WhatIfPreference) { Write-Host 'WhatIf completed; no files or configuration were changed.' }
 else { Write-Host 'Start a new Codex session to load installed components.' }

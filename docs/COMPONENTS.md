@@ -229,7 +229,7 @@ Owner/session mismatch and corrupt content fail closed by design.
 
 ## Efficient Coding
 
-Efficient Coding 1.2.0 is a quality-first implementation workflow:
+Efficient Coding 1.2.1 is a quality-first implementation workflow:
 `GROUND → LOCATE → REPRODUCE → CHANGE → VALIDATE → REPORT`. It routes known-file
 work directly, uses structural intelligence only when relationships matter, and
 expands validation according to risk.
@@ -280,16 +280,13 @@ events and a pricing table. It is not provider-authoritative billing, does not
 reconstruct unavailable data, and can report partial/unavailable fields. Review
 and trust hooks explicitly. See [Usage Tracking](CODEX_USAGE_TRACKER.md).
 
-## Optional and external integrations
+## Optional host integrations
 
 - **Codex MCP:** Graph registration is optional, consented, and managed through
   the native Codex CLI. Conflicting/unproven entries are preserved.
-- **Headroom:** externally installed and configured. The Kit only detects CLI,
-  proxy/provider, and MCP capabilities; it does not edit them.
-- **Prompt Master:** upstream-owned and absent from all implicit presets. Only an
-  explicit Custom/action acquisition uses the pinned upstream contract.
 - **ChatGPT Skills:** Expert can be packaged manually where account/workspace
   policy supports Skills upload. Kit installation does not perform that upload.
 
 Provider, credentials, model, proxy, unrelated MCP entries, and external product
-state are outside the Kit's ownership boundary.
+state are outside the Kit's ownership boundary. Retired external integrations
+are not discovered or managed; existing user-owned installations remain untouched.

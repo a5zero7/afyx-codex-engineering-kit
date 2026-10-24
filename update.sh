@@ -16,6 +16,16 @@ while (($#)); do
   esac
 done
 
+previous=
+for argument in "${args[@]}"; do
+  if [[ "$previous" == --custom-component ]]; then
+    case "$argument" in prompt-master|headroom) printf "Component '%s' is retired from Afyx Kit and remains externally/user managed; no changes were made.\n" "$argument" >&2; exit 2 ;; esac
+  elif [[ "$previous" == --component ]]; then
+    case "$argument" in prompt-master=*|headroom=*) component="${argument%%=*}"; printf "Component '%s' is retired from Afyx Kit and remains externally/user managed; no changes were made.\n" "$component" >&2; exit 2 ;; esac
+  fi
+  case "$argument" in --custom-component|--component) previous="$argument" ;; *) previous= ;; esac
+done
+
 if "$offline"; then
   printf 'Offline mode: self-update skipped; using the current local source intentionally.\n'
 elif "$skip_self_update"; then

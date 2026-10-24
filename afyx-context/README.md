@@ -2,7 +2,7 @@
 
 Afyx Context Engine (ACE) is an Afyx-owned, standalone Node.js component for
 conservative context reduction with byte-exact original recovery. It does not
-require Afyx Graph, Forge, Engineering Expert, Headroom, or the Kit installer.
+require Afyx Graph, Forge, Engineering Expert, an external proxy, or the Kit installer.
 
 ## API
 

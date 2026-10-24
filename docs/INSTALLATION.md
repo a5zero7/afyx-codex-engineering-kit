@@ -16,8 +16,6 @@ only selected Afyx-owned destinations, but those changes are real.
 | npm | Local build fallback/development | Not required by an already packaged runtime |
 | Archive and SHA-256 support | Graph artifact install | Platform package integrity checks |
 
-Headroom and Prompt Master are optional external products. They are not normal
-installation prerequisites.
 
 ## Presets are desired state
 
@@ -32,8 +30,8 @@ The canonical preset membership comes from
 | `custom` | Exactly the repeated explicit component IDs |
 
 On Linux/macOS, Windows-only Usage Tracking is `NOT_APPLICABLE`, not a failed
-installation. ACE (`afyx-context`) and external Prompt Master are absent from all
-implicit presets. Components outside the desired plan are preserved, not removed.
+installation. ACE (`afyx-context`) is absent from all implicit presets.
+Components outside the desired plan are preserved, not removed.
 
 ## Windows Native / PowerShell
 
@@ -143,7 +141,7 @@ Default locations:
 | Codex home | `~/.codex` | existing `CODEX_HOME` |
 
 The Kit does not take ownership of credentials, provider/model selection,
-Headroom, unrelated MCP entries, existing project indexes, or foreign targets.
+unrelated MCP entries, existing project indexes, or foreign targets.
 Skill ownership is recorded in `.afyx-install.json`; runtime ownership uses
 component metadata. Canonical containment, symlinks/reparse points, markers, and
 content integrity are checked before replacement/removal.
@@ -289,9 +287,11 @@ Uninstall only components whose ownership can be proved:
 ./uninstall.sh --remove-afyx-graph
 ```
 
-Prompt Master requires its own explicit remove flag. Graph uninstall removes the
-managed runtime, not project `.afyx-graph`/external indexes. ACE uninstall retains
-independent ACE state; it does not interpret that state as runtime payload.
+Graph uninstall removes the managed runtime, not project `.afyx-graph`/external
+indexes. ACE uninstall retains independent ACE state; it does not interpret state
+runtime payload. Retired IDs `prompt-master` and `headroom` are unsupported by
+install, verify, and uninstall selection. Explicit requests fail before mutation;
+existing external installations and configuration remain user-managed and untouched.
 
 ## Recovery and rollback
 

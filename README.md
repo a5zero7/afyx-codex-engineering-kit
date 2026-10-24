@@ -52,8 +52,6 @@ unqualified automation claims.
 Supporting components are [Efficient Coding](skills/efficient-coding/SKILL.md),
 [Odoo Engineering](skills/odoo-engineering/SKILL.md), the cross-platform Kit
 lifecycle, and optional Windows [Usage Tracking](docs/CODEX_USAGE_TRACKER.md).
-Prompt Master and Headroom are external integrations and are never silently
-installed or reconfigured.
 
 ## How the pieces fit
 
@@ -66,7 +64,6 @@ flowchart LR
     F[Afyx Forge]
     A[ACE]
     S[Supporting skills<br/>Efficient Coding · Odoo Engineering]
-    X[Optional external systems<br/>Headroom · Prompt Master]
 
     K -->|managed components| E
     K -->|managed runtime| G
@@ -78,7 +75,6 @@ flowchart LR
     E -. optional repository evidence .-> G
     G -. graph.ace.consumer/v1<br/>default OFF .-> A
     F -. evaluation contracts;<br/>not a default runtime path .-> E
-    K -. detect/preserve .-> X
 ```
 
 Solid lines are implemented normal-use paths. Dashed lines are optional or
@@ -146,7 +142,7 @@ continuing.
 | `full` | Recommended + Afyx Graph + Windows-only Usage Tracking |
 | `custom` | Only components repeated with `CustomComponent` / `--custom-component` |
 
-ACE and Prompt Master are absent from all implicit presets. Install ACE explicitly
+ACE is absent from all implicit presets. Install ACE explicitly
 without enabling Graph integration:
 
 ```powershell
@@ -246,7 +242,6 @@ providers, models, unrelated MCP entries, and external tools are preserved.
 
 The repository's Afyx-owned code and documentation are distributed under the
 [MIT License](LICENSE). Graph and ACE include their own MIT license files in
-their package roots. Prompt Master and Headroom remain separately managed
-external products under their upstream terms; the Kit does not transfer their
-ownership or imply endorsement. Historical independence and attribution evidence
-is retained in the Phase 5 documentation and Git history.
+their package roots. External software remains governed by its own terms and is
+outside the Kit's ownership boundary. Historical independence, attribution, and
+license evidence remains preserved in Phase 5 documentation and Git history.

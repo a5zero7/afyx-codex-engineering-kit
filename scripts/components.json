@@ -11,25 +11,16 @@
       "ownership_class": "USER",
       "capabilities": "skills;mcp;hooks;provider-routing",
       "configuration_policy": "merge-afyx-owned-entries-only"
-    },
-    {
-      "provider": "headroom",
-      "name": "Headroom",
-      "primary": "false",
-      "ownership_class": "EXTERNAL",
-      "capabilities": "proxy-routing;mcp",
-      "configuration_policy": "observe-only"
     }
   ],
   "prerequisites": [
     { "key": "platform-shell", "class": "REQUIRED", "reason": "Runs the documented lifecycle entrypoint for the host OS." },
-    { "key": "git", "class": "REQUIRED", "reason": "Validates and safely fast-forwards the kit source; explicit Custom Prompt Master selection remains separately upstream-managed." },
+    { "key": "git", "class": "REQUIRED", "reason": "Validates and safely fast-forwards the kit source." },
     { "key": "codex-or-vscode", "class": "REQUIRED", "reason": "Provides the supported Codex host." },
     { "key": "node", "class": "COMPONENT_REQUIRED", "component": "afyx-graph", "minimum_version": "22.5.0", "reason": "Runs Afyx Graph." },
     { "key": "node", "class": "COMPONENT_REQUIRED", "component": "afyx-context", "minimum_version": "22.5.0", "reason": "Runs Afyx Context Engine." },
     { "key": "npm", "class": "BUILD_ONLY", "component": "afyx-graph", "reason": "Used only when a verified release artifact is unavailable." },
-    { "key": "archive-checksum", "class": "COMPONENT_REQUIRED", "component": "afyx-graph", "reason": "Extracts and verifies the selected Afyx Graph artifact." },
-    { "key": "headroom", "class": "OPTIONAL", "reason": "Externally managed integration; never installed or modified by this kit." }
+    { "key": "archive-checksum", "class": "COMPONENT_REQUIRED", "component": "afyx-graph", "reason": "Extracts and verifies the selected Afyx Graph artifact." }
   ],
   "components": [
     {
@@ -84,24 +75,6 @@
       "version_source": "SKILL.md#metadata.version",
       "version_required": "true",
       "required_files": "SKILL.md;README.md;assets/result-template.md;references/ai-ml-engineer.md;references/business-analyst.md;references/cybersecurity-devsecops.md;references/database-administrator.md;references/erp-technical-specialist.md;references/product-manager.md;references/qa-engineer.md;references/site-reliability-engineer.md;references/software-engineer.md;references/solutions-architect.md;references/subject-matter-expert.md;references/system-analyst.md;references/ui-ux-designer.md;workflows/ai-data-erp.md;workflows/debugging.md;workflows/discovery-design.md;workflows/implementation.md;workflows/incident-reliability.md;workflows/review-audit.md"
-    },
-    {
-      "id": "prompt-master",
-      "name": "Prompt Master",
-      "type": "skill",
-      "tier": "external",
-      "ownership": "upstream",
-      "ownership_class": "EXTERNAL",
-      "presets": "",
-      "platforms": "all",
-      "install_root": "skills_root",
-      "install_path": "prompt-master",
-      "version_source": "SKILL.md#metadata.version",
-      "version_required": "false",
-      "required_files": "SKILL.md",
-      "legacy_version": "1.8.0",
-      "source": "https://github.com/nidhinjs/prompt-master.git",
-      "source_revision": "2bd92518e26bf659e21e3d9ab90573fcf3ddeccb"
     },
     {
       "id": "afyx-graph",
@@ -159,22 +132,6 @@
       "version_source": "",
       "version_required": "false",
       "required_files": "CodexUsage.psm1;codex-usage-stop.ps1;codex-usage-watch.ps1;codex-usage-doctor.ps1;codex-usage-pricing.json"
-    },
-    {
-      "id": "headroom",
-      "name": "Headroom",
-      "type": "detected-cli",
-      "tier": "external",
-      "ownership": "external",
-      "ownership_class": "EXTERNAL",
-      "presets": "",
-      "platforms": "all",
-      "install_root": "",
-      "install_path": "",
-      "version_source": "",
-      "version_required": "false",
-      "required_files": "",
-      "detect_command": "headroom"
     }
   ]
 }

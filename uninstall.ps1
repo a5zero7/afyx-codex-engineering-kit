@@ -14,13 +14,18 @@ $ErrorActionPreference = 'Stop'
 
 Write-Host 'Afyx Codex Engineering Kit — Windows uninstaller (PowerShell)'
 
-# One component truth: scripts/components.json. Afyx-owned skills are always removed;
-# the upstream-owned skill (Prompt Master) only on explicit request.
+# One component truth: scripts/components.json. Only Afyx-owned skills are removable.
 Import-Module (Join-Path $PSScriptRoot 'scripts\lib\AfyxComponents.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'scripts\lib\AfyxSkillLifecycle.psm1') -Force
 $componentContext = New-AfyxComponentContext -SkillsRoot $SkillsRoot -ContextRoot $ContextRuntimeRoot
 $contract = @(Get-AfyxComponentContract)
+if ($RemovePromptMaster) {
+    throw "Component 'prompt-master' is retired from Afyx Kit and remains externally/user managed; no changes were made."
+}
 foreach ($id in $SelectedComponent) {
+    if ($id -in @('prompt-master', 'headroom')) {
+        throw "Component '$id' is retired from Afyx Kit and remains externally/user managed; no changes were made."
+    }
     $selected = @($contract | Where-Object { $_.id -eq $id -and $_.type -eq 'skill' -and $_.ownership -eq 'afyx' })
     if ($selected.Count -ne 1) { throw "Unknown or non-removable Afyx skill component: $id" }
 }
@@ -28,7 +33,7 @@ $targets = @()
 foreach ($component in $contract) {
     if ($component.type -ne 'skill') { continue }
     $selectedAfyx = $component.ownership -eq 'afyx' -and ($SelectedComponent.Count -eq 0 -or [string]$component.id -in $SelectedComponent)
-    if ($selectedAfyx -or ($component.ownership -eq 'upstream' -and $RemovePromptMaster)) {
+    if ($selectedAfyx) {
         $targets += [pscustomobject]@{
             Component = [string]$component.id
             Owner = [string]$component.ownership
@@ -65,4 +70,4 @@ if ($RemoveAfyxContext) {
     if (-not $?) { throw 'Afyx Context removal failed.' }
 } elseif (Test-Path -LiteralPath $ContextRuntimeRoot) { Write-Host 'Afyx Context Engine: kept' }
 
-Write-Host 'ACE user state, project indexes, Headroom, and unrelated Codex configuration were not changed.'
+Write-Host 'ACE user state, project indexes, external software, and unrelated Codex configuration were not changed.'
