@@ -79,7 +79,13 @@ if ($RemoveUsageTracker) {
 $graphRoot = $componentContext.GraphRoot
 if ($RemoveProviderConfiguration) {
     $nodeCommand = Get-Command node -ErrorAction SilentlyContinue
-    $codexCommand = Get-Command codex -ErrorAction SilentlyContinue
+    # Node cannot spawn a PowerShell .ps1 command shim directly on Windows.
+    # Prefer the native launchers, matching the Graph installer integration.
+    $codexCommand = Get-Command codex.exe -ErrorAction SilentlyContinue
+    if (-not $codexCommand) { $codexCommand = Get-Command codex.cmd -ErrorAction SilentlyContinue }
+    if (-not $codexCommand -and -not [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)) {
+        $codexCommand = Get-Command codex -ErrorAction SilentlyContinue
+    }
     $installedEntry = Join-Path $graphRoot 'current\lib\dist\bin\afyx-graph.js'
     if (-not $nodeCommand) { throw 'Node.js is required to remove owned provider entries.' }
     $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' }
@@ -102,7 +108,7 @@ if (Test-Path -LiteralPath $graphRoot) {
         $removeGraph = $answer -match '(?i)^(y|yes)$'
     }
     if ($removeGraph) {
-        & (Join-Path $PSScriptRoot 'scripts\install-afyx-graph.ps1') -Uninstall -Confirm:$false -WhatIf:$WhatIfPreference
+        & (Join-Path $PSScriptRoot 'scripts\install-afyx-graph.ps1') -Uninstall -RuntimeRoot $graphRoot -Confirm:$false -WhatIf:$WhatIfPreference
         if (-not $?) { throw 'Afyx Graph removal failed.' }
     } else { Write-Host 'Afyx Graph: kept' }
 }

@@ -334,6 +334,8 @@ class ControlPlaneContractTests(unittest.TestCase):
         self.assertIn("$arguments.RuntimeRoot = $graphRuntimeRoot", installer_source)
         self.assertIn("$arguments.SkipPathUpdate = $true", installer_source)
         self.assertIn("-SkipGraphPathUpdate:$SkipGraphPathUpdate", updater_source)
+        uninstaller_source = (ROOT / "uninstall.ps1").read_text(encoding="utf-8")
+        self.assertIn("-Uninstall -RuntimeRoot $graphRoot", uninstaller_source)
 
     def test_foreign_graph_runtime_blocks_full_plan_before_mutation(self) -> None:
         (self.graph / "current/bin").mkdir(parents=True)
@@ -349,6 +351,15 @@ class ControlPlaneContractTests(unittest.TestCase):
         self.assertIn("afyx-graph:UNVERIFIED:USER", blocked.stdout + blocked.stderr)
         self.assertEqual(tree_digest(self.graph), before)
         self.assertFalse(self.skills.exists())
+
+    def test_uninstaller_prefers_native_codex_launcher_for_node_subprocess(self) -> None:
+        source = (ROOT / "uninstall.ps1").read_text(encoding="utf-8")
+        exe_lookup = source.index("Get-Command codex.exe")
+        cmd_lookup = source.index("Get-Command codex.cmd")
+        provider_arguments = source.index("$arguments += @('--codex', $codexCommand.Source)")
+        self.assertLess(exe_lookup, cmd_lookup)
+        self.assertLess(cmd_lookup, provider_arguments)
+        self.assertNotIn("$codexCommand = Get-Command codex -ErrorAction SilentlyContinue\n", source[:cmd_lookup])
 
     def test_afyx_owned_drift_is_detected_and_repaired_with_backup(self) -> None:
         self.install_preset()
