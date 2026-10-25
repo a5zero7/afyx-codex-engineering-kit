@@ -275,6 +275,7 @@ jobs:
         with:
           artifact-ids: ${{ needs.build.outputs.artifact-id }}
           path: release
+          merge-multiple: true
 
       - name: Reverify downloaded source and artifact identities
         shell: bash
