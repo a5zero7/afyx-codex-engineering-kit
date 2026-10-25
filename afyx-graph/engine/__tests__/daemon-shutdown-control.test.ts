@@ -53,11 +53,17 @@ async function connectActiveClient(lock: DaemonLockInfo): Promise<net.Socket> {
 describe('native daemon shutdown control', () => {
   let root: string;
   let home: string;
+  let previousHome: string | undefined;
+  let previousUserProfile: string | undefined;
   const children: ChildProcess[] = [];
 
   beforeEach(async () => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-daemon-shutdown-'));
     home = fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-daemon-home-'));
+    previousHome = process.env.HOME;
+    previousUserProfile = process.env.USERPROFILE;
+    process.env.HOME = home;
+    process.env.USERPROFILE = home;
     const graph = await AfyxGraph.init(root);
     graph.close();
   });
@@ -70,6 +76,8 @@ describe('native daemon shutdown control', () => {
     }
     children.length = 0;
     await sleep(50);
+    if (previousHome === undefined) delete process.env.HOME; else process.env.HOME = previousHome;
+    if (previousUserProfile === undefined) delete process.env.USERPROFILE; else process.env.USERPROFILE = previousUserProfile;
     fs.rmSync(root, { recursive: true, force: true });
     fs.rmSync(home, { recursive: true, force: true });
   });
