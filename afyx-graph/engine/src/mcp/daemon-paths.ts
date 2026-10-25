@@ -2,11 +2,15 @@
  * Path and identity helpers for the shared daemon's IPC surface (issue #411).
  *
  * One daemon per project root means every cooperating process needs a
- * stable, project-keyed way to find it. That surface is exactly two paths:
+ * stable, project-keyed way to find it. That surface is normally two paths:
  *
  *   - `daemon.sock` — the Unix-domain socket (a named pipe on Windows) the
  *     daemon listens on.
  *   - `daemon.pid` — the atomically-created lockfile holding its pid and version.
+ *
+ * On Windows the bound lock also advertises a dedicated named pipe for
+ * lifecycle probes and shutdown, keeping management available while the data
+ * pipe carries a long-lived MCP session.
  *
  * Both live under `.afyx-graph/`, so a project-scoped `afyx-graph uninit`
  * sweeps them up for free, with no special-casing needed.
@@ -54,6 +58,16 @@ function projectHash(projectRoot: string): string {
 
 function windowsPipeName(projectRoot: string): string {
   return `\\\\.\\pipe\\afyx-graph-${projectHash(projectRoot)}`;
+}
+
+/**
+ * Dedicated Windows management pipe. A long-lived MCP proxy can occupy the
+ * data pipe on some native Node/Windows combinations, so lifecycle probes and
+ * shutdown requests use an independent pipe instance instead of competing
+ * with application traffic. POSIX keeps its existing single-socket behavior.
+ */
+export function getDaemonControlSocketPath(projectRoot: string): string | null {
+  return process.platform === 'win32' ? `${windowsPipeName(projectRoot)}-control` : null;
 }
 
 /**
@@ -122,7 +136,48 @@ export interface DaemonLockInfo {
   pid: number;
   version: string;
   socketPath: string;
+  /** Windows-only lifecycle endpoint; absent in older and POSIX lock records. */
+  controlSocketPath?: string;
   startedAt: number;
+}
+
+function managementSocketPath(info: DaemonLockInfo): string {
+  return info.controlSocketPath || info.socketPath;
+}
+
+/**
+ * Identity-bound management request sent only after the daemon hello matches
+ * the lockfile. This is not cryptographic authentication or OS-level caller
+ * authorization; local IPC access remains governed by the host and pipe ACLs.
+ */
+export interface DaemonControlRequest {
+  afyx_graph_control: 1;
+  action: 'shutdown';
+  pid: number;
+  startedAt: number;
+}
+
+interface DaemonControlReply {
+  afyx_graph_control: 1;
+  status: 'accepted' | 'rejected';
+  pid: number;
+  startedAt: number;
+  detail?: string;
+}
+
+export type DaemonShutdownRequestResult =
+  | { outcome: 'accepted' }
+  | { outcome: 'identity-mismatch'; detail: string }
+  | { outcome: 'permission-denied'; detail: string }
+  | { outcome: 'unavailable'; detail: string }
+  | { outcome: 'rejected'; detail: string };
+
+/** Convert a native IPC error into an actionable, bounded management result. */
+export function classifyDaemonIpcError(err: NodeJS.ErrnoException): DaemonShutdownRequestResult {
+  const detail = `${err.code ?? 'IPC_ERROR'}: ${err.message}`;
+  return err.code === 'EACCES' || err.code === 'EPERM'
+    ? { outcome: 'permission-denied', detail }
+    : { outcome: 'unavailable', detail };
 }
 
 /** Whether a lock record carries enough identity information to attempt a socket-hello probe at all. */
@@ -139,11 +194,29 @@ function helloMatchesLockRecord(hello: Record<string, unknown>, info: DaemonLock
     && (info.version === 'unknown' || hello.afyxGraph === info.version);
 }
 
+/** Parse the bounded first-line management preface accepted by the daemon. */
+export function parseDaemonControlRequestLine(line: string): DaemonControlRequest | null {
+  try {
+    const value = JSON.parse(line) as Record<string, unknown>;
+    if (
+      value.afyx_graph_control === 1
+      && value.action === 'shutdown'
+      && Number.isInteger(value.pid)
+      && (value.pid as number) > 0
+      && typeof value.startedAt === 'number'
+      && Number.isFinite(value.startedAt)
+    ) return value as unknown as DaemonControlRequest;
+  } catch { /* not a control request */ }
+  return null;
+}
+
 /**
- * Confirm that the process a lockfile names is actually the Afyx Graph
- * daemon serving the socket it claims to. A bare pid-liveness check can't
- * establish this on its own — the OS can and does reuse pids after an
- * OOM-kill or SIGKILL (#1553), so only a real socket hello proves identity.
+ * Corroborate that the endpoint named by a lockfile reports the expected Afyx
+ * Graph PID/version. This does not authenticate the caller or cryptographically
+ * prove process identity. A bare pid-liveness check can't establish even this
+ * bounded identity match on its own — the OS can and does reuse pids after an
+ * OOM-kill or SIGKILL (#1553), so the bounded match also requires a live
+ * socket hello.
  */
 export function probeDaemonIdentity(info: DaemonLockInfo, timeoutMs = IDENTITY_PROBE_TIMEOUT_MS): Promise<boolean> {
   if (!canProbeDaemonIdentity(info)) return Promise.resolve(false);
@@ -177,7 +250,7 @@ export function probeDaemonIdentity(info: DaemonLockInfo, timeoutMs = IDENTITY_P
     timer.unref?.();
 
     try {
-      socket = net.createConnection(info.socketPath);
+      socket = net.createConnection(managementSocketPath(info));
     } catch {
       clearTimeout(timer);
       resolve(false);
@@ -187,6 +260,98 @@ export function probeDaemonIdentity(info: DaemonLockInfo, timeoutMs = IDENTITY_P
     socket.on('data', onData);
     socket.on('error', () => settle(false));
     socket.on('close', () => settle(false));
+  });
+}
+
+/** Ask the exact daemon named by `info` to shut itself down gracefully over its IPC pipe. */
+export function requestDaemonShutdown(
+  info: DaemonLockInfo,
+  timeoutMs = 3_000,
+): Promise<DaemonShutdownRequestResult> {
+  if (!canProbeDaemonIdentity(info)) {
+    return Promise.resolve({ outcome: 'identity-mismatch', detail: 'daemon lock lacks a probeable identity' });
+  }
+
+  return new Promise<DaemonShutdownRequestResult>((resolve) => {
+    let settled = false;
+    let received = '';
+    let helloVerified = false;
+    let socket: net.Socket;
+
+    const settle = (result: DaemonShutdownRequestResult): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      socket.destroy();
+      resolve(result);
+    };
+    const unavailable = (err: NodeJS.ErrnoException): void => {
+      settle(classifyDaemonIpcError(err));
+    };
+    const consumeLines = (): void => {
+      while (!settled) {
+        const newlineAt = received.indexOf('\n');
+        if (newlineAt < 0) return;
+        const line = received.slice(0, newlineAt);
+        received = received.slice(newlineAt + 1);
+        let message: Record<string, unknown>;
+        try { message = JSON.parse(line) as Record<string, unknown>; }
+        catch {
+          settle({ outcome: 'identity-mismatch', detail: 'daemon returned malformed identity data' });
+          return;
+        }
+        if (!helloVerified) {
+          if (!helloMatchesLockRecord(message, info)) {
+            settle({ outcome: 'identity-mismatch', detail: 'named-pipe hello does not match the authoritative daemon lock' });
+            return;
+          }
+          helloVerified = true;
+          const request: DaemonControlRequest = {
+            afyx_graph_control: 1,
+            action: 'shutdown',
+            pid: info.pid,
+            startedAt: info.startedAt,
+          };
+          socket.write(JSON.stringify(request) + '\n');
+          continue;
+        }
+        const reply = message as unknown as DaemonControlReply;
+        if (reply.afyx_graph_control !== 1 || reply.pid !== info.pid || reply.startedAt !== info.startedAt) {
+          settle({ outcome: 'identity-mismatch', detail: 'shutdown acknowledgement does not match the authoritative daemon lock' });
+          return;
+        }
+        settle(reply.status === 'accepted'
+          ? { outcome: 'accepted' }
+          : { outcome: 'rejected', detail: reply.detail ?? 'daemon rejected the shutdown request' });
+      }
+    };
+    const onData = (chunk: string): void => {
+      received += chunk;
+      if (received.length > IDENTITY_PROBE_MAX_HELLO_BYTES) {
+        settle({ outcome: 'identity-mismatch', detail: 'daemon response exceeded the identity bound' });
+        return;
+      }
+      consumeLines();
+    };
+
+    const timer = setTimeout(() => settle({
+      outcome: 'unavailable',
+      detail: helloVerified ? 'timed out waiting for shutdown acknowledgement' : 'timed out waiting for daemon identity hello',
+    }), timeoutMs);
+    timer.unref?.();
+
+    try { socket = net.createConnection(managementSocketPath(info)); }
+    catch (err) {
+      clearTimeout(timer);
+      resolve({ outcome: 'unavailable', detail: err instanceof Error ? err.message : String(err) });
+      return;
+    }
+    socket.setEncoding('utf8');
+    socket.on('data', onData);
+    socket.on('error', unavailable);
+    socket.on('close', () => {
+      if (!settled) settle({ outcome: 'unavailable', detail: 'daemon pipe closed before shutdown acknowledgement' });
+    });
   });
 }
 
@@ -205,7 +370,9 @@ function decodeStructuredLockInfo(parsed: unknown): DaemonLockInfo | null {
     typeof (parsed as Record<string, unknown>).pid === 'number' &&
     typeof (parsed as Record<string, unknown>).version === 'string' &&
     typeof (parsed as Record<string, unknown>).socketPath === 'string' &&
-    typeof (parsed as Record<string, unknown>).startedAt === 'number'
+    typeof (parsed as Record<string, unknown>).startedAt === 'number' &&
+    ((parsed as Record<string, unknown>).controlSocketPath === undefined ||
+      typeof (parsed as Record<string, unknown>).controlSocketPath === 'string')
   ) {
     return parsed as DaemonLockInfo;
   }

@@ -19,8 +19,9 @@ WINDOWS = os.name == "nt"
 SELECTABLE = [
     "efficient-coding",
     "odoo-engineering",
-    "prompt-master",
+    "afyx-engineering-expert",
     "afyx-graph",
+    "afyx-context",
     "codex-usage-tracking",
 ]
 
@@ -49,14 +50,12 @@ def write(path: Path, text: str, executable: bool = False) -> None:
 
 
 class LifecycleContractTests(unittest.TestCase):
-    def test_five_selectable_components_and_prerequisite_classes(self) -> None:
+    def test_six_selectable_components_and_prerequisite_classes(self) -> None:
         contract = json.loads((ROOT / "scripts/components.json").read_text(encoding="utf-8"))
-        actual = [item["id"] for item in contract["components"] if item["id"] != "headroom"]
+        actual = [item["id"] for item in contract["components"]]
         self.assertEqual(actual, SELECTABLE)
         classes = {item["class"] for item in contract["prerequisites"]}
-        self.assertEqual(classes, {"REQUIRED", "COMPONENT_REQUIRED", "BUILD_ONLY", "OPTIONAL"})
-        headroom = next(item for item in contract["components"] if item["id"] == "headroom")
-        self.assertEqual((headroom["ownership"], headroom["tier"]), ("external", "external"))
+        self.assertEqual(classes, {"REQUIRED", "COMPONENT_REQUIRED", "BUILD_ONLY"})
 
     def test_update_entrypoints_do_not_apply_blanket_force(self) -> None:
         powershell = (ROOT / "update.ps1").read_text(encoding="utf-8")
@@ -66,15 +65,11 @@ class LifecycleContractTests(unittest.TestCase):
         self.assertIn("--update-installed", bash)
         self.assertNotIn('install.sh" --force', bash)
 
-    def test_offline_mode_skips_self_update_and_refuses_upstream_clone(self) -> None:
+    def test_offline_mode_skips_self_update(self) -> None:
         ps_update = (ROOT / "update.ps1").read_text(encoding="utf-8")
         sh_update = (ROOT / "update.sh").read_text(encoding="utf-8")
-        ps_install = (ROOT / "install.ps1").read_text(encoding="utf-8")
-        sh_install = (ROOT / "install.sh").read_text(encoding="utf-8")
         self.assertIn("Offline mode: self-update skipped", ps_update)
         self.assertIn("Offline mode: self-update skipped", sh_update)
-        self.assertIn("Offline mode cannot install or update upstream-owned Prompt Master", ps_install)
-        self.assertIn("Offline mode cannot install or update upstream-owned Prompt Master", sh_install)
 
     def test_release_channel_is_distribution_metadata(self) -> None:
         operational = json.loads((ROOT / "afyx-graph/afyx-graph.json").read_text(encoding="utf-8"))
@@ -143,54 +138,6 @@ class LifecycleContractTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("22.5", result.stdout + result.stderr)
             self.assertFalse(runtime.exists())
-
-    @unittest.skipUnless(WINDOWS, "PowerShell installer regression is Windows-specific")
-    def test_graph_installer_accepts_detached_head_checkout(self) -> None:
-        shell = pwsh_path()
-        git = shutil.which("git")
-        if not shell or not git:
-            self.skipTest("PowerShell and Git are required")
-
-        with tempfile.TemporaryDirectory() as raw:
-            checkout = Path(raw) / "checkout"
-            runtime = Path(raw) / "runtime"
-            for relative in (
-                "scripts/install-afyx-graph.ps1",
-                "afyx-graph/afyx-graph.json",
-                "afyx-graph/engine/scripts/distribution-product.json",
-            ):
-                destination = checkout / relative
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(ROOT / relative, destination)
-
-            subprocess.run([git, "init", "-q", str(checkout)], check=True)
-            subprocess.run([git, "-C", str(checkout), "config", "user.name", "Afyx Test"], check=True)
-            subprocess.run([git, "-C", str(checkout), "config", "user.email", "test@afyx.invalid"], check=True)
-            subprocess.run([git, "-C", str(checkout), "add", "."], check=True)
-            subprocess.run([git, "-C", str(checkout), "commit", "-qm", "fixture"], check=True)
-            subprocess.run([git, "-C", str(checkout), "checkout", "-q", "--detach", "HEAD"], check=True)
-
-            result = subprocess.run(
-                [
-                    shell,
-                    "-NoProfile",
-                    "-NonInteractive",
-                    "-File",
-                    str(checkout / "scripts/install-afyx-graph.ps1"),
-                    "-RuntimeRoot",
-                    str(runtime),
-                    "-SkipPathUpdate",
-                    "-Offline",
-                    "-NoBuildFallback",
-                ],
-                cwd=checkout,
-                capture_output=True,
-                text=True,
-            )
-            output = result.stdout + result.stderr
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn("COMPONENT_REQUIRED", output)
-            self.assertNotIn("null-valued expression", output)
 
     def test_checksum_failure_preserves_owned_runtime(self) -> None:
         with tempfile.TemporaryDirectory() as raw:

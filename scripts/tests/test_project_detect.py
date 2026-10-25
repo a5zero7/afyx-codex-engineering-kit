@@ -167,6 +167,12 @@ class ProjectDetectTests(unittest.TestCase):
         after = sorted(p.relative_to(self.project).as_posix() for p in self.project.rglob("*"))
         self.assertEqual(before, after)
 
+    def test_manifest_traversal_respects_the_depth_cap(self) -> None:
+        write(self.project, "deep/one/two/three/four/module/__manifest__.py", manifest("17.0.1.0.0"))
+        result = self.detect()
+        self.assertFalse(result["odoo"]["detected"])
+        self.assertEqual(result["odoo"]["addon_roots"], [])
+
     def test_cache_is_only_written_on_explicit_request(self) -> None:
         write(self.project, "odoo/release.py", "version_info = (17, 0, 0, FINAL, 0, '')\n")
         if shutil.which("bash"):

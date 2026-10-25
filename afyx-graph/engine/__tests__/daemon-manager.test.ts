@@ -88,7 +88,7 @@ describe('runDaemonPicker', () => {
     const h = harness([rec('/p/a', 1, 1), rec('/p/b', 2, 2)], ['/p/a', '/p/b']);
     await runDaemonPicker(h.deps);
     expect(h.stopped).toEqual(['/p/a', '/p/b']);
-    expect(h.getDone()).toContain('All daemons stopped');
+    expect(h.getDone()).toContain('No verified daemons are available');
   });
 
   it('Stop all stops everything in one shot', async () => {
@@ -111,6 +111,20 @@ describe('runDaemonPicker', () => {
     expect(h.notes).toEqual([
       'Could not verify daemon (pid 42); left it running with its artifacts intact — /p/a',
     ]);
+    expect(h.getDone()).toContain('Cancelled');
+  });
+
+  it.each([
+    ['permission-denied', 'Permission denied stopping daemon (pid 42)'],
+    ['shutdown-failed', 'Daemon (pid 42) acknowledged shutdown but did not exit'],
+  ] as const)('reports %s as an actionable non-success', async (outcome, message) => {
+    const h = harness([rec('/p/a', 42, 1)], ['/p/a', CANCEL]);
+    h.deps.stop = async (root): Promise<StopResult> => ({ root, pid: 42, outcome, detail: 'bounded detail' });
+
+    await runDaemonPicker(h.deps);
+
+    expect(h.notes[0]).toContain(message);
+    expect(h.notes[0]).toContain('bounded detail');
     expect(h.getDone()).toContain('Cancelled');
   });
 

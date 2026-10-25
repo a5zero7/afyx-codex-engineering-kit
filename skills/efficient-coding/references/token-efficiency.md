@@ -12,9 +12,11 @@ Do not repeat an unchanged search, reread unchanged material, or request a full 
 
 Use Afyx Graph when resolving relationships is the efficient way to answer a structural question. Prefer direct search or focused reads for known locations and simple textual facts.
 
-Use Headroom for genuinely large logs, test output, search results, JSON, API responses, database output, or generated tool output when compression preserves the needed meaning. Do not compress small results by default. Retrieve the original output before relying on an exact line, value, order, or detail that compression could omit.
-
-Efficiency applies to wasted context only: retain every piece of evidence needed to make and validate a correct change.
+For genuinely large logs, test output, search results, JSON, API responses,
+database output, or generated tool output, filter or summarize at the source when
+that preserves the needed meaning. Do not compress small results by default.
+Retrieve the original output before relying on an exact line, value, order, or
+detail that a summary could omit.
 
 ## Validation and reporting
 

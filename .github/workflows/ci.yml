@@ -9,10 +9,12 @@ on:
   push:
     branches:
       - main
+      - dev
       - alpha
   pull_request:
     branches:
       - main
+      - dev
       - alpha
 
 permissions:
@@ -31,13 +33,17 @@ jobs:
       - name: Validate Afyx Graph identity and metadata
         run: python scripts/validate-afyx-graph.py
       - name: Validate the component contract
-        run: python scripts/validate-components.py
+        run: |
+          python scripts/validate-components.py
+          python scripts/validate-engineering-assurance.py
       - name: Operational independence audit (legacy references must be legal or negative tests only)
         run: python scripts/audit-legacy-identity.py
       - name: Compile and validate evaluation assets
         run: |
           python -m py_compile evals/harness/*.py
           python evals/harness/validate.py
+          python -m py_compile evals/forge/validate.py
+          python evals/forge/validate.py --check-fixtures
       - name: Zero-token skill routing validation
         run: python evals/harness/routing.py
       - name: Deterministic tests (component contract, project detector, doctor, routing guard)
@@ -84,21 +90,43 @@ jobs:
         run: ./install.ps1 -ValidateOnly
       - name: Validate identity, metadata and component contract
         run: |
-          python scripts/validate-afyx-graph.py
-          python scripts/validate-components.py
-          python scripts/audit-legacy-identity.py
+          $commands = @(
+            @('scripts/validate-afyx-graph.py'),
+            @('scripts/validate-components.py'),
+            @('scripts/validate-engineering-assurance.py'),
+            @('scripts/audit-legacy-identity.py'),
+            @('-m', 'py_compile', 'evals/forge/validate.py'),
+            @('evals/forge/validate.py', '--check-fixtures')
+          )
+          $failed = $false
+          foreach ($arguments in $commands) {
+            & python @arguments
+            if ($LASTEXITCODE -ne 0) { $failed = $true }
+          }
+          if ($failed) { exit 1 }
       - name: Usage Tracker deterministic tests
         shell: pwsh
         run: ./tools/codex-usage/tests/run-tests.ps1
       - name: Component contract, project detector and doctor tests (PowerShell and Git Bash)
         run: |
-          python scripts/tests/test_components.py
-          python scripts/tests/test_lifecycle.py
-          python scripts/tests/test_skill_lifecycle_security.py
-          python scripts/tests/test_skill_legacy_adoption.py
-          python scripts/tests/test_artifact_identity.py
-          python scripts/tests/test_project_detect.py
-          python scripts/tests/test_doctor.py
+          $commands = @(
+            @('scripts/tests/test_components.py'),
+            @('scripts/tests/test_lifecycle.py'),
+            @('scripts/tests/test_skill_lifecycle_security.py'),
+            @('scripts/tests/test_skill_legacy_adoption.py'),
+            @('scripts/tests/test_control_plane.py'),
+            @('scripts/tests/test_provider_integration.py'),
+            @('scripts/tests/test_engineering_assurance.py'),
+            @('scripts/tests/test_artifact_identity.py'),
+            @('scripts/tests/test_project_detect.py'),
+            @('scripts/tests/test_doctor.py')
+          )
+          $failed = $false
+          foreach ($arguments in $commands) {
+            & python @arguments
+            if ($LASTEXITCODE -ne 0) { $failed = $true }
+          }
+          if ($failed) { exit 1 }
       - name: Verify repository remains clean
         shell: pwsh
         run: |
@@ -123,24 +151,29 @@ jobs:
       - name: Verifier on a staged skills root (system /bin/bash)
         run: |
           root="$RUNNER_TEMP/skills"
-          mkdir -p "$root/prompt-master"
+          mkdir -p "$root"
           cp -R skills/efficient-coding skills/odoo-engineering "$root/"
-          printf -- '---\nname: prompt-master\ndescription: stub\n---\n' > "$root/prompt-master/SKILL.md"
-          # Core skills must verify; the overall exit may be non-zero only because no Codex host exists on a CI runner.
+          # Default skills must verify without Prompt Master; the overall exit may be non-zero only because no Codex host exists on a CI runner.
           /bin/bash ./verify.sh --skills-root "$root" | tee verify.out || true
           grep -q '^\[OK\] Efficient Coding' verify.out
           grep -q '^\[OK\] Odoo Engineering' verify.out
-          grep -q '^\[OK\] Prompt Master' verify.out
-          ! grep -q '^\[FAIL\] \(Efficient Coding\|Odoo Engineering\|Prompt Master\)' verify.out
+          ! grep -q '^\[FAIL\] \(Efficient Coding\|Odoo Engineering\)' verify.out
+          ! grep -q '^\[FAIL\] Prompt Master' verify.out
           rm -f verify.out
       - name: Component contract and project detector (system /bin/bash)
         run: |
           export PATH="/bin:$PATH"
           python3 scripts/validate-components.py
+          python3 scripts/validate-engineering-assurance.py
+          python3 -m py_compile evals/forge/validate.py
+          python3 evals/forge/validate.py --check-fixtures
           python3 scripts/tests/test_components.py
           python3 scripts/tests/test_lifecycle.py
           python3 scripts/tests/test_skill_lifecycle_security.py
           python3 scripts/tests/test_skill_legacy_adoption.py
+          python3 scripts/tests/test_control_plane.py
+          python3 scripts/tests/test_provider_integration.py
+          python3 scripts/tests/test_engineering_assurance.py
           python3 scripts/tests/test_artifact_identity.py
           python3 scripts/tests/test_project_detect.py
       - name: Verify repository remains clean

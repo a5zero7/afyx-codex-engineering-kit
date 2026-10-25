@@ -213,8 +213,10 @@ afyx_promote_skill() {
   if [[ "$state" != NOT_INSTALLED ]]; then
     case "$state" in
       AFYX_OWNED_UNMODIFIED|EXTERNAL_UPSTREAM) ;;
-      AFYX_OWNED_MODIFIED|FOREIGN_UNPROVEN)
-        [[ "$authorize" == true ]] || { printf 'Refusing to replace %s (%s) without explicit authorization.\n' "$target" "$state" >&2; return 1; } ;;
+      AFYX_OWNED_MODIFIED)
+        [[ "$authorize" == true ]] || { printf 'Refusing to replace %s (%s) without explicit repair authorization.\n' "$target" "$state" >&2; return 1; } ;;
+      FOREIGN_UNPROVEN)
+        printf 'Refusing to take ownership of %s (%s).\n' "$target" "$state" >&2; return 1 ;;
       *) printf 'Refusing unsafe skill target %s (%s).\n' "$target" "$state" >&2; return 1 ;;
     esac
     backup="$(afyx_backup_skill "$component" "$target")" || return 1

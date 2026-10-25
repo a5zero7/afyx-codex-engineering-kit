@@ -1,13 +1,42 @@
 {
   "schema_version": 1,
+  "control_plane_version": 1,
+  "default_provider": "codex",
+  "supported_presets": "minimal;recommended;full;custom",
+  "providers": [
+    {
+      "provider": "codex",
+      "name": "Codex",
+      "primary": "true",
+      "ownership_class": "USER",
+      "capabilities": "skills;mcp;hooks;provider-routing",
+      "host_commands": "codex",
+      "surfaces": "cli;ide",
+      "mcp_scopes": "global",
+      "skill_scopes": "global;workspace",
+      "configuration_policy": "merge-afyx-owned-entries-only"
+    },
+    {
+      "provider": "antigravity",
+      "name": "Antigravity",
+      "primary": "false",
+      "ownership_class": "USER",
+      "capabilities": "skills;mcp",
+      "host_commands": "agy;antigravity",
+      "surfaces": "cli;ide",
+      "mcp_scopes": "global;workspace",
+      "skill_scopes": "ide-global;cli-global;workspace",
+      "configuration_policy": "merge-afyx-owned-entries-only"
+    }
+  ],
   "prerequisites": [
     { "key": "platform-shell", "class": "REQUIRED", "reason": "Runs the documented lifecycle entrypoint for the host OS." },
-    { "key": "git", "class": "REQUIRED", "reason": "Validates and safely fast-forwards the kit source; also acquires Prompt Master when selected." },
+    { "key": "git", "class": "REQUIRED", "reason": "Validates and safely fast-forwards the kit source." },
     { "key": "codex-or-vscode", "class": "REQUIRED", "reason": "Provides the supported Codex host." },
     { "key": "node", "class": "COMPONENT_REQUIRED", "component": "afyx-graph", "minimum_version": "22.5.0", "reason": "Runs Afyx Graph." },
+    { "key": "node", "class": "COMPONENT_REQUIRED", "component": "afyx-context", "minimum_version": "22.5.0", "reason": "Runs Afyx Context Engine." },
     { "key": "npm", "class": "BUILD_ONLY", "component": "afyx-graph", "reason": "Used only when a verified release artifact is unavailable." },
-    { "key": "archive-checksum", "class": "COMPONENT_REQUIRED", "component": "afyx-graph", "reason": "Extracts and verifies the selected Afyx Graph artifact." },
-    { "key": "headroom", "class": "OPTIONAL", "reason": "Externally managed integration; never installed or modified by this kit." }
+    { "key": "archive-checksum", "class": "COMPONENT_REQUIRED", "component": "afyx-graph", "reason": "Extracts and verifies the selected Afyx Graph artifact." }
   ],
   "components": [
     {
@@ -16,6 +45,8 @@
       "type": "skill",
       "tier": "core",
       "ownership": "afyx",
+      "ownership_class": "AFYX",
+      "presets": "minimal;recommended;full",
       "platforms": "all",
       "install_root": "skills_root",
       "install_path": "efficient-coding",
@@ -33,6 +64,8 @@
       "type": "skill",
       "tier": "core",
       "ownership": "afyx",
+      "ownership_class": "AFYX",
+      "presets": "minimal;recommended;full",
       "platforms": "all",
       "install_root": "skills_root",
       "install_path": "odoo-engineering",
@@ -45,20 +78,19 @@
       "legacy_distribution_revision": "b0b4d88eb7c42627598de71d6b0bf26317b9a694"
     },
     {
-      "id": "prompt-master",
-      "name": "Prompt Master",
+      "id": "afyx-engineering-expert",
+      "name": "Afyx Engineering Expert",
       "type": "skill",
-      "tier": "core",
-      "ownership": "upstream",
+      "tier": "optional",
+      "ownership": "afyx",
+      "ownership_class": "AFYX",
+      "presets": "recommended;full",
       "platforms": "all",
       "install_root": "skills_root",
-      "install_path": "prompt-master",
+      "install_path": "afyx-engineering-expert",
       "version_source": "SKILL.md#metadata.version",
-      "version_required": "false",
-      "required_files": "SKILL.md",
-      "legacy_version": "1.8.0",
-      "source": "https://github.com/nidhinjs/prompt-master.git",
-      "source_revision": "2bd92518e26bf659e21e3d9ab90573fcf3ddeccb"
+      "version_required": "true",
+      "required_files": "SKILL.md;README.md;assets/result-template.md;references/ai-ml-engineer.md;references/business-analyst.md;references/cybersecurity-devsecops.md;references/database-administrator.md;references/erp-technical-specialist.md;references/product-manager.md;references/qa-engineer.md;references/site-reliability-engineer.md;references/software-engineer.md;references/solutions-architect.md;references/subject-matter-expert.md;references/system-analyst.md;references/ui-ux-designer.md;workflows/ai-data-erp.md;workflows/debugging.md;workflows/discovery-design.md;workflows/implementation.md;workflows/incident-reliability.md;workflows/review-audit.md"
     },
     {
       "id": "afyx-graph",
@@ -66,6 +98,8 @@
       "type": "runtime",
       "tier": "optional",
       "ownership": "afyx",
+      "ownership_class": "AFYX",
+      "presets": "full",
       "platforms": "all",
       "install_root": "afyx_graph_root",
       "install_path": "",
@@ -79,31 +113,42 @@
       "marker_value": "Afyx Graph"
     },
     {
+      "id": "afyx-context",
+      "name": "Afyx Context Engine",
+      "type": "runtime",
+      "tier": "optional",
+      "ownership": "afyx",
+      "ownership_class": "AFYX",
+      "presets": "",
+      "platforms": "all",
+      "install_root": "afyx_context_root",
+      "install_path": "",
+      "version_source": "metadata.json#product_version",
+      "version_required": "true",
+      "required_files": "metadata.json;integrity.sha256;current/identity.json;current/package.json;current/afyx-context.json;current/dist/cli.js;current/dist/index.js;current/contracts/integration-v1.schema.json",
+      "required_files_windows": "current/bin/afyx-context.cmd",
+      "required_files_unix": "current/bin/afyx-context",
+      "marker_file": "metadata.json",
+      "marker_field": "product_name",
+      "marker_value": "Afyx Context Engine",
+      "integrity_manifest_file": "integrity.sha256",
+      "identity_file": "current/identity.json"
+    },
+    {
       "id": "codex-usage-tracking",
       "name": "Usage Tracking",
       "type": "toolset",
       "tier": "optional",
       "ownership": "afyx",
+      "ownership_class": "AFYX",
+      "presets": "full",
       "platforms": "windows",
       "install_root": "codex_tools",
       "install_path": "",
       "version_source": "",
       "version_required": "false",
+      "providers": "codex",
       "required_files": "CodexUsage.psm1;codex-usage-stop.ps1;codex-usage-watch.ps1;codex-usage-doctor.ps1;codex-usage-pricing.json"
-    },
-    {
-      "id": "headroom",
-      "name": "Headroom",
-      "type": "detected-cli",
-      "tier": "external",
-      "ownership": "external",
-      "platforms": "all",
-      "install_root": "",
-      "install_path": "",
-      "version_source": "",
-      "version_required": "false",
-      "required_files": "",
-      "detect_command": "headroom"
     }
   ]
 }

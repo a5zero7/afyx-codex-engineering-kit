@@ -78,7 +78,6 @@ class DoctorTests(unittest.TestCase):
     def install_core(self) -> None:
         for name in ("efficient-coding", "odoo-engineering"):
             shutil.copytree(ROOT / "skills" / name, self.skills / name)
-        write(self.skills / "prompt-master" / "SKILL.md", "---\nname: prompt-master\ndescription: Writes prompts\n---\nBody\n")
 
     def git_project(self) -> str:
         subprocess.run(["git", "init", "-q", str(self.project)], check=True)
@@ -104,16 +103,25 @@ class DoctorTests(unittest.TestCase):
         for shell, (code, out) in self.doctors().items():
             self.assertEqual(code, 1, shell)
             self.assertIn("NOT READY", out, shell)
-            for name in ("Efficient Coding", "Odoo Engineering", "Prompt Master"):
+            for name in ("Efficient Coding", "Odoo Engineering"):
                 self.assertIn(f"[FAIL] {name}", out, shell)
 
     def test_healthy_core_is_reported_with_versions(self) -> None:
         self.install_core()
         for shell, (_code, out) in self.doctors().items():
-            self.assertIn("[OK] Efficient Coding — 1.2.0", out, shell)
-            self.assertIn("[OK] Odoo Engineering — 1.1.0", out, shell)
-            self.assertIn("[OK] Prompt Master", out, shell)
+            self.assertIn("[OK] Efficient Coding — 1.2.1", out, shell)
+            self.assertIn("[OK] Odoo Engineering — 1.2.0", out, shell)
             self.assertNotIn("[FAIL] Efficient Coding", out, shell)
+
+    def test_optional_expert_is_reported_without_affecting_core_readiness(self) -> None:
+        self.install_core()
+        for shell, (_code, out) in self.doctors().items():
+            self.assertIn("[INFO] Afyx Engineering Expert", out, shell)
+            self.assertNotIn("[FAIL] Afyx Engineering Expert", out, shell)
+
+        shutil.copytree(ROOT / "skills" / "afyx-engineering-expert", self.skills / "afyx-engineering-expert")
+        for shell, (_code, out) in self.doctors().items():
+            self.assertIn("[OK] Afyx Engineering Expert — 0.1.1", out, shell)
 
     def test_verdict_agrees_with_fail_lines(self) -> None:
         self.install_core()

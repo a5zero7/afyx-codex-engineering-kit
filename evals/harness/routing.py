@@ -22,8 +22,13 @@ ROUTER_PATH = ROUTING_ROOT / "router.json"
 CASES_PATH = ROUTING_ROOT / "cases.json"
 
 REQUIRED_SCENARIOS = {
+    "ai-data-review",
+    "expert-architecture",
+    "expert-odoo-process",
+    "expert-security",
     "general-coding",
     "odoo-coding",
+    "production-reliability",
     "prompt-authoring",
     "odoo-prompt-authoring",
     "general-conversation",
@@ -59,6 +64,7 @@ def intents(router: dict, prompt: str, signals: dict[str, list[re.Pattern[str]]]
         "prompt_authoring": matches(signals, "prompt_authoring", prompt),
         "odoo_domain": matches(signals, "odoo_domain", prompt),
         "coding": coding,
+        "expert_domain": matches(signals, "expert_domain", prompt),
     }
 
 
@@ -175,7 +181,7 @@ def static_checks(router: dict, cases: dict) -> list[str]:
         problems.append("prompt-master must exclude coding tasks in its description")
 
     # Rule targets must exist and rules must only use the fixed vocabulary.
-    vocabulary = {"prompt_authoring", "odoo_domain", "coding", "and", "or", "not"}
+    vocabulary = {"prompt_authoring", "odoo_domain", "coding", "expert_domain", "and", "or", "not"}
     for rule in router["rules"]:
         if rule["skill"] not in skills:
             problems.append(f"rule targets unknown skill {rule['skill']}")

@@ -31,6 +31,11 @@ def posix(path: Path) -> str:
 
 def run_bash(skills: Path, graph: Path, codex: Path) -> dict[str, tuple[str, str]]:
     bash = shutil.which("bash")
+    if not bash and WINDOWS:
+        for candidate in (Path("C:/Program Files/Git/bin/bash.exe"), Path("C:/Program Files/Git/usr/bin/bash.exe")):
+            if candidate.is_file():
+                bash = str(candidate)
+                break
     if not bash:
         return {}
     script = (
@@ -110,19 +115,22 @@ class ComponentContractTests(unittest.TestCase):
     def test_skill_healthy_and_versioned(self) -> None:
         self.install_skill("efficient-coding")
         for shell, states in self.shells().items():
-            self.assertEqual(states["efficient-coding"], ("HEALTHY", "1.2.0"), shell)
+            self.assertEqual(states["efficient-coding"], ("HEALTHY", "1.2.1"), shell)
 
     def test_skill_incomplete_when_a_reference_is_missing(self) -> None:
         (self.install_skill("efficient-coding") / "references" / "tool-routing.md").unlink()
         self.assert_state("efficient-coding", "INCOMPLETE")
 
+    def test_optional_expert_skill_is_versioned_and_complete(self) -> None:
+        target = self.install_skill("afyx-engineering-expert")
+        for shell, states in self.shells().items():
+            self.assertEqual(states["afyx-engineering-expert"], ("HEALTHY", "0.1.1"), shell)
+        (target / "workflows" / "review-audit.md").unlink()
+        self.assert_state("afyx-engineering-expert", "INCOMPLETE")
+
     def test_skill_invalid_without_frontmatter(self) -> None:
         write(self.skills / "odoo-engineering" / "SKILL.md", "no frontmatter here\n")
         self.assert_state("odoo-engineering", "INVALID")
-
-    def test_upstream_skill_needs_only_a_valid_manifest(self) -> None:
-        write(self.skills / "prompt-master" / "SKILL.md", "---\nname: prompt-master\ndescription: Writes prompts\n---\nBody\n")
-        self.assert_state("prompt-master", "HEALTHY")
 
     def test_graph_states(self) -> None:
         self.assert_state("afyx-graph", "NOT INSTALLED")
@@ -156,8 +164,6 @@ class ComponentContractTests(unittest.TestCase):
             self.skipTest("only one shell available; cross-shell agreement not testable")
         first, second = active.values()
         for component in first:
-            if component == "headroom":
-                continue  # depends on the machine, not on the fixture
             self.assertEqual(first[component], second[component], component)
 
 

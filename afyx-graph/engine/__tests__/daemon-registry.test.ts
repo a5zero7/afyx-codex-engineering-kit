@@ -132,7 +132,7 @@ describe('daemon-registry', () => {
     }
   });
 
-  it('never signals a reused live PID when no matching daemon answers (#1553)', async () => {
+  it('never signals or deletes ownership for a reused live PID when no matching daemon answers (#1553)', async () => {
     const root = fs.mkdtempSync(path.join(tmpHome, 'project-'));
     const pidPath = getDaemonPidPath(root);
     fs.mkdirSync(path.dirname(pidPath), { recursive: true });
@@ -153,9 +153,26 @@ describe('daemon-registry', () => {
 
     expect(await listVerifiedDaemons()).toEqual([]);
     const result = await stopDaemonAt(root);
-    expect(result).toMatchObject({ pid: process.pid, outcome: 'not-running' });
+    expect(result).toMatchObject({ pid: process.pid, outcome: 'unverified' });
     expect(isProcessAlive(process.pid)).toBe(true);
-    expect(fs.existsSync(pidPath)).toBe(false);
+    expect(fs.readFileSync(pidPath, 'utf8')).toContain(`"pid": ${process.pid}`);
+    expect(listDaemons({ prune: false })).toHaveLength(1);
+  });
+
+  it('preserves live discovery after a temporary identity-probe failure', async () => {
+    const root = fs.mkdtempSync(path.join(tmpHome, 'probe-failure-'));
+    registerDaemon({
+      root,
+      pid: process.pid,
+      version: '1.5.0',
+      socketPath: process.platform === 'win32'
+        ? `\\\\.\\pipe\\afyx-missing-${process.pid}-${Date.now()}`
+        : path.join(root, 'missing.sock'),
+      startedAt: Date.now(),
+    });
+
+    expect(await listVerifiedDaemons()).toEqual([]);
+    expect(listDaemons({ prune: false })).toHaveLength(1);
   });
 
   it('preserves a live legacy lock when stop cannot verify daemon identity', async () => {

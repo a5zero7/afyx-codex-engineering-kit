@@ -2,22 +2,17 @@
 
 Status: **Phase 5 complete**
 Canonical since: **2026-10-03**  
-Contract revision: **2026-10-11**
+Contract revision: **2026-10-15**
 v1 scope policy: **FROZEN — Phase 1 through Phase 11**  
 Post-v1 policy: **PLANNED EXPANSION — not a v1 release blocker**
 
-Current work: **T03.R1 Graph-only Alpha promotion is ready for the PR #74 owner merge decision; AFYX-248 remains in progress**
-Task: `AFYX-279`; `AFYX-248` remains in progress
-
-Verified branch topology (2026-10-18):
-
-- `main`: `5349c4a184e539f0ac0752d895ff3262c6326e29`
-- `dev`: `dcebee5a08d3b958d757d056336a3eef7e9653e9`
-- `alpha`: `760778e709ec99e85fded58d10a0efc0350abaa9`
-
-Active promotion branch: `afyx/t03-r1-graph-alpha-promotion`
-Reviewed PR #74 head: `65c17719e9a6bf4fe1a757b69d017ae2c6f87fd5`
-Historical Phase 5F implementation branch: `afyx/native-phase5f-parser-grammar`
+Current work: **AFYX-285 host-relative Docker CE/Ubuntu transaction lock verified; campaign remains blocked**
+Task: retain the verified public package transaction evidence and installed-host boundary; no installation, provisioning, service change, container execution, model benchmark, A8 GO, or Alpha promotion
+Canonical merged main baseline: `5349c4a184e539f0ac0752d895ff3262c6326e29`  
+Active implementation branch: `dev` (created from verified T02 final source `ad1560dd930ccde94b0dadaa7b42d804be55714f`)
+Historical engineering branch preserved: `afyx/native-phase5f-parser-grammar`
+T01 observed development checkpoint: `cdce74c7b75fae94ca99966bb80451afdb766e60`
+Alpha integration contract: [`AFYX_ALPHA_INTEGRATION_ROADMAP.md`](AFYX_ALPHA_INTEGRATION_ROADMAP.md)
 Latest verified Phase 5F implementation checkpoint: `62621a0639f42db0eaac69ef087436d851cdba88`  
 Latest verified Phase 5F semantic-freeze checkpoint: `6fd0296b22844eef62b86a395b861ebb51193dc5`  
 Latest verified Phase 5F performance-baseline checkpoint: `1f671dabc8af5bf8f8088dc6e947e48834cafdc3`  
@@ -30,6 +25,8 @@ Phase 5F final artifact/product viability audit: **PASS**
 Next boundary: **Technical Alpha activation decision; Technical Alpha is not active**
 Last merged Phase 5F major checkpoint: **PR #57 — Utility Runtime + UI Runtime**  
 Phase 5E merge baseline: `48b6078ed37349e405213258819fa5225bcdb3fb`
+
+Workspace boundary: `D:\Project\workspace\afyx-codex-engineering-kit` is the canonical and exclusive development repository for implementation, source changes, fixes, benchmarks, development tests, documentation, versioning, commits, builds, and release preparation. `D:\Project\afyx-alpha` is restricted to clean-install, update, installed-identity, and post-install smoke/acceptance testing. Any defect observed there must be reproduced and fixed in the canonical repository, rebuilt there, and then reinstalled or updated for acceptance. This rule applies to T01-T12 without changing their scope, gates, or recorded history; the detailed contract is in the Alpha integration roadmap.
 
 This document is the forward-looking execution contract for Afyx Code
 Engineering Kit. Historical closure evidence remains in
@@ -1253,6 +1250,18 @@ Adoption provenance 1.1.0 tetap dibekukan pada digest historis AFYX-264 dan kini
 
 Evidence lokal: refinement matrix 3/3 PASS (`2/6 → 6/6 FULL`); routing intent 20/20 PASS; routing mutation guard 11/11 PASS; component 8/8 PASS dengan satu host-only cross-shell skip; doctor 10/10 PASS; legacy adoption 4/4 PASS; component, graph identity, dan independence validators PASS; Python syntax dan `git diff --check` PASS. Corpus empat dokumen bertambah dari 751 menjadi 956 kata untuk kontrak baru; provider token usage dan outcome model tidak diukur, sehingga tidak ada klaim penghematan token atau superioritas model.
 
+### Technical Alpha Batch 4B.2 — AFYX-262
+
+Status: **IMPLEMENTED; ACCEPTANCE REQUIRES FINAL-HEAD CI; AFYX-248 remains IN PROGRESS**
+
+Odoo Engineering 1.2.0 mempertahankan version isolation dan sebelas reference Odoo 10–20 tanpa blanket rewrite. Refinement menambahkan corroboration dua supporting signal independen ketika strong version evidence tidak tersedia, unresolved handling untuk konflik, pemeriksaan override/`super`, multi-record/batching/prefetch/N+1, serta batas eksplisit group implication dan `sudo`. Pertanyaan penjelasan sederhana tetap ringan. Kontrak XML inheritance, persisted identifier, Odoo 20 exact-evidence safeguard, dan source/target migration isolation yang sudah benar dipertahankan.
+
+Matriks sintetis enam skenario yang sama memberi baseline 1.1.0 `3/6 FULL` dan kandidat 1.2.0 `6/6 FULL`: Odoo 10 legacy compatibility, Odoo 17 multi-record ORM, Odoo 19 security, Odoo 20 exact evidence, conflicting migration evidence, serta XML/authorization negative behavior. Ini evaluasi kontrak instruksi deterministik, bukan eksekusi Odoo, model-quality benchmark, atau klaim token savings. Major version 2.0.0 dan rewrite sebelas version references ditolak karena tidak dibenarkan oleh perubahan semantik.
+
+Provenance adoption 1.1.0 tetap dibekukan pada digest AFYX-264 melalui fixture historis terpisah; instalasi user, CODEX_HOME, MCP, database, dan IJP tidak disentuh. Synthetic skill evaluation tidak menyelesaikan formal Technical Alpha/IJP testing.
+
+Evidence lokal: refinement matrix 3/3 PASS (`3/6 → 6/6 FULL`); routing guard 11/11 PASS; component contract 8/8 PASS dengan satu host-only cross-shell skip; doctor 10/10 PASS; legacy adoption 4/4 PASS; historical fixture 15/15 blob MATCH; component, graph identity/legal, dan legacy-independence validators PASS; Python syntax dan `git diff --check` PASS. Provider token usage dan outcome model tidak diukur, sehingga tidak ada klaim token savings atau superioritas model.
+
 ### AFYX-265 — Windows Git subprocess console closure
 
 Status: **IMPLEMENTED; FINAL-HEAD CI PASS; DEPLOYMENT VALIDATION PENDING; AFYX-248 remains IN PROGRESS**
@@ -1405,7 +1414,12 @@ Release:
 
 ## Phase 6 — Unified Kit & Provider Control Plane
 
-Status: **PLANNED**
+Status: **IMPLEMENTED / LOCAL VALIDATION PASS / REVIEW AND CI PENDING**
+
+Implementation evidence and the exact achieved-versus-pending matrix are maintained
+in [AFYX_PHASE6_UNIFIED_CONTROL_PLANE.md](AFYX_PHASE6_UNIFIED_CONTROL_PLANE.md).
+The control plane extends the existing component lifecycle; it does not create a
+second installer, claim Alpha activation, or authorize production Forge.
 
 Contract items:
 
@@ -1700,7 +1714,15 @@ support have created a more representative production workload.
 
 ## Track A — Afyx Forge
 
-Afyx Forge is post-v1. It must not become a blocker for the stable v1 release.
+Scheduling note (2026-10-15): Track A is now permitted to proceed during the
+current Alpha development cycle under the reviewable contract in
+[`AFYX_ALPHA_INTEGRATION_ROADMAP.md`](AFYX_ALPHA_INTEGRATION_ROADMAP.md).
+This changes scheduling only: Forge retains A0-A12, is not added to the frozen
+v1 release requirements, and cannot by itself close Technical Alpha, Alpha,
+Private Beta, or Stable.
+
+Afyx Forge was originally scheduled post-v1. It must not become a blocker for
+the stable v1 release.
 
 Goal:
 
@@ -1753,6 +1775,222 @@ Canonical phases:
 
 Odoo Engineering remains a separate domain skill and is not folded into Forge
 merely to reduce component count.
+
+### T08 closure — A0-A3 contract foundation
+
+T08 freezes the Forge evaluation method and decision rules without executing
+the B0-B5 campaign or selecting an implementation architecture. The canonical
+contract is [`AFYX_FORGE_A0_A3_CONTRACT.md`](AFYX_FORGE_A0_A3_CONTRACT.md),
+with machine-readable identities in
+[`AFYX_FORGE_A0_A3_BASELINE.json`](AFYX_FORGE_A0_A3_BASELINE.json).
+
+Efficient Coding 1.2.0 has a verified repository identity and deterministic
+contract evidence. Historical Prompt Master evidence is limited to one
+identity-bound prompt-authoring smoke and is not treated as the Independent
+Master Prompt or as general engineering-quality evidence. The Independent
+Master Prompt itself has no authorized bytes, provenance, or digest in the
+canonical repository, so B2/B3 construction remains blocked. B4/B5 have not
+been constructed.
+
+The six-category by six-candidate discovery stratum is frozen at 36 cells.
+It is a separate Forge campaign rather than an extension of the Expert
+27-run ceiling, but the Forge budget is not approved. Exact campaign runtime
+identity and independently enforced evaluator isolation also remain blockers.
+T08 is complete at the contract layer; T09 may prepare A4-A8 only after its
+recorded input, identity, isolation, and budget prerequisites are satisfied.
+No A8 GO, performance improvement, final Forge engine, or v1 release-scope
+change is implied.
+
+### T09.P0 closure — benchmark readiness and candidate identities
+
+Status: **PREPARATION COMPLETE / BENCHMARK EXECUTION BLOCKED**.
+
+The canonical readiness record is
+[`AFYX_FORGE_T09_P0_READINESS.md`](AFYX_FORGE_T09_P0_READINESS.md), with
+the executable public preparation under `evals/forge/`. B0 and B1 have
+verified configurations; B5 has an independent evaluation-only directive
+derived from the A3 contract. B2 has no authorized executable artifact,
+therefore B3 remains blocked and B4 is not constructed. None of these states
+is a production Forge architecture decision.
+
+Six public synthetic scenarios cover the frozen categories. Their pristine
+baseline behavior, path containment, content hashes, deterministic 36-cell
+order, negative B2 substitution, and candidate tamper detection are validated
+without a model call. The proposed campaign runtime is not owner-approved,
+Forge-specific evaluator isolation was not independently executed, the
+evaluator-only bundle is not frozen, and the 36-cell budget is not approved.
+T09 benchmark execution and A8 therefore remain blocked. The frozen v1 release
+requirements, Expert evidence, Graph behavior, and Alpha environment are
+unchanged.
+
+### T09.P1 checkpoint — external gates blocked
+
+T09.P1 reverified the P0 identities and six-scenario/36-cell ordering, then added
+deterministic materialization checks for B0, B1, and B5. A machine-readable
+campaign gate now exits nonzero while any prerequisite remains unresolved, so a
+passing public readiness validation cannot be mistaken for campaign authority.
+
+No authorized B2 source, independent evaluator environment, private-bundle
+manifest, or owner approval was supplied. B3/B4 and the complete candidate
+matrix remain unfrozen; campaign/source/environment/evaluator identities remain
+unset. Status is **PREPARATION COMPLETE / EXTERNAL GATES BLOCKED**. A8 has no GO
+decision and no model cell was executed.
+
+### T09.P2A checkpoint — Route B candidate matrix complete
+
+Owner authorization dated 2026-10-16 created controlled amendment
+`A0-ROUTE-B-2026-10-16`. Historical original B2 remains unresolved and was
+not relabeled. New Afyx-owned B2 0.1.0, ordered B3 (`B1` then `B2`), and
+refined B4 0.1.0 now have canonical identities and deterministic disposable
+materialization. All six slots are prepared but unexecuted. Runtime, isolation,
+independent evaluator, evaluator-only bundle, 36-cell and confirmation budgets,
+and final execution authorization remain blocked. No benchmark, A8 decision,
+product implementation, Prompt Master removal, or release-scope change occurred.
+
+### T09.E1.5 checkpoint — public secure handoff prepared
+
+[AFYX_FORGE_T09_E1_SECURE_HANDOFF.md](AFYX_FORGE_T09_E1_SECURE_HANDOFF.md)
+defines developer/evaluator/evaluated-agent boundaries, Windows-only per-cell
+lifecycle, sanitized public schemas, fail-closed isolation checks, cleanup, and
+owner handoff. The manifest fingerprints this public contract; B0-B5 identities,
+fixture, 36-cell order, budgets, and authorization state are unchanged. WSL and
+the owner's personal Ubuntu are excluded from formal execution. Status remains
+**CAMPAIGN BLOCKED** pending all seven external gates.
+
+### T09.E5 checkpoint — WSL formal-runtime amendment proposed
+
+[AFYX_FORGE_T09_E5_WSL_RUNTIME_AMENDMENT.md](AFYX_FORGE_T09_E5_WSL_RUNTIME_AMENDMENT.md)
+records a versioned, unapproved `CONDITIONAL` feasibility proposal. It preserves
+the native-Windows T09.E1 contract as authoritative while specifying the
+split-plane, containerized WSL controls and fresh independent acceptance needed
+before WSL could replace it. PR #63 evidence is reused only within its accepted
+same-user synthetic scope; no runtime was implemented, no accepted tests were
+rerun, and no campaign cell was executed. Status remains **CAMPAIGN BLOCKED —
+0/36**.
+
+### T09.E6-E7 closure — container adapter and synthetic image source accepted
+
+T09.E6 implements the bounded Docker CLI isolation adapter while preserving the
+public controller and evidence lifecycle interfaces. Its source-level policy,
+cleanup classification, and focused regressions are accepted through PR #65;
+no real container enforcement was claimed. T09.E7 adds the deterministic static
+Linux `amd64` synthetic executable, exact one-stage `scratch` recipe, strict OCI
+recipe/metadata validation, and focused source tests accepted through PR #66.
+No OCI image or repository digest was produced because no engine was present.
+Both closures remain developer-side source evidence, not formal-runtime
+acceptance. Status remains **CAMPAIGN BLOCKED — 0/36**.
+
+### T09.E8.P0 checkpoint — WSL runtime readiness preflight
+
+[AFYX_FORGE_T09_E8_RUNTIME_PREFLIGHT.md](AFYX_FORGE_T09_E8_RUNTIME_PREFLIGHT.md)
+records a read-only snapshot at PR #66 baseline. WSL2 `amd64`, the accepted
+compiler/linker, cgroup v2, namespace, seccomp, subordinate-ID, ext4, and
+overlay/fuse substrate are visible. Container engines, low-level runtimes,
+rootless helpers, OCI transport tools, cgroup delegation, and an immutable
+`repository@sha256` flow are absent or unavailable to the inspected session.
+Actual runtime enforcement and external evaluator/evidence independence remain
+not verified. No engine was installed or started, no image was built, and no
+container or campaign cell ran. Status is **PROVISIONING REQUIRED / RUNTIME
+ACCEPTANCE BLOCKED — 0/36**.
+
+### T09.E8.P1 checkpoint — ordinary WSL reconciliation and rootless design
+
+[AFYX_FORGE_T09_E8_ROOTLESS_PROVISIONING_DESIGN.md](AFYX_FORGE_T09_E8_ROOTLESS_PROVISIONING_DESIGN.md)
+preserves the P0 managed-sandbox snapshot while recording distinct
+owner-supplied ordinary WSL observations: systemd is PID 1 and running, cgroup
+v2 is `rw,nsdelegate`, ext4 is writable, and engine/rootless/OCI tooling remains
+absent. Root-cgroup non-writability does not establish user-service delegation,
+which remains unverified. The proposed minimum target is pinned rootless Docker
+with a dedicated ext4 layout, systemd-user supervision, explicit rootless Unix
+socket, controlled-registry digest flow, and independently verified cgroup and
+workspace UID mapping. Two bounded source gaps—explicit socket selection and
+mapped-UID workspace access—must be reviewed before acceptance. No version was
+invented, no package or host state changed, and no container ran. Status remains
+**PROVISIONING NOT AUTHORIZED / RUNTIME ACCEPTANCE BLOCKED — 0/36**.
+
+### T09.E8.P2 checkpoint — rootless runtime source compatibility
+
+[AFYX_FORGE_T09_E8_RUNTIME_COMPATIBILITY.md](AFYX_FORGE_T09_E8_RUNTIME_COMPATIBILITY.md)
+implements only the two accepted P1 source gaps. All T09.E6 lifecycle commands
+and T09.E7 build/inspect commands now select the exact rootless Unix endpoint
+with no inherited Docker context or rootful fallback. The launcher requires a
+verified pre-launch workspace receipt produced from injected, validated UID/GID
+maps and exact lease-local numeric POSIX ACL application/readback. Access and
+default base-group/other permissions are explicitly `---`; only the owner,
+mapped workload UID/GID, gateway UID, and mask receive the reviewed `rwx`
+permissions. Missing, malformed, additional, inherited or permission-drifted
+entries fail before runtime execution. Focused compatibility tests pass 35/35
+and directly impacted controller/WSL-lab regressions pass 46/46. These are
+source/mock results only: no engine was installed or started, no image was
+built, and no container or campaign cell ran. Status is **SOURCE PASS /
+ROOTLESS RUNTIME NOT TESTED / FORMAL CAMPAIGN BLOCKED — 0/36**.
+
+### T09.E8.P3 checkpoint — controlled provisioning readiness
+
+[AFYX_FORGE_T09_E8_P3_PROVISIONING_READINESS.md](AFYX_FORGE_T09_E8_P3_PROVISIONING_READINESS.md)
+records a read-only package/provenance audit at the PR #69 merge baseline.
+Ubuntu 26.04/amd64, the 65,536-entry subordinate UID/GID ranges, ext4
+repository, overlay substrate, cgroup v2 controllers and systemd packages are
+visible. The configured signed Ubuntu archive offers exact snapshot candidates
+for `docker.io`, `docker-buildx`, containerd/runc, RootlessKit, slirp4netns,
+uidmap and ACL; its simulated minimal closure is 17 new packages, zero upgrades
+and zero removals. However the updates/security snapshot is dated 2026-08-10,
+Docker CE repository/key/candidates are absent, and
+systemd-user/cgroup/socket/ACL/runtime enforcement cannot be verified in this
+managed session. No package, source, key, service, daemon, image or container
+changed. The original verdict **BLOCKED — PACKAGE SOURCE/LOCK DECISION
+REQUIRED** remains historical evidence. The owner addendum dated 2026-10-18
+selects official Docker CE as the **SELECTED SOURCE TARGET**; its exact signing
+identity, fresh candidates, package digests, dependency closure and lock remain
+**NOT VERIFIED**, so the current verdict is **BLOCKED — DOCKER CE
+PROVENANCE/PACKAGE LOCK NOT VERIFIED**. Persistent global masking is not
+pre-approved: any future rootful auto-start prevention strategy must be
+evidence-derived, reversible and separately approved after package
+payload/maintainer-script and current unit/dependency ownership inspection.
+Global masking of system `containerd.service` or unrelated services is
+prohibited without impact evidence and separate approval. Formal campaign
+remains **BLOCKED — 0/36**.
+
+### T09.E8.P4 checkpoint — Docker CE provenance and partial package lock
+
+[AFYX_FORGE_T09_E8_P4_DOCKER_CE_PACKAGE_LOCK.md](AFYX_FORGE_T09_E8_P4_DOCKER_CE_PACKAGE_LOCK.md)
+records bounded acquisition from official Docker CE Resolute/stable/amd64.
+Independent fingerprint corroboration, isolated `gpgv` verification, the
+signed Release-to-index digest and all five required Docker `.deb` size/hash
+bindings pass. Static inspection identifies exact Docker CLI/daemon,
+containerd/runc, Buildx and RootlessKit payloads plus maintainer-script actions
+that un-mask, enable and request startup of rootful Docker/socket/containerd
+units and create the `docker` group. The proposed future control is a separately
+approved transaction-scoped service-start guard followed by exact disabling and
+verification of only newly package-owned rootful units; persistent/global
+masking remains prohibited. The simulation selects 16 new packages, zero
+upgrade and zero removal, but 11 Ubuntu archives and the satisfied installed
+dependency baseline were not authorized for download and are not byte-locked;
+local Ubuntu metadata remains stale. Classification: **PARTIAL — DOCKER CE
+PROVENANCE VERIFIED / COMPLETE INSTALLATION LOCK BLOCKED**. No installation,
+service change, daemon/container execution or formal cell occurred. Formal
+Forge remains **BLOCKED — 0/36**.
+
+### T09.E8.P5 checkpoint — Ubuntu dependency closure and host-relative lock
+
+[AFYX_FORGE_T09_E8_P5_UBUNTU_DEPENDENCY_LOCK.md](AFYX_FORGE_T09_E8_P5_UBUNTU_DEPENDENCY_LOCK.md)
+and its deterministic
+[lock manifest](AFYX_FORGE_T09_E8_P5_LOCK_MANIFEST.json) record fresh signed
+Ubuntu Resolute base, updates and security metadata plus exact archive-byte
+verification for the eleven missing Ubuntu transaction packages. The five P4
+Docker CE archives remain byte-identical and were not reacquired. P4's 68
+baseline names resolve to 62 installed packages and six virtual/alternative
+mappings: all installed packages have exact dpkg state and clean `dpkg -V`
+observations, 53 have matching archive hashes in fresh authenticated indexes,
+and nine superseded installed versions remain explicitly installed-state only.
+An isolated `--simulate --no-download` run selects exactly 16 new packages,
+zero upgrades, removals, downgrades or undeclared replacements, and no Ubuntu
+Docker/containerd/runc substitute. Classification is **VERIFIED HOST-RELATIVE
+TRANSACTION LOCK**; clean-machine reproducibility, installation safety, real
+rootless enforcement and independent evaluator/evidence custody are not
+claimed. No installation, host mutation, daemon/container execution or formal
+cell occurred. T09.E8.P6 remains a separate authorization gate and Formal
+Forge remains **BLOCKED — 0/36**.
 
 ## Track B — Platform Generalization
 
@@ -2149,36 +2387,6 @@ The bounded fix resolves relative paths from the repository root while preservin
 
 Focused evidence: the new global-excludes lifecycle matrix passes 4/4 after failing 2/2 before the fix; it covers initial/full indexing, scoped create/modify/rename/delete, restart/persistence, `.gitignore`, `.git/info/exclude`, absolute/relative `core.excludesFile`, unset/missing/non-file configuration, positive files, and supported stale-row reconciliation. Existing extraction ignore checks pass 3/3, watcher info/exclude 1/1, scoped-sync exclusion 1/1, MCP catch-up gate 7/7, and the frozen sync/watcher contract 87/87. TypeScript typecheck, clean production/UI build, semantic baseline 6/6, CLI/MCP smoke 21/21, Afyx identity validation, and legacy-identity audit pass locally. Implementation commit `1c9a9c4dac8b75a3e384509d6f038c2de3720e25` passed [Afyx Graph Build 38130937586](https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/38130937586) on Windows, Linux, and macOS. An official-bundle-format Windows runtime installed under a disposable `%TEMP%` root reported revision `MATCH`, passed Git-grounded scope/reconciliation/restart acceptance, and passed installed CLI/MCP smoke 21/21. The active installed runtime and MCP configuration were not changed. AFYX-268 engineering acceptance is complete; AFYX-248 remains in progress.
 
-### AFYX-267 — Technical Alpha branch and release candidate
-
-Status: **DONE — candidate pinned and independently verified**
-
-The stabilization branch `release/alpha-0.1` is cut non-destructively from the
-approved development revision `fd96cd3a9ad41fc98346b46c56f3ade8e73cc1e8`.
-`main` remains canonical integration and
-`afyx/native-phase5f-parser-grammar` remains ongoing engineering. Only reviewed
-promotions and approved Alpha fixes enter the stabilization branch; Alpha
-hotfixes must flow back to development.
-
-Engineering-kit CI and Afyx Graph Build now run independently for Alpha pushes
-and pull requests. Graph Build retains host-platform archives plus a
-commit-bound candidate manifest after verifying embedded revision, target,
-version, and SHA-256. The candidate label is `technical-alpha` / `alpha-0.1`;
-the existing `1.0.0` product metadata is unchanged and no stable release/tag is
-created.
-
-Candidate `a431ba9ad5fae7bd06329f1fc6e42f1ba503f6dd` passed
-[CI 38134702686](https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/38134702686)
-and
-[Afyx Graph Build 38134702720](https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/38134702720)
-on Windows, Linux, and macOS. Retained `win32-x64`, `linux-x64`, and
-`darwin-arm64` archives were downloaded and independently matched their
-commit-bound manifest SHA-256 values. A disposable Windows install reported
-revision `MATCH`, and restoration of the prior `fd96cd3` artifact validated the
-rollback path without changing the active user runtime or MCP configuration.
-The exact digests and canonical policy are in
-[AFYX_ALPHA_RELEASE.md](AFYX_ALPHA_RELEASE.md). AFYX-267 is complete;
-AFYX-248 remains In Progress pending its separate Technical Alpha program gate.
 ### AFYX-266 — Scoped dependency security remediation
 
 The immutable accepted Alpha candidate remains
@@ -2232,14 +2440,10 @@ Local evidence on the supported contract includes clean install, typecheck and
 clean production/UI build PASS; focused Vitest 4 UI **21/21** and git-currency
 **13/13** PASS; semantic baseline **6/6** PASS; CLI/MCP smoke **21/21** PASS;
 artifact identity/legal **12/12** PASS; component, independence, identity and
-legal validators PASS. Node 26 is included by the declared Node `>=22.5.0`
-runtime compatibility contract; Node 24 is the CI-tested acceptance baseline.
-A full local Node 26 run completed **5647 PASS / 34 FAIL / 31 SKIP**. Review
-classified the failures as Windows test-isolation/resource-cleanup compatibility,
-load-sensitive test flakiness, and one environment-specific Windows `which`
-fixture; no wrong product result was demonstrated. Node 26 full-suite cleanliness
-remains a separately scoped compatibility/test-infrastructure risk and the
-published runtime contract is not narrowed to conceal it.
+legal validators PASS. A full local run on unsupported Node 26 completed
+**5647 PASS / 34 FAIL / 31 SKIP**: failures were Windows open-handle cleanup,
+load-sensitive timeouts/performance assertions, and one Windows `which`
+fixture, while supported final-head Node 24 CI remains the acceptance authority.
 Implementation commit `5989661b1444c4f30d37fb1fafddd5ae3023379c`
 passed [engineering-kit CI 38155025673](https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/38155025673)
 and [Afyx Graph Build 38155028757](https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/38155028757)
@@ -2317,7 +2521,7 @@ from this investigation.
 
 ### AFYX-282 — Native Graph source-intelligence refinement
 
-Status: **IMPLEMENTED; PR #74 EXACT-HEAD GRAPH BUILD PASS; POST-MERGE CANDIDATE ACCEPTANCE PENDING; AFYX-248 IN PROGRESS**
+Status: **IMPLEMENTED; FINAL-HEAD GRAPH BUILD REQUIRED; AFYX-248 IN PROGRESS**
 
 Root cause was layered: the native Python extractor indexed classes and methods but omitted direct class assignments, the Node contract had no structural fact for `_inherit`, ranked FTS search could only return bounded metadata candidates, and default MCP instructions incorrectly encouraged treating ranked exploration as universally exhaustive. The SQLite schema itself was sufficient: source-located `property` nodes with exact class ownership and literal signatures fit the existing node/persistence contract, so no schema migration was introduced. Extraction version advances to 28 so older indexes explicitly request re-indexing.
 
@@ -2327,7 +2531,7 @@ Owned Odoo-like ground truth covers nine Odoo-17-style declarations and forty-fi
 
 ### AFYX-281 + AFYX-282 — Final engineering acceptance closure
 
-Status: **LOCAL ACCEPTANCE PASS; PR #74 EXACT-HEAD GRAPH BUILD PASS; POST-MERGE CANDIDATE ACCEPTANCE PENDING; AFYX-248 AND MAC.4 REMAIN IN PROGRESS**
+Status: **ENGINEERING ACCEPTANCE PASS; AFYX-248 AND MAC.4 REMAIN IN PROGRESS**
 
 AFYX-281 Linux Graph Build failures (`112.72 ms` and `100.96 ms` against a `100 ms` assertion) retained every functional contract: 500+ true callers, 300 shown, truncation, count parity, uniqueness, and blast-radius parity. Bounded focused reproduction did not demonstrate a product slowdown. The assertion measured loopback HTTP wall time under shared-runner load, which cannot distinguish a batched implementation from N+1 reads. The regression contract now observes the database access shape directly: one focal lookup, one 500-caller batch, and fan-in batches for the 300 displayed rows. Product behavior and thresholds are unchanged.
 
@@ -2335,9 +2539,11 @@ AFYX-282 had incorrectly incorporated extraction-v28 `_inherit` property facts i
 
 AFYX-280 boundary validation confirmed `limit + 1` over-fetch and handwritten-before-generated composition. It also reproduced a presentation defect near the shared output bound: a tail-positioned completeness notice could be trimmed. The notice now precedes result rows, so bounded output retains both the ranked-search incompleteness warning and the generic character-truncation marker. Ranking and result composition are unchanged.
 
+Focused regressions, typecheck, clean production/UI build, the six-fixture semantic baseline, 21-check CLI/MCP smoke, identity/component/independence validation, and artifact-identity tests passed. Exact-source-head [Afyx Graph Build 38324265023](https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/38324265023) passed on Windows, Linux, and macOS. AFYX-281 and AFYX-282 engineering acceptance is complete; this does not activate Technical Alpha or complete AFYX-248 or AFYX-272 MAC.4.
+
 ### Repository knowledge catalog acceptance
 
-Status: **TARGETED REFINEMENT IMPLEMENTED; PR #74 EXACT-HEAD GRAPH BUILD PASS; POST-MERGE CANDIDATE ACCEPTANCE PENDING; AFYX-248 IN PROGRESS**
+Status: **ENGINEERING ACCEPTANCE PASS; AFYX-248 IN PROGRESS**
 
 Read-only Odoo 17 evidence confirmed the full-index accounting contract:
 93,003 discovered, 42,130 eligible, 42,123 indexed, 6 size-skipped, 50,873
@@ -2372,3 +2578,484 @@ initial open failure and shows successful retry, watcher startup, catch-up,
 subsequent syncs, complete index state, zero pending references, and WAL mode.
 No writer coordination, daemon lifecycle, schema, parser, ranking, or timeout
 change was justified by this acceptance slice.
+
+Implementation commit `8837ea98aa63a4c93a2c15c599f82148ad3320b0`
+passed exact-source-head [Afyx Graph Build 38357255978](https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/38357255978)
+on Windows, Linux, and macOS, including clean build, unit tests, semantic
+baseline, CLI/MCP smoke, installer verification, identity, attribution, and
+operational-independence gates. This closes only the repository-knowledge
+engineering acceptance boundary; it does not promote Alpha or complete
+AFYX-248.
+
+### Afyx Engineering Expert v0.1.0 — native Kit integration
+
+Status: **IMPLEMENTED; FINAL-HEAD CI REQUIRED; AFYX-248 IN PROGRESS**
+
+The first-party source package
+`afyx-engineering-expert-kit-ready-v0.1.0.zip` was accepted only after its
+SHA-256 matched
+`fe762234d8d21819b53a9963fa37e682635e142d6d4735066f9d692cbeaf0350`.
+All 22 safe relative members are strict UTF-8 and the normalized source-tree
+digest is
+`9ebefe30bf9c7f73b101a53542b3cb09c993cfe9a4d565d15afc5834465569b7`.
+The unchanged source tree is bundled as the optional Afyx-owned
+`afyx-engineering-expert` 0.1.0 component: one adaptive orchestrator, thirteen
+domain references, six workflows, and one result template. No legacy-adoption
+claim was created.
+
+PowerShell and Bash lifecycle paths now support explicit install, update,
+repair, skip, dry-run/WhatIf, ValidateOnly, verified ownership, transactional
+backup/rollback, read-only verifier/doctor reporting, and independently scoped
+uninstall. A missing optional Expert installation does not affect core
+readiness. Deterministic routing keeps ordinary coding with Efficient Coding,
+version-specific Odoo implementation details with Odoo Engineering, and prompt
+authoring with Prompt Master; substantive product/architecture, security,
+incident/reliability, AI/data, and ERP process advisory can route to Expert.
+Simple questions do not route to Expert.
+
+Bundle, component, lifecycle, security, legacy-adoption, doctor, routing,
+Graph validator, identity, and evaluation-harness checks pass locally. An
+isolated advisory-only Odoo agent run exited successfully, preserved its
+fixture, and produced an advisory response. It attempted to read both Expert
+and Odoo skill manifests, but the read commands were rejected by the isolated
+sandbox before either manifest was loaded; therefore actual functional skill
+activation remains **NOT VERIFIED** and is not inferred from response quality
+or static routing.
+
+No active skill installation, `CODEX_HOME`, MCP configuration, Graph runtime,
+Alpha branch/candidate, PR #59, Adit environment, or IJP repository was
+modified. Final-head cross-platform engineering CI remains required before
+this integration can be reported complete.
+
+### 2026-10-13 correction — Expert integration, activation evidence, and AFYX-283
+
+Status: **AFYX-284 DONE; AFYX-283 HARNESS REPAIRED / PILOT BLOCKED; AFYX-248 IN PROGRESS**
+
+AFYX-284 native Kit integration is DONE. The implementation and documentation
+head `7fab789af6e0e1c122a2744210ca0f13cbfbac01` passed exact-head
+[Engineering/Graph Build 38357724286](https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/38357724286)
+on Windows, Linux, and macOS. This correction supersedes only the earlier
+pending-CI wording; it does not alter the accepted 22-file Expert v0.1.0 source.
+
+Functional Activation Smoke Test v2 produced observable host evidence. Case A
+successfully read Expert `SKILL.md` but loaded seven domain references and zero
+workflows, violating the intended progressive-disclosure boundary; it remains
+**FAIL/open**. Case B passed Expert + Odoo Engineering composition. Case C
+passed negative routing for a simple Python question. Case D was unnecessary.
+Two experimental v0.1.1 refinements still loaded six references and zero
+workflows, so they were rejected and reverted; no Expert source optimization is
+accepted from those experiments.
+
+AFYX-283 extends the existing Phase 3A JSON harness rather than creating a
+parallel evaluator. Historical `environment.json` and result evidence remain
+unchanged. The active Expert fingerprint records Efficient Coding 1.2.0, Odoo
+Engineering 1.2.0, Expert 0.1.0, verified Prompt Master checkout identity,
+Codex 0.156.1, and explicit runtime/permission flags. All four installed Afyx
+skills are disabled per session before only the selected frozen configuration
+is copied to an external disposable workspace. `X`/`CORE_X` and formal
+`A0=N`, `A1=CORE`, `B0=X`, `B1=CORE_X` aliases are defined. Successful
+activation now requires observed `SKILL.md` content from a completed host event;
+mentions, failed reads, and unavailable events are not treated as activation.
+
+Deterministic isolation/configuration/fingerprint tests and static preflight
+pass. The required actual-session evaluator canary timed out twice (180 seconds
+and 120 seconds) without any command/read event. It therefore records
+**BLOCKED**, not PASS. No development pilot or formal A1/B1 comparison was run.
+Until a canary proves evaluator ground truth inaccessible and the bounded pilot
+is calibrated, formal comparative acceptance is **BLOCKED**. AFYX-249's formal
+Alpha gate is unchanged, and neither AFYX-248 nor Technical Alpha is complete.
+
+### 2026-10-13 AFYX-283B — child diagnostics and actual isolation checkpoint
+
+Status: **HARNESS DIAGNOSTICS REPAIRED / ACTUAL ISOLATION BLOCKED / PILOT NOT RUN**
+
+The original 120–180 second canary timeouts were not evidence of filesystem
+denial. A minimal no-skill child showed that the process started, emitted
+`thread.started` and `turn.started`, then could not reach the provider inside
+the parent network sandbox. The same bounded command with provider access
+completed successfully using the frozen `gpt-5.6-sol` / OpenAI / medium
+fingerprint. This separates startup and provider health from isolation.
+
+The harness now uses bounded `Popen` execution, preserves redacted partial
+JSONL/stderr, classifies startup/authentication/model/network/timeout failures,
+and terminates only its owned process tree. The reproduced Windows timeout used
+a kill-on-close Job Object and left no owned child running. Pilot mode defaults
+to one repetition; benchmark mode retains its three-repetition minimum.
+
+The actual isolation control remains **BLOCKED**. The child runtime rejected
+all `exec_command` operations before process creation, including the positive
+read of a disposable file inside the authorized repository. Four external
+attempts were requested; sandbox-router denial was observed for canary,
+manifest and rubric, while the final private-holdout attempt did not complete
+before the 45-second bound. No external read succeeded and the randomized
+canary value was not exposed, but negative denial without a successful positive
+control cannot prove the intended trust boundary. Cleanup completed through the
+Windows Job Object. The five DEVELOPMENT pilot scenarios and formal A1/B1 were
+not run. The remaining prerequisite is a genuinely restricted execution
+boundary (restricted OS account, isolated container, or filesystem ACL) that
+allows the evaluated workspace and denies evaluator-only files; Expert v0.1.0
+is unchanged.
+
+### 2026-10-13 AFYX-283C.1 — canary/workload parity correction
+
+Status: **DETERMINISTIC CORRECTION IMPLEMENTED / HOST ISOLATION NOT VERIFIED / PILOT NOT RUN**
+
+The AFYX-283B canary and evaluation cells did not use the same workspace
+construction: cells ran from `%TEMP%/afyx-eval-*/work`, while the canary ran
+under repository-local `evals/results/.isolation-work-*`. The earlier nested
+result therefore diagnosed command-policy interference but could not establish
+the filesystem boundary used by real evaluation workloads.
+
+AFYX-283C.1 gives cells and canary one shared external disposable-workspace
+constructor. The positive attempt flag now derives only from its own observed
+tool event. Confirmed evaluator-only read success or canary exposure has `FAIL`
+precedence over missing positive evidence, timeout, or other `BLOCKED`
+conditions. Bounded execution, redacted evidence, and owned process-tree
+cleanup remain unchanged. Deterministic regressions cover workspace parity,
+allowed reads, unrelated tool activity, unauthorized reads, marker exposure,
+and result precedence.
+
+No direct-host control or DEVELOPMENT pilot was executed from the developer
+sandbox. Actual isolation remains **NOT VERIFIED** until the corrected procedure
+runs from a trusted PowerShell host and supplies sanitized evidence. Expert
+v0.1.0, formal A1/B1, installed components, CODEX_HOME, Graph runtime, PR #59,
+the frozen Alpha candidate, and private evaluation material remain unchanged.
+
+### 2026-10-14 AFYX-283C.5 — Windows child launcher and runtime fingerprint repair
+
+Status: **ENGINEERING PASS / DIRECT-HOST ACCEPTANCE PENDING / PILOT NOT RUN**
+
+Independent Windows Terminal evidence identified two concrete defects. Host
+Codex was authenticated at 0.162.1, while the frozen fingerprint still declared
+0.156.1 and preflight did not verify the installed version. Python resolved the
+npm launcher to `codex.CMD` and passed it directly to `Popen(shell=False)`,
+producing `WinError 2`; the child never started and the displayed isolation JSON
+belonged to an older run.
+
+The runner now dispatches a Windows npm `.CMD` launcher through its sibling
+`codex.ps1` using PowerShell `-File` and a discrete argv. No shell command is
+constructed, argument boundaries are preserved, and missing safe shim support
+fails closed. Direct executable behavior on Linux/macOS is unchanged. Bounded
+timeouts and owned process-tree cleanup remain intact.
+
+Codex CLI 0.162.1 passed non-model compatibility checks for the exact harness
+flags and command options. A new explicit 0.162.1 runtime fingerprint is active;
+the historical 0.156.1 fingerprint and all Expert/skill hashes are preserved.
+Frozen preflight now checks the installed CLI version and command contract
+before model execution. Child-health and isolation records carry one
+`control_run_id`; blocked health overwrites current isolation as
+`NOT_EXECUTED`, preventing stale evidence reuse.
+
+No canary or DEVELOPMENT pilot was executed inside the developer sandbox.
+Direct-host isolation remains **NOT VERIFIED** until the corrected PowerShell
+procedure is run by the user. Expert v0.1.0, installed components, CODEX_HOME,
+Graph, PR #59, the frozen Alpha candidate, and customer repositories remain
+unchanged.
+
+### 2026-10-14 — AFYX-283C.8 execution boundary correction
+
+Status: **EXECUTION BOUNDARY PASS / DEVELOPMENT PILOT GO (NOT RUN)**.
+Independent-host evidence reproduced command-router rejection under legacy
+`--sandbox workspace-write`; the positive command never reached CreateProcess,
+so generic router denials did not prove filesystem isolation. Codex CLI 0.162.1
+passed the official one-command MXC compatibility probe (`MXC_OK`). A disposable
+default-deny permission-profile proof established workspace read exit `0` and
+evaluator-only sibling read exit `1` (`Access is denied`), with no private marker
+exposure, including when both paths were under OS temp.
+
+The harness now selects an explicit root-deny, minimal-runtime-read,
+workspace-write, temp-deny, network-disabled permission profile and native MXC
+on Windows. Legacy `--sandbox` is removed because it disables permission-profile
+mode. Historical fingerprints and Expert v0.1.0 hashes remain unchanged.
+
+The exact host harness then passed child/provider health, a completed command
+event, the workspace read, and all four evaluator-only denials. No unauthorized
+read, canary exposure, timeout, or orphan cleanup occurred. A direct MXC write
+control also created a workspace file while evaluator-only write failed and
+created nothing. The positive read uses its absolute workspace path because
+the first corrected run proved the permission boundary but also showed that
+the child command's relative working-directory assumption was false.
+
+The accepted architecture uses a trusted host-side evaluator controller and
+two disjoint MXC roots: one disposable root for the evaluated agent and one
+development root for any developer agent. The private holdout/rubric root is
+outside both and denied by the same root-deny profile. The controller alone
+retains ground truth. A1 and B1 must use the identical profile and permissions.
+No real holdout, DEVELOPMENT pilot, or formal A1/B1 was run in this checkpoint.
+Focused regression and exact-head CI remain engineering closure gates.
+
+### 2026-10-14 — AFYX-283D.2 pilot evidence review
+
+Status: **PILOT REVIEW PROVISIONAL / PROVENANCE BLOCKED / FORMAL A1-B1
+BLOCKED**. The accessible independent-host control evidence is fresh and
+correlated: child health `PASS`, isolation `PASS`, matching control
+`718a0a8d0aff49f6b6a9a6d28ad71f5f`, positive workspace read `PASS`, four
+negative controls denied, no external read or canary exposure, command tool
+observed, no timeout, and cleanup `PASS`. The active manifest selects the Codex
+0.162.1 MXC fingerprint. Five fresh scenario records eventually completed, but
+none stores the controlling `control_run_id`; the required record-to-isolation
+correlation therefore cannot be proven.
+
+Substantive visible-output review: Architecture, Security, and
+Database/Reliability are technically coherent, bounded advisory responses and
+activate Expert with relevant references. ERP/Odoo gives strong Odoo 17,
+company, quantity, idempotency, retry, and concurrency guidance, but reads only
+Odoo Engineering; the required Expert composition is absent. Negative Routing
+correctly gives a concise Python list-reversal answer with zero skill/tool reads;
+its automated `FAIL` is a keyword-assertion false negative. No scenario modifies
+fixtures, times out, reports a failed tool, or claims executed validation.
+
+Observed progressive disclosure is improved but does not close the historical
+Case A defect: Architecture reads Expert plus three domain references and one
+workflow; Security reads Expert plus three references; Database reads Expert,
+three references, and one workflow. The earlier seven-reference load remains an
+open regression target until repeated evidence demonstrates resolution.
+
+Provider counters across five records: input `218169`, cached input `176768`,
+output `11628`, reasoning `1741`, derived input+output `229797`, derived uncached
+input `41401`, wall time `231.03s`, and 17 command/read tool calls. Provider
+`total_tokens` is absent and is not inferred as a billing total.
+
+Optimization decision: no Expert source change in this review. P0 is evidence
+integrity—persist `control_run_id` and atomically publish complete/failure records.
+P1 is ERP composition routing so Expert orchestrates the cross-disciplinary
+analysis while Odoo Engineering owns version-specific facts. P2 retains the
+progressive-disclosure regression gate and reduces reference loading only when
+quality is preserved. P3 replaces brittle exact-keyword acceptance with semantic
+or structured checks while preserving negative-routing exclusion. Protected
+rubrics and holdouts were not imported into the developer boundary. Formal A1/B1
+remains blocked until provenance is repaired and the affected DEVELOPMENT cases
+are rerun once.
+
+### 2026-10-14 — AFYX-283D.3 evaluation provenance closure
+
+Status: **ENGINEERING CORRECTION IMPLEMENTED / DEVELOPMENT PILOT NOT RERUN /
+FORMAL A1-B1 BLOCKED**.
+
+The D.2 records confirmed an evidence-integrity defect: fresh child-health and
+isolation controls shared `control_run_id` `718a0a8d0aff49f6b6a9a6d28ad71f5f`,
+but no scenario `result.json` stored that identity. The records therefore remain
+historical, substantively reviewable evidence whose control-to-cell provenance
+is explicitly **UNVERIFIED**; they are not retroactively promoted.
+
+The Phase 3A harness now creates one `evaluation_run_id` before child health and
+uses the same value as `control_run_id`. It passes the immutable correlation
+context through function arguments into child health, isolation, every cell,
+and the aggregate summary. The context records exact repository revision,
+benchmark-subject commit, frozen-environment path and SHA-256; each cell also
+records scenario, resolved configuration, repetition, and seed. This shared
+UUID proves record correlation only, not cryptographic attestation. A mixed run
+is rejected and a legacy record without the ID remains `UNVERIFIED`.
+
+Control, cell, and summary JSON publication now uses a same-directory temporary
+file plus `os.replace`, with temporary cleanup on success or failure. The
+summary starts as `INCOMPLETE`, records the last completed and attempted cells,
+and becomes `COMPLETE` only after every planned cell finalizes and all control
+and cell identities match. A pre-finalization exception creates a correlated
+`INCOMPLETE` cell with a bounded error classification and cannot leave an
+apparently complete summary.
+
+The Negative Routing prompt and forbidden-skill boundary are unchanged. Its
+brittle `output_contains('[::-1]')` assertion is replaced by a bounded,
+AST-whitelisted Python semantic check. It accepts slicing, `list(reversed(...))`,
+and in-place `list.reverse()` when execution yields the actual reversed fixture,
+rejects incorrect, irrelevant, and merely hard-coded alternatives, and requires
+zero tool calls in addition to zero Expert, Efficient Coding, Odoo Engineering,
+or Prompt Master reads.
+
+No Expert v0.1.0 source changed. Existing activation evidence supports a future
+ERP composition correction, not a conclusion that the harness missed a read:
+the ERP scenario observably loaded Odoo Engineering only. The smallest
+remediation hypothesis is to clarify discovery ownership so Expert orchestrates
+genuinely cross-disciplinary requirements, risk, architecture, and acceptance
+work, while Odoo Engineering owns Odoo-version-specific ORM, company, and
+transaction facts. Acceptance requires the unchanged cross-disciplinary ERP
+scenario to observably load both skills with bounded Expert disclosure, while a
+narrow Odoo question continues to route to Odoo Engineering without forcing
+Expert. That hypothesis is preparation only and needs a separately authorized
+source change and fresh DEVELOPMENT rerun. The earlier seven-reference Case A
+progressive-disclosure defect remains open. No model evaluation or formal A1/B1
+was run in D.3.
+
+### 2026-10-14 — AFYX-283D.4 Expert/Odoo composition candidate
+
+Status: **v0.1.1 CANDIDATE PREPARED / INDEPENDENT-HOST DEVELOPMENT RERUN
+REQUIRED / FORMAL A1-B1 BLOCKED**.
+
+The D.2 ERP record observably read Odoo Engineering and did not read Expert.
+The source-level cause is overlapping discovery ownership: Odoo Engineering's
+description directly matches Odoo implementation and process work, while
+Expert v0.1.0 listed ERP among broad capabilities but did not state when a
+cross-disciplinary ERP review needs Expert orchestration or how responsibilities
+compose. This was not an activation-observation defect.
+
+Candidate v0.1.1 changes only Expert discovery/composition text and its version
+label within the 22-file skill. Expert owns cross-disciplinary problem framing,
+process invariants, architecture alternatives, risks, and acceptance strategy;
+Odoo Engineering retains release-specific ORM, multi-company/security,
+model/view, transaction, and implementation facts. Narrow Odoo implementation
+questions may continue to use Odoo Engineering without Expert. Composition is
+not permission to broaden context: Expert still starts with one primary domain
+and no more than two supporting domains, loads the ERP workflow only for a
+material multistep process review, and expands only for a concrete dependency
+or risk.
+
+The candidate skill source commit is
+`8df29c3f9e31aa4661cc1e7d6f80328096e3f1ce`, content SHA-256 is
+`06d947c595f164ed1ad94e8ef97aa412a3ec7559c5f79cb467f0ec1ad488095c`,
+and normalized 22-file tree SHA-256 is
+`40cfa1f8b4fe3743a7eca81f8e4eb76c879d7adcd650c33b5611b0a2775ea138`.
+The selected candidate environment is
+`environment-expert-v0.1.1-codex-0.162.1-mxc.json`. Historical v0.1.0
+fingerprints remain unchanged and retain content SHA-256
+`69f85c93dbab28fb11460b0a9a2bbc38dbcf9c04f02747af7199ba84077334db`
+and original normalized source-tree SHA-256
+`9ebefe30bf9c7f73b101a53542b3cb09c993cfe9a4d565d15afc5834465569b7`.
+
+Zero-token routing fixtures cover cross-disciplinary ERP composition, narrow
+Odoo exclusion, simple Python negative routing, and general architecture,
+security, database, reliability, and AI/data routing. The unchanged DEVELOPMENT
+ERP prompt still requires observable reads of both Expert and Odoo Engineering
+and forbids fabricated database/module execution claims. These deterministic
+contracts do not prove actual model routing. Expert v0.1.1 remains a candidate
+until a fresh independent-host DEVELOPMENT run with D.3 provenance observes
+the intended composition and bounded disclosure. The historical Case A
+seven-reference regression remains open; no pilot or formal A1/B1 was run here.
+
+### 2026-10-15 — T06 Expert D.6 substantive-review preparation
+
+Status: **BLOCKED — REVIEW PREPARED / SUBSTANTIVE REVIEW NOT EXECUTED**.
+
+Developer-side preparation correlated Expert `0.1.1` subject revision
+`8df29c3f9e31aa4661cc1e7d6f80328096e3f1ce`, content SHA-256
+`06d947c595f164ed1ad94e8ef97aa412a3ec7559c5f79cb467f0ec1ad488095c`,
+MXC environment SHA-256
+`6203b5dd2f016fade8b04c1d2fd02be5ed8bf24763d1a4404e6931cbb4447c6c`,
+D.5 run `384826dee91d45f0a3388d5d276407ae`, and archive-manifest SHA-256
+`799d34b5934928606954b6fb19b3f8b834e010224a558c85cdfcd527dd48e926`.
+The five D.5 records retain automated PASS and observed routing/operational
+counters, but no sanitized independent-review verdict was available. The
+developer session did not open owner-only raw responses, events, rubrics,
+canaries, or holdouts and did not act as the substantive evaluator.
+
+ERP/Odoo observably selected Expert plus Odoo Engineering, and Negative Routing
+selected no skill and used no tools. Those facts do not prove substantive
+correctness, task fidelity, evidence quality, or security. The historical Case
+A seven-reference progressive-disclosure defect remains `OPEN`; narrow Odoo-only
+exclusion is `NOT TESTED`. Candidate source and historical v0.1.0/v0.1.1
+fingerprints remain unchanged. T07 formal A1/B1 is blocked until an independent
+owner-controlled evaluator returns a sanitized, identity-bound `KEEP`, `REVISE`,
+or `REJECT` conclusion. No model run, candidate freeze, Alpha promotion, release,
+or Jira status change occurred.
+
+### 2026-10-19 — Phase 7 Engineering Assurance candidate
+
+Status: **IMPLEMENTED / FOCUSED LOCAL VALIDATION PASS / STACKED REVIEW AND
+EXACT-HEAD CI PENDING**.
+
+Phase 7 is stacked on Phase 6 PR #79 exact HEAD
+`b7fddb76264244803d723cca5537f9e2ddc0238c`; PR #79 remains Draft and unmerged.
+Its CI run `39227026045` is independently observed SUCCESS on Windows, Linux, and
+macOS. The previously reported 25 native-Windows Forge POSIX/WSL environment
+errors remain historical FAIL evidence. Separate owner-provided isolated Windows
+installation evidence was not attributable in the available public PR record and
+is therefore `NOT VERIFIED`, not inferred.
+
+The frozen-v1 preset amendment removes Prompt Master from Minimal, Recommended,
+Full, normal verification, and implicit legacy update/repair paths. Prompt Master
+remains an upstream-owned EXTERNAL Custom component; existing user state is
+preserved and explicit acquisition retains pinned provenance, backup, rollback,
+and offline fail-closed behavior. This retirement does not claim a Forge-native
+replacement.
+
+The lightweight machine-readable engineering-assurance contract validates the
+schema of self-declared Task, Baseline, Scope, Ground Truth, risk Levels 1/2/3,
+adaptive validation budget,
+conditional mutation/differential/performance proof, failed/skipped classification,
+evidence reuse, CI, documentation, and merge readiness. Unknown status, stale or
+mismatched evidence, unjustified skip, out-of-scope change, and required-v1 failure
+all fail closed. Canonical repository-relative paths reject traversal, absolute,
+drive-qualified, UNC, and malformed input before allowlist matching. Affirmative
+Ground Truth requires PASS evidence; negative observations are separately classified.
+Source/diff/CI identities still require independent verification before acceptance.
+Correctness and security remain higher priority than performance or efficiency. The
+lifecycle remains `PLANNED → ANALYZED → IMPLEMENTED → VALIDATED
+→ DOCUMENTED → MERGE_READY`.
+
+Focused evidence at implementation time is component contract PASS,
+engineering-assurance 13/13 PASS, and control-plane 11/11 PASS. The current
+native-Windows scripts suite executed 240 tests with zero assertion failures and 15
+environment errors in the same synthetic-image/WSL-container/WSL-lab Forge modules;
+it remains `FAIL`, separate from the historical 25-error run. Exact-head CI,
+independent review, owner merge decisions, and retargeting after Phase 6 merge remain
+pending. Active runtime, Alpha, T05 Adit, and T09 Forge campaign were not changed;
+T09 remains `BLOCKED — 0/36` and A8 remains without GO.
+
+## AFYX-290 — Native Afyx Context Engine Foundation
+
+Status: **REVIEW CORRECTIONS IMPLEMENTED; NEW EXACT-HEAD CI PENDING**
+
+The first ACE MVP is an independently runnable, Afyx-owned package under
+`afyx-context/`. It provides conservative protected-content classification,
+exact-repeat reduction, bounded selection with byte-complete fallback, stable
+owner/session-bound references, original retrieval, provenance, and independent
+CLI/API entry points. Graph, Engineering Expert, Forge, and Kit are represented
+only through the versioned optional `ace.integration/v1` contract; their
+standalone behavior does not depend on ACE and no default Kit preset changes.
+
+The deterministic synthetic baseline and complete provenance/limitation record
+are maintained in `docs/AFYX_CONTEXT_ENGINE_FOUNDATION.md`. External Headroom
+A/B, real consumer adapters, multi-process writers, and Kit lifecycle delivery
+remain outside this foundation and must not be inferred as complete.
+
+The bounded review correction moves optional-adapter request validation inside
+its failure boundary and preserves malformed input through `originalInput`.
+Explicit request, CLI, identity, metadata, blob, session-content, and provenance
+limits close the standalone MVP's unbounded-input paths. Storage commits blobs
+and metadata through owned temporary files with `fsync` and rename, preflights
+existing blob integrity before new writes, adopts a complete interruption orphan
+on retry, and leaves truncated metadata unchanged while failing closed. The
+focused suite passes 22 tests. Fresh exact-head CI remains required; the prior
+`4f5abc1` CI does not attest these corrections.
+
+## AFYX-291 — Native ACE comparative benchmark and acceptance
+
+Status: **BENCHMARK EXECUTED; STACKED DRAFT REVIEW AND EXACT-HEAD CI PENDING**
+
+AFYX-291 is isolated on a benchmark-only branch from frozen ACE foundation
+`594452d4722d4135ef04643639c1ad16c2c5e681`; Draft PR #84 and its dogfood
+worktree remain unchanged. Eight synthetic fixtures and seven cold plus seven
+warm repetitions per fixture produce 112 process samples with pinned
+`js-tiktoken` 1.0.21 `o200k_base` measurement. Correctness, protected-content,
+owner/session boundary, fallback, passthrough, exact recovery, and deterministic
+output checks pass.
+
+The evidence explicitly retains zero-saving outcomes and a recovery-heavy net
+regression: 76.14% cold gross reduction becomes -21.92% net after every emitted
+reference is recovered. Therefore no general savings claim is made. Headroom
+0.37.0 comparison is `BLOCKED` and its A/B is `NOT_RUN`: the installed boundary
+is a provider proxy/evaluation surface rather than an equivalent standalone
+transform, and active routing, credentials, private sessions, and global state
+were not used. Full methods and raw evidence are recorded in
+`docs/AFYX_CONTEXT_ENGINE_AFYX_291_BENCHMARK.md` and
+`docs/evidence/afyx-291/`.
+
+## AFYX-292 — Native ACE multi-process coordination and crash-safe local state
+
+Status: **IMPLEMENTED AND LOCALLY VALIDATED; STACKED DRAFT REVIEW AND EXACT-HEAD CI PENDING**
+
+AFYX-292 extends the standalone ACE store with one bounded exclusive lock per
+local state root. Atomic lock-directory creation, state/owner binding, token-checked
+release, and conservative same-host PID-presence checks protect concurrent first
+initialization, same-session writers, cross-session shared blobs, and retrieval.
+Abandoned ownership is reclaimed only after defensible liveness verification;
+age, PID alone, malformed metadata, and foreign artifacts never authorize
+deletion. Interrupted session commits retain the prior metadata, while complete
+content artifacts are adopted only after digest verification.
+
+Focused deterministic child-process tests cover concurrency, contention,
+hard-kill recovery, invisible partial commits, exact retrieval, release after
+failure, and ambiguous lock evidence. The full contract and limitations are in
+`docs/AFYX_CONTEXT_ENGINE_AFYX_292_COORDINATION.md`. Real Graph/MCP consumers,
+distributed coordination, authentication, deployment, and preset activation
+remain separate future boundaries.
