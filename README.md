@@ -159,6 +159,17 @@ Install Recommended:
 .\install.ps1 -Preset recommended
 ```
 
+Codex remains the default host. Native provider-aware onboarding also supports
+Antigravity without changing credentials, models, or provider routing:
+
+```powershell
+.\install.ps1 -Preset full -Provider codex,antigravity -ProviderScope workspace -WorkspaceRoot (Get-Location)
+```
+
+Antigravity-only plans exclude the Codex Usage Tracking component. See the
+[Installation Guide](docs/INSTALLATION.md#provider-aware-onboarding) for global
+IDE/CLI skill paths, dry-run, verification, and ownership-safe rollback.
+
 ```bash
 ./install.sh --preset recommended
 ```

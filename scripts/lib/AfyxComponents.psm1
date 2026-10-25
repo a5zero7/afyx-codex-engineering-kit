@@ -88,12 +88,24 @@ function Get-AfyxControlPlan {
         [Parameter(Mandatory)][ValidateSet('minimal', 'recommended', 'full', 'custom')][string]$Preset,
         [Parameter(Mandatory)]$Context,
         [string[]]$CustomComponent = @(),
+        [string[]]$Provider = @(),
         [hashtable]$StateById,
         [string]$ContractPath = $script:ContractPath
     )
     $contract = Get-AfyxControlPlaneContract -Path $ContractPath
     $components = @($contract.components)
+    if (-not $Provider.Count) { $Provider = @([string]$contract.default_provider) }
+    $providerIds = @($contract.providers | ForEach-Object { [string]$_.provider })
+    $unknownProviders = @($Provider | Where-Object { $_ -notin $providerIds })
+    if ($unknownProviders.Count) { throw "Unknown provider(s): $($unknownProviders -join ', ')" }
+    $Provider = @($providerIds | Where-Object { $_ -in $Provider })
     $desiredIds = @(Get-AfyxDesiredComponentIds -Preset $Preset -CustomComponent $CustomComponent -Path $ContractPath)
+    $desiredIds = @($desiredIds | Where-Object {
+        $wantedId = $_
+        $component = @($components | Where-Object { [string]$_.id -eq $wantedId })[0]
+        $restrictionText = if ($component.PSObject.Properties['providers']) { [string]$component.providers } else { '' }
+        [string]::IsNullOrEmpty($restrictionText) -or @(($restrictionText -split ';') | Where-Object { $_ -in $Provider }).Count -gt 0
+    })
     if (-not $StateById) {
         $StateById = @{}
         foreach ($state in (Get-AfyxComponentStates -Context $Context -ContractPath $ContractPath)) { $StateById[$state.Id] = $state }
@@ -136,12 +148,13 @@ function Get-AfyxControlPlan {
             ActualOwnership = $ownership; ActualState = $actualState; Drift = $drift; Repair = $repair
         }
     }
-    $identity = "v$($contract.control_plane_version)|$Preset|$($contract.default_provider)|$($desiredIds -join ',')"
+    $identity = "v$($contract.control_plane_version)|$Preset|$($Provider -join ',')|$($desiredIds -join ',')"
     [pscustomobject]@{
         Version = [int]$contract.control_plane_version
         Identity = $identity
         Preset = $Preset
-        Provider = [string]$contract.default_provider
+        Provider = ($Provider -join ',')
+        Providers = @($Provider)
         DesiredComponents = @($desiredIds)
         Components = @($items)
     }

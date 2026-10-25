@@ -3,6 +3,7 @@ set -euo pipefail
 
 root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 skills_root="${CODEX_SKILLS_ROOT:-$HOME/.agents/skills}"
+skills_root_explicit=false
 remove_prompt_master=false
 remove_afyx_graph=false
 remove_afyx_context=false
@@ -10,26 +11,51 @@ context_root="${AFYX_CONTEXT_RUNTIME_ROOT:-$HOME/.afyx/context}"
 dry_run=false
 selected_components=()
 selected_component_count=0
+remove_provider_configuration=false
+provider_list=codex
+provider_scope=global
+workspace_root="$PWD"
+gemini_home="${AFYX_GEMINI_HOME:-$HOME/.gemini}"
 
 printf 'Afyx Codex Engineering Kit — Linux/macOS uninstaller (Bash)\n'
 
 usage() {
-  printf '%s\n' 'Usage: ./uninstall.sh [--skills-root PATH] [--context-runtime-root PATH] [--component AFYX-SKILL-ID] [--remove-afyx-graph] [--remove-afyx-context] [--dry-run]'
+  printf '%s\n' 'Usage: ./uninstall.sh [--skills-root PATH] [--context-runtime-root PATH] [--component AFYX-SKILL-ID] [--remove-provider-configuration] [--provider codex|antigravity[,..]] [--provider-scope global|workspace] [--workspace-root PATH] [--gemini-home PATH] [--remove-afyx-graph] [--remove-afyx-context] [--dry-run]'
 }
 
 while (($#)); do
   case "$1" in
-    --skills-root) (($# >= 2)) || { printf '%s\n' '--skills-root requires a value.' >&2; exit 2; }; skills_root="$2"; shift 2 ;;
+    --skills-root) (($# >= 2)) || { printf '%s\n' '--skills-root requires a value.' >&2; exit 2; }; skills_root="$2"; skills_root_explicit=true; shift 2 ;;
     --component) (($# >= 2)) || { printf '%s\n' '--component requires a value.' >&2; exit 2; }; selected_components+=("$2"); selected_component_count=$((selected_component_count + 1)); shift 2 ;;
     --context-runtime-root) (($# >= 2)) || { printf '%s\n' '--context-runtime-root requires a value.' >&2; exit 2; }; context_root="$2"; shift 2 ;;
     --remove-prompt-master) remove_prompt_master=true; shift ;;
     --remove-afyx-graph) remove_afyx_graph=true; shift ;;
     --remove-afyx-context) remove_afyx_context=true; shift ;;
+    --remove-provider-configuration) remove_provider_configuration=true; shift ;;
+    --provider) provider_list="$2"; shift 2 ;;
+    --provider-scope) provider_scope="$2"; shift 2 ;;
+    --workspace-root) workspace_root="$2"; shift 2 ;;
+    --gemini-home) gemini_home="$2"; shift 2 ;;
     --dry-run) dry_run=true; shift ;;
     -h|--help) usage; exit 0 ;;
     *) printf 'Unknown option: %s\n' "$1" >&2; usage >&2; exit 2 ;;
   esac
 done
+case "$provider_scope" in global|workspace) ;; *) printf 'Unknown provider scope: %s\n' "$provider_scope" >&2; exit 2 ;; esac
+old_ifs=$IFS; IFS=','
+for provider_id in $provider_list; do case "$provider_id" in codex|antigravity) ;; *) printf 'Unknown provider: %s\n' "$provider_id" >&2; exit 2 ;; esac; done
+IFS=$old_ifs
+if [[ "$skills_root_explicit" == false && "$provider_scope" == workspace && ",$provider_list," == *,antigravity,* ]]; then
+  skills_root="$workspace_root/.agents/skills"
+fi
+additional_skill_roots=()
+if [[ "$provider_scope" == global && ",$provider_list," == *,antigravity,* ]]; then
+  antigravity_ide_skills="$gemini_home/config/skills"
+  antigravity_cli_skills="$gemini_home/antigravity-cli/skills"
+  if [[ "$skills_root_explicit" == false && "$provider_list" == antigravity ]]; then skills_root="$antigravity_ide_skills"; fi
+  [[ "$skills_root" == "$antigravity_ide_skills" ]] || additional_skill_roots+=("$antigravity_ide_skills")
+  [[ "$skills_root" == "$antigravity_cli_skills" ]] || additional_skill_roots+=("$antigravity_cli_skills")
+fi
 
 # One component truth: scripts/components.json. Only Afyx-owned skills are removable.
 # shellcheck source=scripts/lib/afyx-components.sh
@@ -72,6 +98,23 @@ for component_id in $(afyx_component_ids); do
     fi
   fi
 done
+for additional_root in ${additional_skill_roots[@]+"${additional_skill_roots[@]}"}; do
+  for component_id in $(afyx_component_ids); do
+    [[ "$(afyx_component_field "$component_id" type)" == skill && "$(afyx_component_field "$component_id" ownership)" == afyx ]] || continue
+    component_selected "$component_id" || continue
+    target="$additional_root/$(afyx_component_field "$component_id" install_path)"
+    if "$dry_run"; then
+      afyx_classify_skill "$target" "$component_id" afyx
+      case "$AFYX_OWNERSHIP_STATE" in NOT_INSTALLED) ;; AFYX_OWNED_UNMODIFIED) printf '+ ownership-verified remove %q\n' "$target" ;; *) printf 'Refusing to remove %s because installed ownership is %s.\n' "$target" "$AFYX_OWNERSHIP_STATE" >&2; exit 1 ;; esac
+    else afyx_remove_skill "$component_id" "$target" afyx; fi
+  done
+done
+if "$remove_provider_configuration"; then
+  provider_args=("$root/scripts/afyx-provider-integration.mjs" --providers "$provider_list" --scope "$provider_scope" --workspace-root "$workspace_root" --gemini-home "$gemini_home" --codex-home "${CODEX_HOME:-$HOME/.codex}" --node "$(command -v node)" --entry "$graph_root/current/lib/dist/bin/afyx-graph.js" --uninstall)
+  command -v codex >/dev/null 2>&1 && provider_args+=(--codex "$(command -v codex)")
+  if "$dry_run"; then printf 'Dry-run: would remove only Afyx-owned provider MCP entries at %s scope.\n' "$provider_scope"
+  else provider_json="$(node "${provider_args[@]}" --apply)" || { printf 'Provider removal failed: %s\n' "$provider_json" >&2; exit 1; }; fi
+fi
 if [[ -e "$graph_root" ]]; then
   if ! "$remove_afyx_graph" && [[ -t 0 && -z "${CI:-}" ]] && ! "$dry_run"; then
     read -r -p 'Afyx Graph detected. Remove Afyx Graph? [Y/N] [N]: ' answer || answer=
