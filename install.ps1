@@ -208,7 +208,7 @@ function Read-InstallChoice([string]$Label) {
     return $answer -match '(?i)^(y|yes)$'
 }
 
-function Install-ManagedSkillSafely([string]$Component, [string]$Name, [string]$Source, [string]$Target, [bool]$ReplaceExisting, [string]$InstallRoot = $SkillsRoot) {
+function Install-ManagedSkillSafely([string]$Component, [string]$Name, [string]$Source, [string]$Target, [bool]$ReplaceExisting, [string]$InstallRoot = $SkillsRoot, [bool]$AuthorizeRepair = $false) {
     if ((Test-Path -LiteralPath $Target) -and -not $ReplaceExisting) { return 'skipped' }
     if ($WhatIfPreference) { Write-Host "WhatIf: would stage and install $Name at $Target"; return 'planned' }
     Assert-AfyxSkillTarget -SkillsRoot $InstallRoot -Target $Target
@@ -219,7 +219,7 @@ function Install-ManagedSkillSafely([string]$Component, [string]$Name, [string]$
         Copy-Item -LiteralPath $Source -Destination $stage -Recurse -Force -ErrorAction Stop
         if (-not (Test-SkillManifest $stage)) { throw "$Name staged manifest is invalid." }
         $planRepair = $controlPlan -and @($controlPlan.Components | Where-Object { $_.Id -eq $Component -and $_.Repair -eq 'REPAIR' }).Count -eq 1
-        $authorized = $Force -or $componentActions.ContainsKey($Component) -or $planRepair
+        $authorized = $Force -or $componentActions.ContainsKey($Component) -or $planRepair -or $AuthorizeRepair
         Install-AfyxSkillTransaction -SkillsRoot $InstallRoot -Component $Component -Name $Name -Stage $stage -Target $Target -Owner afyx -Version (Get-AfyxSkillVersion -Directory $Source) -AuthorizeUnproven:$authorized
     } finally {
         if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue }
@@ -407,7 +407,7 @@ foreach ($additionalRoot in $additionalSkillRoots) {
             $summary["$($component.Name) [$additionalRoot]"] = 'skipped'
             continue
         }
-        $replicate = Install-ManagedSkillSafely $component.Id $component.Name $component.Source $target ($ownership -ne 'NOT_INSTALLED') $additionalRoot
+        $replicate = Install-ManagedSkillSafely $component.Id $component.Name $component.Source $target ($ownership -ne 'NOT_INSTALLED') $additionalRoot ($ownership -eq 'AFYX_OWNED_MODIFIED')
         $summary["$($component.Name) [$additionalRoot]"] = $replicate
     }
 }
