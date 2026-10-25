@@ -27,7 +27,6 @@ if (!fs.existsSync(cli)) throw new Error('dist/ is not built: run `npm run build
 
 process.env.AFYX_GRAPH_NO_WATCH = '1';
 process.env.AFYX_GRAPH_NO_DAEMON = '1';
-process.env.AFYX_GRAPH_ALLOW_UNSAFE_NODE = '1';
 
 const median = (values) => {
   const sorted = [...values].sort((a, b) => a - b);
