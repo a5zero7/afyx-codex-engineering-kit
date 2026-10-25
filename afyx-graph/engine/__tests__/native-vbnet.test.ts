@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { extractNativeVbnetFacts } from '../src/extraction/native/vbnet-facts';
 import { scanSource } from '../src/extraction/native/scanner';
 import { tokenizeSource } from '../src/extraction/syntax-tokens';
@@ -48,31 +48,55 @@ End Namespace
 `;
 
 function contract(result: ReturnType<typeof extractFromSource>) {
+  const qualifiedById = new Map(result.nodes.map((node) => [node.id, node.qualifiedName]));
   return {
-    nodes: result.nodes.filter((node) => node.kind !== 'file').map((node) => `${node.kind}:${node.name}`).sort(),
+    nodes: result.nodes.filter((node) => node.kind !== 'file').map((node) => `${node.kind}:${node.qualifiedName}`).sort(),
     relations: result.unresolvedReferences
       .filter((reference) => ['extends', 'implements', 'calls', 'instantiates', 'imports'].includes(reference.referenceKind))
-      .map((reference) => `${reference.referenceKind}:${reference.referenceName}`).sort(),
+      .map((reference) => `${qualifiedById.get(reference.fromNodeId)}->${reference.referenceKind}:${reference.referenceName}`).sort(),
   };
 }
 
 describe('Afyx-native VB.NET facts', () => {
-
-  afterEach(() => {
-    delete process.env.AFYX_GRAPH_NATIVE_PARSER;
+  it('matches the explicit native semantic oracle', () => {
+    const result = extractFromSource('Invoice.vb', SOURCE, 'vbnet');
+    expect(contract(result)).toEqual({
+      nodes: [
+        'class:Acme.Billing::EntityBase',
+        'class:Acme.Billing::Helpers',
+        'class:Acme.Billing::Invoice',
+        'enum:Acme.Billing::InvoiceState',
+        'enum_member:Acme.Billing::InvoiceState::Draft',
+        'enum_member:Acme.Billing::InvoiceState::Paid',
+        'field:Acme.Billing::Invoice::MaxLines',
+        'field:Acme.Billing::Invoice::PaidEvent',
+        'field:Acme.Billing::Invoice::_lines',
+        'import:System.Collections.Generic',
+        'interface:Acme.Billing::IRepository',
+        'method:Acme.Billing::Helpers::Twice',
+        'method:Acme.Billing::IRepository::GetById',
+        'method:Acme.Billing::Invoice::AddLine',
+        'method:Acme.Billing::Invoice::GetById',
+        'method:Acme.Billing::Invoice::New',
+        'method:Acme.Billing::Invoice::Validate',
+        'namespace:Acme.Billing',
+        'property:Acme.Billing::Invoice::State',
+        'struct:Acme.Billing::Money',
+        'type_alias:Acme.Billing::Helpers::Mapper',
+      ],
+      relations: [
+        'Acme.Billing::Invoice->extends:EntityBase',
+        'Acme.Billing::Invoice->implements:IRepository',
+        'Acme.Billing::Invoice::AddLine->calls:VALIDATE',
+        'Acme.Billing::Invoice::AddLine->calls:_lines.Add',
+        'Acme.Billing::Invoice::GetById->instantiates:Invoice',
+        'Invoice.vb->imports:System.Collections.Generic',
+      ],
+    });
+    expect(result.nodes.find((node) => node.kind === 'method' && node.name === 'GetById')?.returnType).toBe('Invoice');
   });
 
-  it('preserves the established semantic contract against the parser fallback', () => {
-    delete process.env.AFYX_GRAPH_NATIVE_PARSER;
-    const oldResult = extractFromSource('Invoice.vb', SOURCE, 'vbnet');
-    process.env.AFYX_GRAPH_NATIVE_PARSER = '1';
-    const newResult = extractFromSource('Invoice.vb', SOURCE, 'vbnet');
-    expect(contract(newResult)).toEqual(contract(oldResult));
-    expect(newResult.nodes.find((node) => node.kind === 'method' && node.name === 'GetById')?.returnType).toBe('Invoice');
-  });
-
-  it('routes native-gated semantic extraction without requesting a parser', () => {
-    process.env.AFYX_GRAPH_NATIVE_PARSER = '1';
+  it('routes .vb semantic extraction through the production dispatcher', () => {
     const result = extractFromSource('Invoice.vb', SOURCE, 'vbnet');
     expect(result.nodes).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: 'class', name: 'Invoice' }),
@@ -95,7 +119,6 @@ describe('Afyx-native VB.NET facts', () => {
   });
 
   it('classifies mixed-case VB.NET source natively', async () => {
-    process.env.AFYX_GRAPH_NATIVE_PARSER = '1';
     const source = "pUbLiC cLaSs Worker\n  Public Function Run(value As Integer) As String\n  End Function\nEnd Class";
     const result = await tokenizeSource(source, 'vbnet');
     expect(result?.spans.some((span) => span.cls === 'keyword' && source.slice(span.start, span.end) === 'cLaSs')).toBe(true);
