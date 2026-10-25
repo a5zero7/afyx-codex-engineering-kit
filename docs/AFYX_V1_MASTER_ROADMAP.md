@@ -2457,6 +2457,41 @@ remains **UNVERIFIED**. AFYX-266 engineering closure is ready for review; it
 does not mutate or promote the frozen Alpha candidate and does not replace the
 active installed runtime.
 
+# Unified development baseline checkpoint — 2026-10-25
+
+`dev` is the routine development source of truth. The consolidation started from
+remote `dev` commit `3b270f2689fc8e2a9b62a9f79ce9a03c3db09700`, whose tree already matches the
+accepted Alpha product tree `c352187dcd7e673bda99cd5e92242e24cd2fa77d`.
+
+| Existing work source | Verified disposition |
+|---|---|
+| Merged Graph, Expert, Forge, ACE, Kit/provider PRs through #101 | Integrated in `dev`; do not replay feature branches. |
+| Alpha promotion PR #102 | Product content already matches `dev`; Alpha history remains a release checkpoint. |
+| Main PRs #103/#104 | Exact-source build/attestation workflow and artifact layout correction consolidated into `dev`. |
+| Main Draft PR #106 | Release-safety behavior consolidated into `dev`; the separate Stable PR remains owner-controlled and unmerged. |
+| Main Draft PR #105 | Not integrated. Publication stays default-OFF pending a simpler explicit-owner manual contract. |
+| Historical T03/T04 and closed #77/#78 branches | Preserved as evidence/history; their accepted product content is superseded or already present. |
+| Detached evaluation/mutation worktrees and Alpha acceptance directories | Evidence only; not development source and not upload candidates. |
+| `.afyx-report-staging/`, `debug.log`, ignored indexes/build output, backups, and separate Afyx repositories | Owner/private/runtime state; excluded from `dev`. |
+
+Release workflow consolidation preserves deterministic six-target builds, checksums,
+release manifests, immutable action pins, artifact attestations, and downloadable
+verification artifacts. Non-publication workflows are read-only and no longer create
+tags or GitHub Releases. The previously attested Technical Alpha artifact is not
+rebuilt or substituted by this source consolidation.
+
+AFYX-278 reproduced on Windows with Node 26.8.1: the shutdown-control test child used
+an isolated home while the parent enumerated the owner's global daemon registry. The
+test harness now binds and restores both `HOME` and `USERPROFILE`; the affected file
+passes 5/5 and the daemon registry/manager regression set passes 30/30. Product daemon
+behavior is unchanged.
+
+Capability work remains nonlinear. Graph reliability and correctness continue first;
+Expert D.6 independent review, Forge's formal 0/36 campaign, optional/default-OFF ACE,
+and blocked third-party host sessions remain scoped limitations rather than universal
+development blockers. Daily installations, customer repositories, credentials, and
+runtime indexes remain outside source development.
+
 # Final definition of success
 
 The v1 contract is satisfied only when:
