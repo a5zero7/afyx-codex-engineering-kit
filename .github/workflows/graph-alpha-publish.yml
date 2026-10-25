@@ -59,7 +59,9 @@ jobs:
             test "$APPROVAL_TEXT" = PUBLISH_AFYX_GRAPH_TECHNICAL_ALPHA_077abe1
             env_json="$(gh api "repos/$GITHUB_REPOSITORY/environments/$PUBLICATION_ENV")"
             jq -e 'any(.protection_rules[]?; .type == "required_reviewers" and ((.reviewers // []) | length > 0))' <<<"$env_json" >/dev/null
-            jq -e '.deployment_branch_policy != null' <<<"$env_json" >/dev/null
+            jq -e '.deployment_branch_policy.custom_branch_policies == true and .deployment_branch_policy.protected_branches == false' <<<"$env_json" >/dev/null
+          policy_json="$(gh api "repos/$GITHUB_REPOSITORY/environments/$PUBLICATION_ENV/deployment-branch-policies?per_page=100")"
+          jq -e '.total_count == 1 and .branch_policies[0].name == "main"' <<<"$policy_json" >/dev/null
           fi
           run_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$APPROVED_BUILD_RUN")"
           jq -e --arg sha "$APPROVED_WORKFLOW_SHA" '.status=="completed" and .conclusion=="success" and .event=="workflow_dispatch" and .head_sha==$sha' <<<"$run_json" >/dev/null
@@ -143,7 +145,9 @@ jobs:
           test "$APPROVAL_TEXT" = PUBLISH_AFYX_GRAPH_TECHNICAL_ALPHA_077abe1
           env_json="$(gh api "repos/$GITHUB_REPOSITORY/environments/$PUBLICATION_ENV")"
           jq -e 'any(.protection_rules[]?; .type == "required_reviewers" and ((.reviewers // []) | length > 0))' <<<"$env_json" >/dev/null
-          jq -e '.deployment_branch_policy != null' <<<"$env_json" >/dev/null
+          jq -e '.deployment_branch_policy.custom_branch_policies == true and .deployment_branch_policy.protected_branches == false' <<<"$env_json" >/dev/null
+          policy_json="$(gh api "repos/$GITHUB_REPOSITORY/environments/$PUBLICATION_ENV/deployment-branch-policies?per_page=100")"
+          jq -e '.total_count == 1 and .branch_policies[0].name == "main"' <<<"$policy_json" >/dev/null
           if gh release view "$ALPHA_RELEASE_ID" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo 'Release already exists; refuse overwrite.' >&2; exit 1
           fi
