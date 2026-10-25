@@ -1,0 +1,221 @@
+name: Afyx Graph Technical Alpha Guarded Publication
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Verify-only (default) or separately owner-authorized publish
+        type: choice
+        options: [verify-only, publish]
+        default: verify-only
+        required: true
+      approval:
+        description: For publish, type PUBLISH_AFYX_GRAPH_TECHNICAL_ALPHA_077abe1
+        type: string
+        required: false
+
+# This workflow NEVER builds source. It consumes only one exact attested artifact.
+# Do not activate publication before the protected environment has reviewers.
+permissions:
+  contents: read
+
+concurrency:
+  group: afyx-graph-technical-alpha-publication
+  cancel-in-progress: false
+
+env:
+  ALPHA_SOURCE_SHA: 077abe19cadd861e676b6b2c14a229d11a0a5717
+  ALPHA_SOURCE_TREE: c352187dcd7e673bda99cd5e92242e24cd2fa77d
+  ALPHA_RELEASE_ID: afyx-graph-v1.0.0-technical-alpha.077abe1
+  APPROVED_BUILD_RUN: "40193643194"
+  APPROVED_WORKFLOW_SHA: 4ed9881168058a43f77ece54db057c37dd3e3a67
+  APPROVED_ARTIFACT_ID: "12599366070"
+  APPROVED_ARTIFACT_DIGEST: sha256:28c24c9bff78335b949df29e7b914cc945c9e9153f79f146d9f8a9c71dd21564
+  SIGNER_WORKFLOW: a5zero7/afyx-codex-engineering-kit/.github/workflows/graph-alpha-build-attest.yml
+  PUBLICATION_ENV: technical-alpha-publication
+
+jobs:
+  verify:
+    name: Verify exact immutable attested release set (read-only)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+      attestations: read
+    steps:
+      - name: Reject unauthorized run context and wrong build identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_ACTION: ${{ inputs.action }}
+          APPROVAL_TEXT: ${{ inputs.approval }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_REF" = refs/heads/main
+          test "$REQUESTED_ACTION" = verify-only -o "$REQUESTED_ACTION" = publish
+          if [[ "$REQUESTED_ACTION" == publish ]]; then
+            test "$APPROVAL_TEXT" = PUBLISH_AFYX_GRAPH_TECHNICAL_ALPHA_077abe1
+            env_json="$(gh api "repos/$GITHUB_REPOSITORY/environments/$PUBLICATION_ENV")"
+            jq -e 'any(.protection_rules[]?; .type == "required_reviewers" and ((.reviewers // []) | length > 0))' <<<"$env_json" >/dev/null
+            jq -e '.deployment_branch_policy != null' <<<"$env_json" >/dev/null
+          fi
+          run_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$APPROVED_BUILD_RUN")"
+          jq -e --arg sha "$APPROVED_WORKFLOW_SHA" '.status=="completed" and .conclusion=="success" and .event=="workflow_dispatch" and .head_sha==$sha' <<<"$run_json" >/dev/null
+          artifact_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$APPROVED_ARTIFACT_ID")"
+          jq -e --argjson run "$APPROVED_BUILD_RUN" --arg digest "$APPROVED_ARTIFACT_DIGEST" '.expired==false and .workflow_run.id==$run and .digest==$digest' <<<"$artifact_json" >/dev/null
+
+      - name: Download approved artifact by immutable ID, without rebuild
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          run-id: 40193643194
+          artifact-ids: 12599366070
+          github-token: ${{ github.token }}
+          path: release
+          merge-multiple: true
+
+      - name: Verify exact file allowlist, archive digests, source and manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd release && sha256sum -c SHA256SUMS)
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib
+          folder=pathlib.Path("release")
+          targets=("darwin-arm64","darwin-x64","linux-arm64","linux-x64","win32-arm64","win32-x64")
+          files={f"afyx-graph-{t}.zip" if t.startswith("win32") else f"afyx-graph-{t}.tar.gz" for t in targets}
+          expected=files|{"SHA256SUMS","RELEASE-MANIFEST.json","ARTIFACT-IDENTITY-LEDGER.json"}
+          assert {p.name for p in folder.iterdir()}==expected,"Release file allowlist mismatch"
+          manifest=json.loads((folder/"RELEASE-MANIFEST.json").read_text())
+          ledger=json.loads((folder/"ARTIFACT-IDENTITY-LEDGER.json").read_text())
+          assert manifest["source_revision"]==os.environ["ALPHA_SOURCE_SHA"]
+          assert manifest["release_tag"]==os.environ["ALPHA_RELEASE_ID"]
+          assert manifest["product_version"]=="1.0.0"
+          assert len(manifest["artifacts"])==6
+          assert {x["file"] for x in manifest["artifacts"]}==files
+          assert ledger["approved_source_sha"]==os.environ["ALPHA_SOURCE_SHA"]
+          assert ledger["approved_source_tree"]==os.environ["ALPHA_SOURCE_TREE"]
+          assert ledger["workflow_execution"]["run_id"]==os.environ["APPROVED_BUILD_RUN"]
+          assert ledger["workflow_execution"]["workflow_sha"]==os.environ["APPROVED_WORKFLOW_SHA"]
+          for item in manifest["artifacts"]:
+              assert hashlib.sha256((folder/item["file"]).read_bytes()).hexdigest()==item["sha256"]
+          PY
+
+      - name: Verify nine signed subjects and exact trusted workflow identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in release/*; do
+            gh attestation verify "$file" \
+              --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$SIGNER_WORKFLOW" \
+              --source-digest "$APPROVED_WORKFLOW_SHA" \
+              --source-ref refs/heads/main \
+              --deny-self-hosted-runners --format json >/dev/null
+          done
+          echo 'VERIFIED: nine signed files and frozen Alpha release identity' >> "$GITHUB_STEP_SUMMARY"
+          echo 'No publication occurred in this job' >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    name: Publish prerelease only after protected owner approval
+    needs: verify
+    if: ${{ inputs.action == 'publish' }}
+    environment:
+      name: technical-alpha-publication
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      actions: read
+      attestations: read
+    steps:
+      - name: Recheck protected environment and explicit owner intent
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APPROVAL_TEXT: ${{ inputs.approval }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/main
+          test "$APPROVAL_TEXT" = PUBLISH_AFYX_GRAPH_TECHNICAL_ALPHA_077abe1
+          env_json="$(gh api "repos/$GITHUB_REPOSITORY/environments/$PUBLICATION_ENV")"
+          jq -e 'any(.protection_rules[]?; .type == "required_reviewers" and ((.reviewers // []) | length > 0))' <<<"$env_json" >/dev/null
+          jq -e '.deployment_branch_policy != null' <<<"$env_json" >/dev/null
+          if gh release view "$ALPHA_RELEASE_ID" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'Release already exists; refuse overwrite.' >&2; exit 1
+          fi
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$ALPHA_RELEASE_ID" >/dev/null 2>&1; then
+            echo 'Tag already exists; refuse overwrite.' >&2; exit 1
+          fi
+
+      - name: Retrieve exact approved immutable artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          run-id: 40193643194
+          artifact-ids: 12599366070
+          github-token: ${{ github.token }}
+          path: release
+          merge-multiple: true
+
+      - name: Recheck signed files and integrity immediately before upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd release && sha256sum -c SHA256SUMS)
+          test "$(find release -maxdepth 1 -type f | wc -l)" -eq 9
+          for file in release/*; do
+            gh attestation verify "$file" --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$SIGNER_WORKFLOW" \
+              --source-digest "$APPROVED_WORKFLOW_SHA" \
+              --source-ref refs/heads/main --deny-self-hosted-runners >/dev/null
+          done
+
+      - name: Create a DRAFT prerelease, verify uploaded bytes, then publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/notes.md" <<'NOTES'
+          ## Afyx Graph 1.0.0 — Technical Alpha prerelease
+
+          This is a **Technical Alpha**, not stable v1. These archives contain the
+          standalone Afyx Graph runtime only, not the full Afyx Code Engineering Kit.
+          The four-component Kit uses the exact pinned source commit and custom
+          installation of efficient-coding, odoo-engineering, afyx-engineering-expert
+          and afyx-graph. Use an explicit platform archive and the accompanying
+          SHA256SUMS and RELEASE-MANIFEST.json. External Node.js >=22.5 is required.
+
+          Source Alpha: 077abe19cadd861e676b6b2c14a229d11a0a5717
+          Build/attestation workflow execution: 4ed9881168058a43f77ece54db057c37dd3e3a67
+          Attested Actions artifact: 12599366070 (run 40193643194)
+
+          Limits: Windows installed acceptance is bounded; Linux/macOS CI is not
+          physical-host acceptance. Physical macOS and IDE UI NOT_RUN. Codex
+          agent 401 and Antigravity agent 429 remain unverified; Antigravity is
+          preview. Usage Tracking and Full preset excluded; ACE optional/default
+          OFF. Forge formal benchmark 0/36 and not included. Graph structural
+          evidence is not a claim of behavioral completeness. Attestation confirms
+          signed workflow and file digests, not independent product correctness.
+          NOTES
+          gh release create "$ALPHA_RELEASE_ID" release/* \
+            --target "$ALPHA_SOURCE_SHA" --title 'Afyx Graph 1.0.0 — Technical Alpha' \
+            --prerelease --latest=false --draft --notes-file "$RUNNER_TEMP/notes.md" \
+            --repo "$GITHUB_REPOSITORY"
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$ALPHA_RELEASE_ID" > "$RUNNER_TEMP/release-api.json"
+          python3 - <<'PY'
+          import hashlib,json,pathlib,os
+          release=json.loads(pathlib.Path(os.environ["RUNNER_TEMP"],"release-api.json").read_text())
+          local={p.name:"sha256:"+hashlib.sha256(p.read_bytes()).hexdigest() for p in pathlib.Path("release").iterdir()}
+          remote={x["name"]:x.get("digest") for x in release["assets"]}
+          assert release["draft"] and release["prerelease"],"Release must still be a draft prerelease"
+          assert release["target_commitish"]==os.environ["ALPHA_SOURCE_SHA"],"Incorrect source target"
+          assert remote==local,"GitHub uploaded asset digest or list mismatch"
+          PY
+          gh release edit "$ALPHA_RELEASE_ID" --draft=false --prerelease --latest=false --repo "$GITHUB_REPOSITORY"
+          echo "Technical Alpha prerelease published after protected approval: $ALPHA_RELEASE_ID" >> "$GITHUB_STEP_SUMMARY"
