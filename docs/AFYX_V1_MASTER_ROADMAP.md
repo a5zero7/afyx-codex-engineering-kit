@@ -2440,10 +2440,13 @@ Local evidence on the supported contract includes clean install, typecheck and
 clean production/UI build PASS; focused Vitest 4 UI **21/21** and git-currency
 **13/13** PASS; semantic baseline **6/6** PASS; CLI/MCP smoke **21/21** PASS;
 artifact identity/legal **12/12** PASS; component, independence, identity and
-legal validators PASS. A full local run on unsupported Node 26 completed
+legal validators PASS. A historical full local Node 26 run completed
 **5647 PASS / 34 FAIL / 31 SKIP**: failures were Windows open-handle cleanup,
 load-sensitive timeouts/performance assertions, and one Windows `which`
-fixture, while supported final-head Node 24 CI remains the acceptance authority.
+fixture. Node 26 is inside the published `>=22.5.0` engine range, so AFYX-278
+tracks those failures as compatibility defects instead of labeling the runtime
+unsupported. Current closure evidence is recorded below; exact-head Node 24
+Windows/Linux/macOS CI remains the cross-platform acceptance authority.
 Implementation commit `5989661b1444c4f30d37fb1fafddd5ae3023379c`
 passed [engineering-kit CI 38155025673](https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/38155025673)
 and [Afyx Graph Build 38155028757](https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/38155028757)
@@ -2480,11 +2483,16 @@ verification artifacts. Non-publication workflows are read-only and no longer cr
 tags or GitHub Releases. The previously attested Technical Alpha artifact is not
 rebuilt or substituted by this source consolidation.
 
-AFYX-278 reproduced on Windows with Node 26.8.1: the shutdown-control test child used
-an isolated home while the parent enumerated the owner's global daemon registry. The
-test harness now binds and restores both `HOME` and `USERPROFILE`; the affected file
-passes 5/5 and the daemon registry/manager regression set passes 30/30. Product daemon
-behavior is unchanged.
+AFYX-278 reproduced on Windows with Node 26.8.1. The shutdown-control test child used
+an isolated home while the parent enumerated the owner's global daemon registry; MCP
+fixtures removed temp directories before killed children closed; ArkTS/JVM/C++/PHP
+fixtures left Graph or SQLite handles open; the old-Git fixture assumed POSIX `which`;
+and Vitest's CPU-derived worker count oversubscribed the Git/SQLite-heavy Windows suite.
+The harness now isolates `HOME`/`USERPROFILE`, awaits child close, closes Graph/SQLite
+resources, uses a native Windows Git shim, and caps only Windows Node >=26 at four
+workers. Product daemon and Graph runtime behavior are unchanged. Focused lifecycle
+regression passes 261/261; the final Node 26.8.1 Windows suite passes 325/325 active
+files and 5738/5738 active tests, with 4 files and 32 tests intentionally skipped.
 
 Capability work remains nonlinear. Graph reliability and correctness continue first;
 Expert D.6 independent review, Forge's formal 0/36 campaign, optional/default-OFF ACE,

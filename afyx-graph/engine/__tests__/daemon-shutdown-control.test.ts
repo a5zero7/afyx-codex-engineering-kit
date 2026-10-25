@@ -95,12 +95,12 @@ describe('native daemon shutdown control', () => {
       },
     });
     children.push(child);
-    const lock = await waitFor(() => readLock(root));
+    const lock = await waitFor(() => readLock(root), 20_000);
     const boundLock = await waitFor(async () => {
       const current = readLock(root);
       const lifecycleEndpointPublished = process.platform !== 'win32' || Boolean(current?.controlSocketPath);
       return current && lifecycleEndpointPublished && await probeDaemonIdentity(current) ? current : null;
-    });
+    }, 20_000);
     return { child, lock: boundLock };
   }
 
