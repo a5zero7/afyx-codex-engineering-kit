@@ -35,6 +35,33 @@ lines.on('line',(line)=>{const m=JSON.parse(line);if(m.id===1)console.log(JSON.s
 
 
 class McpIntegrationTests(unittest.TestCase):
+    def test_probe_isolates_caller_state_and_working_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            base = Path(raw)
+            entry = base / "runtime/current/lib/dist/bin/afyx-graph.js"
+            entry.parent.mkdir(parents=True)
+            entry.write_text(
+                """const readline=require('node:readline');
+if(process.env.AFYX_GRAPH_STATE_DIR || process.env.AFYX_GRAPH_NO_DAEMON!=='1' || process.env.AFYX_GRAPH_NO_WATCH!=='1' || process.env.NODE_DISABLE_COMPILE_CACHE!=='1' || !require('node:path').basename(process.cwd()).startsWith('afyx-mcp-probe-')) process.exit(23);
+const lines=readline.createInterface({input:process.stdin});
+lines.on('line',(line)=>{const m=JSON.parse(line);if(m.id===1)console.log(JSON.stringify({jsonrpc:'2.0',id:1,result:{protocolVersion:'2025-11-25',capabilities:{},serverInfo:{name:'afyx_graph',version:'1.0.0'}}}));if(m.id===2)console.log(JSON.stringify({jsonrpc:'2.0',id:2,result:{tools:[{name:'afyx_graph_explore'}]}}));});
+""",
+                encoding="utf-8",
+            )
+            script = (
+                f"import {{probeMcp}} from {json.dumps(HELPER.as_uri())};"
+                f"console.log(JSON.stringify(await probeMcp(process.execPath,{json.dumps(str(entry))})));"
+            )
+            result = subprocess.run(
+                ["node", "--input-type=module", "-e", script],
+                cwd=ROOT,
+                env={**os.environ, "AFYX_GRAPH_STATE_DIR": str(ROOT.parent)},
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertTrue(json.loads(result.stdout)["ok"])
+
     def test_classifier_distinguishes_current_stale_and_conflict(self) -> None:
         expected = {"node": "C:/node/node.exe", "entry": "C:/runtime/current/lib/dist/bin/afyx-graph.js"}
         script = f"""import {{classifyEntry}} from {json.dumps(HELPER.as_uri())};
@@ -60,7 +87,7 @@ console.log(JSON.stringify([classifyEntry(null,expected),classifyEntry(current,e
 
             fake_codex = launcher_dir / "fake-codex.mjs"
             fake_codex.write_text(
-                """import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+                """import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 const home = process.env.CODEX_HOME;
 const state = resolve(home, 'fixture-state.json');
@@ -79,7 +106,8 @@ if (action === 'get') {
   writeFileSync(state, JSON.stringify({ transport: { type: 'stdio', command: command[0], args: command.slice(1) } }));
   writeFileSync(config, '[mcp_servers.afyx_graph]\\n');
 } else if (action === 'remove') {
-  process.exit(0);
+  rmSync(state, { force: true });
+  rmSync(config, { force: true });
 } else {
   process.exit(8);
 }
@@ -121,6 +149,14 @@ if (action === 'get') {
             self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
             self.assertEqual(json.loads(second.stdout)["mcp"], "MCP_REACHABLE")
             self.assertFalse(json.loads(second.stdout)["changed"])
+
+            removed = subprocess.run(command + ["--uninstall"], cwd=ROOT, capture_output=True, text=True)
+            self.assertEqual(removed.returncode, 0, removed.stdout + removed.stderr)
+            self.assertEqual(json.loads(removed.stdout)["mcp"], "MCP_NOT_CONFIGURED")
+            self.assertTrue(json.loads(removed.stdout)["changed"])
+            self.assertFalse((codex_home / ".afyx-provider-ownership.json").exists())
+            restored = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
+            self.assertEqual(restored.returncode, 0, restored.stdout + restored.stderr)
 
             (codex_home / "fixture-state.json").write_text("not json", encoding="utf-8")
             invalid = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)

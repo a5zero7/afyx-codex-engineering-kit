@@ -144,6 +144,53 @@ class SkillLifecycleSecurityTests(unittest.TestCase):
         self.assertEqual(hashlib.sha256((target / "SKILL.md").read_bytes()).hexdigest(), before)
         self.assertTrue((target / ".afyx-install.json").is_file())
 
+    @unittest.skipUnless(WINDOWS, "provider replica lifecycle is exercised by the PowerShell installer")
+    def test_antigravity_secondary_roots_repair_owned_drift_and_reject_unowned(self) -> None:
+        (self.fake_bin / "agy.cmd").write_text("@echo agy-test\r\n", encoding="utf-8")
+        primary = self.base / "primary-skills"
+        gemini = self.base / "gemini"
+        command = [
+            self.shell,
+            "-NoProfile",
+            "-NonInteractive",
+            "-File",
+            str(ROOT / "install.ps1"),
+            "-SkillsRoot",
+            str(primary),
+            "-Preset",
+            "recommended",
+            "-Provider",
+            "antigravity",
+            "-ProviderScope",
+            "global",
+            "-GeminiHome",
+            str(gemini),
+            "-SkipGraphMcp",
+            "-Confirm:$false",
+        ]
+
+        first = subprocess.run(command, cwd=ROOT, env=self.env, capture_output=True, text=True)
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        source = (ROOT / "skills/efficient-coding/SKILL.md").read_bytes()
+        ide_target = gemini / "config/skills/efficient-coding"
+        cli_target = gemini / "antigravity-cli/skills/efficient-coding"
+        for target in (ide_target, cli_target):
+            with (target / "SKILL.md").open("a", encoding="utf-8") as handle:
+                handle.write("\n<!-- secondary-root drift -->\n")
+
+        repaired = subprocess.run(command, cwd=ROOT, env=self.env, capture_output=True, text=True)
+        self.assertEqual(repaired.returncode, 0, repaired.stdout + repaired.stderr)
+        self.assertEqual((ide_target / "SKILL.md").read_bytes(), source)
+        self.assertEqual((cli_target / "SKILL.md").read_bytes(), source)
+
+        (cli_target / ".afyx-install.json").unlink()
+        with (cli_target / "SKILL.md").open("a", encoding="utf-8") as handle:
+            handle.write("\nforeign-preserve-sentinel\n")
+        before = (cli_target / "SKILL.md").read_bytes()
+        refused = subprocess.run(command, cwd=ROOT, env=self.env, capture_output=True, text=True)
+        self.assertNotEqual(refused.returncode, 0, refused.stdout + refused.stderr)
+        self.assertEqual((cli_target / "SKILL.md").read_bytes(), before)
+
     def test_interrupted_swap_is_recovered_before_retry(self) -> None:
         self.run_install("install")
         target = self.skills / "efficient-coding"

@@ -28,11 +28,6 @@ function Read-Text([string]$File) {
 
 function Test-InRange([int]$Major) { return ($Major -ge $SupportedMin -and $Major -le $SupportedMax) }
 
-function Get-RelativePath([string]$Root, [string]$Full) {
-    $relative = $Full.Substring($Root.Length).TrimStart('\', '/')
-    return ($relative -replace '\\', '/')
-}
-
 function Find-Root([string]$Start) {
     # Nearest ancestor (including the start directory) carrying a root marker wins.
     $current = (Resolve-Path -LiteralPath $Start).Path
@@ -50,17 +45,20 @@ function Find-Root([string]$Start) {
 }
 
 function Get-Manifests([string]$Root) {
-    $found = New-Object System.Collections.Generic.List[string]
+    $found = New-Object System.Collections.Generic.List[object]
     $stack = New-Object System.Collections.Generic.Stack[object]
-    $stack.Push(@($Root, 0))
+    $stack.Push(@($Root, 0, ''))
     while ($stack.Count -gt 0 -and $found.Count -lt $ManifestCap) {
-        $item = $stack.Pop(); $directory = $item[0]; $depth = $item[1]
+        $item = $stack.Pop(); $directory = $item[0]; $depth = $item[1]; $relativeDirectory = $item[2]
         $manifest = Join-Path $directory '__manifest__.py'
-        if (Test-Path -LiteralPath $manifest -PathType Leaf) { $found.Add($manifest) }
+        if (Test-Path -LiteralPath $manifest -PathType Leaf) {
+            $found.Add([pscustomobject]@{ Path = $manifest; RelativeDirectory = $relativeDirectory })
+        }
         if ($depth -ge 4) { continue }
         foreach ($child in (Get-ChildItem -LiteralPath $directory -Directory -Force -ErrorAction SilentlyContinue | Sort-Object Name)) {
             if ($SkipDirectories -contains $child.Name) { continue }
-            $stack.Push(@($child.FullName, $depth + 1))
+            $childRelative = if ($relativeDirectory) { Join-Path $relativeDirectory $child.Name } else { $child.Name }
+            $stack.Push(@($child.FullName, ($depth + 1), $childRelative))
         }
     }
     return $found
@@ -113,13 +111,9 @@ $manifests = @(Get-Manifests $root)
 $manifestMajors = @{}
 $addonRoots = New-Object System.Collections.Generic.SortedSet[string] ([System.StringComparer]::Ordinal)
 foreach ($manifest in $manifests) {
-    $moduleDirectory = Split-Path -Parent $manifest
-    $container = Split-Path -Parent $moduleDirectory
-    if ($container -and $container.Length -ge $root.Length) {
-        $relativeContainer = Get-RelativePath $root $container
-        [void]$addonRoots.Add($(if ($relativeContainer) { $relativeContainer } else { '.' }))
-    }
-    $match = [regex]::Match((Read-Text $manifest), "['""]version['""]\s*:\s*['""](\d{2})\.0\.\d+\.\d+\.\d+['""]")
+    $relativeContainer = [IO.Path]::GetDirectoryName([string]$manifest.RelativeDirectory)
+    [void]$addonRoots.Add($(if ($relativeContainer) { $relativeContainer -replace '\\', '/' } else { '.' }))
+    $match = [regex]::Match((Read-Text $manifest.Path), "['""]version['""]\s*:\s*['""](\d{2})\.0\.\d+\.\d+\.\d+['""]")
     if ($match.Success -and (Test-InRange ([int]$match.Groups[1].Value))) {
         $major = [int]$match.Groups[1].Value
         $manifestMajors[$major] = 1 + $(if ($manifestMajors.ContainsKey($major)) { $manifestMajors[$major] } else { 0 })

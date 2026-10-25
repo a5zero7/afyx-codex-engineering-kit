@@ -2,7 +2,7 @@
 name: efficient-coding
 description: Quality-first workflow for software implementation, debugging, refactoring, and code investigation. Applies to coding work, not general conversation, prompt writing, or document-only tasks.
 metadata:
-  version: "1.2.0"
+  version: "1.2.1"
 ---
 
 # Efficient Coding

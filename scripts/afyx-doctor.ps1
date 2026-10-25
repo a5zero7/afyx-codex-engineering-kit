@@ -69,7 +69,7 @@ foreach ($state in (Get-AfyxComponentStates -Context $context)) { $states[$state
 
 Write-Host ''
 Write-Host 'CORE'
-foreach ($id in @('efficient-coding', 'odoo-engineering', 'prompt-master')) {
+foreach ($id in @('efficient-coding', 'odoo-engineering')) {
     $component = $states[$id]
     if ($component.State -eq 'HEALTHY') { Write-Line 'OK' $component.Name $component.Version }
     else { Write-Line 'FAIL' $component.Name "$($component.State): $($component.Detail)" }
@@ -77,6 +77,12 @@ foreach ($id in @('efficient-coding', 'odoo-engineering', 'prompt-master')) {
 
 Write-Host ''
 Write-Host 'OPTIONAL'
+$expert = $states['afyx-engineering-expert']
+switch ($expert.State) {
+    'HEALTHY' { Write-Line 'OK' $expert.Name $expert.Version }
+    'NOT INSTALLED' { Write-Line 'INFO' $expert.Name 'not installed (optional)' }
+    default { Write-Line 'WARN' $expert.Name "$($expert.State): $($expert.Detail)" }
+}
 $graph = $states['afyx-graph']
 switch ($graph.State) {
     'HEALTHY' { Write-Line 'OK' $graph.Name $graph.Version; Write-Host "     State: $($graph.State)" }
@@ -89,9 +95,6 @@ switch ($usage.State) {
     'NOT INSTALLED' { Write-Line 'INFO' $usage.Name $(if ($usage.Detail -eq 'not installed') { 'not installed (optional)' } else { $usage.Detail }) }
     default { Write-Line 'WARN' $usage.Name "$($usage.State): $($usage.Detail)" }
 }
-$headroom = $states['headroom']
-if ($headroom.State -eq 'HEALTHY') { Write-Line 'OK' $headroom.Name 'detected (externally managed)' } else { Write-Line 'INFO' $headroom.Name 'not detected (externally managed, optional)' }
-
 Write-Host ''
 Write-Host 'ENVIRONMENT'
 $codexVersion = Get-ToolVersion 'codex' @('--version')
@@ -100,7 +103,7 @@ if ($codexVersion) { Write-Line 'OK' 'Codex CLI' $codexVersion } else { Write-Li
 if ($extension) { Write-Line 'OK' 'VS Code extension' 'detected' } else { Write-Line 'INFO' 'VS Code extension' 'not detected' }
 if (-not $codexVersion -and -not $extension) { Write-Line 'FAIL' 'Codex host' 'neither Codex CLI nor the ChatGPT/Codex VS Code extension was detected' }
 $gitVersion = Get-ToolVersion 'git' @('--version')
-if ($gitVersion) { Write-Line 'OK' 'Git' $gitVersion } else { Write-Line 'WARN' 'Git' 'not found; required to install Prompt Master and for freshness checks' }
+if ($gitVersion) { Write-Line 'OK' 'Git' $gitVersion } else { Write-Line 'WARN' 'Git' 'not found; required for source and freshness checks' }
 $pythonVersion = Get-ToolVersion 'python' @('--version')
 if (-not $pythonVersion) { $pythonVersion = Get-ToolVersion 'python3' @('--version') }
 if ($pythonVersion) { Write-Line 'OK' 'Python' "$pythonVersion (optional: validators and evals)" } else { Write-Line 'INFO' 'Python' 'not found (optional: validators and evals)' }

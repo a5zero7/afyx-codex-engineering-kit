@@ -204,4 +204,18 @@ describe('afyx-graph index — recovers a stale/oversized prior index (#1067)', 
     expect(counts.nodes).toBeGreaterThan(0);
     expect(counts.edges).toBeGreaterThan(0);
   });
+
+  it('recovers a corrupt database through the documented full-index command', () => {
+    runAfyxGraph(['init'], tempDir);
+    fs.writeFileSync(dbPath(tempDir), 'not a sqlite database');
+
+    // `index` must discard the unreadable database before opening it. This is
+    // the bounded recovery path for a corrupt disposable index; source files
+    // remain authoritative and untouched.
+    runAfyxGraph(['index'], tempDir);
+
+    const counts = graphCounts(tempDir);
+    expect(counts.nodes).toBeGreaterThan(0);
+    expect(counts.edges).toBeGreaterThan(0);
+  });
 });

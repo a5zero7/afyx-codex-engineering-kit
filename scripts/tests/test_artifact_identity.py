@@ -80,16 +80,6 @@ def create_bundle(release: Path, revision: str) -> Path:
     return archive
 
 
-def write_identity_metadata(path: Path, revision: str) -> None:
-    _, target = host_target()
-    write(path, json.dumps({
-        "product_name": "Afyx Graph", "product_version": "1.0.0",
-        "release_channel": "technical-alpha", "artifact_identity_schema": 1,
-        "artifact_target": target, "source_revision": revision,
-        "build_identity": f"git:{revision}", "extraction_version": 27,
-    }))
-
-
 class ArtifactIdentityTests(unittest.TestCase):
     def run_tool(self, *args: str, expected: int = 0) -> subprocess.CompletedProcess[str]:
         result = subprocess.run(
@@ -97,23 +87,6 @@ class ArtifactIdentityTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
         return result
-
-    def prepare_retained(self, release: Path, archive: Path, revision: str) -> tuple[Path, Path, Path]:
-        metadata = release / "metadata.json"
-        candidate = release / "ALPHA-CANDIDATE-MANIFEST.json"
-        release_manifest = release / "RELEASE-MANIFEST.json"
-        checksums = release / "SHA256SUMS"
-        write_identity_metadata(metadata, revision)
-        self.run_tool(
-            "create-release-manifest", "--directory", str(release), "--output", str(candidate),
-            "--revision", revision, "--version", "1.0.0", "--tag", f"alpha-0.1-{revision}",
-        )
-        self.run_tool(
-            "prepare-retained-artifact", "--candidate-manifest", str(candidate),
-            "--release-manifest", str(release_manifest), "--checksums", str(checksums),
-            "--archive", str(archive), "--metadata", str(metadata),
-        )
-        return candidate, release_manifest, checksums
 
     def test_stamp_match_mismatch_unknown_and_install_provenance(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
@@ -169,73 +142,41 @@ class ArtifactIdentityTests(unittest.TestCase):
             )
             self.assertEqual(json.loads(verified.stdout)["status"], "VERIFIED")
 
+            metadata_record = json.loads(metadata.read_text(encoding="utf-8"))
+            metadata_record["artifact_target"] = "linux-arm64" if target != "linux-arm64" else "win32-x64"
+            metadata.write_text(json.dumps(metadata_record), encoding="utf-8")
+            wrong_target = self.run_tool(
+                "verify-release-manifest", "--manifest", str(manifest), "--archive", str(archive),
+                "--metadata", str(metadata), expected=1,
+            )
+            self.assertIn("target does not match", wrong_target.stderr)
+            metadata_record["artifact_target"] = target
+            metadata.write_text(json.dumps(metadata_record), encoding="utf-8")
+
+            manifest_record = json.loads(manifest.read_text(encoding="utf-8"))
+            manifest_record["source_revision"] = "d" * 40
+            manifest.write_text(json.dumps(manifest_record), encoding="utf-8")
+            wrong_revision = self.run_tool(
+                "verify-release-manifest", "--manifest", str(manifest), "--archive", str(archive),
+                "--metadata", str(metadata), expected=1,
+            )
+            self.assertIn("revision does not match", wrong_revision.stderr)
+            manifest_record["source_revision"] = revision
+            manifest_record["product_version"] = "9.9.9"
+            manifest.write_text(json.dumps(manifest_record), encoding="utf-8")
+            wrong_version = self.run_tool(
+                "verify-release-manifest", "--manifest", str(manifest), "--archive", str(archive),
+                "--metadata", str(metadata), expected=1,
+            )
+            self.assertIn("version does not match", wrong_version.stderr)
+            manifest_record["product_version"] = "1.0.0"
+            manifest.write_text(json.dumps(manifest_record), encoding="utf-8")
+
             archive.write_bytes(archive.read_bytes() + b"tampered")
             failed = self.run_tool(
                 "verify-release-manifest", "--manifest", str(manifest), "--archive", str(archive), "--metadata", str(metadata), expected=1
             )
             self.assertIn("digest mismatch", failed.stderr)
-
-    def test_retained_artifact_sidecars_are_complete_and_fail_closed(self) -> None:
-        with tempfile.TemporaryDirectory() as raw:
-            release = Path(raw)
-            revision = "d" * 40
-            archive = create_bundle(release, revision)
-            candidate, release_manifest, checksums = self.prepare_retained(release, archive, revision)
-            metadata = release / "metadata.json"
-
-            self.assertEqual(candidate.read_bytes(), release_manifest.read_bytes())
-            self.run_tool(
-                "verify-retained-artifact", "--candidate-manifest", str(candidate),
-                "--release-manifest", str(release_manifest), "--checksums", str(checksums),
-                "--archive", str(archive), "--metadata", str(metadata),
-            )
-
-            checksums.unlink()
-            missing = self.run_tool(
-                "verify-retained-artifact", "--candidate-manifest", str(candidate),
-                "--release-manifest", str(release_manifest), "--checksums", str(checksums),
-                "--archive", str(archive), "--metadata", str(metadata), expected=1,
-            )
-            self.assertIn("SHA256SUMS", missing.stderr)
-
-            _, release_manifest, checksums = self.prepare_retained(release, archive, revision)
-            archive.write_bytes(archive.read_bytes() + b"tampered")
-            tampered = self.run_tool(
-                "verify-retained-artifact", "--candidate-manifest", str(candidate),
-                "--release-manifest", str(release_manifest), "--checksums", str(checksums),
-                "--archive", str(archive), "--metadata", str(metadata), expected=1,
-            )
-            self.assertIn("digest mismatch", tampered.stderr)
-
-            archive = create_bundle(release, revision)
-            candidate, release_manifest, checksums = self.prepare_retained(release, archive, revision)
-            release_manifest.write_text(release_manifest.read_text(encoding="utf-8") + " ", encoding="utf-8")
-            wrong_manifest = self.run_tool(
-                "verify-retained-artifact", "--candidate-manifest", str(candidate),
-                "--release-manifest", str(release_manifest), "--checksums", str(checksums),
-                "--archive", str(archive), "--metadata", str(metadata), expected=1,
-            )
-            self.assertIn("byte-identical", wrong_manifest.stderr)
-
-            candidate, release_manifest, checksums = self.prepare_retained(release, archive, revision)
-            write_identity_metadata(metadata, "e" * 40)
-            wrong_revision = self.run_tool(
-                "verify-retained-artifact", "--candidate-manifest", str(candidate),
-                "--release-manifest", str(release_manifest), "--checksums", str(checksums),
-                "--archive", str(archive), "--metadata", str(metadata), expected=1,
-            )
-            self.assertIn("revision", wrong_revision.stderr)
-
-            write_identity_metadata(metadata, revision)
-            changed = json.loads(metadata.read_text(encoding="utf-8"))
-            changed["artifact_target"] = "darwin-arm64" if changed["artifact_target"] != "darwin-arm64" else "linux-x64"
-            write(metadata, json.dumps(changed))
-            wrong_target = self.run_tool(
-                "verify-retained-artifact", "--candidate-manifest", str(candidate),
-                "--release-manifest", str(release_manifest), "--checksums", str(checksums),
-                "--archive", str(archive), "--metadata", str(metadata), expected=1,
-            )
-            self.assertIn("target", wrong_target.stderr)
 
     def test_matching_cache_installs_and_stale_cache_preserves_existing_runtime(self) -> None:
         current = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
@@ -247,8 +188,11 @@ class ArtifactIdentityTests(unittest.TestCase):
             base = Path(raw)
             release, runtime, public_bin = base / "release", base / "runtime", base / "bin"
             release.mkdir()
-            archive = create_bundle(release, current)
-            self.prepare_retained(release, archive, current)
+            create_bundle(release, current)
+            self.run_tool(
+                "create-release-manifest", "--directory", str(release), "--output", str(release / "RELEASE-MANIFEST.json"),
+                "--revision", current, "--version", "1.0.0", "--tag", "afyx-graph-v1.0.0",
+            )
             env = os.environ.copy()
             env.update({
                 "AFYX_GRAPH_RELEASE_ROOT": str(release),
@@ -269,6 +213,11 @@ class ArtifactIdentityTests(unittest.TestCase):
             self.assertEqual(metadata["build_provenance"], "COMMIT_BOUND_MANIFEST")
             self.assertEqual(len(metadata["archive_sha256"]), 64)
 
+            update_command = command + (["-Update"] if os.name == "nt" else ["--update"])
+            updated = subprocess.run(update_command, cwd=ROOT, env=env, capture_output=True, text=True)
+            self.assertEqual(updated.returncode, 0, updated.stdout + updated.stderr)
+            self.assertFalse(Path(f"{runtime}.afyx-old").exists())
+
             metadata["source_revision"] = "b" * 40
             write(runtime / "metadata.json", json.dumps(metadata))
             validate = ([shell, "-NoProfile", "-NonInteractive", "-File", str(installer), "-RuntimeRoot", str(runtime), "-SkipPathUpdate", "-ValidateOnly"]
@@ -287,6 +236,101 @@ class ArtifactIdentityTests(unittest.TestCase):
             self.assertIn("valid but stale", (stale.stdout + stale.stderr).lower())
             preserved = json.loads((runtime / "metadata.json").read_text(encoding="utf-8-sig"))
             self.assertEqual(preserved["sentinel"], "preserve-me")
+
+    def test_interrupted_graph_swap_recovers_owned_runtime_and_fails_closed(self) -> None:
+        installer = ROOT / "scripts" / ("install-afyx-graph.ps1" if os.name == "nt" else "install-afyx-graph.sh")
+        shell = shutil.which("pwsh") if os.name == "nt" else (shutil.which("bash") or "/bin/bash")
+        if not shell:
+            self.skipTest("host lifecycle shell unavailable")
+
+        with tempfile.TemporaryDirectory() as raw:
+            base = Path(raw)
+            runtime = base / "runtime"
+            recovery = Path(f"{runtime}.afyx-old")
+            write(recovery / "metadata.json", json.dumps({
+                "product_name": "Afyx Graph",
+                "product_version": "0.9.0",
+                "sentinel": "preserve-interrupted-runtime",
+            }))
+            if os.name == "nt":
+                write(recovery / "current/bin/afyx-graph.cmd", "@echo off\r\nexit /b 0\r\n")
+                update = [shell, "-NoProfile", "-NonInteractive", "-File", str(installer),
+                          "-RuntimeRoot", str(runtime), "-SkipPathUpdate", "-Update",
+                          "-Offline", "-ArchivePath", str(base / "missing.zip")]
+                validate = [shell, "-NoProfile", "-NonInteractive", "-File", str(installer),
+                            "-RuntimeRoot", str(runtime), "-SkipPathUpdate", "-ValidateOnly"]
+            else:
+                write(recovery / "current/bin/afyx-graph", "#!/bin/sh\nexit 0\n", executable=True)
+                update = [shell, str(installer), "--update", "--offline", "--archive", str(base / "missing.tar.gz")]
+                validate = [shell, str(installer), "--validate-only"]
+
+            env = os.environ.copy()
+            env.update({"AFYX_GRAPH_RUNTIME_ROOT": str(runtime), "AFYX_GRAPH_BIN_DIR": str(base / "bin")})
+            recovered = subprocess.run(update, cwd=ROOT, env=env, capture_output=True, text=True)
+            self.assertNotEqual(recovered.returncode, 0)
+            self.assertIn("Recovered interrupted Afyx Graph transaction", recovered.stdout + recovered.stderr)
+            self.assertTrue(runtime.is_dir())
+            self.assertFalse(recovery.exists())
+            restored = json.loads((runtime / "metadata.json").read_text(encoding="utf-8-sig"))
+            self.assertEqual(restored["sentinel"], "preserve-interrupted-runtime")
+
+            runtime.rename(recovery)
+            refused_validate = subprocess.run(validate, cwd=ROOT, env=env, capture_output=True, text=True)
+            self.assertNotEqual(refused_validate.returncode, 0)
+            self.assertTrue(recovery.is_dir())
+            self.assertFalse(runtime.exists())
+
+            shutil.copytree(recovery, runtime)
+            refused_ambiguous = subprocess.run(update, cwd=ROOT, env=env, capture_output=True, text=True)
+            self.assertNotEqual(refused_ambiguous.returncode, 0)
+            self.assertIn("ambiguous", (refused_ambiguous.stdout + refused_ambiguous.stderr).lower())
+            self.assertTrue(runtime.is_dir())
+            self.assertTrue(recovery.is_dir())
+
+            def tree_fingerprint(root: Path) -> str:
+                if not root.exists():
+                    return "MISSING"
+                digest = hashlib.sha256()
+                for entry in sorted(root.rglob("*"), key=lambda item: item.relative_to(root).as_posix()):
+                    relative = entry.relative_to(root).as_posix().encode("utf-8")
+                    if entry.is_dir():
+                        digest.update(b"D\0" + relative + b"\0")
+                    elif entry.is_file():
+                        digest.update(b"F\0" + relative + b"\0" + entry.read_bytes() + b"\0")
+                    else:
+                        digest.update(b"O\0" + relative + b"\0")
+                return digest.hexdigest()
+
+            ownership_cases = {
+                "foreign": json.dumps({"product_name": "External Graph", "product_version": "0.9.0"}),
+                "missing": None,
+                "invalid": "{not-json",
+            }
+            for case, metadata_text in ownership_cases.items():
+                case_runtime = base / case / "runtime"
+                case_recovery = Path(f"{case_runtime}.afyx-old")
+                write(case_recovery / "sentinel.bin", f"preserve-{case}\n")
+                if metadata_text is not None:
+                    write(case_recovery / "metadata.json", metadata_text)
+                if os.name == "nt":
+                    write(case_recovery / "current/bin/afyx-graph.cmd", "@echo off\r\nexit /b 0\r\n")
+                    case_update = [shell, "-NoProfile", "-NonInteractive", "-File", str(installer),
+                                   "-RuntimeRoot", str(case_runtime), "-SkipPathUpdate", "-Update",
+                                   "-Offline", "-ArchivePath", str(base / "missing.zip")]
+                else:
+                    write(case_recovery / "current/bin/afyx-graph", "#!/bin/sh\nexit 0\n", executable=True)
+                    case_update = [shell, str(installer), "--update", "--offline", "--archive",
+                                   str(base / "missing.tar.gz")]
+
+                recovery_before = tree_fingerprint(case_recovery)
+                runtime_before = tree_fingerprint(case_runtime)
+                case_env = env.copy()
+                case_env["AFYX_GRAPH_RUNTIME_ROOT"] = str(case_runtime)
+                refused = subprocess.run(case_update, cwd=ROOT, env=case_env, capture_output=True, text=True)
+                self.assertNotEqual(refused.returncode, 0, case)
+                self.assertIn("ownership cannot be verified", (refused.stdout + refused.stderr).lower(), case)
+                self.assertEqual(tree_fingerprint(case_recovery), recovery_before, case)
+                self.assertEqual(tree_fingerprint(case_runtime), runtime_before, case)
 
     def test_explicit_archive_preserves_unknown_revision_truthfully(self) -> None:
         installer = ROOT / "scripts" / ("install-afyx-graph.ps1" if os.name == "nt" else "install-afyx-graph.sh")

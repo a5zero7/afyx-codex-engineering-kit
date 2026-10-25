@@ -40,12 +40,15 @@ import { MCPEngine } from './engine';
 import { MCPSession } from './session';
 import { SocketTransport } from './transport';
 import {
-  DaemonLockInfo,
+  type DaemonLockInfo,
+  type DaemonControlRequest,
   decodeLockInfo,
   encodeLockInfo,
   getDaemonPidPath,
+  getDaemonControlSocketPath,
   getDaemonSocketCandidates,
   getDaemonSocketPath,
+  parseDaemonControlRequestLine,
 } from './daemon-paths';
 import { AfyxGraphPackageVersion } from './version';
 import {
@@ -160,6 +163,7 @@ export interface DaemonStartResult {
  */
 export class Daemon {
   private server: net.Server | null = null;
+  private controlServer: net.Server | null = null;
   private clients = new Set<MCPSession>();
   /** Per-client peer pids from that connection's optional client-hello, for the liveness sweep. */
   private clientPeers = new Map<MCPSession, ClientPeerInfo>();
@@ -170,7 +174,9 @@ export class Daemon {
   private engine: MCPEngine;
   private stopping = false;
   private socketPath: string;
+  private controlSocketPath: string | null = null;
   private pidPath: string;
+  private startedAt = 0;
 
   constructor(
     private projectRoot: string,
@@ -209,7 +215,22 @@ export class Daemon {
     // original preferred guess.
     this.socketPath = bound.socketPath;
 
+    // Native Windows keeps lifecycle traffic off the long-lived MCP data
+    // pipe. This avoids a busy data-pipe instance making a healthy daemon
+    // unmanageable while preserving the original endpoint on POSIX.
+    this.controlSocketPath = getDaemonControlSocketPath(this.projectRoot);
+    if (this.controlSocketPath) {
+      try {
+        this.controlServer = await this.listenOnControl(this.controlSocketPath);
+      } catch (err) {
+        await new Promise<void>((resolve) => bound.server.close(() => resolve()));
+        this.cleanupLockfile();
+        throw err;
+      }
+    }
+
     const lock = this.refreshLockfileAfterBind(bound.server, initialLockContents);
+    this.startedAt = lock.startedAt;
 
     // Backgrounded (see #172): only starts after bind + ownership refresh, so
     // a delayed daemon that already lost the election can never open a
@@ -317,6 +338,15 @@ export class Daemon {
     });
   }
 
+  /** Bind the Windows-only lifecycle endpoint; it never accepts MCP traffic. */
+  private listenOnControl(socketPath: string): Promise<net.Server> {
+    return new Promise<net.Server>((resolve, reject) => {
+      const server = net.createServer((socket) => this.handleControlConnection(socket));
+      server.once('error', reject);
+      server.listen(socketPath, () => resolve(server));
+    });
+  }
+
   /**
    * Rewrite the lockfile with the socket path actually bound (which may be a
    * relocated fallback). Refreshed on every successful bind, not only a
@@ -330,6 +360,7 @@ export class Daemon {
       pid: process.pid,
       version: AfyxGraphPackageVersion,
       socketPath: this.socketPath,
+      ...(this.controlSocketPath ? { controlSocketPath: this.controlSocketPath } : {}),
       startedAt: Date.now(),
     };
     try {
@@ -342,6 +373,8 @@ export class Daemon {
       return lock;
     } catch (err) {
       try { server.close(); } catch { /* best-effort */ }
+      try { this.controlServer?.close(); } catch { /* best-effort */ }
+      this.controlServer = null;
       this.cleanupLockfile();
       throw err;
     }
@@ -376,6 +409,11 @@ export class Daemon {
       this.server = null;
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
+    if (this.controlServer) {
+      const server = this.controlServer;
+      this.controlServer = null;
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
 
     this.engine.stop();
     this.cleanupLockfile();
@@ -400,7 +438,47 @@ export class Daemon {
     };
     socket.write(JSON.stringify(hello) + '\n');
 
-    void readClientHello(socket).then((peers) => this.acceptSession(socket, peers));
+    void readConnectionPreface(socket).then((preface) => {
+      if (preface.control) this.handleControlRequest(socket, preface.control);
+      else this.acceptSession(socket, preface.peers);
+    });
+  }
+
+  /**
+   * Management-only connection handler for the dedicated Windows pipe.
+   * Identity probes read the hello and disconnect; shutdown callers then send
+   * exactly one validated control request. Other traffic is rejected.
+   */
+  private handleControlConnection(socket: net.Socket): void {
+    const hello: DaemonHello = {
+      afyxGraph: AfyxGraphPackageVersion,
+      pid: process.pid,
+      socketPath: this.controlSocketPath ?? this.socketPath,
+      protocol: 1,
+    };
+    socket.write(JSON.stringify(hello) + '\n');
+    void readConnectionPreface(socket).then((preface) => {
+      if (preface.control) this.handleControlRequest(socket, preface.control);
+      else if (!socket.destroyed) socket.end();
+    });
+  }
+
+  /**
+   * Accept shutdown only for the exact PID/start identity in our live lock.
+   * Host IPC permissions remain the caller-authorization boundary.
+   */
+  private handleControlRequest(socket: net.Socket, request: DaemonControlRequest): void {
+    const matches = request.pid === process.pid && request.startedAt === this.startedAt;
+    const reply = {
+      afyx_graph_control: 1,
+      status: matches ? 'accepted' : 'rejected',
+      pid: process.pid,
+      startedAt: this.startedAt,
+      ...(matches ? {} : { detail: 'control identity does not match the running daemon' }),
+    };
+    socket.end(JSON.stringify(reply) + '\n', () => {
+      if (matches) void this.stop('management request');
+    });
   }
 
   /**
@@ -679,13 +757,16 @@ export { parseClientHelloLine, peerIsDead } from './client-registry';
  * newline search is byte-based specifically so a UTF-8 sequence straddling a
  * chunk boundary in that unshifted tail can never be corrupted.
  */
-function readClientHello(socket: net.Socket): Promise<ClientPeerInfo> {
+function readConnectionPreface(socket: net.Socket): Promise<{
+  peers: ClientPeerInfo;
+  control: DaemonControlRequest | null;
+}> {
   return new Promise((resolve) => {
     let buffered: Buffer[] = [];
     let bufferedLength = 0;
     let settled = false;
 
-    const settle = (peers: ClientPeerInfo, putBack?: Buffer) => {
+    const settle = (peers: ClientPeerInfo, putBack?: Buffer, control: DaemonControlRequest | null = null) => {
       if (settled) return;
       settled = true;
       // Pause BEFORE detaching: dropping the last 'data' listener does not
@@ -709,7 +790,7 @@ function readClientHello(socket: net.Socket): Promise<ClientPeerInfo> {
       if (putBack && putBack.length > 0 && !socket.destroyed) {
         try { socket.unshift(putBack); } catch { /* stream already gone */ }
       }
-      resolve(peers);
+      resolve({ peers, control });
     };
 
     const onData = (chunk: Buffer | string) => {
@@ -725,7 +806,13 @@ function readClientHello(socket: net.Socket): Promise<ClientPeerInfo> {
         else buffered = [accumulated];
         return;
       }
-      const peers = parseClientHelloLine(accumulated.subarray(0, newlineAt).toString('utf8'));
+      const line = accumulated.subarray(0, newlineAt).toString('utf8');
+      const control = parseDaemonControlRequestLine(line);
+      if (control) {
+        settle({ pid: null, hostPid: null }, undefined, control);
+        return;
+      }
+      const peers = parseClientHelloLine(line);
       if (!peers) {
         // Not a hello (a legacy or direct client) — return the whole buffer
         // untouched so the transport parses it as the real first message.

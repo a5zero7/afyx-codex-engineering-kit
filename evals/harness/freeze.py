@@ -12,7 +12,12 @@ from pathlib import Path
 EVAL_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = EVAL_ROOT.parent
 ENVIRONMENT_PATH = EVAL_ROOT / "environment.json"
-REPOSITORY_SKILLS = ("efficient-coding", "odoo-engineering")
+MANIFEST_PATH = EVAL_ROOT / "manifest.json"
+REPOSITORY_SKILLS = (
+    "efficient-coding",
+    "odoo-engineering",
+    "afyx-engineering-expert",
+)
 
 
 def directory_content_sha256(root: Path) -> str:
@@ -51,7 +56,13 @@ def prompt_master_git_sha(checkout: Path) -> str:
     return completed.stdout.strip()
 
 
-def freeze_environment(path: Path = ENVIRONMENT_PATH) -> dict:
+def selected_environment_path() -> Path:
+    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+    return EVAL_ROOT / manifest["environment"]
+
+
+def freeze_environment(path: Path | None = None) -> dict:
+    path = path or selected_environment_path()
     environment = json.loads(path.read_text(encoding="utf-8"))
     for name in REPOSITORY_SKILLS:
         skill_root = REPO_ROOT / "skills" / name

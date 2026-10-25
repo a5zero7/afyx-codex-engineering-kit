@@ -16,10 +16,10 @@
  * daemon or a CLI command over it; the worst case is `list` briefly missing
  * or over-reporting one entry, self-correcting on the next liveness sweep.
  *
- * Portable by construction — nothing here beyond plain files and
- * `process.kill(pid, signal)`, which behaves the same in spirit on
- * macOS/Linux (a real signal) and Windows (mapped internally to
- * TerminateProcess). Exercised live on all three platforms.
+ * Shutdown is portable by construction: the manager authenticates the
+ * daemon over its existing socket/pipe and asks it to tear itself down. This
+ * avoids Windows mapping `process.kill()` to abrupt TerminateProcess while
+ * keeping PID-reuse protection anchored in the daemon hello.
  */
 import * as fs from 'fs';
 import * as os from 'os';
@@ -32,6 +32,7 @@ import {
   decodeLockInfo,
   canProbeDaemonIdentity,
   probeDaemonIdentity,
+  requestDaemonShutdown,
   type DaemonLockInfo,
 } from './daemon-paths';
 import { readWriterLock, releaseWriterLock, tryAcquireWriterLock } from './writer-lock';
@@ -132,14 +133,33 @@ export function listDaemons(opts: { prune?: boolean } = {}): DaemonRecord[] {
 }
 
 /**
- * Registered daemons narrowed to the ones whose socket hello actually proves
- * the recorded process is a real daemon, not just a pid that happens to be
- * alive. Every user-facing list/stop-all path goes through this, so a reused
- * pid can never masquerade as a phantom running daemon (#1553).
+ * Live management candidates from discovery plus authoritative project roots.
+ * This deliberately does not grant shutdown authority: `stopDaemonAt` still
+ * requires a matching pipe hello and control acknowledgement before acting.
  */
-export async function listVerifiedDaemons(opts: { prune?: boolean } = {}): Promise<DaemonRecord[]> {
+export function listDaemonCandidates(opts: { prune?: boolean; roots?: string[] } = {}): DaemonRecord[] {
+  const candidates = listDaemons({ prune: opts.prune });
+  for (const root of opts.roots ?? []) {
+    try {
+      const info = decodeLockInfo(fs.readFileSync(getDaemonPidPath(root), 'utf8'));
+      if (info && isProcessAlive(info.pid) && !candidates.some((rec) => path.resolve(rec.root) === path.resolve(root))) {
+        candidates.push({ root, ...info });
+      }
+    } catch { /* no authoritative lock at this root */ }
+  }
+  return candidates.sort((a, b) => b.startedAt - a.startedAt);
+}
+
+/**
+ * Registered daemons narrowed to endpoints whose socket hello corroborates
+ * the recorded PID/version, rather than trusting a live PID alone. This is an
+ * identity-consistency check, not cryptographic or OS caller authentication.
+ * Every user-facing list/stop-all path goes through this, so a reused PID is
+ * not sufficient to masquerade as a running daemon (#1553).
+ */
+export async function listVerifiedDaemons(opts: { prune?: boolean; roots?: string[] } = {}): Promise<DaemonRecord[]> {
   const prune = opts.prune ?? true;
-  const candidates = listDaemons({ prune });
+  const candidates = listDaemonCandidates({ prune, roots: opts.roots });
   const checks = await Promise.all(candidates.map(async (rec) => ({
     rec,
     verified: await probeDaemonIdentity(rec),
@@ -147,7 +167,8 @@ export async function listVerifiedDaemons(opts: { prune?: boolean } = {}): Promi
   const verified: DaemonRecord[] = [];
   for (const check of checks) {
     if (check.verified) verified.push(check.rec);
-    else if (prune) deregisterDaemon(check.rec.root);
+    // A live process plus a temporary pipe/probe failure is inconclusive.
+    // Preserve discovery so a later management attempt can retry safely.
   }
   return verified;
 }
@@ -242,8 +263,9 @@ async function waitForDeath(pid: number, timeoutMs: number): Promise<boolean> {
 export interface StopResult {
   root: string;
   pid: number | null;
-  /** 'term' graceful, 'kill' force, 'not-running' stale, 'no-daemon' absent, 'unverified' preserved. */
-  outcome: 'term' | 'kill' | 'not-running' | 'no-daemon' | 'unverified';
+  /** `term` means the daemon acknowledged graceful IPC shutdown and its process exited. */
+  outcome: 'term' | 'not-running' | 'no-daemon' | 'unverified' | 'permission-denied' | 'shutdown-failed';
+  detail?: string;
 }
 
 interface ResolvedDaemonIdentity {
@@ -299,28 +321,30 @@ export async function stopDaemonAt(root: string): Promise<StopResult> {
     return { root, pid, outcome: removed ? 'not-running' : 'unverified' };
   }
   // A live pid alone is never enough to justify signaling it — it could be an
-  // unrelated process that inherited a reused pid. The socket hello is what
-  // actually proves this pid is our daemon (#1553).
+  // unrelated process that inherited a reused pid. A matching socket hello
+  // corroborates the lock identity without authenticating the caller (#1553).
   if (!identity || !canProbeDaemonIdentity(identity)) {
-    return { root, pid, outcome: 'unverified' };
+    return { root, pid, outcome: 'unverified', detail: 'live PID has no probeable daemon identity; ownership artifacts were preserved' };
   }
-  if (!await probeDaemonIdentity(identity)) {
-    const removed = cleanupDaemonArtifacts(root, lockContents);
-    return { root, pid, outcome: removed ? 'not-running' : 'unverified' };
+  const requested = await requestDaemonShutdown(identity);
+  if (requested.outcome !== 'accepted') {
+    return {
+      root,
+      pid,
+      outcome: requested.outcome === 'permission-denied' ? 'permission-denied' : 'unverified',
+      detail: `${requested.detail}; live ownership artifacts were preserved`,
+    };
   }
-
-  // SIGTERM drives the daemon's own graceful shutdown on POSIX. Windows maps
-  // it to TerminateProcess instead (no graceful path there), so the artifact
-  // sweep below always runs itself rather than trust the daemon to have done it.
-  try { process.kill(pid, 'SIGTERM'); } catch { /* raced to exit */ }
-  let outcome: StopResult['outcome'] = 'term';
-  if (!(await waitForDeath(pid, 3000))) {
-    try { process.kill(pid, 'SIGKILL'); } catch { /* raced to exit */ }
-    await waitForDeath(pid, 2000);
-    outcome = 'kill';
+  if (!(await waitForDeath(pid, 5_000))) {
+    return {
+      root,
+      pid,
+      outcome: 'shutdown-failed',
+      detail: 'daemon acknowledged shutdown but remained alive after 5000ms; no force-kill or artifact deletion was attempted',
+    };
   }
   cleanupDaemonArtifacts(root, lockContents);
-  return { root, pid, outcome };
+  return { root, pid, outcome: 'term' };
 }
 
 /** Stop every registered, live daemon. */

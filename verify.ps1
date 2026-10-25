@@ -1,6 +1,13 @@
 [CmdletBinding()]
 param(
-    [string]$SkillsRoot = (Join-Path $env:USERPROFILE '.agents\skills')
+    [string]$SkillsRoot = (Join-Path $env:USERPROFILE '.agents\skills'),
+    [string]$Preset = '',
+    [string[]]$CustomComponent = @(),
+    [string[]]$Provider = @('codex'),
+    [ValidateSet('global', 'workspace')][string]$ProviderScope = 'global',
+    [string]$WorkspaceRoot = (Get-Location).Path,
+    [string]$GeminiHome = $(if ($env:AFYX_GEMINI_HOME) { $env:AFYX_GEMINI_HOME } else { Join-Path $env:USERPROFILE '.gemini' }),
+    [string]$ContextRuntimeRoot = $(if ($env:AFYX_CONTEXT_RUNTIME_ROOT) { $env:AFYX_CONTEXT_RUNTIME_ROOT } else { Join-Path $env:USERPROFILE '.afyx\context' })
 )
 
 Set-StrictMode -Version Latest
@@ -17,16 +24,79 @@ function Write-Result([string]$State, [string]$Name, [string]$Detail = '') {
 
 # One component truth: scripts/components.json, read through the shared module.
 Import-Module (Join-Path $PSScriptRoot 'scripts\lib\AfyxComponents.psm1') -Force
-$componentContext = New-AfyxComponentContext -SkillsRoot $SkillsRoot -GraphRoot $graphRoot -CodexHome $codexHome
+Import-Module (Join-Path $PSScriptRoot 'scripts\lib\AfyxSkillLifecycle.psm1') -Force
+$providerIds = @(Get-AfyxProviderRegistry | ForEach-Object { [string]$_.provider })
+$unknownProviders = @($Provider | Where-Object { $_ -notin $providerIds })
+if ($unknownProviders.Count) { throw "Unknown provider(s): $($unknownProviders -join ', ')" }
+if (-not $PSBoundParameters.ContainsKey('SkillsRoot') -and $ProviderScope -eq 'workspace' -and 'antigravity' -in $Provider) {
+    $SkillsRoot = Join-Path $WorkspaceRoot '.agents\skills'
+}
+$additionalSkillRoots = @()
+if ($ProviderScope -eq 'global' -and 'antigravity' -in $Provider) {
+    $antigravitySkillRoots = @((Join-Path $GeminiHome 'config\skills'), (Join-Path $GeminiHome 'antigravity-cli\skills'))
+    if (-not $PSBoundParameters.ContainsKey('SkillsRoot') -and $Provider.Count -eq 1) { $SkillsRoot = $antigravitySkillRoots[0] }
+    $additionalSkillRoots = @($antigravitySkillRoots | Where-Object { [System.IO.Path]::GetFullPath($_) -ne [System.IO.Path]::GetFullPath($SkillsRoot) })
+}
+$componentContext = New-AfyxComponentContext -SkillsRoot $SkillsRoot -GraphRoot $graphRoot -ContextRoot $ContextRuntimeRoot -CodexHome $codexHome
 $componentStates = @{}
 foreach ($componentState in (Get-AfyxComponentStates -Context $componentContext)) { $componentStates[$componentState.Id] = $componentState }
-
-function Test-McpEntry([string]$Name) {
-    if (-not (Test-Path -LiteralPath $configPath -PathType Leaf)) { return $false }
-    try { return (Get-Content -Raw -LiteralPath $configPath -Encoding utf8) -match "(?m)^\[mcp_servers\.$([regex]::Escape($Name))\]\s*$" } catch { return $false }
+if ($Preset) {
+    foreach ($component in (Get-AfyxComponentContract | Where-Object { $_.type -eq 'skill' })) {
+        $state = $componentStates[[string]$component.id]
+        if ($state.State -eq 'NOT INSTALLED') { continue }
+        $installedOwnership = Get-AfyxSkillOwnership -Target $state.Path -Component ([string]$component.id) -ExpectedOwner ([string]$component.ownership)
+        if ($installedOwnership -eq 'AFYX_OWNED_MODIFIED') {
+            $state.State = 'DRIFTED'; $state.Detail = 'Afyx ownership verified but installed content was modified'
+        } elseif ($installedOwnership -notin @('AFYX_OWNED_UNMODIFIED', 'EXTERNAL_UPSTREAM')) {
+            $state.State = 'UNKNOWN'; $state.Detail = "installed ownership is $installedOwnership"
+        }
+    }
 }
+if ($Preset -and $Preset -notin @('minimal', 'recommended', 'full', 'custom')) { throw "Unknown preset: $Preset" }
+if (-not $Preset -and $CustomComponent.Count) { throw '-CustomComponent requires -Preset custom.' }
+foreach ($id in $CustomComponent) {
+    if ($id -in @('prompt-master', 'headroom')) {
+        throw "Component '$id' is retired from Afyx Kit and remains externally/user managed; no changes were made."
+    }
+}
+$controlPlan = if ($Preset) { Get-AfyxControlPlan -Preset $Preset -CustomComponent $CustomComponent -Provider $Provider -Context $componentContext -StateById $componentStates } else { $null }
 
 Write-Host 'Afyx Codex Engineering Kit — readiness verification (Windows PowerShell)'
+foreach ($providerRecord in (Get-AfyxProviderRegistry)) {
+    Write-Result 'INFO' "Provider adapter: $($providerRecord.name)" "primary=$($providerRecord.primary); ownership=$($providerRecord.ownership_class); capabilities=$($providerRecord.capabilities); policy=$($providerRecord.configuration_policy)"
+}
+if ('antigravity' -in $Provider) {
+    $nodeCommand = Get-Command node -ErrorAction SilentlyContinue
+    $entry = Join-Path $graphRoot 'current\lib\dist\bin\afyx-graph.js'
+    if ($nodeCommand -and (Test-Path -LiteralPath $entry -PathType Leaf)) {
+        $providerTool = Join-Path $PSScriptRoot 'scripts\afyx-provider-integration.mjs'
+        $providerJson = (& $nodeCommand.Source $providerTool --providers antigravity --scope $ProviderScope --workspace-root $WorkspaceRoot --gemini-home $GeminiHome --node $nodeCommand.Source --entry $entry) -join ''
+        try {
+            $providerResult = $providerJson | ConvertFrom-Json -Depth 20
+            $level = if ($providerResult.status -in @('READY', 'CONFIGURED_RESTART_REQUIRED')) { 'OK' } elseif ($providerResult.status -eq 'BLOCKED') { 'FAIL' } else { 'INFO' }
+            Write-Result $level 'Antigravity MCP' "$($providerResult.status): $($providerResult.providers[0].detail)"
+            if ($level -eq 'FAIL') { $coreFailure = $true }
+        } catch { Write-Result 'FAIL' 'Antigravity MCP' 'provider status was not valid JSON'; $coreFailure = $true }
+    } else { Write-Result 'INFO' 'Antigravity MCP' 'BLOCKED: Graph runtime or Node.js unavailable' }
+}
+if ($controlPlan) {
+    Write-Result 'INFO' 'Desired state plan' $controlPlan.Identity
+    foreach ($item in $controlPlan.Components) {
+        if ($item.Drift -eq 'IN_SYNC') { Write-Result 'OK' "Plan/$($item.Id)" 'IN_SYNC' }
+        elseif ($item.Drift -eq 'NOT_APPLICABLE' -or -not $item.Desired) { Write-Result 'INFO' "Plan/$($item.Id)" "$($item.Drift); preserved" }
+        else { Write-Result 'FAIL' "Plan/$($item.Id)" "$($item.Drift); ownership=$($item.ActualOwnership); repair=$($item.Repair)"; $coreFailure = $true }
+    }
+}
+foreach ($additionalRoot in $additionalSkillRoots) {
+    foreach ($component in Get-AfyxComponentContract | Where-Object { $_.type -eq 'skill' -and $_.ownership -eq 'afyx' }) {
+        $desired = -not $controlPlan -or [string]$component.id -in $controlPlan.DesiredComponents
+        $target = Join-Path $additionalRoot ([string]$component.install_path)
+        $ownership = Get-AfyxSkillOwnership -Target $target -Component ([string]$component.id) -ExpectedOwner ([string]$component.ownership)
+        if ($ownership -eq 'AFYX_OWNED_UNMODIFIED') { Write-Result 'OK' "Antigravity skill/$($component.id)" "$additionalRoot; ownership verified" }
+        elseif ($ownership -eq 'NOT_INSTALLED' -and -not $desired) { Write-Result 'INFO' "Antigravity skill/$($component.id)" "$additionalRoot; not selected" }
+        elseif ($desired) { Write-Result 'FAIL' "Antigravity skill/$($component.id)" "$additionalRoot; $ownership"; $coreFailure = $true }
+    }
+}
 $git = Get-Command git -ErrorAction SilentlyContinue
 $node = Get-Command node -ErrorAction SilentlyContinue
 $npm = Get-Command npm -ErrorAction SilentlyContinue
@@ -39,6 +109,8 @@ if ($node) {
     if ($match.Success -and [version]$match.Value -ge [version]'22.5.0') { Write-Result 'OK' 'Node.js [COMPONENT_REQUIRED:Afyx Graph]' $nodeText }
     else { Write-Result 'WARN' 'Node.js [COMPONENT_REQUIRED:Afyx Graph]' "$nodeText; requires >=22.5.0" }
 } else { Write-Result 'INFO' 'Node.js [COMPONENT_REQUIRED:Afyx Graph]' 'missing; install from https://nodejs.org/ before selecting Afyx Graph' }
+if ($node) { Write-Result 'OK' 'Node.js [COMPONENT_REQUIRED:Afyx Context]' ((& node --version 2>$null) -join ' ') }
+else { Write-Result 'INFO' 'Node.js [COMPONENT_REQUIRED:Afyx Context]' 'missing; required only when Afyx Context is selected' }
 if ($npm) { Write-Result 'OK' 'npm [BUILD_ONLY:Afyx Graph]' ((& npm --version 2>$null) -join ' ') } else { Write-Result 'INFO' 'npm [BUILD_ONLY:Afyx Graph]' 'missing; required only for local artifact fallback' }
 Write-Result 'OK' 'Archive/checksum [COMPONENT_REQUIRED:Afyx Graph]' 'Expand-Archive and Get-FileHash available'
 $codex = Get-Command codex.exe -ErrorAction SilentlyContinue
@@ -55,9 +127,17 @@ if ($codex) {
 if ($extension) { Write-Result 'OK' 'VS Code extension' 'detected' } else { Write-Result 'INFO' 'VS Code extension' 'not detected' }
 if (-not $codex -and -not $extension) { $coreFailure = $true }
 
-foreach ($component in ($componentStates.Values | Where-Object { $_.Tier -eq 'core' } | Sort-Object { @('efficient-coding', 'odoo-engineering', 'prompt-master').IndexOf($_.Id) })) {
+$requiredIds = if ($controlPlan) { @($controlPlan.DesiredComponents) } else { @('efficient-coding', 'odoo-engineering') }
+foreach ($component in ($componentStates.Values | Where-Object { $_.Id -in $requiredIds -and $_.Type -eq 'skill' } | Sort-Object { $requiredIds.IndexOf($_.Id) })) {
     if ($component.State -eq 'HEALTHY') { Write-Result 'OK' $component.Name $component.Detail }
     else { Write-Result 'FAIL' $component.Name "$($component.State): $($component.Detail)"; $coreFailure = $true }
+}
+
+$expert = $componentStates['afyx-engineering-expert']
+switch ($expert.State) {
+    'HEALTHY' { Write-Result 'OK' $expert.Name "$($expert.Version); optional skill valid" }
+    'NOT INSTALLED' { Write-Result 'INFO' $expert.Name 'not installed (optional)' }
+    default { Write-Result 'WARN' $expert.Name "$($expert.State): $($expert.Detail) (optional)" }
 }
 
 $graph = $componentStates['afyx-graph']
@@ -89,16 +169,21 @@ if ($graph.State -eq 'HEALTHY' -and $node -and $codex) {
 } elseif (-not $codex) { Write-Result 'INFO' 'Afyx Graph MCP' 'MCP_BLOCKED: Codex CLI unavailable' }
 elseif ($graph.State -ne 'HEALTHY') { Write-Result 'INFO' 'Afyx Graph MCP' 'MCP_BLOCKED: Graph runtime unavailable' }
 else { Write-Result 'INFO' 'Afyx Graph MCP' 'MCP_NOT_CONFIGURED' }
-$headroom = [bool](Get-Command headroom -ErrorAction SilentlyContinue)
-$configText = if (Test-Path -LiteralPath $configPath -PathType Leaf) { Get-Content -Raw -LiteralPath $configPath -Encoding utf8 } else { '' }
-$headroomProvider = $configText -match '(?im)^\s*model_provider\s*=\s*["'']headroom["'']\s*$' -or
-    $configText -match '(?im)^\s*\[model_providers\.headroom\]\s*$'
-$headroomProxy = $headroomProvider -or
-    $configText -match '(?im)^\s*headroom_(endpoint|base_url|proxy_url)\s*='
-if ($headroom) { Write-Result 'OK' 'Headroom CLI' 'detected' } else { Write-Result 'INFO' 'Headroom CLI' 'not found' }
-if ($headroomProxy) { Write-Result 'OK' 'Headroom proxy/provider' ($(if ($headroomProvider) { 'provider routing configured' } else { 'endpoint configured' })) } else { Write-Result 'INFO' 'Headroom proxy/provider' 'not configured' }
-if (Test-McpEntry 'headroom') { Write-Result 'OK' 'Headroom MCP' 'configured (optional)' } else { Write-Result 'INFO' 'Headroom MCP' 'not configured; optional for proxy mode' }
-
+$context = $componentStates['afyx-context']
+switch ($context.State) {
+    'NOT INSTALLED' { Write-Result 'INFO' 'Afyx Context Engine' 'not installed (optional; explicit selection only)' }
+    'HEALTHY' {
+        $contextCli = Join-Path $context.Path 'current\bin\afyx-context.cmd'
+        try {
+            $reported = (& $contextCli --version 2>$null) -join ' '
+            if ($LASTEXITCODE -ne 0 -or $reported -notmatch [regex]::Escape([string]$context.Version)) { throw 'version mismatch' }
+            & $contextCli --help *> $null
+            if ($LASTEXITCODE -ne 0) { throw 'help command failed' }
+            Write-Result 'OK' 'Afyx Context Engine' "$reported; integrity and executable verification passed; Graph integration remains OFF"
+        } catch { Write-Result 'FAIL' 'Afyx Context Engine' "metadata is healthy but executable verification failed: $($_.Exception.Message)"; $coreFailure = $true }
+    }
+    default { Write-Result 'WARN' 'Afyx Context Engine' "$($context.State): $($context.Detail) (optional)" }
+}
 if (Test-Path -LiteralPath $configPath -PathType Leaf) { Write-Result 'OK' 'Codex config' 'read-only check completed' }
 else { Write-Result 'WARN' 'Codex config' 'not found; optional MCP entries unavailable' }
 

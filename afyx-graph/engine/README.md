@@ -3,6 +3,14 @@
 This directory contains the Afyx Graph engine. Build and test it from this
 directory with `npm ci`, `npm run build:clean`, and `npm test`.
 
+For public capability, lifecycle, command, limitation, and troubleshooting
+guidance, see the repository [Component Guide](../../docs/COMPONENTS.md#afyx-graph)
+and [Installation Guide](../../docs/INSTALLATION.md#graph-installation-and-project-initialization).
+
+Afyx Graph is static structural evidence, not runtime proof. Check index health
+and coverage before using a result, verify source when precision matters, and run
+the affected behavioral tests before accepting a code change.
+
 Regression gates, all local and deterministic (no model calls):
 
 - `npm run test:semantic` compares the built engine with the frozen structural

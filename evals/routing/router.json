@@ -12,6 +12,11 @@
       "skill_file": "skills/odoo-engineering/SKILL.md",
       "anchors": ["Odoo"]
     },
+    "afyx-engineering-expert": {
+      "source": "repository",
+      "skill_file": "skills/afyx-engineering-expert/SKILL.md",
+      "anchors": ["cross-disciplinary", "simple programming syntax"]
+    },
     "prompt-master": {
       "source": "upstream",
       "version": "1.8.0",
@@ -41,11 +46,20 @@
     ],
     "document_only": [
       "\\b(readme|email|summary|summari[sz]e|meeting|transcript|essay|blog post|release notes|documentation section)\\b"
+    ],
+    "expert_domain": [
+      "\\b(product discovery|product strategy|business requirements?|business process|system architecture|solution architecture|architecture tradeoffs?)\\b",
+      "\\b(threat model|security-sensitive design|security design review|devsecops review)\\b",
+      "\\b(production incident|incident response|reliability review|availability review|postmortem)\\b",
+      "\\b(database reliability architecture|database architecture|schema migration strategy)\\b",
+      "\\b(ai solution|machine learning solution|data solution|model evaluation|data pipeline review)\\b",
+      "\\b(purchase request|multi-vendor rfqs?|erp workflow|transactional workflow)\\b"
     ]
   },
   "rules": [
     {"skill": "prompt-master", "when": "prompt_authoring"},
     {"skill": "efficient-coding", "when": "coding and not prompt_authoring"},
-    {"skill": "odoo-engineering", "when": "odoo_domain and (coding or prompt_authoring)"}
+    {"skill": "odoo-engineering", "when": "odoo_domain and (coding or prompt_authoring or expert_domain)"},
+    {"skill": "afyx-engineering-expert", "when": "expert_domain and not prompt_authoring"}
   ]
 }

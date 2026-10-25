@@ -10,12 +10,19 @@ Satu sumber kebenaran: [`scripts/components.json`](../scripts/components.json). 
 |---|---|---|---|
 | Efficient Coding | core | afyx | `<skills-root>/efficient-coding` |
 | Odoo Engineering | core | afyx | `<skills-root>/odoo-engineering` |
-| Prompt Master | core | upstream | `<skills-root>/prompt-master` |
+| Afyx Engineering Expert | optional | afyx | `<skills-root>/afyx-engineering-expert` |
 | Afyx Graph | optional | afyx | `~/.afyx/graph` |
+| Afyx Context Engine | optional | afyx | `~/.afyx/context` (explicit Custom/action only) |
 | Codex Usage Tracking | optional | afyx | `<codex-home>/tools` (Windows) |
-| Headroom | external | external | hanya dideteksi |
 
-Status komponen selalu salah satu dari `NOT INSTALLED`, `HEALTHY`, `INCOMPLETE`, `INVALID`, atau `UNKNOWN`. Komponen yang sudah ada menawarkan `[S] Skip` (default) atau `[R] Replace`; mode non-interaktif selalu Skip.
+Status komponen selalu salah satu dari `NOT INSTALLED`, `HEALTHY`, `INCOMPLETE`,
+`INVALID`, `DRIFTED`, atau `UNKNOWN`. Action yang tersedia bergantung pada state,
+ownership, preset, dan mode interaktif; target asing/tidak terbukti tidak diambil
+alih secara diam-diam.
+
+ID lama `prompt-master` dan `headroom` tidak termasuk inventaris aktif, tidak
+dideteksi oleh doctor/verifier, dan tidak dikelola oleh lifecycle Kit. Permintaan
+eksplisit ditolak sebelum mutasi; instalasi eksternal yang sudah ada tetap utuh.
 
 `python scripts/validate-components.py` memvalidasi kontrak secara statis (format satu pasangan `"key": "value"` per baris agar terbaca Bash, file yang dijanjikan benar-benar dikirim, dan konsistensi dengan metadata Afyx Graph).
 
@@ -72,7 +79,7 @@ Hasil `version_status`: `proven` (bukti kuat konsisten), `inferred` (hanya bukti
 
 ## Validasi routing skill tanpa token
 
-`python evals/harness/routing.py` mengevaluasi fixture di [`evals/routing/cases.json`](../evals/routing/cases.json) terhadap model kata kunci statis di [`evals/routing/router.json`](../evals/routing/router.json). Setiap kasus memakai `required`, `allowed`, dan `forbidden`, sehingga komposisi seperti Efficient Coding + Odoo Engineering dapat dinyatakan.
+`python evals/harness/routing.py` mengevaluasi fixture di [`evals/routing/cases.json`](../evals/routing/cases.json) terhadap model kata kunci statis di [`evals/routing/router.json`](../evals/routing/router.json). Setiap kasus memakai `required`, `allowed`, dan `forbidden`, sehingga komposisi seperti Efficient Coding + Odoo Engineering atau Afyx Engineering Expert + Odoo Engineering dapat dinyatakan. Matrix Expert mencakup discovery/architecture, ordinary debugging yang tidak boleh memicu Expert, advisory ERP, security review, production reliability, AI/data, dan pertanyaan sederhana.
 
 Pemeriksaan statis mendeteksi tabrakan deskripsi yang jelas (kemiripan kosakata), anchor routing yang hilang dari deskripsi skill, cakupan skenario, dan kontradiksi fixture. Ini adalah regression guard untuk maksud routing. Ini bukan bukti kualitas routing model saat runtime.
 

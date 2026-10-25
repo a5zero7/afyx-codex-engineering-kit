@@ -4,6 +4,8 @@ param(
     [switch]$SkipSelfUpdate,
 
     [string[]]$ComponentAction = @(),
+    [string]$Preset = '',
+    [string[]]$CustomComponent = @(),
 
     [switch]$Offline,
 
@@ -12,17 +14,38 @@ param(
     [switch]$AllowDirtySource,
     [switch]$InstallUsageTracker,
     [switch]$SkipUsageTracker,
-    [switch]$SkipGraphMcp
+    [switch]$SkipGraphMcp,
+    [switch]$SkipGraphPathUpdate,
+    [string[]]$Provider = @(),
+    [ValidateSet('global', 'workspace')][string]$ProviderScope = 'global',
+    [string]$WorkspaceRoot = (Get-Location).Path,
+    [string]$GeminiHome = $(if ($env:AFYX_GEMINI_HOME) { $env:AFYX_GEMINI_HOME } else { Join-Path $env:USERPROFILE '.gemini' }),
+    [switch]$SkipProviderConfiguration,
+    [string]$ContextRuntimeRoot = $(if ($env:AFYX_CONTEXT_RUNTIME_ROOT) { $env:AFYX_CONTEXT_RUNTIME_ROOT } else { Join-Path $env:USERPROFILE '.afyx\context' })
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $installer = Join-Path $PSScriptRoot 'install.ps1'
 $root = $PSScriptRoot
+if (-not $PSBoundParameters.ContainsKey('SkillsRoot') -and $ProviderScope -eq 'workspace' -and 'antigravity' -in $Provider) {
+    $SkillsRoot = Join-Path $WorkspaceRoot '.agents\skills'
+}
 
 if ($InstallUsageTracker -and $SkipUsageTracker) {
     Write-Error '-InstallUsageTracker and -SkipUsageTracker cannot be used together.'
     exit 1
+}
+
+foreach ($id in $CustomComponent) {
+    if ($id -in @('prompt-master', 'headroom')) {
+        throw "Component '$id' is retired from Afyx Kit and remains externally/user managed; no changes were made."
+    }
+}
+foreach ($specification in $ComponentAction) {
+    if ($specification -match '^([a-z0-9-]+)=' -and $Matches[1] -in @('prompt-master', 'headroom')) {
+        throw "Component '$($Matches[1])' is retired from Afyx Kit and remains externally/user managed; no changes were made."
+    }
 }
 
 Write-Host 'Afyx Codex Engineering Kit — Windows updater (PowerShell)'
@@ -58,7 +81,7 @@ $usageArguments = @{}
 if ($InstallUsageTracker) { $usageArguments.InstallUsageTracker = $true }
 elseif ($SkipUsageTracker) { $usageArguments.SkipUsageTracker = $true }
 
-& $installer -SkillsRoot $SkillsRoot -UpdateInstalled -ComponentAction $ComponentAction -Offline:$Offline -NoBuildFallback:$NoBuildFallback -AllowDirtySource:$AllowDirtySource -SkipGraphMcp:$SkipGraphMcp -Confirm:$false -WhatIf:$WhatIfPreference @usageArguments
+& $installer -SkillsRoot $SkillsRoot -UpdateInstalled -ComponentAction $ComponentAction -Preset $Preset -CustomComponent $CustomComponent -Offline:$Offline -NoBuildFallback:$NoBuildFallback -AllowDirtySource:$AllowDirtySource -SkipGraphMcp:$SkipGraphMcp -SkipGraphPathUpdate:$SkipGraphPathUpdate -Provider $Provider -ProviderScope $ProviderScope -WorkspaceRoot $WorkspaceRoot -GeminiHome $GeminiHome -SkipProviderConfiguration:$SkipProviderConfiguration -ContextRuntimeRoot $ContextRuntimeRoot -Confirm:$false -WhatIf:$WhatIfPreference @usageArguments
 $installerSucceeded = $?
 $installerExitCode = 0
 if (Test-Path -LiteralPath variable:LASTEXITCODE) { $installerExitCode = [int]$LASTEXITCODE }

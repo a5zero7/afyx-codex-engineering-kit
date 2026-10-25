@@ -1,1 +1,2 @@
 afyx-graph/engine/tests/semantic-baseline.json text eol=lf
+/scripts/tests/fixtures/legacy-*/** text eol=lf
