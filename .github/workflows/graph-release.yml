@@ -1,13 +1,13 @@
-name: Afyx Graph Release
+name: Afyx Graph Stable Build Verification
 
 on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  release:
+  build-and-verify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,9 +23,17 @@ jobs:
             bash scripts/build-bundle.sh "$target"
           done
           (cd release && sha256sum afyx-graph-* > SHA256SUMS)
-      - name: Publish GitHub release assets
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          version=$(python -c "import json; print(json.load(open('afyx-graph/afyx-graph.json'))['product_version'])")
-          gh release create "afyx-graph-v$version" afyx-graph/engine/release/afyx-graph-* afyx-graph/engine/release/SHA256SUMS --title "Afyx Graph v$version" --notes "Afyx Graph self-contained runtimes. See the bundled third-party notices."
+      # Stable publication requires a separate, owner-authorized workflow with a
+      # configured protected environment. This workflow only retains build and
+      # verification capability.
+      - name: Upload build verification output
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: afyx-graph-stable-build-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            afyx-graph/engine/release/afyx-graph-*.tar.gz
+            afyx-graph/engine/release/afyx-graph-*.zip
+            afyx-graph/engine/release/SHA256SUMS
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
