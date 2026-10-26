@@ -193,8 +193,10 @@ Smoke mode uses one repetition to validate mechanics and fixtures. It is not evi
 - General file-open and duplicate-read counts remain unavailable. For Expert
   evaluation only, completed successful tool traces record normalized unique
   `references/*.md` and `workflows/*.md` paths; the Architecture scenario fails
-  when more than three Expert references are observed. This bounded gate does
-  not claim that every filesystem read is visible.
+  when more than three Expert references are observed or when reference-path
+  telemetry is unavailable. Missing telemetry is stored as `null`, never as an
+  observed zero. This bounded gate does not claim that every filesystem read is
+  visible.
 - Phase 3A does not evaluate Afyx Graph, Headroom, end-to-end Prompt Master value, or comparative skill effectiveness.
 - The current fixtures validate the harness only and must not be used to claim benchmark superiority.
 - An actual-session canary or pilot can be BLOCKED by host/model availability;

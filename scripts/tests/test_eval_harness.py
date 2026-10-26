@@ -191,6 +191,42 @@ class EvaluationHarnessTests(unittest.TestCase):
             parsed["expert_workflow_reads"], ["workflows/review-audit.md"]
         )
 
+    def test_expert_reference_limit_fails_closed_without_path_telemetry(self) -> None:
+        event = {
+            "type": "item.completed",
+            "item": {
+                "type": "command_execution",
+                "command": (
+                    "Get-Content "
+                    ".agents/skills/afyx-engineering-expert/SKILL.md"
+                ),
+                "status": "completed",
+                "exit_code": 0,
+                "aggregated_output": "name: afyx-engineering-expert",
+            },
+        }
+        parsed = run.parse_events(json.dumps(event))
+        self.assertIsNone(parsed["expert_reference_reads"])
+        self.assertFalse(parsed["expert_reference_telemetry_observed"])
+        scenario = {
+            "expected_assertions": [
+                {"type": "max_expert_reference_reads", "value": 3}
+            ],
+            "output_kind": "advisory",
+            "forbidden_patterns": [],
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            checks = run.check_assertions(
+                scenario,
+                Path(temporary),
+                "",
+                None,
+                [],
+                expert_reference_reads=parsed["expert_reference_reads"],
+            )
+        self.assertFalse(checks[0]["passed"])
+        self.assertIsNone(checks[0]["observed"])
+
     def test_cell_and_canary_share_external_workspace_constructor(self) -> None:
         scenario = {
             "scenario_id": "isolation-unit",

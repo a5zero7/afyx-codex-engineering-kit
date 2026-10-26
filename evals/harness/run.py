@@ -648,17 +648,25 @@ def parse_events(stdout: str) -> dict:
                 read_calls += 1
             if item.get("status") in {"failed", "error"}:
                 failed_tools += 1
-    expert_reference_reads = sorted({
+    expert_reference_pattern = re.compile(
+        r"afyx-engineering-expert[\\/]+references[\\/]+"
+        r"(?P<name>[A-Za-z0-9][A-Za-z0-9._-]*\.md)\b",
+        re.I,
+    )
+    expert_reference_telemetry_observed = any(
+        expert_reference_pattern.search(event["trace"])
+        for event in command_events
+    )
+    observed_expert_reference_reads = sorted({
         f"references/{match.group('name').casefold()}"
         for event in command_events
         if not event["failed"]
-        for match in re.finditer(
-            r"afyx-engineering-expert[\\/]+references[\\/]+"
-            r"(?P<name>[A-Za-z0-9][A-Za-z0-9._-]*\.md)\b",
-            event["trace"],
-            re.I,
-        )
+        for match in expert_reference_pattern.finditer(event["trace"])
     })
+    expert_reference_reads = (
+        observed_expert_reference_reads
+        if expert_reference_telemetry_observed else None
+    )
     expert_workflow_reads = sorted({
         f"workflows/{match.group('name').casefold()}"
         for event in command_events
@@ -681,6 +689,7 @@ def parse_events(stdout: str) -> dict:
         "command_events": command_events,
         "tool_events": tool_events,
         "expert_reference_reads": expert_reference_reads,
+        "expert_reference_telemetry_observed": expert_reference_telemetry_observed,
         "expert_workflow_reads": expert_workflow_reads,
     }
 
@@ -746,8 +755,8 @@ def check_assertions(
         elif kind == "max_tool_calls":
             passed = tool_calls <= value
         elif kind == "max_expert_reference_reads":
-            observed = expert_reference_reads or []
-            passed = len(observed) <= value
+            observed = expert_reference_reads
+            passed = observed is not None and len(observed) <= value
         else:
             passed = False
         check = {"type": kind, "expected": value, "passed": passed}
@@ -1010,7 +1019,13 @@ def run_cell(
         "search_calls": parsed["search_calls"],
         "read_calls": parsed["read_calls"],
         "expert_reference_reads": parsed["expert_reference_reads"],
-        "expert_reference_read_count": len(parsed["expert_reference_reads"]),
+        "expert_reference_read_count": (
+            len(parsed["expert_reference_reads"])
+            if parsed["expert_reference_reads"] is not None else None
+        ),
+        "expert_reference_telemetry_observed": parsed[
+            "expert_reference_telemetry_observed"
+        ],
         "expert_workflow_reads": parsed["expert_workflow_reads"],
         "expert_workflow_read_count": len(parsed["expert_workflow_reads"]),
         "files_opened": None,

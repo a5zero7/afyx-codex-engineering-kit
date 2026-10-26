@@ -3152,8 +3152,10 @@ that the host/model will always over-load references.
 The bounded correction extracts successful Expert reference and workflow paths
 from completed tool events, stores only normalized skill-relative names and
 counts, and gives the Architecture scenario a fail-closed maximum of three
-unique Expert references. Failed reads do not count as loaded content;
-duplicates and Windows path-case differences do not inflate the unique count.
+unique Expert references. Missing path telemetry is recorded as unavailable and
+fails the gate rather than being reported as an observed zero. Failed reads do
+not count as loaded content; duplicates and Windows path-case differences do not
+inflate the unique count.
 No Expert skill source, frozen v0.1.1 identity, prompt, rubric, provider,
 installed runtime, or owner-only evidence changed.
 
