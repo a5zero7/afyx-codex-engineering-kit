@@ -112,6 +112,121 @@ class EvaluationHarnessTests(unittest.TestCase):
             evidence["efficient-coding"]["state"], "ACTIVATION_NOT_OBSERVABLE"
         )
 
+    def test_expert_disclosure_counts_unique_successful_reference_reads(self) -> None:
+        events = [
+            {
+                "type": "item.completed",
+                "item": {
+                    "type": "command_execution",
+                    "command": (
+                        "Get-Content .agents/skills/afyx-engineering-expert/"
+                        "references/product-manager.md,"
+                        ".agents/skills/afyx-engineering-expert/"
+                        "references/solutions-architect.md"
+                    ),
+                    "status": "completed",
+                    "exit_code": 0,
+                },
+            },
+            {
+                "type": "item.completed",
+                "item": {
+                    "type": "tool_call",
+                    "input": {
+                        "path": (
+                            ".agents\\skills\\afyx-engineering-expert\\"
+                            "references\\QA-Engineer.md"
+                        )
+                    },
+                    "status": "completed",
+                },
+            },
+            {
+                "type": "item.completed",
+                "item": {
+                    "type": "command_execution",
+                    "command": (
+                        "Get-Content .agents/skills/afyx-engineering-expert/"
+                        "references/product-manager.md"
+                    ),
+                    "status": "completed",
+                    "exit_code": 0,
+                },
+            },
+            {
+                "type": "item.completed",
+                "item": {
+                    "type": "command_execution",
+                    "command": (
+                        "Get-Content .agents/skills/afyx-engineering-expert/"
+                        "references/cybersecurity-devsecops.md"
+                    ),
+                    "status": "failed",
+                    "exit_code": 1,
+                },
+            },
+            {
+                "type": "item.completed",
+                "item": {
+                    "type": "command_execution",
+                    "command": (
+                        "Get-Content .agents/skills/afyx-engineering-expert/"
+                        "workflows/review-audit.md"
+                    ),
+                    "status": "completed",
+                    "exit_code": 0,
+                },
+            },
+        ]
+        parsed = run.parse_events("\n".join(json.dumps(event) for event in events))
+        self.assertEqual(
+            parsed["expert_reference_reads"],
+            [
+                "references/product-manager.md",
+                "references/qa-engineer.md",
+                "references/solutions-architect.md",
+            ],
+        )
+        self.assertEqual(
+            parsed["expert_workflow_reads"], ["workflows/review-audit.md"]
+        )
+
+    def test_expert_reference_limit_fails_closed_without_path_telemetry(self) -> None:
+        event = {
+            "type": "item.completed",
+            "item": {
+                "type": "command_execution",
+                "command": (
+                    "Get-Content "
+                    ".agents/skills/afyx-engineering-expert/SKILL.md"
+                ),
+                "status": "completed",
+                "exit_code": 0,
+                "aggregated_output": "name: afyx-engineering-expert",
+            },
+        }
+        parsed = run.parse_events(json.dumps(event))
+        self.assertIsNone(parsed["expert_reference_reads"])
+        self.assertFalse(parsed["expert_reference_telemetry_observed"])
+        scenario = {
+            "expected_assertions": [
+                {"type": "max_expert_reference_reads", "value": 3}
+            ],
+            "output_kind": "advisory",
+            "forbidden_patterns": [],
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            checks = run.check_assertions(
+                scenario,
+                Path(temporary),
+                "",
+                None,
+                [],
+                expert_reference_reads=parsed["expert_reference_reads"],
+            )
+        self.assertFalse(checks[0]["passed"])
+        self.assertIsNone(checks[0]["observed"])
+
     def test_cell_and_canary_share_external_workspace_constructor(self) -> None:
         scenario = {
             "scenario_id": "isolation-unit",
@@ -626,15 +741,33 @@ print(answer)
             "expected_assertions": [
                 {"type": "python_list_reversal", "value": True},
                 {"type": "max_tool_calls", "value": 0},
+                {"type": "max_expert_reference_reads", "value": 3},
             ],
             "output_kind": "advisory", "forbidden_patterns": [],
         }
         with tempfile.TemporaryDirectory() as temporary:
             checks = run.check_assertions(
-                scenario, Path(temporary), in_place, None, [], tool_calls=1
+            scenario,
+            Path(temporary),
+            in_place,
+            None,
+            [],
+            tool_calls=1,
+            expert_reference_reads=[f"references/{index}.md" for index in range(4)],
             )
         self.assertTrue(checks[0]["passed"])
         self.assertFalse(checks[1]["passed"])
+        self.assertFalse(checks[2]["passed"])
+        self.assertEqual(len(checks[2]["observed"]), 4)
+        bounded_checks = run.check_assertions(
+            scenario,
+            Path(temporary),
+            in_place,
+            None,
+            [],
+            expert_reference_reads=[f"references/{index}.md" for index in range(3)],
+        )
+        self.assertTrue(bounded_checks[2]["passed"])
 
     def test_interrupted_cell_is_correlated_and_summary_never_complete(self) -> None:
         provenance = self.provenance("evaluation-interrupted")
@@ -714,6 +847,13 @@ print(answer)
             self.assertIn(
                 "afyx-engineering-expert", scenarios[scenario_id]["required_skill_reads"]
             )
+        architecture_assertions = scenarios["pilot-expert-architecture-001"][
+            "expected_assertions"
+        ]
+        self.assertIn(
+            {"type": "max_expert_reference_reads", "value": 3},
+            architecture_assertions,
+        )
 
     def test_pilot_defaults_to_one_repetition_contract(self) -> None:
         source = (ROOT / "evals" / "harness" / "run.py").read_text(encoding="utf-8")

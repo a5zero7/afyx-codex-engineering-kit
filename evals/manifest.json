@@ -80,7 +80,8 @@
       "expected_assertions": [
         {"type": "output_contains", "value": "tenant"},
         {"type": "output_contains", "value": "audit"},
-        {"type": "output_contains", "value": "acceptance"}
+        {"type": "output_contains", "value": "acceptance"},
+        {"type": "max_expert_reference_reads", "value": 3}
       ],
       "forbidden_patterns": ["implemented successfully", "tests passed"],
       "validation_command": null,
