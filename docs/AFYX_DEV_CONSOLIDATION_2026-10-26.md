@@ -1,12 +1,12 @@
 # AFYX DEV consolidation checkpoint — 2026-10-26
 
-Status: **CANDIDATE PREPARED / OWNER MERGE APPROVAL PENDING**
+Status: **DEV CONSOLIDATION MERGED / HISTORICAL ACCEPTANCE RECOVERY PREPARED**
 
 This report records the bounded reconciliation of existing repository work into
 `dev`. It does not authorize a merge, branch deletion, Alpha promotion, build,
 tag, release, publication, provider activation, or Forge campaign.
 
-## Verified baseline and immutable evidence
+## Verified pre-consolidation baseline and immutable evidence
 
 | Ref or evidence | Verified identity | Disposition |
 |---|---|---|
@@ -35,6 +35,29 @@ merge. The only open PR is Draft PR #105 at
 | PR #105 guarded publication | `RELEASE_ONLY` | The single added workflow is a future manual publication boundary for `main`; it is not product source and is not copied to `dev`. `verify-only` remains the default and no publication was run. |
 | Local-only `ce3fb3e755683f3c64e24b0f519d0f7267efde8a` | `SUPERSEDED / RELEASE_ONLY` | Unpushed reviewer-dependent PR #105 correction in its own clean worktree. The current remote PR uses the later solo-owner contract. Preserve; do not integrate or delete. |
 | Historical T03/T04 and Alpha convergence tips | `CONTENT_EQUIVALENT` or `SUPERSEDED` | Functional content is present in newer `dev`; the `ba7448b` promotion delta has no content difference from its merge base. No historical merge replay. |
+
+### Historical PR #77 acceptance record
+
+This is a provenance-only record of the owner decision dated
+**2026-10-19 (Asia/Jakarta)** in closed, unmerged PR #77 at
+`d765603ce98577d190d904078cfa4c891cb26ccb`. It preserves the historical
+acceptance boundary and does not automatically describe or constrain current
+`dev`.
+
+- The isolated internal Windows Graph candidate was
+  `b704790327fa12dfe0e92a237324c23054a2b0fb`; the owner decision was
+  `ACCEPTED WITH DECLARED LIMITATIONS`.
+- Installed-daemon lifecycle was `NOT_RUN`, publisher authenticity was
+  `UNVERIFIED`, and a P3 diagnostic wording mismatch was nonblocking.
+- Odoo XML semantic relationships and access CSV were unsupported; freshness
+  for non-Git Odoo17 input was `UNKNOWN`.
+- Adit T05 was deferred by owner choice. That deferral was not a T05 PASS and
+  did not authorize distribution to or testing by Adit.
+- The historical full/cross-platform T12 contract required T05. Without an
+  actual T05 PASS, it could not be marked DONE. A separately labelled internal
+  Windows integration slice could proceed only within its narrower accepted
+  boundary; this historical record is not approval to reinterpret current T12
+  scope.
 
 No private evaluator bundle, credentials, raw customer source, report staging,
 or owner-local artifact is included in the candidate.
