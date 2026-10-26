@@ -3102,3 +3102,38 @@ failure, and ambiguous lock evidence. The full contract and limitations are in
 `docs/AFYX_CONTEXT_ENGINE_AFYX_292_COORDINATION.md`. Real Graph/MCP consumers,
 distributed coordination, authentication, deployment, and preset activation
 remain separate future boundaries.
+
+## 2026-10-26 — AFYX-249 Alpha entry readiness reconciliation
+
+This checkpoint corrects current state without rewriting the historical gate
+observations above.
+
+- `dev` is `640d3a00ef9a7cb079f811b75c09bae3ff60c0ca` (tree
+  `970023696a6b05b9a84a83ccea01fe5c3d4c66b7`); exact-head Repository CI is
+  green on Windows, Linux, and macOS.
+- `alpha` remains the frozen Technical Alpha source
+  `077abe19cadd861e676b6b2c14a229d11a0a5717` (tree
+  `c352187dcd7e673bda99cd5e92242e24cd2fa77d`). Its accepted six-target
+  artifact/attestation evidence remains immutable and available; it does not
+  attest later `dev` changes.
+- AFYX-248 and its accepted IJP testing children, AFYX-289, AFYX-58/59, and
+  AFYX-62/63 no longer represent open Alpha-entry defects. Their declared
+  limitations remain in force.
+- No current evidence demonstrates an ordinary-use P0/P1 defect in the
+  declared Technical Alpha contract. Expert D.6 independent review, the Forge
+  campaign, the Adit physical macOS pilot, optional ACE, provider-host
+  authentication/quota limitations, and deferred graphical UI remain outside
+  the universal entry gate unless their capability is explicitly claimed.
+- The frozen artifact is suitable only for the frozen `077abe19...` release
+  contract. Promoting unified `dev` requires a distinct reviewed candidate and
+  new exact-source build/attestation; prior installed-host evidence may be
+  reused only for unchanged behavior.
+- Public publication remains separate from product readiness. Draft PR #106
+  contains the fail-closed legacy Stable workflow correction, while Draft PR
+  #105 contains guarded Technical Alpha publication preparation. Neither is
+  merged. Publication stays disabled pending an explicit owner decision and a
+  proportionate owner-controlled Build -> Test -> Verify -> Release path.
+
+Current disposition: **CONDITIONAL**. No automatic promotion, tag, release,
+publication workflow dispatch, or branch rewrite is authorized by this
+checkpoint.
