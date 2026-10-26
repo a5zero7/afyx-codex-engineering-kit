@@ -18,13 +18,13 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  ALPHA_SOURCE_SHA: 077abe19cadd861e676b6b2c14a229d11a0a5717
-  ALPHA_SOURCE_TREE: c352187dcd7e673bda99cd5e92242e24cd2fa77d
+  ALPHA_SOURCE_SHA: 3b8360c44bd148739a6048b309898a41558e2141
+  ALPHA_SOURCE_TREE: 0ee87ab17cbfcdabd2234cfd264a28c5f3950238
   ALPHA_VERSION: 1.0.0
   ALPHA_CHANNEL: technical-alpha
   ALPHA_EXTRACTION_VERSION: "28"
-  ALPHA_RELEASE_ID: afyx-graph-v1.0.0-technical-alpha.077abe1
-  RELEASE_ARTIFACT_NAME: afyx-graph-technical-alpha-077abe1-${{ github.run_id }}-${{ github.run_attempt }}
+  ALPHA_RELEASE_ID: afyx-graph-v1.0.0-technical-alpha.3b8360c
+  RELEASE_ARTIFACT_NAME: afyx-graph-technical-alpha-3b8360c-${{ github.run_id }}-${{ github.run_attempt }}
   SIGNER_WORKFLOW: a5zero7/afyx-codex-engineering-kit/.github/workflows/graph-alpha-build-attest.yml
 
 jobs:
@@ -198,7 +198,7 @@ jobs:
               run_attempt: process.env.GITHUB_RUN_ATTEMPT,
             },
             local_candidate: {
-              source_sha: process.env.ALPHA_SOURCE_SHA,
+              source_sha: '077abe19cadd861e676b6b2c14a229d11a0a5717',
               release_manifest_sha256: '0abfa125671a06aad0a724b2bbbf30eff3c9cdfeea797dd45c5c30878a7db04c',
               checksums_sha256: 'bb9a3a5bfcc4346df23fa93800ecd9123b813db476dd82890faf5178b86fe797',
             },
