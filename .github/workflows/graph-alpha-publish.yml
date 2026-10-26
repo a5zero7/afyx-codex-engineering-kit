@@ -1,0 +1,393 @@
+name: Afyx Graph Technical Alpha Guarded Publication
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Verify-only (default) or separately owner-authorized publish
+        type: choice
+        options: [verify-only, publish]
+        default: verify-only
+        required: true
+      approval:
+        description: For publish, type the exact candidate confirmation documented in this workflow
+        type: string
+        required: false
+
+# This workflow never builds source. It consumes one exact GitHub-built,
+# attested artifact. Verify-only is read-only. Publication requires the
+# repository owner's explicit action and exact-candidate confirmation; it does
+# not claim or depend on an independent organizational reviewer.
+permissions:
+  contents: read
+
+concurrency:
+  group: afyx-graph-technical-alpha-publication
+  cancel-in-progress: false
+
+env:
+  ALPHA_SOURCE_SHA: 3b8360c44bd148739a6048b309898a41558e2141
+  ALPHA_SOURCE_TREE: 0ee87ab17cbfcdabd2234cfd264a28c5f3950238
+  ALPHA_RELEASE_ID: afyx-graph-v1.0.0-technical-alpha.3b8360c
+  APPROVED_BUILD_RUN: "40279559615"
+  APPROVED_BUILD_ATTEMPT: "1"
+  APPROVED_WORKFLOW_SHA: cd3ffa59066ce4be5e7752bd920c852e8605a6b4
+  APPROVED_ARTIFACT_ID: "12631346917"
+  APPROVED_ARTIFACT_NAME: afyx-graph-technical-alpha-3b8360c-40279559615-1
+  APPROVED_ARTIFACT_DIGEST: sha256:03369e82265d421ae9da6d7e67abd909bfc810ee5a8e3ae9792ad0e4e56ca05b
+  ATTESTATION_EVIDENCE_ID: "12631137522"
+  ATTESTATION_EVIDENCE_NAME: afyx-graph-technical-alpha-attestation-ledger-40279559615-1
+  ATTESTATION_EVIDENCE_DIGEST: sha256:98089e40d4ba937acffc438c7f9b67f95abd2489428e56a02e2017fd793dd55b
+  SIGNER_WORKFLOW: a5zero7/afyx-codex-engineering-kit/.github/workflows/graph-alpha-build-attest.yml
+  BUILDER_WORKFLOW_PATH: .github/workflows/graph-alpha-build-attest.yml
+  AUTHORIZED_ACTOR: a5zero7
+  AUTHORIZED_ACTOR_ID: "104313041"
+  PUBLISH_CONFIRMATION: PUBLISH_AFYX_GRAPH_TECHNICAL_ALPHA_3b8360c_ARTIFACT_12631346917
+  PUBLICATION_ENV: technical-alpha-publication
+
+jobs:
+  verify:
+    name: Verify exact immutable attested release set (read-only)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+      attestations: read
+    steps:
+      - name: Reject unauthorized context and verify immutable GitHub identities
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_ACTION: ${{ inputs.action }}
+          APPROVAL_TEXT: ${{ inputs.approval }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_REPOSITORY" = a5zero7/afyx-codex-engineering-kit
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_ACTOR" = "$AUTHORIZED_ACTOR"
+          test "${GITHUB_ACTOR_ID:-}" = "$AUTHORIZED_ACTOR_ID"
+          test "$REQUESTED_ACTION" = verify-only -o "$REQUESTED_ACTION" = publish
+          if [[ "$REQUESTED_ACTION" == verify-only ]]; then
+            test -z "$APPROVAL_TEXT"
+          else
+            test "$APPROVAL_TEXT" = "$PUBLISH_CONFIRMATION"
+            env_json="$(gh api "repos/$GITHUB_REPOSITORY/environments/$PUBLICATION_ENV")"
+            jq -e '
+              .deployment_branch_policy.custom_branch_policies == true and
+              .deployment_branch_policy.protected_branches == false and
+              any(.protection_rules[]?; .type == "branch_policy") and
+              ([.protection_rules[]? | select(.type == "required_reviewers")] | length) == 0 and
+              (.can_admins_bypass | type) == "boolean"
+            ' <<<"$env_json" >/dev/null
+            policy_json="$(gh api "repos/$GITHUB_REPOSITORY/environments/$PUBLICATION_ENV/deployment-branch-policies?per_page=100")"
+            jq -e '.total_count == 1 and .branch_policies[0].type == "branch" and .branch_policies[0].name == "main"' <<<"$policy_json" >/dev/null
+            echo "Solo-owner gate: actor $GITHUB_ACTOR ($GITHUB_ACTOR_ID); no required reviewer is configured or claimed." >> "$GITHUB_STEP_SUMMARY"
+            echo "Administrator environment bypass setting: $(jq -r .can_admins_bypass <<<"$env_json"). Actor and exact-candidate checks remain mandatory." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          source_json="$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$ALPHA_SOURCE_SHA")"
+          jq -e --arg tree "$ALPHA_SOURCE_TREE" '.tree.sha == $tree' <<<"$source_json" >/dev/null
+
+          run_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$APPROVED_BUILD_RUN")"
+          jq -e \
+            --arg sha "$APPROVED_WORKFLOW_SHA" \
+            --arg path "$BUILDER_WORKFLOW_PATH" \
+            --arg repo "$GITHUB_REPOSITORY" \
+            --arg actor "$AUTHORIZED_ACTOR" \
+            --arg actor_id "$AUTHORIZED_ACTOR_ID" \
+            --argjson attempt "$APPROVED_BUILD_ATTEMPT" '
+              .status == "completed" and .conclusion == "success" and
+              .event == "workflow_dispatch" and .run_attempt == $attempt and
+              .head_sha == $sha and .head_branch == "main" and .path == $path and
+              .repository.full_name == $repo and .actor.login == $actor and
+              .actor.id == ($actor_id | tonumber)
+            ' <<<"$run_json" >/dev/null
+
+          artifact_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$APPROVED_ARTIFACT_ID")"
+          jq -e \
+            --argjson id "$APPROVED_ARTIFACT_ID" \
+            --argjson run "$APPROVED_BUILD_RUN" \
+            --arg name "$APPROVED_ARTIFACT_NAME" \
+            --arg digest "$APPROVED_ARTIFACT_DIGEST" \
+            --arg sha "$APPROVED_WORKFLOW_SHA" '
+              .id == $id and .expired == false and .name == $name and
+              .workflow_run.id == $run and .workflow_run.head_sha == $sha and
+              .digest == $digest
+            ' <<<"$artifact_json" >/dev/null
+
+          evidence_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ATTESTATION_EVIDENCE_ID")"
+          jq -e \
+            --argjson id "$ATTESTATION_EVIDENCE_ID" \
+            --argjson run "$APPROVED_BUILD_RUN" \
+            --arg name "$ATTESTATION_EVIDENCE_NAME" \
+            --arg digest "$ATTESTATION_EVIDENCE_DIGEST" \
+            --arg sha "$APPROVED_WORKFLOW_SHA" '
+              .id == $id and .expired == false and .name == $name and
+              .workflow_run.id == $run and .workflow_run.head_sha == $sha and
+              .digest == $digest
+            ' <<<"$evidence_json" >/dev/null
+
+      - name: Download approved artifact by immutable ID, without rebuild
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          run-id: ${{ env.APPROVED_BUILD_RUN }}
+          artifact-ids: ${{ env.APPROVED_ARTIFACT_ID }}
+          github-token: ${{ github.token }}
+          path: release
+          merge-multiple: true
+
+      - name: Download signed attestation evidence by immutable ID
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          run-id: ${{ env.APPROVED_BUILD_RUN }}
+          artifact-ids: ${{ env.ATTESTATION_EVIDENCE_ID }}
+          github-token: ${{ github.token }}
+          path: attestation-evidence
+          merge-multiple: true
+
+      - name: Verify exact allowlist, archive hashes, source tree and ledgers
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd release && sha256sum -c SHA256SUMS)
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib
+
+          folder = pathlib.Path("release")
+          evidence = pathlib.Path("attestation-evidence")
+          expected_hashes = {
+              "afyx-graph-darwin-arm64.tar.gz": "fe5342fda2c753b7c253fa15162e459bfa1f868881478f2a193440f3c3b90ea7",
+              "afyx-graph-darwin-x64.tar.gz": "6093f3563cb2125d60fe5873e908fb4fc514faf7a49eef5fa487cc457cf110e0",
+              "afyx-graph-linux-arm64.tar.gz": "70a4ea744ea43ee23e0ab996b37893af4d417ef5a7518853c8df6dd6626a4568",
+              "afyx-graph-linux-x64.tar.gz": "322aca491f006f1df1dd96bff2d942db282ba08cfd61b56c52f9c8a2b74588aa",
+              "afyx-graph-win32-arm64.zip": "b77b5ea6fb83d7e1f09e9836ab6ff7b24744c91f04d278f8c9c876ace536a463",
+              "afyx-graph-win32-x64.zip": "5fba73d8464daf2b62842599be559aa5bab292e379a3d1a9949593cb3c12abb4",
+          }
+          expected_files = set(expected_hashes) | {
+              "SHA256SUMS", "RELEASE-MANIFEST.json", "ARTIFACT-IDENTITY-LEDGER.json"
+          }
+          assert {p.name for p in folder.iterdir()} == expected_files, "Release file allowlist mismatch"
+
+          sums = {}
+          for line in (folder / "SHA256SUMS").read_text().splitlines():
+              digest, name = line.split(maxsplit=1)
+              sums[name] = digest
+          assert sums == expected_hashes, "SHA256SUMS identity mismatch"
+
+          manifest = json.loads((folder / "RELEASE-MANIFEST.json").read_text())
+          ledger = json.loads((folder / "ARTIFACT-IDENTITY-LEDGER.json").read_text())
+          verification = json.loads((evidence / "ATTESTATION-VERIFICATION-LEDGER.json").read_text())
+          assert manifest["source_revision"] == os.environ["ALPHA_SOURCE_SHA"]
+          assert manifest["release_tag"] == os.environ["ALPHA_RELEASE_ID"]
+          assert manifest["product_version"] == "1.0.0"
+          assert len(manifest["artifacts"]) == 6
+          assert {x["file"]: x["sha256"] for x in manifest["artifacts"]} == expected_hashes
+          assert ledger["channel"] == "technical-alpha"
+          assert ledger["release_identity"] == os.environ["ALPHA_RELEASE_ID"]
+          assert ledger["approved_source_sha"] == os.environ["ALPHA_SOURCE_SHA"]
+          assert ledger["approved_source_tree"] == os.environ["ALPHA_SOURCE_TREE"]
+          assert ledger["workflow_execution"]["run_id"] == os.environ["APPROVED_BUILD_RUN"]
+          assert ledger["workflow_execution"]["run_attempt"] == os.environ["APPROVED_BUILD_ATTEMPT"]
+          assert ledger["workflow_execution"]["workflow_sha"] == os.environ["APPROVED_WORKFLOW_SHA"]
+          assert verification["status"] == "VERIFIED"
+          assert verification["repository"] == "a5zero7/afyx-codex-engineering-kit"
+          assert verification["signer_workflow"] == os.environ["SIGNER_WORKFLOW"]
+          assert verification["workflow_execution_sha"] == os.environ["APPROVED_WORKFLOW_SHA"]
+          assert verification["approved_alpha_source_sha"] == os.environ["ALPHA_SOURCE_SHA"]
+          assert verification["approved_alpha_source_tree"] == os.environ["ALPHA_SOURCE_TREE"]
+          assert verification["build_artifact_id"] == os.environ["APPROVED_ARTIFACT_ID"]
+          assert "sha256:" + verification["build_artifact_digest"] == os.environ["APPROVED_ARTIFACT_DIGEST"]
+          assert len(verification["files"]) == 9
+
+          verification_hashes = {x["file"]: x["sha256"] for x in verification["files"]}
+          for name, digest in expected_hashes.items():
+              actual = hashlib.sha256((folder / name).read_bytes()).hexdigest()
+              assert actual == digest == verification_hashes[name]
+          for name in ("SHA256SUMS", "RELEASE-MANIFEST.json", "ARTIFACT-IDENTITY-LEDGER.json"):
+              actual = hashlib.sha256((folder / name).read_bytes()).hexdigest()
+              assert verification_hashes[name] == actual
+          PY
+
+      - name: Verify nine signed subjects and exact trusted workflow identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(find release -maxdepth 1 -type f | wc -l)" -eq 9
+          for file in release/*; do
+            gh attestation verify "$file" \
+              --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$SIGNER_WORKFLOW" \
+              --source-digest "$APPROVED_WORKFLOW_SHA" \
+              --source-ref refs/heads/main \
+              --deny-self-hosted-runners --format json >/dev/null
+          done
+          echo 'VERIFIED: nine signed subjects, six exact archive hashes and approved Alpha identity' >> "$GITHUB_STEP_SUMMARY"
+          echo 'No publication occurred in this job' >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    name: Publish prerelease only after explicit owner action
+    needs: verify
+    if: ${{ inputs.action == 'publish' }}
+    environment:
+      name: technical-alpha-publication
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      actions: read
+      attestations: read
+    steps:
+      - name: Reverify solo-owner intent, environment and immutable identities
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APPROVAL_TEXT: ${{ inputs.approval }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_REPOSITORY" = a5zero7/afyx-codex-engineering-kit
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_ACTOR" = "$AUTHORIZED_ACTOR"
+          test "${GITHUB_ACTOR_ID:-}" = "$AUTHORIZED_ACTOR_ID"
+          test "$APPROVAL_TEXT" = "$PUBLISH_CONFIRMATION"
+
+          env_json="$(gh api "repos/$GITHUB_REPOSITORY/environments/$PUBLICATION_ENV")"
+          jq -e '
+            .deployment_branch_policy.custom_branch_policies == true and
+            .deployment_branch_policy.protected_branches == false and
+            any(.protection_rules[]?; .type == "branch_policy") and
+            ([.protection_rules[]? | select(.type == "required_reviewers")] | length) == 0 and
+            (.can_admins_bypass | type) == "boolean"
+          ' <<<"$env_json" >/dev/null
+          policy_json="$(gh api "repos/$GITHUB_REPOSITORY/environments/$PUBLICATION_ENV/deployment-branch-policies?per_page=100")"
+          jq -e '.total_count == 1 and .branch_policies[0].type == "branch" and .branch_policies[0].name == "main"' <<<"$policy_json" >/dev/null
+
+          source_json="$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$ALPHA_SOURCE_SHA")"
+          jq -e --arg tree "$ALPHA_SOURCE_TREE" '.tree.sha == $tree' <<<"$source_json" >/dev/null
+          run_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$APPROVED_BUILD_RUN")"
+          jq -e --arg sha "$APPROVED_WORKFLOW_SHA" --arg path "$BUILDER_WORKFLOW_PATH" --argjson attempt "$APPROVED_BUILD_ATTEMPT" '
+            .status == "completed" and .conclusion == "success" and
+            .event == "workflow_dispatch" and .run_attempt == $attempt and
+            .head_sha == $sha and .head_branch == "main" and .path == $path
+          ' <<<"$run_json" >/dev/null
+          artifact_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$APPROVED_ARTIFACT_ID")"
+          jq -e --argjson run "$APPROVED_BUILD_RUN" --arg name "$APPROVED_ARTIFACT_NAME" --arg digest "$APPROVED_ARTIFACT_DIGEST" --arg sha "$APPROVED_WORKFLOW_SHA" '
+            .expired == false and .name == $name and .workflow_run.id == $run and
+            .workflow_run.head_sha == $sha and .digest == $digest
+          ' <<<"$artifact_json" >/dev/null
+          evidence_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ATTESTATION_EVIDENCE_ID")"
+          jq -e --argjson run "$APPROVED_BUILD_RUN" --arg name "$ATTESTATION_EVIDENCE_NAME" --arg digest "$ATTESTATION_EVIDENCE_DIGEST" --arg sha "$APPROVED_WORKFLOW_SHA" '
+            .expired == false and .name == $name and .workflow_run.id == $run and
+            .workflow_run.head_sha == $sha and .digest == $digest
+          ' <<<"$evidence_json" >/dev/null
+
+          if gh release view "$ALPHA_RELEASE_ID" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'Release already exists; refuse overwrite.' >&2
+            exit 1
+          fi
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$ALPHA_RELEASE_ID" >/dev/null 2>&1; then
+            echo 'Tag already exists; refuse overwrite.' >&2
+            exit 1
+          fi
+
+      - name: Retrieve exact approved immutable artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          run-id: ${{ env.APPROVED_BUILD_RUN }}
+          artifact-ids: ${{ env.APPROVED_ARTIFACT_ID }}
+          github-token: ${{ github.token }}
+          path: release
+          merge-multiple: true
+
+      - name: Recheck signed files and exact candidate immediately before upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd release && sha256sum -c SHA256SUMS)
+          test "$(find release -maxdepth 1 -type f | wc -l)" -eq 9
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib
+
+          folder = pathlib.Path("release")
+          manifest = json.loads((folder / "RELEASE-MANIFEST.json").read_text())
+          ledger = json.loads((folder / "ARTIFACT-IDENTITY-LEDGER.json").read_text())
+          assert manifest["source_revision"] == os.environ["ALPHA_SOURCE_SHA"]
+          assert manifest["release_tag"] == os.environ["ALPHA_RELEASE_ID"]
+          assert ledger["approved_source_sha"] == os.environ["ALPHA_SOURCE_SHA"]
+          assert ledger["approved_source_tree"] == os.environ["ALPHA_SOURCE_TREE"]
+          assert ledger["workflow_execution"]["run_id"] == os.environ["APPROVED_BUILD_RUN"]
+          assert ledger["workflow_execution"]["workflow_sha"] == os.environ["APPROVED_WORKFLOW_SHA"]
+          for item in manifest["artifacts"]:
+              assert hashlib.sha256((folder / item["file"]).read_bytes()).hexdigest() == item["sha256"]
+          PY
+          for file in release/*; do
+            gh attestation verify "$file" \
+              --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$SIGNER_WORKFLOW" \
+              --source-digest "$APPROVED_WORKFLOW_SHA" \
+              --source-ref refs/heads/main \
+              --deny-self-hosted-runners >/dev/null
+          done
+
+      - name: Create a draft prerelease, verify uploaded bytes, then publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          draft_created=false
+          cleanup_draft() {
+            if [[ "$draft_created" == true ]]; then
+              gh release delete "$ALPHA_RELEASE_ID" --yes --repo "$GITHUB_REPOSITORY" || true
+            fi
+          }
+          trap cleanup_draft ERR
+          cat > "$RUNNER_TEMP/notes.md" <<'NOTES'
+          ## Afyx Graph 1.0.0 — Technical Alpha prerelease
+
+          This is a **Technical Alpha**, not stable v1. These archives contain the
+          standalone Afyx Graph runtime only, not the full Afyx Code Engineering Kit.
+          Use the explicit platform archive with SHA256SUMS and RELEASE-MANIFEST.json.
+          External Node.js >=22.5 is required.
+
+          Source Alpha: 3b8360c44bd148739a6048b309898a41558e2141
+          Source tree: 0ee87ab17cbfcdabd2234cfd264a28c5f3950238
+          Build/attestation workflow execution: cd3ffa59066ce4be5e7752bd920c852e8605a6b4
+          Attested Actions artifact: 12631346917 (run 40279559615, attempt 1)
+
+          Limits: Windows installed acceptance is bounded; Linux/macOS CI is not
+          physical-host acceptance. Physical macOS and IDE UI are NOT_RUN. Codex
+          agent 401 and Antigravity agent 429 remain unverified; Antigravity is
+          preview. Usage Tracking is excluded; ACE is optional/default OFF. Forge
+          formal benchmark is 0/36 and not included. Graph structural evidence is
+          not a claim of behavioral completeness. GitHub attestation proves signer
+          workflow and file digests, not independent organizational approval or
+          complete product correctness.
+          NOTES
+          gh release create "$ALPHA_RELEASE_ID" release/* \
+            --target "$ALPHA_SOURCE_SHA" \
+            --title 'Afyx Graph 1.0.0 — Technical Alpha' \
+            --prerelease --latest=false --draft \
+            --notes-file "$RUNNER_TEMP/notes.md" \
+            --repo "$GITHUB_REPOSITORY"
+          draft_created=true
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$ALPHA_RELEASE_ID" > "$RUNNER_TEMP/release-api.json"
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib
+
+          release = json.loads(pathlib.Path(os.environ["RUNNER_TEMP"], "release-api.json").read_text())
+          local = {p.name: "sha256:" + hashlib.sha256(p.read_bytes()).hexdigest() for p in pathlib.Path("release").iterdir()}
+          remote = {x["name"]: x.get("digest") for x in release["assets"]}
+          assert release["draft"] and release["prerelease"], "Release must still be a draft prerelease"
+          assert release["target_commitish"] == os.environ["ALPHA_SOURCE_SHA"], "Incorrect source target"
+          assert remote == local, "GitHub uploaded asset digest or list mismatch"
+          PY
+          trap - ERR
+          gh release edit "$ALPHA_RELEASE_ID" --draft=false --prerelease --latest=false --repo "$GITHUB_REPOSITORY"
+          echo "Technical Alpha prerelease published by the explicitly authorized owner: $ALPHA_RELEASE_ID" >> "$GITHUB_STEP_SUMMARY"
