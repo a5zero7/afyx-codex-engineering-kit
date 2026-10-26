@@ -71,11 +71,22 @@ does not prove missing source.
 | Alpha | `ff54a07c3264a39c55f49813da6020fd8286072b` | Promoted source; tree `dad055293008bfdb8de0c8953aacd796964b5e3b` |
 | Main | `ce1e020a89095cc32130056440245e2ef101448f` | Stable workflow baseline; no expanded-v1 release implication |
 | Signed historical Alpha artifact | artifact `12631346917` | Immutable evidence for prior Alpha source only; never substitute for `ff54a07c...` |
+| PR #113 Graph-only Technical Alpha path | workflow head `36bb6ee75bc8a2bd536ce4960bfae3723143edbe` | Prepares an exact-source Afyx Graph build/attestation for `ff54a07c...`; no dispatch or new artifact exists from that PR yet |
+| T12 Unified Kit candidate | `NOT_BUILT` | Future signed, installed candidate containing the accepted five-component Kit and Track B contracts |
 | Forge formal campaign | `0/36 NOT_RUN` | A6/A7 evidence absent; A8 has no GO |
 
 PR #105 and PR #113 remain separate owner-controlled publication/workflow work.
 This roadmap does not authorize their merge, workflow dispatch, tag, release,
 publication, deployment, or installed-runtime mutation.
+
+The Graph-only artifact path prepared by PR #113 proves only the exact Afyx Graph
+source/build/provenance contract declared by that workflow. T12 requires a later
+signed **Unified Kit** candidate installed from one frozen identity after Graph,
+Context, Forge, Odoo Engineering, Expert, and Track B have satisfied their
+applicable gates. The Graph-only artifact cannot satisfy T12 component/integration
+acceptance, and the future T12 artifact cannot retroactively replace the Graph-only
+Technical Alpha evidence. Their manifests, subjects, checksums, installation
+records, and acceptance verdicts remain separate.
 
 ### Five-component standalone and integration readiness
 
@@ -125,7 +136,7 @@ versioned, independently testable boundaries:
 | A1 Capability Harvest | COMPLETE within recorded public inputs | Reopen only for a concrete source/contract change |
 | A2 Capability Matrix | COMPLETE within recorded inputs | Preserve historical unavailable-input limitations |
 | A3 Deduplication/Refinement | COMPLETE | Preserve Afyx-owned provenance and candidate independence |
-| A4 Candidate Construction | COMPLETE for Route B B0–B5 identities | Reverify exact candidates immediately before an authorized campaign |
+| A4 Candidate Construction | IMPLEMENTATION/CANDIDATE PREPARATION COMPLETE; ACCEPTANCE PENDING where applicable | Preserve AFYX-92 and AFYX-178 `In Review`; reverify exact Route B B0–B5 identities immediately before an authorized campaign. This is not formal candidate acceptance or A8 GO |
 | A5 Benchmark Harness | Public controller/orchestrator and synthetic tests complete | Owner-approved isolated runtime, evaluator-only bundle, custody, budgets, and one formal 36-cell execution |
 | A6 Quality Gate | `NOT_RUN` | Independent correctness, task fidelity, evidence quality, and security verdicts for every required cell; no fabricated PASS |
 | A7 Efficiency Gate | `NOT_RUN` | Compare only quality-passing cells using available context/token/tool/time/resource evidence; no unsupported superiority claim |
@@ -142,23 +153,28 @@ evidence remain outside developer and evaluated-agent boundaries.
 
 `B0`–`B5` inside Forge A4 are **candidate IDs**, not Platform Track B phases.
 To prevent ambiguity, this roadmap uses `TB0`–`TB7` for Platform Track B while
-preserving the legacy Jira phase names `B0`–`B7`. Existing Jira keys must be
-retained; no duplicate issues may be created merely to adopt the `TB` prefix.
-The repository does not contain a verified key-by-key legacy Track B snapshot,
-so AFYX-53/56 remain the known provider/control-plane umbrellas and exact child
-keys are `UNVERIFIED` until Jira is read by an authorized session. Implementation
-may use this semantic crosswalk but must not invent or transition Jira keys.
+preserving the legacy Jira identities and titles AFYX-101–108. Existing issues
+must be updated in place; no duplicate issues may be created merely to adopt the
+`TB` prefix. AFYX-53/56 remain broader provider/control-plane evidence, not
+replacements for the legacy Track B issues.
 
-| Canonical label | Legacy Jira label | V1 contract | Current evidence / exit |
-|---|---|---|---|
-| TB0 | B0 | Platform contract freeze | Freeze Codex → Google Antigravity/Gemini → Claude Code priority, ownership, supported host surfaces, and non-goals |
-| TB1 | B1 | Provider-neutral core | Remove provider branching from core decisions while preserving current behavior and standalone operation |
-| TB2 | B2 | Stable `ProviderAdapter` | Typed/versioned inspect/plan/apply/verify/uninstall/capability/diagnostic contract; fail closed on unknown capability |
-| TB3 | B3 | Capability discovery/negotiation | Report actual CLI/editor/MCP/skill/config capabilities; absence is explicit, never fabricated |
-| TB4 | B4 | Provider-neutral task/context/evidence | One task/result/evidence schema with provider-native translation only at adapters |
-| TB5 | B5 | Required v1 provider integrations | Codex CLI first, Antigravity/Gemini second, Claude Code third; each only for capabilities actually supported by that host |
-| TB6 | B6 | Cross-provider hardening | Same bounded scenarios, ownership/rollback, degraded mode, diagnostics, Windows/Linux/macOS where applicable |
-| TB7 | B7 | Stable generalized platform | Freeze adapter compatibility and pass T12 provider matrix without regressing Codex |
+| Canonical planning label | Legacy Jira identity and preserved title | Expanded-v1 conceptual use |
+|---|---|---|
+| TB0 | AFYX-101 — B0 — v1 Platform Contract Freeze | Freeze Codex → Google Antigravity/Gemini → Claude Code priority, ownership, actual host surfaces, and non-goals |
+| TB1 | AFYX-102 — B1 — Provider-Neutral Core Contracts | Remove provider branching from core decisions while preserving standalone behavior |
+| TB2 | AFYX-103 — B2 — Stable ProviderAdapter Contract | Version inspect/plan/apply/verify/uninstall/capability/diagnostic behavior and fail closed on unknown capability |
+| TB3 | AFYX-104 — B3 — Capability Discovery / Negotiation | Report actual CLI/editor/MCP/skill/config capabilities; absence remains explicit |
+| TB4 | AFYX-105 — B4 — Provider-Neutral Task / Context / Evidence Contracts | Keep task/result/evidence schemas neutral and translate only at adapters |
+| TB5 | AFYX-106 — B5 — Additional Provider Integrations by Measured Demand | Deliver required v1 Codex, Antigravity/Gemini, and Claude Code integrations only for supported capabilities |
+| TB6 | AFYX-107 — B6 — Cross-Provider Validation / Hardening | Apply bounded ownership, rollback, degraded-mode, diagnostics, and applicable 3OS validation |
+| TB7 | AFYX-108 — B7 — Stable Generalized Platform | Freeze adapter compatibility and pass the T12 provider matrix without regressing Codex |
+
+This is a **conceptual planning crosswalk**, not a declaration that each expanded
+TB gate is one-to-one equivalent to the historical Jira issue's original scope or
+acceptance state. Historical issue titles, descriptions, status, comments, and
+evidence remain authoritative for their original boundary. Expanded-v1 obligations
+must be recorded as additive acceptance on the existing issue or its already-linked
+children, without rewriting past completion claims.
 
 Provider acceptance is capability-based, not false feature parity:
 
@@ -171,15 +187,31 @@ Provider acceptance is capability-based, not false feature parity:
   skill/command, MCP, and diagnostics surfaces. Missing host capabilities must be
   reported as unsupported rather than emulated through unsafe global mutation.
 
+AFYX-294 defines six concrete editor/CLI acceptance surfaces that Track B must
+carry forward independently rather than compressing into a single "provider
+works" claim:
+
+| AFYX-294 acceptance surface | Preserved observed state | Track B use |
+|---|---|---|
+| Codex isolated MCP | PASS | Codex MCP registration, reachability, ownership, and isolation reference |
+| Antigravity shared configuration/read-back | PASS | Configuration merge/read-back evidence only; not full host-mediated acceptance |
+| Antigravity `agy mcp list` | PASS | CLI-visible MCP discovery surface |
+| Codex agent-mediated query | BLOCKED (`401`) | Requires authorized provider/session acceptance; configuration evidence cannot substitute |
+| Antigravity agent-mediated query | BLOCKED (`429`) | Requires authorized provider/session acceptance; rate/provider limitation remains explicit |
+| IDE UI | `NOT_RUN` | Requires separately executed supported-editor acceptance; never infer from CLI/config PASS |
+
+Claude Code must receive equivalent capability-appropriate coverage after TB1/TB2,
+but AFYX-294 does not claim or retroactively supply Claude evidence.
+
 ### Phase 8–11 critical path and parallel workstreams
 
 | Workstream | Jira/evidence | Current state | Completion gate | Dependency |
 |---|---|---|---|---|
 | W1 Graph/Context Phase 8 | AFYX-8, AFYX-64 dogfood evidence | PARTIAL: two bounded cases, no general superiority claim | Representative public/private-safe workload matrix; correctness parity first; measured useful/non-useful cases; comparative claims only where controlled | Can run beside W2/W3; freeze scenarios before execution |
 | W2 Expert acceptance | AFYX-283, AFYX-67/68 | ACCEPTANCE_PENDING | Independent D.6 verdict, Case A reference/tool bounds, controlled A1/B1 quality comparison, sanitized provenance | Independent evaluator/owner boundary |
-| W3 Forge A0–A8 | AFYX-12, AFYX-88–96, AFYX-171–183 | A0–A5 public preparation complete; formal `0/36` | External prerequisites, formal campaign, A6/A7, explicit A8 decision | A8 blocks W4 |
+| W3 Forge A0–A8 | AFYX-12, AFYX-88–96, AFYX-171–183 | A0–A3 contract complete; A4 implementation/candidate preparation complete with AFYX-92/178 `In Review`; A5 public harness preparation complete; formal `0/36 NOT_RUN` | Pending A4 acceptance where applicable, external prerequisites, formal campaign, A6/A7, explicit A8 decision | A8 blocks W4 |
 | W4 Forge A9–A12 | AFYX-97–100, AFYX-184–188 | NOT_STARTED/BLOCKED | Selected implementation, adaptive modes, dogfood, stable contract | Only after A8 GO; NO-GO requires redesign/owner decision |
-| W5 Platform Track B | AFYX-53/56 umbrellas; child mapping pending authorized Jira read | PARTIAL: Codex and Antigravity paths exist, core is not yet generalized, Claude absent | TB0–TB7 and three-provider capability matrix | TB1/TB2 before Claude adapter; may run beside Forge evaluation |
+| W5 Platform Track B | AFYX-101–108; AFYX-53/56 and AFYX-294 as supporting evidence | PARTIAL: Codex and Antigravity paths/six-surface evidence exist, core is not yet generalized, Claude absent | TB0–TB7, AFYX-294 surface closure, and three-provider capability matrix | TB1/TB2 before Claude adapter; may run beside Forge evaluation |
 | W6 Phase 9 hardening | AFYX-58/59/62/63 and accepted CI/security/recovery evidence | SUBSTANTIAL REUSABLE EVIDENCE; final matrix pending | Only changed/untested release risks: installed exact artifact, corruption/interruption/rollback, resource bounds, 3OS packaging | After material component changes settle; focused reruns only |
 | W7 T12 combined acceptance | AFYX-248/249/269/283/12 | BLOCKED by component gates | Contract below passes on exact installed candidate | W1, W2, W4, W5, W6 complete |
 | W8 Phase 10 Private Beta | Existing Phase 10 program | NOT_STARTED | Controlled users/environments, upgrade/config stability, all release-blocking defects closed | Phase 8 + Phase 9 + T12 PASS |
@@ -192,12 +224,16 @@ T12 before component freezes, or Private Beta before Phase 8/9/T12 PASS.
 
 ### T12 combined installed-product acceptance contract
 
-T12 uses one exact, signed candidate in disposable installed environments. Source
-CI or component mocks cannot substitute for it. Acceptance requires:
+T12 uses one future exact, signed **Unified Kit** candidate in disposable installed
+environments. It is not the Graph-only Technical Alpha artifact path prepared by
+PR #113. Source CI, Graph-only attestation, or component mocks cannot substitute
+for the installed combined candidate; conversely T12 cannot rewrite or replace the
+separate Graph-only provenance record. Acceptance requires:
 
-1. **Identity/provenance:** source SHA/tree, workflow SHA, artifact ID/digest,
-   archive checksums, manifest, signer, version/channel, and installed identity
-   agree; prior artifact identities remain historical comparison only.
+1. **Identity/provenance:** Unified Kit source SHA/tree, workflow SHA, artifact
+   ID/digest, component inventory, archive checksums, manifest, signer,
+   version/channel, and installed identity agree. The PR #113 Graph-only ledger
+   and prior artifact identities remain separate historical/checkpoint evidence.
 2. **Five standalone smokes:** Graph, Context, Forge, Odoo Engineering, and Expert
    each start/use/stop independently with documented optional dependencies absent.
 3. **Integrated engineering flow:** detect a representative repository, route the
