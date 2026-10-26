@@ -18,21 +18,19 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  ALPHA_SOURCE_SHA: 3b8360c44bd148739a6048b309898a41558e2141
-  ALPHA_SOURCE_TREE: 0ee87ab17cbfcdabd2234cfd264a28c5f3950238
+  ALPHA_SOURCE_SHA: ff54a07c3264a39c55f49813da6020fd8286072b
+  ALPHA_SOURCE_TREE: dad055293008bfdb8de0c8953aacd796964b5e3b
   ALPHA_VERSION: 1.0.0
   ALPHA_CHANNEL: technical-alpha
   ALPHA_EXTRACTION_VERSION: "28"
-  ALPHA_RELEASE_ID: afyx-graph-v1.0.0-technical-alpha.3b8360c
-  RELEASE_ARTIFACT_NAME: afyx-graph-technical-alpha-3b8360c-${{ github.run_id }}-${{ github.run_attempt }}
+  ALPHA_RELEASE_ID: afyx-graph-v1.0.0-technical-alpha.ff54a07
+  RELEASE_ARTIFACT_NAME: afyx-graph-technical-alpha-ff54a07-${{ github.run_id }}-${{ github.run_attempt }}
   SIGNER_WORKFLOW: a5zero7/afyx-codex-engineering-kit/.github/workflows/graph-alpha-build-attest.yml
 
 jobs:
   build:
     name: Build exact Alpha source
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
