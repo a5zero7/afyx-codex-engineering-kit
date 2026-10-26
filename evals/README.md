@@ -190,7 +190,11 @@ Smoke mode uses one repetition to validate mechanics and fixtures. It is not evi
 ## Current limitations
 
 - Tool/read/search metrics depend on the event detail exposed by the installed Codex CLI.
-- File-open and duplicate-read counts remain unavailable when event payloads do not identify paths.
+- General file-open and duplicate-read counts remain unavailable. For Expert
+  evaluation only, completed successful tool traces record normalized unique
+  `references/*.md` and `workflows/*.md` paths; the Architecture scenario fails
+  when more than three Expert references are observed. This bounded gate does
+  not claim that every filesystem read is visible.
 - Phase 3A does not evaluate Afyx Graph, Headroom, end-to-end Prompt Master value, or comparative skill effectiveness.
 - The current fixtures validate the harness only and must not be used to claim benchmark superiority.
 - An actual-session canary or pilot can be BLOCKED by host/model availability;

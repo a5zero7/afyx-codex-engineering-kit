@@ -3137,3 +3137,29 @@ observations above.
 Current disposition: **CONDITIONAL**. No automatic promotion, tag, release,
 publication workflow dispatch, or branch rewrite is authorized by this
 checkpoint.
+
+## 2026-10-26 — AFYX-283 Case A reference-disclosure gate
+
+Status: **MEASUREMENT DEFECT CORRECTED / CASE A RERUN NOT RUN / D.6 BLOCKED**.
+
+The accepted D.5 records exposed only aggregate `read_calls`; result records
+left `files_opened`, `unique_files_opened`, and `duplicate_reads` unavailable.
+The harness therefore could report automated PASS without enforcing the Expert
+contract of one primary and at most two supporting references. This is a
+reproducible harness defect, not evidence that Expert response quality failed or
+that the host/model will always over-load references.
+
+The bounded correction extracts successful Expert reference and workflow paths
+from completed tool events, stores only normalized skill-relative names and
+counts, and gives the Architecture scenario a fail-closed maximum of three
+unique Expert references. Failed reads do not count as loaded content;
+duplicates and Windows path-case differences do not inflate the unique count.
+No Expert skill source, frozen v0.1.1 identity, prompt, rubric, provider,
+installed runtime, or owner-only evidence changed.
+
+Deterministic positive, negative, duplicate, failed-read, Windows-path, manifest,
+and routing regressions pass. Actual Case A model execution remains `NOT_RUN` in
+this correction. AFYX-283 remains `ACCEPTANCE_PENDING`: the next acceptance step
+is an authorized isolated Architecture rerun proving at most three observed
+Expert references, followed by the already-required independent D.6 substantive
+`KEEP`, `REVISE`, or `REJECT` verdict. Formal A1/B1 remains blocked by D.6.

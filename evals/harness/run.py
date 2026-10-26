@@ -648,6 +648,28 @@ def parse_events(stdout: str) -> dict:
                 read_calls += 1
             if item.get("status") in {"failed", "error"}:
                 failed_tools += 1
+    expert_reference_reads = sorted({
+        f"references/{match.group('name').casefold()}"
+        for event in command_events
+        if not event["failed"]
+        for match in re.finditer(
+            r"afyx-engineering-expert[\\/]+references[\\/]+"
+            r"(?P<name>[A-Za-z0-9][A-Za-z0-9._-]*\.md)\b",
+            event["trace"],
+            re.I,
+        )
+    })
+    expert_workflow_reads = sorted({
+        f"workflows/{match.group('name').casefold()}"
+        for event in command_events
+        if not event["failed"]
+        for match in re.finditer(
+            r"afyx-engineering-expert[\\/]+workflows[\\/]+"
+            r"(?P<name>[A-Za-z0-9][A-Za-z0-9._-]*\.md)\b",
+            event["trace"],
+            re.I,
+        )
+    })
     return {
         "usage": usage,
         "message": agent_messages[-1] if agent_messages else "",
@@ -658,6 +680,8 @@ def parse_events(stdout: str) -> dict:
         "commands": commands,
         "command_events": command_events,
         "tool_events": tool_events,
+        "expert_reference_reads": expert_reference_reads,
+        "expert_workflow_reads": expert_workflow_reads,
     }
 
 
@@ -708,6 +732,7 @@ def evaluated_workspace():
 def check_assertions(
     scenario: dict, work: Path, output: str, validation_exit: int | None,
     modified: list[str], tool_calls: int = 0,
+    expert_reference_reads: list[str] | None = None,
 ) -> list[dict]:
     checks = []
     for assertion in scenario["expected_assertions"]:
@@ -720,9 +745,15 @@ def check_assertions(
             passed = python_list_reversal_is_correct(output)
         elif kind == "max_tool_calls":
             passed = tool_calls <= value
+        elif kind == "max_expert_reference_reads":
+            observed = expert_reference_reads or []
+            passed = len(observed) <= value
         else:
             passed = False
-        checks.append({"type": kind, "expected": value, "passed": passed})
+        check = {"type": kind, "expected": value, "passed": passed}
+        if kind == "max_expert_reference_reads":
+            check["observed"] = observed
+        checks.append(check)
     file_corpus = "\n".join(
         (work / rel).read_text(encoding="utf-8", errors="replace")
         for rel in modified if (work / rel).is_file()
@@ -878,7 +909,13 @@ def run_cell(
             )
             (run_root / response_path).write_text(output, encoding="utf-8")
         assertions = check_assertions(
-            scenario, work, output, validation_exit, modified, parsed["tool_calls"]
+            scenario,
+            work,
+            output,
+            validation_exit,
+            modified,
+            parsed["tool_calls"],
+            parsed["expert_reference_reads"],
         )
         activation = activation_evidence(parsed, active_skills)
         observed_skill_reads = sorted(
@@ -972,6 +1009,10 @@ def run_cell(
         "tool_calls": parsed["tool_calls"],
         "search_calls": parsed["search_calls"],
         "read_calls": parsed["read_calls"],
+        "expert_reference_reads": parsed["expert_reference_reads"],
+        "expert_reference_read_count": len(parsed["expert_reference_reads"]),
+        "expert_workflow_reads": parsed["expert_workflow_reads"],
+        "expert_workflow_read_count": len(parsed["expert_workflow_reads"]),
         "files_opened": None,
         "unique_files_opened": None,
         "duplicate_reads": None,
