@@ -144,6 +144,11 @@ class FailedCleanupManager(controller.DisposableWorkspaceManager):
         return False
 
 
+class RaisingCleanupManager(controller.DisposableWorkspaceManager):
+    def cleanup(self, lease: controller.WorkspaceLease) -> bool:
+        raise OSError("synthetic-private-cleanup-path")
+
+
 class PrivateCapableArtifactValidator:
     def validate(self, request, outcome, files_modified):
         return controller.ArtifactValidation(
@@ -556,6 +561,14 @@ class PublicControllerTests(unittest.TestCase):
         self.assertEqual(result["cleanup"], "FAIL")
         self.assertIn("cleanup_failed", result["validation_outcomes"]["failure_codes"])
         self.assertTrue(result["evidence_retention"]["archive_finalized"])
+
+    def test_cleanup_exception_is_sanitized_and_fails(self) -> None:
+        manager = RaisingCleanupManager(self.workspace_parent)
+        result = self.make_controller(FakeLauncher(), workspace_manager=manager).run(self.input())
+        self.assertEqual(result["result"], "FAIL")
+        self.assertEqual(result["cleanup"], "FAIL")
+        self.assertIn("cleanup_failed", result["validation_outcomes"]["failure_codes"])
+        self.assertNotIn("synthetic-private-cleanup-path", str(result))
 
     def test_unsafe_output_marker_is_not_published(self) -> None:
         outcome = complete_outcome(
