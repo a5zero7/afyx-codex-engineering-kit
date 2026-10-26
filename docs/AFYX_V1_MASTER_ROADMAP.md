@@ -2440,10 +2440,13 @@ Local evidence on the supported contract includes clean install, typecheck and
 clean production/UI build PASS; focused Vitest 4 UI **21/21** and git-currency
 **13/13** PASS; semantic baseline **6/6** PASS; CLI/MCP smoke **21/21** PASS;
 artifact identity/legal **12/12** PASS; component, independence, identity and
-legal validators PASS. A full local run on unsupported Node 26 completed
+legal validators PASS. A historical full local Node 26 run completed
 **5647 PASS / 34 FAIL / 31 SKIP**: failures were Windows open-handle cleanup,
 load-sensitive timeouts/performance assertions, and one Windows `which`
-fixture, while supported final-head Node 24 CI remains the acceptance authority.
+fixture. Node 26 is inside the published `>=22.5.0` engine range, so AFYX-278
+tracks those failures as compatibility defects instead of labeling the runtime
+unsupported. Current closure evidence is recorded below; exact-head Node 24
+Windows/Linux/macOS CI remains the cross-platform acceptance authority.
 Implementation commit `5989661b1444c4f30d37fb1fafddd5ae3023379c`
 passed [engineering-kit CI 38155025673](https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/38155025673)
 and [Afyx Graph Build 38155028757](https://github.com/a5zero7/afyx-codex-engineering-kit/actions/runs/38155028757)
@@ -2456,6 +2459,46 @@ passed bundle/manifest verification and isolated installation: source revision
 remains **UNVERIFIED**. AFYX-266 engineering closure is ready for review; it
 does not mutate or promote the frozen Alpha candidate and does not replace the
 active installed runtime.
+
+# Unified development baseline checkpoint — 2026-10-25
+
+`dev` is the routine development source of truth. The consolidation started from
+remote `dev` commit `3b270f2689fc8e2a9b62a9f79ce9a03c3db09700`, whose tree already matches the
+accepted Alpha product tree `c352187dcd7e673bda99cd5e92242e24cd2fa77d`.
+
+| Existing work source | Verified disposition |
+|---|---|
+| Merged Graph, Expert, Forge, ACE, Kit/provider PRs through #101 | Integrated in `dev`; do not replay feature branches. |
+| Alpha promotion PR #102 | Product content already matches `dev`; Alpha history remains a release checkpoint. |
+| Main PRs #103/#104 | Exact-source build/attestation workflow and artifact layout correction consolidated into `dev`. |
+| Main Draft PR #106 | Release-safety behavior consolidated into `dev`; the separate Stable PR remains owner-controlled and unmerged. |
+| Main Draft PR #105 | Not integrated. Publication stays default-OFF pending a simpler explicit-owner manual contract. |
+| Historical T03/T04 and closed #77/#78 branches | Preserved as evidence/history; their accepted product content is superseded or already present. |
+| Detached evaluation/mutation worktrees and Alpha acceptance directories | Evidence only; not development source and not upload candidates. |
+| `.afyx-report-staging/`, `debug.log`, ignored indexes/build output, backups, and separate Afyx repositories | Owner/private/runtime state; excluded from `dev`. |
+
+Release workflow consolidation preserves deterministic six-target builds, checksums,
+release manifests, immutable action pins, artifact attestations, and downloadable
+verification artifacts. Non-publication workflows are read-only and no longer create
+tags or GitHub Releases. The previously attested Technical Alpha artifact is not
+rebuilt or substituted by this source consolidation.
+
+AFYX-278 reproduced on Windows with Node 26.8.1. The shutdown-control test child used
+an isolated home while the parent enumerated the owner's global daemon registry; MCP
+fixtures removed temp directories before killed children closed; ArkTS/JVM/C++/PHP
+fixtures left Graph or SQLite handles open; the old-Git fixture assumed POSIX `which`;
+and Vitest's CPU-derived worker count oversubscribed the Git/SQLite-heavy Windows suite.
+The harness now isolates `HOME`/`USERPROFILE`, awaits child close, closes Graph/SQLite
+resources, uses a native Windows Git shim, and caps only Windows Node >=26 at four
+workers. Product daemon and Graph runtime behavior are unchanged. Focused lifecycle
+regression passes 261/261; the final Node 26.8.1 Windows suite passes 325/325 active
+files and 5738/5738 active tests, with 4 files and 32 tests intentionally skipped.
+
+Capability work remains nonlinear. Graph reliability and correctness continue first;
+Expert D.6 independent review, Forge's formal 0/36 campaign, optional/default-OFF ACE,
+and blocked third-party host sessions remain scoped limitations rather than universal
+development blockers. Daily installations, customer repositories, credentials, and
+runtime indexes remain outside source development.
 
 # Final definition of success
 
@@ -3059,3 +3102,38 @@ failure, and ambiguous lock evidence. The full contract and limitations are in
 `docs/AFYX_CONTEXT_ENGINE_AFYX_292_COORDINATION.md`. Real Graph/MCP consumers,
 distributed coordination, authentication, deployment, and preset activation
 remain separate future boundaries.
+
+## 2026-10-26 — AFYX-249 Alpha entry readiness reconciliation
+
+This checkpoint corrects current state without rewriting the historical gate
+observations above.
+
+- `dev` is `640d3a00ef9a7cb079f811b75c09bae3ff60c0ca` (tree
+  `970023696a6b05b9a84a83ccea01fe5c3d4c66b7`); exact-head Repository CI is
+  green on Windows, Linux, and macOS.
+- `alpha` remains the frozen Technical Alpha source
+  `077abe19cadd861e676b6b2c14a229d11a0a5717` (tree
+  `c352187dcd7e673bda99cd5e92242e24cd2fa77d`). Its accepted six-target
+  artifact/attestation evidence remains immutable and available; it does not
+  attest later `dev` changes.
+- AFYX-248 and its accepted IJP testing children, AFYX-289, AFYX-58/59, and
+  AFYX-62/63 no longer represent open Alpha-entry defects. Their declared
+  limitations remain in force.
+- No current evidence demonstrates an ordinary-use P0/P1 defect in the
+  declared Technical Alpha contract. Expert D.6 independent review, the Forge
+  campaign, the Adit physical macOS pilot, optional ACE, provider-host
+  authentication/quota limitations, and deferred graphical UI remain outside
+  the universal entry gate unless their capability is explicitly claimed.
+- The frozen artifact is suitable only for the frozen `077abe19...` release
+  contract. Promoting unified `dev` requires a distinct reviewed candidate and
+  new exact-source build/attestation; prior installed-host evidence may be
+  reused only for unchanged behavior.
+- Public publication remains separate from product readiness. Draft PR #106
+  contains the fail-closed legacy Stable workflow correction, while Draft PR
+  #105 contains guarded Technical Alpha publication preparation. Neither is
+  merged. Publication stays disabled pending an explicit owner decision and a
+  proportionate owner-controlled Build -> Test -> Verify -> Release path.
+
+Current disposition: **CONDITIONAL**. No automatic promotion, tag, release,
+publication workflow dispatch, or branch rewrite is authorized by this
+checkpoint.

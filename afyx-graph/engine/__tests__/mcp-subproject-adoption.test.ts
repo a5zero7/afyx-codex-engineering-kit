@@ -113,11 +113,13 @@ describe('MCP workspace sub-project adoption (#1606) + no-default diagnostics (#
     ws = fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-graph-mcp-ws-'));
   });
 
-  afterEach(() => {
-    if (child && !child.killed) {
+  afterEach(async () => {
+    if (child && child.exitCode === null && child.signalCode === null) {
+      const closed = new Promise<void>((resolve) => child!.once('close', () => resolve()));
       child.kill('SIGKILL');
-      child = null;
+      await closed;
     }
+    child = null;
     fs.rmSync(ws, { recursive: true, force: true });
   });
 

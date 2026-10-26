@@ -48,26 +48,46 @@ describe('Old git without `ls-files -s --recurse-submodules` support (#1549)', (
   const installOldGitShim = () => {
     const shimDir = path.join(tempDir, '.shim');
     fs.mkdirSync(shimDir, { recursive: true });
-    const realGit = execFileSync('which', ['git']).toString().trim();
-    const shim = path.join(shimDir, 'git');
-    fs.writeFileSync(
-      shim,
-      [
-        '#!/bin/sh',
-        'for a in "$@"; do',
-        '  [ "$a" = "--recurse-submodules" ] && rs=1',
-        '  [ "$a" = "-s" ] && st=1',
-        'done',
-        'if [ -n "$rs" ] && [ -n "$st" ]; then',
-        '  echo "fatal: ls-files --recurse-submodules unsupported mode" >&2',
-        '  exit 128',
-        'fi',
-        `exec ${JSON.stringify(realGit)} "$@"`,
-      ].join('\n'),
-    );
-    fs.chmodSync(shim, 0o755);
+    const locator = process.platform === 'win32' ? 'where.exe' : 'which';
+    const realGit = execFileSync(locator, ['git']).toString().split(/\r?\n/, 1)[0].trim();
+    if (process.platform === 'win32') {
+      const shimScript = path.join(shimDir, 'git-shim.cjs');
+      fs.writeFileSync(shimScript, [
+        "const { spawnSync } = require('child_process');",
+        'const args = process.argv.slice(2);',
+        "if (args.includes('--recurse-submodules') && args.includes('-s')) {",
+        "  console.error('fatal: ls-files --recurse-submodules unsupported mode');",
+        '  process.exit(128);',
+        '}',
+        `const result = spawnSync(${JSON.stringify(realGit)}, args, { stdio: 'inherit' });`,
+        'if (result.error) throw result.error;',
+        'process.exit(result.status ?? 1);',
+      ].join('\n'));
+      fs.writeFileSync(
+        path.join(shimDir, 'git.cmd'),
+        `@"${process.execPath}" "%~dp0git-shim.cjs" %*\r\n`,
+      );
+    } else {
+      const shim = path.join(shimDir, 'git');
+      fs.writeFileSync(
+        shim,
+        [
+          '#!/bin/sh',
+          'for a in "$@"; do',
+          '  [ "$a" = "--recurse-submodules" ] && rs=1',
+          '  [ "$a" = "-s" ] && st=1',
+          'done',
+          'if [ -n "$rs" ] && [ -n "$st" ]; then',
+          '  echo "fatal: ls-files --recurse-submodules unsupported mode" >&2',
+          '  exit 128',
+          'fi',
+          `exec ${JSON.stringify(realGit)} "$@"`,
+        ].join('\n'),
+      );
+      fs.chmodSync(shim, 0o755);
+    }
     originalPath = process.env.PATH;
-    process.env.PATH = `${shimDir}:${originalPath ?? ''}`;
+    process.env.PATH = `${shimDir}${path.delimiter}${originalPath ?? ''}`;
   };
 
   beforeEach(() => {

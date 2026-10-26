@@ -1,5 +1,8 @@
 import { defineConfig } from 'vitest/config';
 
+const capWindowsNode26Workers =
+  process.platform === 'win32' && Number.parseInt(process.versions.node, 10) >= 26;
+
 /**
  * The SHARED base. `vitest.workspace.mts` extends it twice — once for the
  * engine's node-environment suites and once for the viewer package's jsdom
@@ -11,6 +14,11 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     testTimeout: 10_000,
+    // Node 26 on Windows oversubscribes the Git/SQLite-heavy integration suite
+    // at Vitest's CPU-derived default. The resulting timeouts and stale daemon
+    // observations disappear with bounded concurrency; product behavior and
+    // per-test assertions remain unchanged.
+    ...(capWindowsNode26Workers ? { maxWorkers: 4 } : {}),
     include: ['__tests__/**/*.test.ts'],
     /**
      * Several MCP integration tests (mcp-daemon, mcp-initialize, mcp-ppid-watchdog,

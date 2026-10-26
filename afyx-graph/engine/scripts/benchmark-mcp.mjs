@@ -54,7 +54,6 @@ async function runRound(round) {
     stdio: ['pipe', 'pipe', 'pipe'],
     env: {
       ...process.env,
-      AFYX_GRAPH_ALLOW_UNSAFE_NODE: '1',
       AFYX_GRAPH_NO_DAEMON: '1',
       AFYX_GRAPH_NO_WATCHDOG: '1',
       AFYX_GRAPH_MCP_TOOLS: 'explore,search,status',

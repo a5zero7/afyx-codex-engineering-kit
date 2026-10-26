@@ -1428,7 +1428,11 @@ class PublicController:
                             finalization_receipt.receipt_sha256
                         )
             if lease is not None:
-                cleanup = "PASS" if self.workspace_manager.cleanup(lease) else "FAIL"
+                try:
+                    cleanup_succeeded = self.workspace_manager.cleanup(lease)
+                except Exception:
+                    cleanup_succeeded = False
+                cleanup = "PASS" if cleanup_succeeded else "FAIL"
                 if cleanup == "FAIL":
                     failure_codes.append("cleanup_failed")
 

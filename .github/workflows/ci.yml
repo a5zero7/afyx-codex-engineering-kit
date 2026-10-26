@@ -107,6 +107,8 @@ jobs:
       - name: Usage Tracker deterministic tests
         shell: pwsh
         run: ./tools/codex-usage/tests/run-tests.ps1
+      - name: Forge frozen input newline portability
+        run: python -m unittest scripts.tests.test_forge_portability -v
       - name: Component contract, project detector and doctor tests (PowerShell and Git Bash)
         run: |
           $commands = @(

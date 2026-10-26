@@ -112,8 +112,8 @@ export const EXTENSION_MAP: Record<string, Language> = {
   '.cob': 'cobol',
   '.cobol': 'cobol',
   '.cpy': 'cobol',
-  // VB.NET: vendored grammar (patched govindbanura/tree-sitter-vbnet) — classes,
-  // modules, interfaces, structures, properties, events, Handles clauses, LINQ.
+  // VB.NET: Afyx-native scanner/fact extraction for the bounded semantic
+  // contract; no external parser grammar participates in production routing.
   '.vb': 'vbnet',
   // Erlang: modules (.erl) and header files (.hrl). Vendored WhatsApp/
   // tree-sitter-erlang grammar (the ELP grammar).

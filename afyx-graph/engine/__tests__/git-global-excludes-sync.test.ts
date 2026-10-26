@@ -153,5 +153,5 @@ describe('core.excludesFile sync scope', () => {
     fs.writeFileSync(path.join(root, 'src', 'also-visible.ts'), 'export const alsoVisible = 1;\n');
     await expect(graph!.sync({ paths: ['src/also-visible.ts'] })).resolves.toMatchObject({ filesAdded: 1 });
     expect(graph!.searchNodes('alsoVisible').length).toBeGreaterThan(0);
-  });
+  }, 20_000);
 });

@@ -10815,7 +10815,7 @@ DO-WORK.
 });
 
 // =============================================================================
-// VB.NET (.vb) — vendored patched govindbanura/tree-sitter-vbnet grammar
+// VB.NET (.vb) — Afyx-native scanner/fact extraction
 // =============================================================================
 
 describe('VB.NET Extraction', () => {
