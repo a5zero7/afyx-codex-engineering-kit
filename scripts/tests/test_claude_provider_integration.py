@@ -31,9 +31,11 @@ def fake_claude(path: Path, script: Path) -> None:
     script.write_text(
         r"""const fs=require('node:fs');
 const path=require('node:path');
+const os=require('node:os');
 const args=process.argv.slice(2);
-const configDir=process.env.CLAUDE_CONFIG_DIR;
-const userConfig=path.join(path.dirname(configDir),'.claude.json');
+const overridden=Object.hasOwn(process.env,'CLAUDE_CONFIG_DIR');
+const configDir=overridden?path.resolve(process.env.CLAUDE_CONFIG_DIR):path.join(os.homedir(),'.claude');
+const userConfig=overridden?path.join(configDir,'.claude.json'):path.join(os.homedir(),'.claude.json');
 const projectConfig=path.join(process.cwd(),'.mcp.json');
 const sentinel=(name)=>fs.existsSync(path.join(configDir,name));
 const pause=()=>{const end=Date.now()+2000;while(Date.now()<end){}};
@@ -41,11 +43,26 @@ const read=(file)=>fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8')):
 const write=(file,value)=>{fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,JSON.stringify(value,null,2)+'\n');};
 const scope=()=>{const index=args.indexOf('--scope');return index>=0?args[index+1]:'local';};
 const fileFor=(value)=>value==='project'?projectConfig:userConfig;
+const localEntry=(document,name)=>{
+  for(const [project,value] of Object.entries(document.projects||{})){
+    if(path.resolve(project)===path.resolve(process.cwd())&&value.mcpServers&&value.mcpServers[name])return value.mcpServers[name];
+  }
+  return null;
+};
+const effective=(name)=>{
+  const state=read(userConfig);const project=read(projectConfig);
+  const local=localEntry(state,name);if(local)return {name,scope:'local',entry:local};
+  if(project.mcpServers&&project.mcpServers[name])return {name,scope:'project',entry:project.mcpServers[name]};
+  if(state.mcpServers&&state.mcpServers[name])return {name,scope:'user',entry:state.mcpServers[name]};
+  return null;
+};
 if(args[0]!=='mcp'){console.error('unsupported command');process.exit(64);}
 if(sentinel('HANG'))pause();
 if(args[1]==='get'){
   const name=args[2];
-  for(const file of [projectConfig,userConfig]){const doc=read(file);if(doc.mcpServers&&doc.mcpServers[name]){console.log(JSON.stringify(doc.mcpServers[name]));process.exit(0);}}
+  if(sentinel('MISMATCH_GET')){console.log(JSON.stringify({name,scope:'user',entry:{type:'stdio',command:'foreign',args:[]}}));process.exit(0);}
+  if(sentinel('UNPROVEN_GET')){console.log('afyx_graph exists');process.exit(0);}
+  const found=effective(name);if(found){console.log(JSON.stringify(found));process.exit(0);}
   console.error('MCP server not found');process.exit(1);
 }
 if(args[1]==='add-json'){
@@ -76,7 +93,10 @@ class ClaudeProviderIntegrationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.base = Path(self.temporary.name)
-        self.claude_home = self.base / "claude"
+        self.claude_config = self.base / "claude-config"
+        self.claude_config.mkdir()
+        self.native_home = self.base / "native-home"
+        self.native_home.mkdir()
         self.workspace = self.base / "workspace"
         self.workspace.mkdir()
         self.entry = self.base / "runtime/current/lib/dist/bin/afyx-graph.js"
@@ -93,11 +113,23 @@ class ClaudeProviderIntegrationTests(unittest.TestCase):
 
     @property
     def user_config(self) -> Path:
-        return self.base / ".claude.json"
+        return self.claude_config / ".claude.json"
+
+    @property
+    def default_user_config(self) -> Path:
+        return self.native_home / ".claude.json"
 
     @property
     def ownership(self) -> Path:
-        return self.claude_home / ".afyx-provider-ownership.json"
+        return self.claude_config / ".afyx-provider-ownership.json"
+
+    @property
+    def expected_entry(self) -> dict:
+        return {
+            "type": "stdio",
+            "command": str(Path(self.node).resolve()),
+            "args": [str(self.entry.resolve()), "serve", "--mcp"],
+        }
 
     def run_helper(
         self,
@@ -105,6 +137,7 @@ class ClaudeProviderIntegrationTests(unittest.TestCase):
         expected: int = 0,
         providers: str = "claude",
         timeout_ms: int = 15000,
+        config_override: bool = True,
     ) -> dict:
         command = [
             "node",
@@ -117,8 +150,6 @@ class ClaudeProviderIntegrationTests(unittest.TestCase):
             str(self.entry),
             "--claude",
             str(self.claude),
-            "--claude-home",
-            str(self.claude_home),
             "--gemini-home",
             str(self.base / "gemini"),
             "--codex-home",
@@ -127,9 +158,17 @@ class ClaudeProviderIntegrationTests(unittest.TestCase):
             str(self.workspace),
             "--provider-timeout-ms",
             str(timeout_ms),
-            *extra,
         ]
-        result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
+        if config_override:
+            command.extend(["--claude-config-dir", str(self.claude_config)])
+        command.extend(extra)
+        env = os.environ.copy()
+        env.pop("CLAUDE_CONFIG_DIR", None)
+        env["HOME"] = str(self.native_home)
+        env["USERPROFILE"] = str(self.native_home)
+        result = subprocess.run(
+            command, cwd=ROOT, env=env, capture_output=True, text=True
+        )
         self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
         return json.loads(result.stdout)
 
@@ -179,15 +218,88 @@ console.log(JSON.stringify({{caller,filesystem,runtime}}));"""
         self.assertEqual(second["status"], "READY")
         self.assertFalse(second["providers"][0]["changed"])
 
-        (self.claude_home / "HANG").write_text("1", encoding="utf-8")
+        (self.claude_config / "HANG").write_text("1", encoding="utf-8")
         side_effect_free = self.run_helper("--scope", "global", timeout_ms=50)
         self.assertEqual(side_effect_free["providers"][0]["status"], "CONFIGURED")
-        (self.claude_home / "HANG").unlink()
+        (self.claude_config / "HANG").unlink()
 
         removed = self.run_helper("--scope", "global", "--apply", "--uninstall")
         self.assertTrue(removed["providers"][0]["changed"])
-        self.assertFalse(json.loads(self.user_config.read_text(encoding="utf-8")).get("mcpServers"))
+        self.assertFalse(
+            json.loads(self.user_config.read_text(encoding="utf-8")).get("mcpServers")
+        )
         self.assertFalse(self.ownership.exists())
+
+    def test_native_default_and_overridden_config_paths_are_distinct(self) -> None:
+        overridden = self.run_helper("--scope", "global")
+        self.assertEqual(
+            Path(overridden["providers"][0]["configPath"]), self.user_config
+        )
+
+        native = self.run_helper(
+            "--scope", "global", "--apply", config_override=False
+        )
+        self.assertEqual(native["status"], "READY")
+        self.assertEqual(
+            Path(native["providers"][0]["configPath"]), self.default_user_config
+        )
+        self.assertTrue(self.default_user_config.exists())
+        self.assertFalse(self.user_config.exists())
+
+    def test_higher_precedence_project_and_local_entries_block_user_ready(self) -> None:
+        self.run_helper("--scope", "global", "--apply")
+        user_before = self.user_config.read_bytes()
+        foreign = {"type": "stdio", "command": "foreign", "args": []}
+
+        project_config = self.workspace / ".mcp.json"
+        project_config.write_text(
+            json.dumps({"mcpServers": {"afyx_graph": foreign}}), encoding="utf-8"
+        )
+        project_blocked = self.run_helper(
+            "--scope", "global", "--apply", expected=2
+        )
+        self.assertEqual(
+            project_blocked["providers"][0]["reason"],
+            "HIGHER_PRECEDENCE_ENTRY",
+        )
+        self.assertEqual(self.user_config.read_bytes(), user_before)
+
+        project_config.unlink()
+        state = json.loads(self.user_config.read_text(encoding="utf-8"))
+        state["projects"] = {
+            str(self.workspace.resolve()): {"mcpServers": {"afyx_graph": foreign}}
+        }
+        self.user_config.write_text(json.dumps(state), encoding="utf-8")
+        local_before = self.user_config.read_bytes()
+        local_blocked = self.run_helper(
+            "--scope", "global", "--apply", expected=2
+        )
+        self.assertEqual(
+            local_blocked["providers"][0]["reason"],
+            "HIGHER_PRECEDENCE_ENTRY",
+        )
+        self.assertEqual(self.user_config.read_bytes(), local_before)
+
+    def test_cli_success_mismatch_blocks_and_unparseable_identity_is_unverified(self) -> None:
+        self.run_helper("--scope", "global", "--apply")
+        config_before = self.user_config.read_bytes()
+        (self.claude_config / "MISMATCH_GET").write_text("1", encoding="utf-8")
+        mismatch = self.run_helper("--scope", "global", "--apply", expected=2)
+        self.assertEqual(
+            mismatch["providers"][0]["reason"],
+            "CLAUDE_EFFECTIVE_ENTRY_MISMATCH",
+        )
+        self.assertEqual(self.user_config.read_bytes(), config_before)
+
+        (self.claude_config / "MISMATCH_GET").unlink()
+        (self.claude_config / "UNPROVEN_GET").write_text("1", encoding="utf-8")
+        unproven = self.run_helper("--scope", "global", "--apply")
+        self.assertEqual(unproven["status"], "PARTIAL")
+        self.assertEqual(unproven["providers"][0]["status"], "UNVERIFIED")
+        self.assertEqual(
+            unproven["providers"][0]["reason"],
+            "CLAUDE_EFFECTIVE_ENTRY_UNPROVEN",
+        )
 
     def test_project_scope_preserves_unrelated_configuration(self) -> None:
         config = self.workspace / ".mcp.json"
@@ -210,12 +322,10 @@ console.log(JSON.stringify({{caller,filesystem,runtime}}));"""
         self.assertEqual(blocked["providers"][0]["reason"], "FOREIGN_ENTRY")
         self.assertEqual(json.loads(self.user_config.read_text(encoding="utf-8")), foreign)
 
-        expected_entry = {
-            "type": "stdio",
-            "command": str(Path(self.node).resolve()),
-            "args": [str(self.entry.resolve()), "serve", "--mcp"],
-        }
-        self.user_config.write_text(json.dumps({"mcpServers": {"afyx_graph": expected_entry}}), encoding="utf-8")
+        self.user_config.write_text(
+            json.dumps({"mcpServers": {"afyx_graph": self.expected_entry}}),
+            encoding="utf-8",
+        )
         refused = self.run_helper("--scope", "global", "--apply", "--uninstall", expected=2)
         self.assertEqual(refused["providers"][0]["reason"], "UNOWNED_ENTRY")
         self.assertTrue(self.user_config.exists())
@@ -237,8 +347,8 @@ console.log(JSON.stringify({{caller,filesystem,runtime}}));"""
         self.ownership.write_text(json.dumps(marker), encoding="utf-8")
         config_before = self.user_config.read_bytes()
         marker_before = self.ownership.read_bytes()
-        self.claude_home.mkdir(parents=True, exist_ok=True)
-        (self.claude_home / "FAIL_ADD").write_text("1", encoding="utf-8")
+        self.claude_config.mkdir(parents=True, exist_ok=True)
+        (self.claude_config / "FAIL_ADD").write_text("1", encoding="utf-8")
 
         blocked = self.run_helper("--scope", "global", "--apply", expected=2)
         self.assertEqual(blocked["providers"][0]["reason"], "ROLLBACK_COMPLETED")
@@ -255,8 +365,8 @@ console.log(JSON.stringify({{caller,filesystem,runtime}}));"""
         self.assertFalse(self.ownership.exists())
 
         self.claude = original
-        self.claude_home.mkdir(parents=True, exist_ok=True)
-        (self.claude_home / "HANG").write_text("1", encoding="utf-8")
+        self.claude_config.mkdir(parents=True, exist_ok=True)
+        (self.claude_config / "HANG").write_text("1", encoding="utf-8")
         timed_out = self.run_helper("--scope", "global", "--apply", expected=2, timeout_ms=50)
         self.assertEqual(timed_out["providers"][0]["reason"], "ROLLBACK_COMPLETED")
         self.assertIn("timed out", timed_out["providers"][0]["detail"])

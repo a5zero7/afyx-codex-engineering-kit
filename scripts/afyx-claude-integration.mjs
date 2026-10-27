@@ -107,38 +107,84 @@ function expectedEntry(options) {
 
 function claudePaths(options) {
   const scope = options.scope || 'global';
-  const claudeHome = resolve(options.claudeHome || resolve(homedir(), '.claude'));
+  const configured = options.claudeConfigDir ?? process.env.CLAUDE_CONFIG_DIR;
+  if (configured !== undefined && (!String(configured).trim() || !isAbsolute(String(configured)))) {
+    throw new Error('PROVIDER_CLAUDE_CONFIG_DIR_MUST_BE_ABSOLUTE');
+  }
+  const overridden = configured !== undefined;
+  const configDir = overridden ? resolve(String(configured)) : resolve(homedir(), '.claude');
+  const stateConfig = overridden
+    ? resolve(configDir, '.claude.json')
+    : resolve(homedir(), '.claude.json');
+  const workspace = resolve(options.workspaceRoot);
   if (scope === 'workspace') {
-    const base = resolve(options.workspaceRoot);
     return {
-      base,
-      config: resolve(base, '.mcp.json'),
-      ownership: resolve(base, '.claude', '.afyx-provider-ownership.json'),
+      base: workspace,
+      config: resolve(workspace, '.mcp.json'),
+      ownership: resolve(workspace, '.claude', '.afyx-provider-ownership.json'),
       nativeScope: 'project',
-      claudeHome,
+      configDir,
+      configDirOverridden: overridden,
+      stateConfig,
+      workspace,
     };
   }
   if (scope !== 'global') throw new Error(`PROVIDER_SCOPE_UNSUPPORTED: ${scope}`);
-  const base = dirname(claudeHome);
   return {
-    base,
-    config: resolve(base, '.claude.json'),
-    ownership: resolve(claudeHome, '.afyx-provider-ownership.json'),
+    base: overridden ? configDir : resolve(homedir()),
+    config: stateConfig,
+    ownership: resolve(configDir, '.afyx-provider-ownership.json'),
     nativeScope: 'user',
-    claudeHome,
+    configDir,
+    configDirOverridden: overridden,
+    stateConfig,
+    workspace,
   };
+}
+
+function mcpServers(document, file) {
+  if (document.mcpServers !== undefined && (!document.mcpServers || Array.isArray(document.mcpServers) || typeof document.mcpServers !== 'object')) {
+    throw new Error(`PROVIDER_INVALID_MCP_SERVERS: ${file}`);
+  }
+  return document.mcpServers || {};
+}
+
+function localEntry(stateDocument, stateConfig, workspace) {
+  if (stateDocument.projects === undefined) return null;
+  if (!stateDocument.projects || Array.isArray(stateDocument.projects) || typeof stateDocument.projects !== 'object') {
+    throw new Error(`PROVIDER_INVALID_PROJECTS: ${stateConfig}`);
+  }
+  for (const [projectPath, project] of Object.entries(stateDocument.projects)) {
+    if (normalizedPath(projectPath) !== normalizedPath(workspace)) continue;
+    if (!project || Array.isArray(project) || typeof project !== 'object') {
+      throw new Error(`PROVIDER_INVALID_PROJECT_ENTRY: ${stateConfig}`);
+    }
+    return mcpServers(project, stateConfig)[SERVER] ?? null;
+  }
+  return null;
 }
 
 export function inspectClaude(options) {
   const paths = claudePaths(options);
   assertSafePath(paths.base, paths.config);
   assertSafePath(paths.base, paths.ownership);
+  assertSafePath(paths.configDirOverridden ? paths.configDir : resolve(homedir()), paths.stateConfig);
   const document = parseObject(paths.config);
-  if (document.mcpServers !== undefined && (!document.mcpServers || Array.isArray(document.mcpServers) || typeof document.mcpServers !== 'object')) {
-    throw new Error(`PROVIDER_INVALID_MCP_SERVERS: ${paths.config}`);
-  }
+  const stateDocument = paths.stateConfig === paths.config ? document : parseObject(paths.stateConfig);
+  const projectConfig = resolve(paths.workspace, '.mcp.json');
+  const projectDocument = projectConfig === paths.config ? document : parseObject(projectConfig);
+  const targetServers = mcpServers(document, paths.config);
+  const user = mcpServers(stateDocument, paths.stateConfig)[SERVER] ?? null;
+  const project = mcpServers(projectDocument, projectConfig)[SERVER] ?? null;
+  const local = localEntry(stateDocument, paths.stateConfig, paths.workspace);
+  const effective = local ? { scope: 'local', entry: local }
+    : project ? { scope: 'project', entry: project }
+      : user ? { scope: 'user', entry: user } : null;
+  const precedence = { local: 0, project: 1, user: 2 };
+  const higherPrecedence = effective !== null
+    && precedence[effective.scope] < precedence[paths.nativeScope];
   const marker = parseObject(paths.ownership);
-  const actual = document.mcpServers?.[SERVER] ?? null;
+  const actual = targetServers[SERVER] ?? null;
   const expected = expectedEntry(options);
   const claim = marker.entries?.[SERVER] ?? null;
   const claimValid = claim?.provider === 'claude'
@@ -157,7 +203,10 @@ export function inspectClaude(options) {
       state = 'MCP_BLOCKED';
     }
   }
-  return { paths, document, marker, actual, expected, claim, claimValid, state, owned };
+  return {
+    paths, document, stateDocument, projectDocument, marker, actual, expected,
+    claim, claimValid, state, owned, effective, higherPrecedence,
+  };
 }
 
 function planForClaude(options, inspection) {
@@ -171,6 +220,7 @@ function planForClaude(options, inspection) {
     configPath: inspection.paths.config,
     ownershipPath: inspection.paths.ownership,
     state: inspection.state,
+    effectiveScope: inspection.effective?.scope ?? null,
     action,
   };
 }
@@ -191,6 +241,7 @@ function escapeCmdArgument(value) {
 
 function claudeRun(options, args) {
   const claude = options.claude;
+  const paths = claudePaths(options);
   const isWindowsCmd = process.platform === 'win32' && extname(claude).toLowerCase() === '.cmd';
   const command = isWindowsCmd ? (process.env.ComSpec || process.env.COMSPEC || 'cmd.exe') : claude;
   const commandArgs = isWindowsCmd
@@ -199,10 +250,13 @@ function claudeRun(options, args) {
   const configuredTimeout = Number(options.providerTimeoutMs);
   const timeout = Number.isSafeInteger(configuredTimeout) && configuredTimeout > 0
     ? Math.min(configuredTimeout, 60_000) : 15_000;
+  const env = { ...process.env };
+  if (paths.configDirOverridden) env.CLAUDE_CONFIG_DIR = paths.configDir;
+  else delete env.CLAUDE_CONFIG_DIR;
   return spawnSync(command, commandArgs, {
     cwd: resolve(options.workspaceRoot),
     encoding: 'utf8',
-    env: { ...process.env, CLAUDE_CONFIG_DIR: resolve(options.claudeHome) },
+    env,
     timeout,
     maxBuffer: 1024 * 1024,
     windowsHide: true,
@@ -223,6 +277,18 @@ function requireClaudeSuccess(result, action) {
   }
   if (result.status !== 0) {
     throw new Error(`${action} failed with exit code ${result.status}: ${diagnostic(result) || 'no diagnostic output'}`);
+  }
+}
+
+function reportedEffectiveEntry(result) {
+  try {
+    const value = JSON.parse(String(result.stdout || '').trim());
+    if (!value || Array.isArray(value) || typeof value !== 'object') return null;
+    if (!value.entry || Array.isArray(value.entry) || typeof value.entry !== 'object') return null;
+    if (typeof value.name !== 'string' || typeof value.scope !== 'string') return null;
+    return { name: value.name, scope: value.scope, entry: value.entry };
+  } catch {
+    return null;
   }
 }
 
@@ -257,14 +323,27 @@ function removeClaim(inspection) {
 }
 
 async function verifyClaude(options, inspection, result) {
-  if (!inspection.actual || !entryEquivalent(inspection.actual, inspection.expected)) {
-    return { ...result, status: 'BLOCKED', reason: 'MCP_CONFIGURATION_MISMATCH', detail: 'Claude Code MCP entry does not match the approved Afyx Graph runtime.' };
+  if (inspection.higherPrecedence) {
+    return { ...result, status: 'BLOCKED', reason: 'HIGHER_PRECEDENCE_ENTRY', detail: `Claude Code ${inspection.effective.scope}-scope entry overrides the managed ${inspection.paths.nativeScope}-scope entry.` };
+  }
+  if (!inspection.actual || !entryEquivalent(inspection.actual, inspection.expected)
+      || inspection.effective?.scope !== inspection.paths.nativeScope
+      || !entryEquivalent(inspection.effective?.entry, inspection.expected)) {
+    return { ...result, status: 'BLOCKED', reason: 'MCP_CONFIGURATION_MISMATCH', detail: 'The effective Claude Code MCP entry does not match the approved Afyx Graph runtime and scope.' };
   }
   const native = claudeRun(options, ['mcp', 'get', SERVER]);
   try {
     requireClaudeSuccess(native, 'Claude Code MCP verification');
   } catch (error) {
     return { ...result, status: 'BLOCKED', reason: 'CLAUDE_RUNTIME_UNVERIFIED', detail: error instanceof Error ? error.message : String(error) };
+  }
+  const reported = reportedEffectiveEntry(native);
+  if (!reported) {
+    return { ...result, status: 'UNVERIFIED', reason: 'CLAUDE_EFFECTIVE_ENTRY_UNPROVEN', detail: 'Claude Code CLI succeeded but did not provide structured effective-entry identity evidence.' };
+  }
+  if (reported.name !== SERVER || reported.scope !== inspection.paths.nativeScope
+      || !entryEquivalent(reported.entry, inspection.expected)) {
+    return { ...result, status: 'BLOCKED', reason: 'CLAUDE_EFFECTIVE_ENTRY_MISMATCH', detail: 'Claude Code CLI reported an effective entry that differs from the approved scope or runtime.' };
   }
   const probe = await probeMcp(resolve(options.node), resolve(options.entry));
   if (!probe.ok) return { ...result, status: 'BLOCKED', reason: 'MCP_HANDSHAKE_FAILED', detail: probe.detail };
@@ -282,6 +361,9 @@ export async function integrateClaude(options) {
   const result = { ...plan, status: 'DETECTED', changed: false, reason: '', detail: '' };
   if (inspection.state === 'MCP_BLOCKED') {
     return { ...result, status: 'BLOCKED', reason: 'FOREIGN_ENTRY', detail: 'Existing unowned afyx_graph entry was preserved.' };
+  }
+  if (inspection.higherPrecedence && !options.uninstall) {
+    return { ...result, status: 'BLOCKED', reason: 'HIGHER_PRECEDENCE_ENTRY', detail: `Claude Code ${inspection.effective.scope}-scope entry overrides the managed ${inspection.paths.nativeScope}-scope entry; no mutation was attempted.` };
   }
   if (options.operation === 'inspect') return { ...result, detail: 'Claude Code configuration was inspected without mutation.' };
   if (options.operation === 'verify') return verifyClaude(options, inspection, result);
@@ -316,6 +398,9 @@ export async function integrateClaude(options) {
       if (after.actual) throw new Error('Claude Code provider removal read-back failed.');
       if (!same(withoutAfyxServer(after.document), withoutAfyxServer(inspection.document))) {
         throw new Error('Claude Code CLI changed unrelated configuration during removal.');
+      }
+      if (after.effective) {
+        return { ...result, status: 'BLOCKED', changed: true, reason: 'EFFECTIVE_ENTRY_REMAINS', detail: `Owned ${inspection.paths.nativeScope}-scope entry was removed, but a ${after.effective.scope}-scope entry with the same name remains effective.` };
       }
       return { ...result, status: 'UNAVAILABLE', changed: true, detail: 'Owned Claude Code entry removed; unrelated configuration preserved.' };
     } catch (error) {

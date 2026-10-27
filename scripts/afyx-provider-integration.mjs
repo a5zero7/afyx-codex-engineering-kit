@@ -406,7 +406,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
     codexHome: argument('--codex-home', resolve(homedir(), '.codex')),
     geminiHome: argument('--gemini-home', resolve(homedir(), '.gemini')),
     claude: argument('--claude'),
-    claudeHome: argument('--claude-home', resolve(homedir(), '.claude')),
+    claudeConfigDir: argument('--claude-config-dir') || undefined,
     providerTimeoutMs: Number(argument('--provider-timeout-ms', '15000')),
     apply: process.argv.includes('--apply'),
     uninstall: process.argv.includes('--uninstall'),

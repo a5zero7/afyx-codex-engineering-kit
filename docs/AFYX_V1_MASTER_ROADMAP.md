@@ -210,8 +210,10 @@ to Claude `user`, `workspace` to Claude `project`). Discovery and planning remai
 read-only; caller assertions and executable presence remain `UNVERIFIED`; apply
 and uninstall require explicit consent and use bounded native CLI calls with
 configuration read-back, Afyx ownership markers, rollback, and foreign-entry
-preservation. Claude MCP `local` scope is intentionally not managed because it
-is project-specific private state in `~/.claude.json`. Authenticated CLI, bundled
+preservation. Native state remains in `~/.claude.json` by default and relocates
+to `<CLAUDE_CONFIG_DIR>/.claude.json` only under an explicit override; effective
+identity checks honor Claude's `local` → `project` → `user` precedence. Claude
+MCP `local` scope is inspected but intentionally not managed. Authenticated CLI, bundled
 VS Code CLI, IDE UI, and agent-mediated acceptance remain `NOT_RUN` pending an
 authorized host. TB6 must validate cross-provider degraded modes and applicable
 live acceptance without treating source implementation as provider acceptance.
