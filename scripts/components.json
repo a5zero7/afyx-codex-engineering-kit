@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
   "control_plane_version": 1,
+  "provider_adapter_contract": "ProviderAdapter/v1",
+  "provider_adapter_operations": "inspect;plan;apply;verify;uninstall",
   "default_provider": "codex",
   "supported_presets": "minimal;recommended;full;custom",
   "providers": [

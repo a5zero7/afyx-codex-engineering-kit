@@ -40,9 +40,11 @@ class ProviderIntegrationTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temporary.cleanup()
 
-    def run_helper(self, *extra: str, expected: int = 0) -> dict:
+    def run_helper(
+        self, *extra: str, expected: int = 0, providers: str = "antigravity"
+    ) -> dict:
         command = [
-            "node", str(HELPER), "--providers", "antigravity",
+            "node", str(HELPER), "--providers", providers,
             "--node", self.node, "--entry", str(self.entry),
             "--gemini-home", str(self.gemini), "--workspace-root", str(self.workspace),
             *extra,
@@ -50,6 +52,132 @@ class ProviderIntegrationTests(unittest.TestCase):
         result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
         self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
         return json.loads(result.stdout)
+
+    def test_versioned_adapter_contract_exposes_only_accepted_providers(self) -> None:
+        script = f"""import {{PROVIDER_ADAPTER_CONTRACT,providerAdapters}} from {json.dumps(HELPER.as_uri())};
+const methods=['inspect','plan','apply','verify','uninstall'];
+console.log(JSON.stringify({{
+  contract:PROVIDER_ADAPTER_CONTRACT,
+  providers:Object.keys(providerAdapters),
+  methods:Object.fromEntries(Object.entries(providerAdapters).map(([id,adapter])=>[id,methods.every((name)=>typeof adapter[name]==='function')])),
+  scopes:Object.fromEntries(Object.entries(providerAdapters).map(([id,adapter])=>[id,adapter.capabilities.scopes])),
+}}));"""
+        result = subprocess.run(
+            ["node", "--input-type=module", "-e", script],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["contract"]["name"], "ProviderAdapter")
+        self.assertEqual(payload["contract"]["version"], 1)
+        self.assertEqual(
+            payload["contract"]["operations"],
+            ["inspect", "plan", "apply", "verify", "uninstall"],
+        )
+        self.assertEqual(payload["providers"], ["codex", "antigravity"])
+        self.assertEqual(payload["methods"], {"codex": True, "antigravity": True})
+        self.assertEqual(payload["scopes"], {"codex": ["global"], "antigravity": ["global", "workspace"]})
+
+    def test_codex_plan_is_side_effect_free_and_unknown_provider_fails_closed(self) -> None:
+        codex_home = self.base / "codex-plan"
+        unknown_home = self.base / "unknown-plan"
+        if os.name == "nt":
+            fake_codex = self.base / "fake-codex.cmd"
+            fake_codex.write_text(
+                "@echo MCP server afyx_graph not found 1>&2\r\n@exit /b 1\r\n",
+                encoding="utf-8",
+            )
+        else:
+            fake_codex = self.base / "fake-codex"
+            fake_codex.write_text(
+                "#!/bin/sh\necho 'MCP server afyx_graph not found' >&2\nexit 1\n",
+                encoding="utf-8",
+            )
+            fake_codex.chmod(0o755)
+        script = f"""import {{providerAdapters,runProviderLifecycle}} from {json.dumps(HELPER.as_uri())};
+const options={{scope:'global',node:process.execPath,entry:{json.dumps(str(self.entry))},codex:{json.dumps(str(fake_codex))},codexHome:{json.dumps(str(codex_home))},geminiHome:{json.dumps(str(self.gemini))},workspaceRoot:{json.dumps(str(self.workspace))}}};
+const planned=await providerAdapters.codex.plan(options);
+const unknown=await runProviderLifecycle({{...options,providers:['claude'],codexHome:{json.dumps(str(unknown_home))}}});
+console.log(JSON.stringify({{planned,unknown}}));"""
+        result = subprocess.run(
+            ["node", "--input-type=module", "-e", script],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["planned"]["status"], "DETECTED")
+        self.assertEqual(payload["planned"]["reason"], "MCP_ENTRY_NOT_FOUND")
+        self.assertFalse(codex_home.exists())
+        self.assertEqual(payload["unknown"]["status"], "BLOCKED")
+        self.assertEqual(payload["unknown"]["providers"][0]["status"], "BLOCKED")
+        self.assertEqual(payload["unknown"]["providers"][0]["reason"], "UNKNOWN_PROVIDER")
+        self.assertFalse(unknown_home.exists())
+
+    def assert_unknown_provider_prevalidation_preserves_configuration(
+        self, providers: str
+    ) -> None:
+        blocked = self.run_helper(
+            "--scope", "global", "--apply", expected=2, providers=providers
+        )
+        self.assertEqual(blocked["status"], "BLOCKED")
+        by_provider = {item["provider"]: item for item in blocked["providers"]}
+        self.assertEqual(by_provider["claude"]["reason"], "UNKNOWN_PROVIDER")
+        self.assertFalse(by_provider["claude"]["changed"])
+        self.assertEqual(
+            by_provider["antigravity"]["reason"], "PREVALIDATION_FAILED"
+        )
+        self.assertFalse(by_provider["antigravity"]["changed"])
+        self.assertFalse(self.gemini.exists())
+
+    def test_unknown_provider_after_accepted_provider_blocks_before_apply(self) -> None:
+        self.assert_unknown_provider_prevalidation_preserves_configuration(
+            "antigravity,claude"
+        )
+
+    def test_unknown_provider_before_accepted_provider_blocks_before_apply(self) -> None:
+        self.assert_unknown_provider_prevalidation_preserves_configuration(
+            "claude,antigravity"
+        )
+
+    def test_unsupported_scope_blocks_all_providers_before_apply(self) -> None:
+        blocked = self.run_helper(
+            "--scope",
+            "workspace",
+            "--apply",
+            expected=2,
+            providers="antigravity,codex",
+        )
+        self.assertEqual(blocked["status"], "BLOCKED")
+        by_provider = {item["provider"]: item for item in blocked["providers"]}
+        self.assertEqual(
+            by_provider["antigravity"]["reason"], "PREVALIDATION_FAILED"
+        )
+        self.assertEqual(by_provider["codex"]["status"], "INCOMPATIBLE")
+        self.assertEqual(by_provider["codex"]["reason"], "SCOPE_UNSUPPORTED")
+        self.assertFalse(self.workspace.exists())
+
+    def test_unknown_provider_blocks_owned_uninstall_without_mutation(self) -> None:
+        self.run_helper("--scope", "global", "--apply")
+        config = self.gemini / "config/mcp_config.json"
+        ownership = Path(f"{config}.afyx-ownership.json")
+        config_before = config.read_bytes()
+        ownership_before = ownership.read_bytes()
+
+        blocked = self.run_helper(
+            "--scope",
+            "global",
+            "--apply",
+            "--uninstall",
+            expected=2,
+            providers="antigravity,claude",
+        )
+        self.assertEqual(blocked["status"], "BLOCKED")
+        self.assertEqual(config.read_bytes(), config_before)
+        self.assertEqual(ownership.read_bytes(), ownership_before)
 
     def test_global_plan_is_side_effect_free_then_apply_is_idempotent(self) -> None:
         planned = self.run_helper("--scope", "global")

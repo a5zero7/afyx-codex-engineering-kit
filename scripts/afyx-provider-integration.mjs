@@ -18,6 +18,12 @@ import { integrate as integrateCodex, probeMcp } from './afyx-mcp-integration.mj
 
 const SERVER = 'afyx_graph';
 
+export const PROVIDER_ADAPTER_CONTRACT = Object.freeze({
+  name: 'ProviderAdapter',
+  version: 1,
+  operations: Object.freeze(['inspect', 'plan', 'apply', 'verify', 'uninstall']),
+});
+
 function argument(name, fallback = '') {
   const index = process.argv.indexOf(name);
   return index >= 0 ? process.argv[index + 1] : fallback;
@@ -247,27 +253,111 @@ export async function integrateAntigravity(options) {
   return result;
 }
 
+async function integrateCodexAdapter(options) {
+  if (options.scope !== 'global') {
+    return {
+      provider: 'codex', status: 'INCOMPATIBLE', changed: false,
+      reason: 'SCOPE_UNSUPPORTED',
+      detail: 'Codex adapter currently supports its user-scoped native CLI configuration.',
+    };
+  }
+  const codex = await integrateCodex({
+    node: resolve(options.node), entry: resolve(options.entry), codex: options.codex,
+    codexHome: resolve(options.codexHome), apply: Boolean(options.apply), uninstall: Boolean(options.uninstall),
+  });
+  return {
+    provider: 'codex',
+    status: codex.mcp === 'MCP_REACHABLE' ? 'READY'
+      : codex.mcp === 'MCP_NOT_CONFIGURED' ? (options.uninstall ? 'UNAVAILABLE' : 'DETECTED')
+        : 'BLOCKED',
+    ...codex,
+  };
+}
+
+function defineProviderAdapter(provider, scopes, execute) {
+  const invoke = (operation, options) => {
+    const lifecycle = {
+      ...options,
+      apply: operation === 'apply' || (operation === 'uninstall' && Boolean(options.apply)),
+      uninstall: operation === 'uninstall',
+    };
+    return execute(lifecycle);
+  };
+  return Object.freeze({
+    provider,
+    contract: PROVIDER_ADAPTER_CONTRACT,
+    capabilities: Object.freeze({
+      scopes: Object.freeze([...scopes]),
+      operations: PROVIDER_ADAPTER_CONTRACT.operations,
+      configurationPolicy: 'merge-afyx-owned-entries-only',
+    }),
+    inspect: (options) => invoke('inspect', options),
+    plan: (options) => invoke('plan', options),
+    apply: (options) => invoke('apply', options),
+    verify: (options) => invoke('verify', options),
+    uninstall: (options) => invoke('uninstall', options),
+  });
+}
+
+export const providerAdapters = Object.freeze({
+  codex: defineProviderAdapter('codex', ['global'], integrateCodexAdapter),
+  antigravity: defineProviderAdapter('antigravity', ['global', 'workspace'], integrateAntigravity),
+});
+
+export function getProviderAdapter(provider) {
+  return Object.hasOwn(providerAdapters, provider) ? providerAdapters[provider] : null;
+}
+
+function unsupportedScopeResult(provider, scope) {
+  return {
+    provider, status: 'INCOMPATIBLE', changed: false, reason: 'SCOPE_UNSUPPORTED',
+    detail: provider === 'codex'
+      ? 'Codex adapter currently supports its user-scoped native CLI configuration.'
+      : `Provider ${provider} does not support the requested ${scope} scope.`,
+  };
+}
+
+function prevalidateProviderSelection(selected, scope) {
+  return selected.map((provider) => {
+    const adapter = getProviderAdapter(provider);
+    if (!adapter) {
+      return {
+        provider,
+        adapter: null,
+        failure: { provider, status: 'BLOCKED', changed: false, reason: 'UNKNOWN_PROVIDER', detail: `Unknown provider: ${provider}` },
+      };
+    }
+    if (!adapter.capabilities.scopes.includes(scope)) {
+      return { provider, adapter, failure: unsupportedScopeResult(provider, scope) };
+    }
+    return { provider, adapter, failure: null };
+  });
+}
+
+function prevalidationBlockedResult(provider) {
+  return {
+    provider, status: 'BLOCKED', changed: false, reason: 'PREVALIDATION_FAILED',
+    detail: 'No provider mutation was executed because the selected provider set failed prevalidation.',
+  };
+}
+
 export async function runProviderLifecycle(options) {
   const selected = [...new Set(options.providers?.length ? options.providers : ['codex'])];
+  const selection = prevalidateProviderSelection(selected, options.scope);
+  if (options.apply && selection.some((item) => item.failure)) {
+    return {
+      providers: selection.map((item) => item.failure ?? prevalidationBlockedResult(item.provider)),
+      status: 'BLOCKED',
+    };
+  }
   const results = [];
-  for (const provider of selected) {
-    if (provider === 'codex') {
-      if (options.scope !== 'global') {
-        results.push({ provider, status: 'INCOMPATIBLE', changed: false, reason: 'SCOPE_UNSUPPORTED', detail: 'Codex adapter currently supports its user-scoped native CLI configuration.' });
-        continue;
-      }
-      const codex = await integrateCodex({
-        node: resolve(options.node), entry: resolve(options.entry), codex: options.codex,
-        codexHome: resolve(options.codexHome), apply: Boolean(options.apply), uninstall: Boolean(options.uninstall),
-      });
-      results.push({ provider, status: codex.mcp === 'MCP_REACHABLE' ? 'READY' : codex.mcp === 'MCP_NOT_CONFIGURED' ? (options.uninstall ? 'UNAVAILABLE' : 'DETECTED') : 'BLOCKED', ...codex });
+  for (const item of selection) {
+    if (item.failure) {
+      results.push(item.failure);
       continue;
     }
-    if (provider === 'antigravity') {
-      results.push(await integrateAntigravity(options));
-      continue;
-    }
-    results.push({ provider, status: 'INCOMPATIBLE', changed: false, reason: 'UNKNOWN_PROVIDER', detail: `Unknown provider: ${provider}` });
+    const operation = options.uninstall ? 'uninstall' : options.apply ? 'apply' : 'plan';
+    results.push(await item.adapter[operation](options));
   }
   return {
     providers: results,

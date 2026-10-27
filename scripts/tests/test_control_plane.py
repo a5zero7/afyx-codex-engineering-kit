@@ -126,6 +126,11 @@ class ControlPlaneContractTests(unittest.TestCase):
     def test_registry_presets_and_ownership_boundaries(self) -> None:
         contract = json.loads((ROOT / "scripts/components.json").read_text(encoding="utf-8"))
         self.assertEqual(contract["default_provider"], "codex")
+        self.assertEqual(contract["provider_adapter_contract"], "ProviderAdapter/v1")
+        self.assertEqual(
+            contract["provider_adapter_operations"],
+            "inspect;plan;apply;verify;uninstall",
+        )
         self.assertEqual([item["provider"] for item in contract["providers"]], ["codex", "antigravity"])
         self.assertEqual(contract["providers"][0]["configuration_policy"], "merge-afyx-owned-entries-only")
         self.assertEqual(contract["providers"][1]["mcp_scopes"], "global;workspace")
