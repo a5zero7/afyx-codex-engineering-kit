@@ -98,7 +98,7 @@ function malformedDiscovery(definition, diagnostic) {
     contract: PROVIDER_CAPABILITY_CONTRACT,
     provider: { id: String(definition?.provider || 'unknown'), name: String(definition?.name || 'Unknown') },
     status: 'BLOCKED',
-    host: { commands: [], detected: null, command: null, version: null, status: 'BLOCKED', evidence: 'NONE' },
+    host: { commands: [], detected: null, command: null, version: null, status: 'BLOCKED', evidence: 'NONE', runtimeVerified: false },
     surfaces: [],
     scopes: { lifecycle: [], mcp: [], skills: [] },
     ownership: { class: 'USER', configurationPolicy: 'observe-only' },
@@ -122,16 +122,16 @@ function hostObservation(value) {
 
 function capabilityRecord(id, declared, host) {
   if (id === 'surface:cli' && declared) {
-    if (host.detected === false) return { id, status: 'BLOCKED', runtimeVerified: false, evidence: host.evidence };
-    if (host.detected === null) return { id, status: 'UNVERIFIED', runtimeVerified: false, evidence: 'DECLARED' };
-    return { id, status: 'SUPPORTED', runtimeVerified: true, evidence: host.evidence };
+    if (host.detected === false) return { id, declared: true, status: 'BLOCKED', runtimeVerified: false, evidence: host.evidence };
+    if (host.detected === null) return { id, declared: true, status: 'UNVERIFIED', runtimeVerified: false, evidence: 'DECLARED' };
+    return { id, declared: true, status: 'UNVERIFIED', runtimeVerified: false, evidence: host.evidence };
   }
   if (id === 'surface:ide' && declared) {
-    return { id, status: 'UNVERIFIED', runtimeVerified: false, evidence: 'DECLARED' };
+    return { id, declared: true, status: 'UNVERIFIED', runtimeVerified: false, evidence: 'DECLARED' };
   }
   return declared
-    ? { id, status: 'SUPPORTED', runtimeVerified: false, evidence: 'DECLARED' }
-    : { id, status: 'UNSUPPORTED', runtimeVerified: false, evidence: 'REGISTRY' };
+    ? { id, declared: true, status: 'SUPPORTED', runtimeVerified: false, evidence: 'DECLARED' }
+    : { id, declared: false, status: 'UNSUPPORTED', runtimeVerified: false, evidence: 'REGISTRY' };
 }
 
 export function discoverProviderCapabilities(definition, adapterCapabilities, options = {}) {
@@ -159,12 +159,12 @@ export function discoverProviderCapabilities(definition, adapterCapabilities, op
       'lifecycle',
     ]);
     const capabilities = KNOWN_CAPABILITIES.map((id) => capabilityRecord(id, declared.has(id), host));
-    const hostStatus = host.detected === true ? 'SUPPORTED' : host.detected === false ? 'BLOCKED' : 'UNVERIFIED';
+    const hostStatus = host.detected === false ? 'BLOCKED' : 'UNVERIFIED';
     return freeze({
       contract: PROVIDER_CAPABILITY_CONTRACT,
       provider: { id: provider, name },
       status: hostStatus,
-      host: { commands, ...host, status: hostStatus },
+      host: { commands, ...host, status: hostStatus, runtimeVerified: false },
       surfaces,
       scopes: { lifecycle: lifecycleScopes, mcp: mcpScopes, skills: skillScopes },
       ownership: { class: ownershipClass, configurationPolicy },
@@ -206,11 +206,17 @@ export function negotiateProviderCapabilities(discovery, requirements) {
     const available = new Map(discovery.capabilities.map((item) => [item.id, item]));
     const evaluated = requested.map((requirement) => {
       const capability = available.get(requirement.capability);
-      let status = capability?.status ?? 'BLOCKED';
+      let status = 'BLOCKED';
       let reason = capability ? '' : 'UNKNOWN_CAPABILITY';
-      if (capability?.status === 'SUPPORTED' && requirement.verification === 'RUNTIME' && !capability.runtimeVerified) {
-        status = 'UNVERIFIED';
-        reason = 'RUNTIME_EVIDENCE_ABSENT';
+      if (capability) {
+        if (!capability.declared) status = 'UNSUPPORTED';
+        else if (requirement.verification === 'DECLARED') status = 'SUPPORTED';
+        else if (capability.runtimeVerified) status = 'SUPPORTED';
+        else if (capability.status === 'BLOCKED') status = 'BLOCKED';
+        else {
+          status = 'UNVERIFIED';
+          reason = 'RUNTIME_EVIDENCE_ABSENT';
+        }
       }
       return { ...requirement, status, ...(reason ? { reason } : {}) };
     });

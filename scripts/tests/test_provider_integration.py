@@ -114,12 +114,36 @@ console.log(JSON.stringify({{first,declared,runtime,deterministic:JSON.stringify
         self.assertFalse(discovery["mutationAuthorized"])
         self.assertEqual(by_capability["mcp"]["status"], "SUPPORTED")
         self.assertFalse(by_capability["mcp"]["runtimeVerified"])
+        self.assertEqual(by_capability["surface:cli"]["status"], "UNVERIFIED")
+        self.assertFalse(by_capability["surface:cli"]["runtimeVerified"])
+        self.assertTrue(by_capability["surface:cli"]["declared"])
         self.assertEqual(by_capability["surface:ide"]["status"], "UNVERIFIED")
         self.assertEqual(by_capability["scope:ide-global"]["status"], "SUPPORTED")
         self.assertEqual(payload["declared"]["status"], "SUPPORTED")
         self.assertEqual(payload["runtime"]["status"], "UNVERIFIED")
         self.assertFalse(payload["declared"]["mutationAuthorized"])
         self.assertEqual(config.read_bytes(), before)
+
+    def test_existing_host_path_is_presence_evidence_not_runtime_verification(self) -> None:
+        script = f"""import {{providerAdapters}} from {json.dumps(HELPER.as_uri())};
+const discovery=providerAdapters.codex.discover({{codex:process.execPath}});
+const cli=discovery.capabilities.find((item)=>item.id==='surface:cli');
+const negotiation=providerAdapters.codex.negotiate([{{capability:'surface:cli',verification:'RUNTIME'}}],{{codex:process.execPath}});
+console.log(JSON.stringify({{discovery,cli,negotiation}}));"""
+        result = subprocess.run(
+            ["node", "--input-type=module", "-e", script], cwd=ROOT,
+            capture_output=True, text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertTrue(payload["discovery"]["host"]["detected"])
+        self.assertEqual(payload["discovery"]["host"]["evidence"], "FILESYSTEM")
+        self.assertEqual(payload["discovery"]["host"]["status"], "UNVERIFIED")
+        self.assertFalse(payload["discovery"]["host"]["runtimeVerified"])
+        self.assertEqual(payload["cli"]["status"], "UNVERIFIED")
+        self.assertFalse(payload["cli"]["runtimeVerified"])
+        self.assertEqual(payload["negotiation"]["status"], "UNVERIFIED")
+        self.assertFalse(payload["negotiation"]["mutationAuthorized"])
 
     def test_capability_negotiation_fails_closed_for_missing_unsupported_and_unknown(self) -> None:
         missing_codex = self.base / "missing-codex"
