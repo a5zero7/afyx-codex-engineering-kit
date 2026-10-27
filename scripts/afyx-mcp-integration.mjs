@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /** Consent-safe Codex MCP registration through the native `codex mcp` CLI. */
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { basename, dirname, extname, join, normalize, resolve } from 'node:path';
+import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { basename, dirname, extname, isAbsolute, join, normalize, relative, resolve } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -13,6 +13,26 @@ function argument(name, fallback = '') {
 
 function normalized(value) {
   return normalize(String(value || '')).toLowerCase();
+}
+
+function inside(base, candidate) {
+  const rel = relative(resolve(base), resolve(candidate));
+  return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
+}
+
+function assertSafePath(base, candidate) {
+  if (!inside(base, candidate)) throw new McpIntegrationError('CODEX_PATH_UNSAFE', `Path outside Codex configuration boundary: ${candidate}`);
+  const boundary = resolve(base);
+  let cursor = resolve(candidate);
+  for (;;) {
+    if (existsSync(cursor) && lstatSync(cursor).isSymbolicLink()) {
+      throw new McpIntegrationError('CODEX_PATH_UNSAFE', `Symlinked Codex configuration path was refused: ${cursor}`);
+    }
+    if (cursor === boundary) break;
+    const parent = dirname(cursor);
+    if (parent === cursor) break;
+    cursor = parent;
+  }
 }
 
 export function classifyEntry(existing, expected) {
@@ -53,17 +73,21 @@ function escapeCmdArgument(value) {
   return escaped.replace(cmdMetaCharacters, '^$1');
 }
 
-function codexRun(codex, codexHome, args) {
+function codexRun(codex, codexHome, args, configuredTimeout) {
   const isWindowsCmd = process.platform === 'win32' && extname(codex).toLowerCase() === '.cmd';
   const command = isWindowsCmd ? (process.env.ComSpec || process.env.COMSPEC || 'cmd.exe') : codex;
   const commandArgs = isWindowsCmd
     ? ['/d', '/s', '/c', `"${[escapeCmdCommand(codex), ...args.map(escapeCmdArgument)].join(' ')}"`]
     : args;
+  const requested = Number(configuredTimeout);
+  const timeout = Number.isSafeInteger(requested) && requested > 0 ? Math.min(requested, 60_000) : 15_000;
   return spawnSync(command, commandArgs, {
     encoding: 'utf8',
     env: { ...process.env, CODEX_HOME: codexHome },
     windowsHide: true,
     windowsVerbatimArguments: isWindowsCmd,
+    timeout,
+    maxBuffer: 1024 * 1024,
   });
 }
 
@@ -72,6 +96,9 @@ function commandDiagnostic(result) {
 }
 
 function requireCodexSuccess(result, action) {
+  if (result.error?.code === 'ETIMEDOUT' || result.signal === 'SIGTERM') {
+    throw new McpIntegrationError('CODEX_TIMEOUT', `${action} timed out within the bounded provider execution window.`);
+  }
   if (result.error || result.status === null) {
     throw new McpIntegrationError(
       'CODEX_LAUNCH_FAILED',
@@ -87,8 +114,11 @@ function requireCodexSuccess(result, action) {
   return result;
 }
 
-function readExisting(codex, codexHome) {
-  const result = codexRun(codex, codexHome, ['mcp', 'get', 'afyx_graph', '--json']);
+function readExisting(codex, codexHome, providerTimeoutMs) {
+  const result = codexRun(codex, codexHome, ['mcp', 'get', 'afyx_graph', '--json'], providerTimeoutMs);
+  if (result.error?.code === 'ETIMEDOUT' || result.signal === 'SIGTERM') {
+    throw new McpIntegrationError('CODEX_TIMEOUT', 'Codex MCP inspection timed out within the bounded provider execution window.');
+  }
   if (result.error || result.status === null) {
     throw new McpIntegrationError(
       'CODEX_LAUNCH_FAILED',
@@ -114,24 +144,46 @@ function readExisting(codex, codexHome) {
 
 function backupConfig(codexHome) {
   const config = resolve(codexHome, 'config.toml');
-  if (!existsSync(config)) return { config, backup: null, existed: false };
+  if (!existsSync(config)) return { config, backup: null, existed: false, before: null, expected: null };
   const backup = `${config}.afyx-backup`;
+  const before = readFileSync(config);
   copyFileSync(config, backup);
-  return { config, backup, existed: true };
+  return { config, backup, existed: true, before, expected: before };
 }
 
 function restoreBackup(backup) {
-  if (!backup) return;
+  if (!backup || !sameBytes(fileBytes(backup.config), backup.expected)) return false;
   if (backup.existed) {
     copyFileSync(backup.backup, backup.config);
     rmSync(backup.backup, { force: true });
   } else {
     rmSync(backup.config, { force: true });
   }
+  return sameBytes(fileBytes(backup.config), backup.before);
 }
 
 function removeBackup(backup) {
   if (backup?.backup) rmSync(backup.backup, { force: true });
+}
+
+function fileBytes(file) {
+  return existsSync(file) ? readFileSync(file) : null;
+}
+
+function sameBytes(left, right) {
+  if (left === null || right === null) return left === right;
+  return left.equals(right);
+}
+
+function markBackupState(backup) {
+  if (backup) backup.expected = fileBytes(backup.config);
+}
+
+function restoreFileGuarded(file, before, expected) {
+  if (!sameBytes(fileBytes(file), expected)) return false;
+  if (before === null) rmSync(file, { force: true });
+  else writeFileSync(file, before);
+  return sameBytes(fileBytes(file), before);
 }
 
 function ownershipPath(codexHome) {
@@ -241,6 +293,15 @@ export async function integrate(options) {
     reason: '',
     detail: '',
   };
+  try {
+    const codexHome = resolve(options.codexHome);
+    assertSafePath(codexHome, resolve(codexHome, 'config.toml'));
+    assertSafePath(codexHome, ownershipPath(codexHome));
+  } catch (error) {
+    result.reason = error instanceof McpIntegrationError ? error.reason : 'CODEX_PATH_UNSAFE';
+    result.detail = error instanceof Error ? error.message : String(error);
+    return result;
+  }
   if (result.cli !== 'CLI_REACHABLE') {
     result.reason = 'GRAPH_RUNTIME_UNAVAILABLE';
     result.detail = 'Installed entry point or Node.js executable is unavailable.';
@@ -257,7 +318,7 @@ export async function integrate(options) {
   if (options.apply) mkdirSync(options.codexHome, { recursive: true });
   let inspection;
   try {
-    inspection = readExisting(options.codex, options.codexHome);
+    inspection = readExisting(options.codex, options.codexHome, options.providerTimeoutMs);
   } catch (error) {
     result.reason = error instanceof McpIntegrationError ? error.reason : 'MCP_INSPECTION_FAILED';
     result.detail = `Graph runtime is installed; MCP integration failed: ${error instanceof Error ? error.message : String(error)}`;
@@ -299,28 +360,30 @@ export async function integrate(options) {
       return result;
     }
     const backup = backupConfig(options.codexHome);
-    const markerBackup = existsSync(ownership.file) ? `${ownership.file}.afyx-backup` : null;
-    if (markerBackup) copyFileSync(ownership.file, markerBackup);
+    const markerBefore = fileBytes(ownership.file);
+    let markerExpected = markerBefore;
     try {
-      requireCodexSuccess(codexRun(options.codex, options.codexHome, ['mcp', 'remove', 'afyx_graph']), 'Codex MCP removal');
-      if (readExisting(options.codex, options.codexHome).existing) throw new Error('Codex MCP removal did not persist.');
+      requireCodexSuccess(codexRun(options.codex, options.codexHome, ['mcp', 'remove', 'afyx_graph'], options.providerTimeoutMs), 'Codex MCP removal');
+      markBackupState(backup);
+      if (readExisting(options.codex, options.codexHome, options.providerTimeoutMs).existing) throw new Error('Codex MCP removal did not persist.');
       delete ownership.document.entries.afyx_graph;
       if (Object.keys(ownership.document.entries).length) writeOwnership(ownership);
       else rmSync(ownership.file, { force: true });
+      markerExpected = fileBytes(ownership.file);
       removeBackup(backup);
-      if (markerBackup) rmSync(markerBackup, { force: true });
       result.mcp = 'MCP_NOT_CONFIGURED';
       result.changed = true;
       result.reason = '';
       result.detail = 'Owned Codex MCP entry removed; unrelated configuration preserved.';
       return result;
     } catch (error) {
-      restoreBackup(backup);
-      if (markerBackup) { copyFileSync(markerBackup, ownership.file); rmSync(markerBackup, { force: true }); }
-      else rmSync(ownership.file, { force: true });
+      const configRestored = restoreBackup(backup);
+      const markerRestored = restoreFileGuarded(ownership.file, markerBefore, markerExpected);
+      const restored = configRestored && markerRestored;
       result.mcp = 'MCP_BLOCKED';
-      result.reason = 'MCP_REMOVAL_FAILED';
-      result.detail = `Codex MCP removal failed and configuration was restored: ${error instanceof Error ? error.message : String(error)}`;
+      result.changed = !restored;
+      result.reason = restored ? 'MCP_REMOVAL_FAILED' : 'ROLLBACK_INCOMPLETE';
+      result.detail = `Codex MCP removal failed${restored ? ' and configuration was restored' : '; exact-byte rollback was refused because provider state changed outside the last known Afyx mutation'}: ${error instanceof Error ? error.message : String(error)}`;
       return result;
     }
   }
@@ -338,14 +401,17 @@ export async function integrate(options) {
     }
     const backup = backupConfig(options.codexHome);
     const ownershipBefore = existsSync(ownership.file) ? readFileSync(ownership.file) : null;
+    let ownershipExpected = ownershipBefore;
     try {
       if (state === 'MCP_STALE_OWNED') {
-        const removed = codexRun(options.codex, options.codexHome, ['mcp', 'remove', 'afyx_graph']);
+        const removed = codexRun(options.codex, options.codexHome, ['mcp', 'remove', 'afyx_graph'], options.providerTimeoutMs);
         requireCodexSuccess(removed, 'Codex MCP removal');
+        markBackupState(backup);
       }
-      const added = codexRun(options.codex, options.codexHome, ['mcp', 'add', 'afyx_graph', '--', options.node, options.entry, 'serve', '--mcp']);
+      const added = codexRun(options.codex, options.codexHome, ['mcp', 'add', 'afyx_graph', '--', options.node, options.entry, 'serve', '--mcp'], options.providerTimeoutMs);
       requireCodexSuccess(added, 'Codex MCP registration');
-      inspection = readExisting(options.codex, options.codexHome);
+      markBackupState(backup);
+      inspection = readExisting(options.codex, options.codexHome, options.providerTimeoutMs);
       existing = inspection.existing;
       state = classifyEntry(existing, options);
       if (state !== 'MCP_CONFIGURED') throw new Error('Codex MCP registration did not persist the expected direct-Node entry.');
@@ -353,14 +419,18 @@ export async function integrate(options) {
       result.reason = '';
       ownership.document.entries.afyx_graph = { provider: 'codex', expected: { node: options.node, entry: options.entry } };
       writeOwnership(ownership);
+      ownershipExpected = fileBytes(ownership.file);
       removeBackup(backup);
     } catch (error) {
-      restoreBackup(backup);
-      if (ownershipBefore === null) rmSync(ownership.file, { force: true });
-      else writeFileSync(ownership.file, ownershipBefore);
+      const configRestored = restoreBackup(backup);
+      const ownershipRestored = restoreFileGuarded(ownership.file, ownershipBefore, ownershipExpected);
+      const restored = configRestored && ownershipRestored;
       result.mcp = 'MCP_BLOCKED';
-      result.reason = error instanceof McpIntegrationError ? error.reason : 'MCP_REGISTRATION_FAILED';
-      result.detail = `Graph runtime is installed; MCP registration failed and configuration was restored: ${error instanceof Error ? error.message : String(error)}`;
+      result.changed = !restored;
+      result.reason = restored
+        ? (error instanceof McpIntegrationError ? error.reason : 'MCP_REGISTRATION_FAILED')
+        : 'ROLLBACK_INCOMPLETE';
+      result.detail = `Graph runtime is installed; MCP registration failed${restored ? ' and configuration was restored' : '; exact-byte rollback was refused because provider state changed outside the last known Afyx mutation'}: ${error instanceof Error ? error.message : String(error)}`;
       return result;
     }
   }
@@ -377,6 +447,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
     entry: resolve(argument('--entry')),
     codex: argument('--codex') ? resolve(argument('--codex')) : '',
     codexHome: resolve(argument('--codex-home')),
+    providerTimeoutMs: Number(argument('--provider-timeout-ms', '15000')),
     apply: process.argv.includes('--apply'),
     uninstall: process.argv.includes('--uninstall'),
   };
