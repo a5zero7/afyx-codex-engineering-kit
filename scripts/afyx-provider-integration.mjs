@@ -308,17 +308,56 @@ export function getProviderAdapter(provider) {
   return Object.hasOwn(providerAdapters, provider) ? providerAdapters[provider] : null;
 }
 
-export async function runProviderLifecycle(options) {
-  const selected = [...new Set(options.providers?.length ? options.providers : ['codex'])];
-  const results = [];
-  for (const provider of selected) {
+function unsupportedScopeResult(provider, scope) {
+  return {
+    provider, status: 'INCOMPATIBLE', changed: false, reason: 'SCOPE_UNSUPPORTED',
+    detail: provider === 'codex'
+      ? 'Codex adapter currently supports its user-scoped native CLI configuration.'
+      : `Provider ${provider} does not support the requested ${scope} scope.`,
+  };
+}
+
+function prevalidateProviderSelection(selected, scope) {
+  return selected.map((provider) => {
     const adapter = getProviderAdapter(provider);
     if (!adapter) {
-      results.push({ provider, status: 'BLOCKED', changed: false, reason: 'UNKNOWN_PROVIDER', detail: `Unknown provider: ${provider}` });
+      return {
+        provider,
+        adapter: null,
+        failure: { provider, status: 'BLOCKED', changed: false, reason: 'UNKNOWN_PROVIDER', detail: `Unknown provider: ${provider}` },
+      };
+    }
+    if (!adapter.capabilities.scopes.includes(scope)) {
+      return { provider, adapter, failure: unsupportedScopeResult(provider, scope) };
+    }
+    return { provider, adapter, failure: null };
+  });
+}
+
+function prevalidationBlockedResult(provider) {
+  return {
+    provider, status: 'BLOCKED', changed: false, reason: 'PREVALIDATION_FAILED',
+    detail: 'No provider mutation was executed because the selected provider set failed prevalidation.',
+  };
+}
+
+export async function runProviderLifecycle(options) {
+  const selected = [...new Set(options.providers?.length ? options.providers : ['codex'])];
+  const selection = prevalidateProviderSelection(selected, options.scope);
+  if (options.apply && selection.some((item) => item.failure)) {
+    return {
+      providers: selection.map((item) => item.failure ?? prevalidationBlockedResult(item.provider)),
+      status: 'BLOCKED',
+    };
+  }
+  const results = [];
+  for (const item of selection) {
+    if (item.failure) {
+      results.push(item.failure);
       continue;
     }
     const operation = options.uninstall ? 'uninstall' : options.apply ? 'apply' : 'plan';
-    results.push(await adapter[operation](options));
+    results.push(await item.adapter[operation](options));
   }
   return {
     providers: results,

@@ -40,9 +40,11 @@ class ProviderIntegrationTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temporary.cleanup()
 
-    def run_helper(self, *extra: str, expected: int = 0) -> dict:
+    def run_helper(
+        self, *extra: str, expected: int = 0, providers: str = "antigravity"
+    ) -> dict:
         command = [
-            "node", str(HELPER), "--providers", "antigravity",
+            "node", str(HELPER), "--providers", providers,
             "--node", self.node, "--entry", str(self.entry),
             "--gemini-home", str(self.gemini), "--workspace-root", str(self.workspace),
             *extra,
@@ -114,6 +116,68 @@ console.log(JSON.stringify({{planned,unknown}}));"""
         self.assertEqual(payload["unknown"]["providers"][0]["status"], "BLOCKED")
         self.assertEqual(payload["unknown"]["providers"][0]["reason"], "UNKNOWN_PROVIDER")
         self.assertFalse(unknown_home.exists())
+
+    def assert_unknown_provider_prevalidation_preserves_configuration(
+        self, providers: str
+    ) -> None:
+        blocked = self.run_helper(
+            "--scope", "global", "--apply", expected=2, providers=providers
+        )
+        self.assertEqual(blocked["status"], "BLOCKED")
+        by_provider = {item["provider"]: item for item in blocked["providers"]}
+        self.assertEqual(by_provider["claude"]["reason"], "UNKNOWN_PROVIDER")
+        self.assertFalse(by_provider["claude"]["changed"])
+        self.assertEqual(
+            by_provider["antigravity"]["reason"], "PREVALIDATION_FAILED"
+        )
+        self.assertFalse(by_provider["antigravity"]["changed"])
+        self.assertFalse(self.gemini.exists())
+
+    def test_unknown_provider_after_accepted_provider_blocks_before_apply(self) -> None:
+        self.assert_unknown_provider_prevalidation_preserves_configuration(
+            "antigravity,claude"
+        )
+
+    def test_unknown_provider_before_accepted_provider_blocks_before_apply(self) -> None:
+        self.assert_unknown_provider_prevalidation_preserves_configuration(
+            "claude,antigravity"
+        )
+
+    def test_unsupported_scope_blocks_all_providers_before_apply(self) -> None:
+        blocked = self.run_helper(
+            "--scope",
+            "workspace",
+            "--apply",
+            expected=2,
+            providers="antigravity,codex",
+        )
+        self.assertEqual(blocked["status"], "BLOCKED")
+        by_provider = {item["provider"]: item for item in blocked["providers"]}
+        self.assertEqual(
+            by_provider["antigravity"]["reason"], "PREVALIDATION_FAILED"
+        )
+        self.assertEqual(by_provider["codex"]["status"], "INCOMPATIBLE")
+        self.assertEqual(by_provider["codex"]["reason"], "SCOPE_UNSUPPORTED")
+        self.assertFalse(self.workspace.exists())
+
+    def test_unknown_provider_blocks_owned_uninstall_without_mutation(self) -> None:
+        self.run_helper("--scope", "global", "--apply")
+        config = self.gemini / "config/mcp_config.json"
+        ownership = Path(f"{config}.afyx-ownership.json")
+        config_before = config.read_bytes()
+        ownership_before = ownership.read_bytes()
+
+        blocked = self.run_helper(
+            "--scope",
+            "global",
+            "--apply",
+            "--uninstall",
+            expected=2,
+            providers="antigravity,claude",
+        )
+        self.assertEqual(blocked["status"], "BLOCKED")
+        self.assertEqual(config.read_bytes(), config_before)
+        self.assertEqual(ownership.read_bytes(), ownership_before)
 
     def test_global_plan_is_side_effect_free_then_apply_is_idempotent(self) -> None:
         planned = self.run_helper("--scope", "global")
