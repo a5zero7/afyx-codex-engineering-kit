@@ -51,6 +51,70 @@ class ProviderIntegrationTests(unittest.TestCase):
         self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
         return json.loads(result.stdout)
 
+    def test_versioned_adapter_contract_exposes_only_accepted_providers(self) -> None:
+        script = f"""import {{PROVIDER_ADAPTER_CONTRACT,providerAdapters}} from {json.dumps(HELPER.as_uri())};
+const methods=['inspect','plan','apply','verify','uninstall'];
+console.log(JSON.stringify({{
+  contract:PROVIDER_ADAPTER_CONTRACT,
+  providers:Object.keys(providerAdapters),
+  methods:Object.fromEntries(Object.entries(providerAdapters).map(([id,adapter])=>[id,methods.every((name)=>typeof adapter[name]==='function')])),
+  scopes:Object.fromEntries(Object.entries(providerAdapters).map(([id,adapter])=>[id,adapter.capabilities.scopes])),
+}}));"""
+        result = subprocess.run(
+            ["node", "--input-type=module", "-e", script],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["contract"]["name"], "ProviderAdapter")
+        self.assertEqual(payload["contract"]["version"], 1)
+        self.assertEqual(
+            payload["contract"]["operations"],
+            ["inspect", "plan", "apply", "verify", "uninstall"],
+        )
+        self.assertEqual(payload["providers"], ["codex", "antigravity"])
+        self.assertEqual(payload["methods"], {"codex": True, "antigravity": True})
+        self.assertEqual(payload["scopes"], {"codex": ["global"], "antigravity": ["global", "workspace"]})
+
+    def test_codex_plan_is_side_effect_free_and_unknown_provider_fails_closed(self) -> None:
+        codex_home = self.base / "codex-plan"
+        unknown_home = self.base / "unknown-plan"
+        if os.name == "nt":
+            fake_codex = self.base / "fake-codex.cmd"
+            fake_codex.write_text(
+                "@echo MCP server afyx_graph not found 1>&2\r\n@exit /b 1\r\n",
+                encoding="utf-8",
+            )
+        else:
+            fake_codex = self.base / "fake-codex"
+            fake_codex.write_text(
+                "#!/bin/sh\necho 'MCP server afyx_graph not found' >&2\nexit 1\n",
+                encoding="utf-8",
+            )
+            fake_codex.chmod(0o755)
+        script = f"""import {{providerAdapters,runProviderLifecycle}} from {json.dumps(HELPER.as_uri())};
+const options={{scope:'global',node:process.execPath,entry:{json.dumps(str(self.entry))},codex:{json.dumps(str(fake_codex))},codexHome:{json.dumps(str(codex_home))},geminiHome:{json.dumps(str(self.gemini))},workspaceRoot:{json.dumps(str(self.workspace))}}};
+const planned=await providerAdapters.codex.plan(options);
+const unknown=await runProviderLifecycle({{...options,providers:['claude'],codexHome:{json.dumps(str(unknown_home))}}});
+console.log(JSON.stringify({{planned,unknown}}));"""
+        result = subprocess.run(
+            ["node", "--input-type=module", "-e", script],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["planned"]["status"], "DETECTED")
+        self.assertEqual(payload["planned"]["reason"], "MCP_ENTRY_NOT_FOUND")
+        self.assertFalse(codex_home.exists())
+        self.assertEqual(payload["unknown"]["status"], "BLOCKED")
+        self.assertEqual(payload["unknown"]["providers"][0]["status"], "BLOCKED")
+        self.assertEqual(payload["unknown"]["providers"][0]["reason"], "UNKNOWN_PROVIDER")
+        self.assertFalse(unknown_home.exists())
+
     def test_global_plan_is_side_effect_free_then_apply_is_idempotent(self) -> None:
         planned = self.run_helper("--scope", "global")
         self.assertEqual(planned["status"], "PARTIAL")

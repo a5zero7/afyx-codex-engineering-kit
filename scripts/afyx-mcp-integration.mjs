@@ -251,7 +251,10 @@ export async function integrate(options) {
     result.detail = 'Codex CLI is unavailable; Graph runtime remains healthy.';
     return result;
   }
-  mkdirSync(options.codexHome, { recursive: true });
+  // Inspection/planning must not create provider state. The native Codex CLI
+  // can report an absent entry against a non-existent CODEX_HOME; only an
+  // explicitly consented apply may prepare that directory.
+  if (options.apply) mkdirSync(options.codexHome, { recursive: true });
   let inspection;
   try {
     inspection = readExisting(options.codex, options.codexHome);

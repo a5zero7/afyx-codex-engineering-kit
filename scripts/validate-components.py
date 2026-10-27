@@ -37,6 +37,10 @@ if document.get("schema_version") != 1:
     fail("schema_version must be 1")
 if document.get("control_plane_version") != 1:
     fail("control_plane_version must be 1")
+if document.get("provider_adapter_contract") != "ProviderAdapter/v1":
+    fail("provider_adapter_contract must be ProviderAdapter/v1")
+if document.get("provider_adapter_operations") != "inspect;plan;apply;verify;uninstall":
+    fail("provider_adapter_operations must declare the stable v1 lifecycle")
 if set(document.get("supported_presets", "").split(";")) != PRESETS:
     fail("supported_presets must contain minimal, recommended, full and custom")
 providers = document.get("providers", [])
