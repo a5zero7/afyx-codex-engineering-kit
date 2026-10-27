@@ -104,6 +104,11 @@ describe('getDaemonSocketCandidates (#997)', () => {
     expect(candidates[0]!.startsWith('\\\\.\\pipe\\afyx-graph-')).toBe(true);
   });
 
+  it.runIf(!POSIX)('uses one named pipe for Windows path case variants', () => {
+    expect(getDaemonSocketCandidates(process.cwd().toUpperCase()))
+      .toEqual(getDaemonSocketCandidates(process.cwd().toLowerCase()));
+  });
+
   it('getDaemonSocketPath returns the preferred candidate (index 0)', () => {
     const root = path.join(os.tmpdir(), 'cg-cand-primary');
     expect(getDaemonSocketPath(root)).toBe(getDaemonSocketCandidates(root)[0]);
