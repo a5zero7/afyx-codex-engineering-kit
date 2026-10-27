@@ -35,6 +35,47 @@ lines.on('line',(line)=>{const m=JSON.parse(line);if(m.id===1)console.log(JSON.s
 
 
 class McpIntegrationTests(unittest.TestCase):
+    def test_symlinked_codex_configuration_boundary_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            base = Path(raw)
+            real_home = base / "real-codex-home"
+            real_home.mkdir()
+            linked_home = base / "linked-codex-home"
+            try:
+                linked_home.symlink_to(real_home, target_is_directory=True)
+            except OSError as error:
+                self.skipTest(f"symlink creation unavailable: {error}")
+            entry = base / "runtime/current/lib/dist/bin/afyx-graph.js"
+            fake_server(entry)
+            suffix = ".cmd" if os.name == "nt" else ""
+            codex = base / f"codex{suffix}"
+            if os.name == "nt":
+                codex.write_text("@exit /b 0\r\n", encoding="utf-8")
+            else:
+                codex.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+                codex.chmod(0o755)
+            result = subprocess.run(
+                [
+                    "node",
+                    str(HELPER),
+                    "--node",
+                    shutil.which("node") or "node",
+                    "--entry",
+                    str(entry),
+                    "--codex",
+                    str(codex),
+                    "--codex-home",
+                    str(linked_home),
+                ],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["reason"], "CODEX_PATH_UNSAFE")
+            self.assertFalse((real_home / "config.toml").exists())
+
     def test_probe_isolates_caller_state_and_working_directory(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             base = Path(raw)

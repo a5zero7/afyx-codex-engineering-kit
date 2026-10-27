@@ -66,7 +66,12 @@ if(args[1]==='get'){
   console.error('MCP server not found');process.exit(1);
 }
 if(args[1]==='add-json'){
-  if(sentinel('FAIL_ADD')){console.error('injected add failure');process.exit(9);}
+  if(sentinel('FAIL_ADD')){
+    const corrupt=path.join(configDir,'CORRUPT_PATH');
+    if(fs.existsSync(corrupt))fs.appendFileSync(fs.readFileSync(corrupt,'utf8'),'\nforeign-concurrent-change');
+    if(sentinel('DIRTY_FAIL'))write(userConfig,{mcpServers:{afyx_graph:{type:'stdio',command:'unproven',args:[]}}});
+    console.error('injected add failure');process.exit(9);
+  }
   const name=args[2];const entry=JSON.parse(args[3]);const file=fileFor(scope());const doc=read(file);doc.mcpServers ||= {};
   if(doc.mcpServers[name]){console.error('MCP server already exists');process.exit(2);}
   doc.mcpServers[name]=entry;write(file,doc);console.log('Added');process.exit(0);
@@ -386,6 +391,61 @@ console.log(JSON.stringify({{caller,filesystem,runtime}}));"""
         self.assertEqual(by_provider["claude"]["reason"], "PREVALIDATION_FAILED")
         self.assertFalse((self.workspace / ".mcp.json").exists())
         self.assertFalse((self.workspace / ".agents").exists())
+
+    def test_later_provider_failure_rolls_back_earlier_owned_change(self) -> None:
+        config = self.base / "gemini/config/mcp_config.json"
+        config.parent.mkdir(parents=True)
+        config.write_text('{\n  "theme": "owner-preserved"\n}\n', encoding="utf-8")
+        config_before = config.read_bytes()
+        (self.claude_config / "FAIL_ADD").write_text("1", encoding="utf-8")
+        blocked = self.run_helper(
+            "--scope",
+            "global",
+            "--apply",
+            providers="antigravity,claude",
+            expected=2,
+        )
+        by_provider = {item["provider"]: item for item in blocked["providers"]}
+        self.assertEqual(blocked["recovery"]["status"], "RESTORED")
+        self.assertEqual(by_provider["antigravity"]["reason"], "BATCH_ROLLED_BACK")
+        self.assertFalse(by_provider["antigravity"]["changed"])
+        self.assertEqual(by_provider["antigravity"]["recovery"]["status"], "RESTORED")
+        self.assertEqual(config.read_bytes(), config_before)
+        self.assertFalse((self.base / "gemini/config/mcp_config.json.afyx-ownership.json").exists())
+
+    def test_concurrent_foreign_change_blocks_batch_rollback_without_overwrite(self) -> None:
+        config = self.base / "gemini/config/mcp_config.json"
+        (self.claude_config / "FAIL_ADD").write_text("1", encoding="utf-8")
+        (self.claude_config / "CORRUPT_PATH").write_text(str(config), encoding="utf-8")
+        blocked = self.run_helper(
+            "--scope",
+            "global",
+            "--apply",
+            providers="antigravity,claude",
+            expected=2,
+        )
+        by_provider = {item["provider"]: item for item in blocked["providers"]}
+        self.assertEqual(blocked["recovery"]["status"], "INCOMPLETE")
+        self.assertEqual(
+            by_provider["antigravity"]["reason"], "BATCH_ROLLBACK_INCOMPLETE"
+        )
+        self.assertTrue(by_provider["antigravity"]["changed"])
+        self.assertIn(b"foreign-concurrent-change", config.read_bytes())
+
+    def test_failed_provider_unproven_mutation_is_preserved_and_reported(self) -> None:
+        (self.claude_config / "FAIL_ADD").write_text("1", encoding="utf-8")
+        (self.claude_config / "DIRTY_FAIL").write_text("1", encoding="utf-8")
+        blocked = self.run_helper(
+            "--scope", "global", "--apply", expected=2, providers="claude"
+        )
+        provider = blocked["providers"][0]
+        self.assertEqual(blocked["recovery"]["status"], "INCOMPLETE")
+        self.assertEqual(provider["recovery"]["status"], "INCOMPLETE")
+        self.assertTrue(provider["changed"])
+        state = json.loads(self.user_config.read_text(encoding="utf-8"))
+        self.assertEqual(
+            state["mcpServers"]["afyx_graph"]["command"], "unproven"
+        )
 
 
 if __name__ == "__main__":

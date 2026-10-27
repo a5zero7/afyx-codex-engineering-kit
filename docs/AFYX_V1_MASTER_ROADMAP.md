@@ -218,6 +218,26 @@ VS Code CLI, IDE UI, and agent-mediated acceptance remain `NOT_RUN` pending an
 authorized host. TB6 must validate cross-provider degraded modes and applicable
 live acceptance without treating source implementation as provider acceptance.
 
+TB6 cross-provider acceptance matrix (2026-10-27). `PASS` below is limited to
+the named evidence surface; fixture/CI evidence never substitutes for a live
+authenticated provider or IDE session.
+
+| Provider surface | Configuration / ownership | Discovery | MCP lifecycle | Agent-mediated | Evidence boundary |
+|---|---|---|---|---|---|
+| Codex CLI | PASS | PASS | PASS | BLOCKED (`401`) | AFYX-294 isolated/native evidence plus disposable lifecycle regression; no new authentication |
+| Codex IDE | NOT_RUN | NOT_RUN | NOT_RUN | NOT_RUN | No authorized IDE session |
+| Antigravity/Gemini CLI global | PASS | PASS (`agy mcp list`) | PASS | BLOCKED (`429`) | AFYX-294 host evidence plus isolated ownership/read-back regression |
+| Antigravity workspace / IDE | PASS (workspace fixture) | NOT_RUN (IDE) | PASS (fixture) | NOT_RUN | IDE UI and authenticated model execution unavailable |
+| Claude Code CLI user/project | PASS (isolated fixture) | NOT_RUN (`runtimeVerified` remains false) | PASS (isolated lifecycle); NOT_RUN live | NOT_RUN | Native config semantics, scope precedence, identity mismatch and rollback tested without credentials |
+| Claude skills / instructions | PASS (declared contract and scopes) | NOT_RUN live | NOT_RUN | NOT_RUN | User/project surfaces declared; no host-mediated load claim |
+| Claude Code VS Code | NOT_RUN | NOT_RUN | NOT_RUN | NOT_RUN | Bundled extension CLI and IDE UI require separately authorized host acceptance |
+
+TB6 source hardening requires batch preflight and bounded per-provider execution.
+If a later provider fails, only exact captured Afyx configuration bytes may be
+restored; any concurrent or foreign change makes recovery `INCOMPLETE` and must
+remain preserved and visible. This is bounded compensation, not a claim of a
+general distributed transaction or live provider acceptance.
+
 ### Phase 8–11 critical path and parallel workstreams
 
 | Workstream | Jira/evidence | Current state | Completion gate | Dependency |
@@ -226,7 +246,7 @@ live acceptance without treating source implementation as provider acceptance.
 | W2 Expert acceptance | AFYX-283, AFYX-67/68 | ACCEPTANCE_PENDING | Independent D.6 verdict, Case A reference/tool bounds, controlled A1/B1 quality comparison, sanitized provenance | Independent evaluator/owner boundary |
 | W3 Forge A0–A8 | AFYX-12, AFYX-88–96, AFYX-171–183 | A0–A3 contract complete; A4 implementation/candidate preparation complete with AFYX-92/178 `In Review`; A5 public harness preparation complete; formal `0/36 NOT_RUN` | Pending A4 acceptance where applicable, external prerequisites, formal campaign, A6/A7, explicit A8 decision | A8 blocks W4 |
 | W4 Forge A9–A12 | AFYX-97–100, AFYX-184–188 | NOT_STARTED/BLOCKED | Selected implementation, adaptive modes, dogfood, stable contract | Only after A8 GO; NO-GO requires redesign/owner decision |
-| W5 Platform Track B | AFYX-101–108; AFYX-53/56 and AFYX-294 as supporting evidence | PARTIAL: TB1–TB5 source contracts/adapters implemented in candidate; Claude live CLI/IDE acceptance and TB6/TB7 remain | TB0–TB7, AFYX-294 surface closure, and three-provider capability matrix | TB6 cross-provider hardening follows TB5; may run beside Forge evaluation |
+| W5 Platform Track B | AFYX-101–108; AFYX-53/56 and AFYX-294 as supporting evidence | PARTIAL: TB1–TB6 source candidate implemented; live provider/IDE acceptance and TB7 remain | TB0–TB7, AFYX-294 surface closure, and three-provider capability matrix | TB7 stable-platform acceptance follows reviewed TB6; may run beside Forge evaluation |
 | W6 Phase 9 hardening | AFYX-58/59/62/63 and accepted CI/security/recovery evidence | SUBSTANTIAL REUSABLE EVIDENCE; final matrix pending | Only changed/untested release risks: installed exact artifact, corruption/interruption/rollback, resource bounds, 3OS packaging | After material component changes settle; focused reruns only |
 | W7 T12 combined acceptance | AFYX-248/249/269/283/12 | BLOCKED by component gates | Contract below passes on exact installed candidate | W1, W2, W4, W5, W6 complete |
 | W8 Phase 10 Private Beta | Existing Phase 10 program | NOT_STARTED | Controlled users/environments, upgrade/config stability, all release-blocking defects closed | Phase 8 + Phase 9 + T12 PASS |
