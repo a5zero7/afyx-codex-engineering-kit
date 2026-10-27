@@ -80,6 +80,100 @@ console.log(JSON.stringify({{
         self.assertEqual(payload["methods"], {"codex": True, "antigravity": True})
         self.assertEqual(payload["scopes"], {"codex": ["global"], "antigravity": ["global", "workspace"]})
 
+    def test_capability_discovery_is_deterministic_read_only_and_evidence_aware(self) -> None:
+        config = self.gemini / "config/mcp_config.json"
+        config.parent.mkdir(parents=True)
+        config.write_text(json.dumps({"preserve": True}), encoding="utf-8")
+        before = config.read_bytes()
+        script = f"""import {{providerAdapters}} from {json.dumps(HELPER.as_uri())};
+const options={{geminiHome:{json.dumps(str(self.gemini))},host:{{detected:true,command:'agy',version:'1.2.3',evidence:'CALLER'}}}};
+const first=providerAdapters.antigravity.discover(options);
+const second=providerAdapters.antigravity.discover(options);
+const declared=providerAdapters.antigravity.negotiate([{{capability:'mcp'}}],options);
+const runtime=providerAdapters.antigravity.negotiate([{{capability:'mcp',verification:'RUNTIME'}}],options);
+console.log(JSON.stringify({{first,declared,runtime,deterministic:JSON.stringify(first)===JSON.stringify(second)}}));"""
+        result = subprocess.run(
+            ["node", "--input-type=module", "-e", script], cwd=ROOT,
+            capture_output=True, text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        payload = json.loads(result.stdout)
+        discovery = payload["first"]
+        by_capability = {item["id"]: item for item in discovery["capabilities"]}
+        self.assertTrue(payload["deterministic"])
+        self.assertEqual(discovery["contract"], "ProviderCapability/v1")
+        self.assertEqual(discovery["provider"]["id"], "antigravity")
+        self.assertEqual(discovery["host"]["version"], "1.2.3")
+        self.assertEqual(discovery["surfaces"], ["cli", "ide"])
+        self.assertEqual(discovery["scopes"]["mcp"], ["global", "workspace"])
+        self.assertEqual(
+            discovery["scopes"]["skills"],
+            ["ide-global", "cli-global", "workspace"],
+        )
+        self.assertEqual(discovery["acceptance"], "NOT_RUN")
+        self.assertFalse(discovery["mutationAuthorized"])
+        self.assertEqual(by_capability["mcp"]["status"], "SUPPORTED")
+        self.assertFalse(by_capability["mcp"]["runtimeVerified"])
+        self.assertEqual(by_capability["surface:cli"]["status"], "UNVERIFIED")
+        self.assertFalse(by_capability["surface:cli"]["runtimeVerified"])
+        self.assertTrue(by_capability["surface:cli"]["declared"])
+        self.assertEqual(by_capability["surface:ide"]["status"], "UNVERIFIED")
+        self.assertEqual(by_capability["scope:ide-global"]["status"], "SUPPORTED")
+        self.assertEqual(payload["declared"]["status"], "SUPPORTED")
+        self.assertEqual(payload["runtime"]["status"], "UNVERIFIED")
+        self.assertFalse(payload["declared"]["mutationAuthorized"])
+        self.assertEqual(config.read_bytes(), before)
+
+    def test_existing_host_path_is_presence_evidence_not_runtime_verification(self) -> None:
+        script = f"""import {{providerAdapters}} from {json.dumps(HELPER.as_uri())};
+const discovery=providerAdapters.codex.discover({{codex:process.execPath}});
+const cli=discovery.capabilities.find((item)=>item.id==='surface:cli');
+const negotiation=providerAdapters.codex.negotiate([{{capability:'surface:cli',verification:'RUNTIME'}}],{{codex:process.execPath}});
+console.log(JSON.stringify({{discovery,cli,negotiation}}));"""
+        result = subprocess.run(
+            ["node", "--input-type=module", "-e", script], cwd=ROOT,
+            capture_output=True, text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertTrue(payload["discovery"]["host"]["detected"])
+        self.assertEqual(payload["discovery"]["host"]["evidence"], "FILESYSTEM")
+        self.assertEqual(payload["discovery"]["host"]["status"], "UNVERIFIED")
+        self.assertFalse(payload["discovery"]["host"]["runtimeVerified"])
+        self.assertEqual(payload["cli"]["status"], "UNVERIFIED")
+        self.assertFalse(payload["cli"]["runtimeVerified"])
+        self.assertEqual(payload["negotiation"]["status"], "UNVERIFIED")
+        self.assertFalse(payload["negotiation"]["mutationAuthorized"])
+
+    def test_capability_negotiation_fails_closed_for_missing_unsupported_and_unknown(self) -> None:
+        missing_codex = self.base / "missing-codex"
+        script = f"""import {{providerAdapters}} from {json.dumps(HELPER.as_uri())};
+const missing=providerAdapters.codex.discover({{codex:{json.dumps(str(missing_codex))}}});
+const blocked=providerAdapters.codex.negotiate([{{capability:'mcp',verification:'RUNTIME'}}],{{codex:{json.dumps(str(missing_codex))}}});
+const unsupported=providerAdapters.antigravity.negotiate([{{capability:'hooks'}}],{{host:{{detected:true,command:'agy',evidence:'CALLER'}}}});
+const unknown=providerAdapters.antigravity.negotiate([{{capability:'model-routing'}}],{{host:{{detected:true,command:'agy',evidence:'CALLER'}}}});
+const malformed=providerAdapters.codex.discover({{host:{{detected:'yes',command:'codex'}}}});
+console.log(JSON.stringify({{missing,blocked,unsupported,unknown,malformed}}));"""
+        result = subprocess.run(
+            ["node", "--input-type=module", "-e", script], cwd=ROOT,
+            capture_output=True, text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["missing"]["status"], "BLOCKED")
+        self.assertEqual(payload["blocked"]["status"], "BLOCKED")
+        self.assertEqual(payload["unsupported"]["status"], "UNSUPPORTED")
+        self.assertEqual(payload["unknown"]["status"], "BLOCKED")
+        self.assertEqual(payload["malformed"]["status"], "BLOCKED")
+        self.assertEqual(
+            payload["malformed"]["diagnostics"][0]["code"],
+            "MALFORMED_CAPABILITY_METADATA",
+        )
+        for result_payload in (
+            payload["blocked"], payload["unsupported"], payload["unknown"]
+        ):
+            self.assertFalse(result_payload["mutationAuthorized"])
+
     def test_codex_plan_is_side_effect_free_and_unknown_provider_fails_closed(self) -> None:
         codex_home = self.base / "codex-plan"
         unknown_home = self.base / "unknown-plan"

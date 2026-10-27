@@ -11,12 +11,18 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname, isAbsolute, relative, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, relative, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { integrate as integrateCodex, probeMcp } from './afyx-mcp-integration.mjs';
+import {
+  discoverProviderCapabilities,
+  negotiateProviderCapabilities,
+} from './afyx-integration-contracts.mjs';
 
 const SERVER = 'afyx_graph';
+const COMPONENT_CONTRACT = JSON.parse(readFileSync(fileURLToPath(new URL('./components.json', import.meta.url)), 'utf8'));
+const PROVIDER_DEFINITIONS = new Map(COMPONENT_CONTRACT.providers.map((definition) => [definition.provider, definition]));
 
 export const PROVIDER_ADAPTER_CONTRACT = Object.freeze({
   name: 'ProviderAdapter',
@@ -275,6 +281,7 @@ async function integrateCodexAdapter(options) {
 }
 
 function defineProviderAdapter(provider, scopes, execute) {
+  const definition = PROVIDER_DEFINITIONS.get(provider);
   const invoke = (operation, options) => {
     const lifecycle = {
       ...options,
@@ -283,14 +290,29 @@ function defineProviderAdapter(provider, scopes, execute) {
     };
     return execute(lifecycle);
   };
+  const capabilities = Object.freeze({
+    scopes: Object.freeze([...scopes]),
+    operations: PROVIDER_ADAPTER_CONTRACT.operations,
+    configurationPolicy: 'merge-afyx-owned-entries-only',
+  });
+  const observeHost = (options = {}) => {
+    if (options.host !== undefined) return options.host;
+    const candidate = provider === 'codex' ? options.codex : options.antigravity;
+    if (!candidate) return undefined;
+    return {
+      detected: existsSync(candidate),
+      command: basename(candidate),
+      version: options.hostVersion ?? null,
+      evidence: 'FILESYSTEM',
+    };
+  };
+  const discover = (options = {}) => discoverProviderCapabilities(definition, capabilities, { host: observeHost(options) });
   return Object.freeze({
     provider,
     contract: PROVIDER_ADAPTER_CONTRACT,
-    capabilities: Object.freeze({
-      scopes: Object.freeze([...scopes]),
-      operations: PROVIDER_ADAPTER_CONTRACT.operations,
-      configurationPolicy: 'merge-afyx-owned-entries-only',
-    }),
+    capabilities,
+    discover,
+    negotiate: (requirements, options = {}) => negotiateProviderCapabilities(discover(options), requirements),
     inspect: (options) => invoke('inspect', options),
     plan: (options) => invoke('plan', options),
     apply: (options) => invoke('apply', options),
