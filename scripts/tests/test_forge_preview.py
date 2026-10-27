@@ -62,6 +62,57 @@ class ForgePreviewTests(unittest.TestCase):
         self.assertIn("percentage-point", guidance["user_prompt"])
         self.assertIn("Baseline", guidance["directive_summary"])
 
+    def test_cli_candidate_b3_guidance_and_materialization(self) -> None:
+        observed_materializations: list[tuple[bool, bool]] = []
+
+        def validate_materialization(
+            command: list[str] | None, cwd: Path, timeout: int = 30
+        ) -> tuple[int, str, str]:
+            observed_materializations.append(
+                (
+                    (cwd / ".agents/skills/efficient-coding/SKILL.md").is_file(),
+                    (cwd / "AGENTS.md").is_file(),
+                )
+            )
+            return 1, "", ""
+
+        stdout = io.StringIO()
+        with (
+            mock.patch.object(
+                preview,
+                "execute_validation_command",
+                side_effect=validate_materialization,
+            ),
+            redirect_stdout(stdout),
+        ):
+            exit_code = preview.main(
+                [
+                    "--opt-in",
+                    "--candidate",
+                    "B3",
+                    "--scenario",
+                    "forge-known-file-001",
+                    "--json",
+                ]
+            )
+
+        result = json.loads(stdout.getvalue())
+        guidance = result["guidance"]
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(result["candidate_id"], "B3")
+        self.assertEqual(guidance["composition_order"], ["B1", "B2"])
+        self.assertEqual(
+            [item["candidate_id"] for item in guidance["component_definitions"]],
+            ["B1", "B2"],
+        )
+        self.assertIn("B1 (Efficient Coding 1.2.0)", guidance["directive_summary"])
+        self.assertIn(
+            "B2 (Afyx Independent Engineering Baseline 0.1.0)",
+            guidance["directive_summary"],
+        )
+        self.assertEqual(observed_materializations, [(True, True), (True, True)])
+        self.assertTrue(result["disposable_workspace_cleaned"])
+
     def test_tampered_manifests_fail_before_preview_actions(self) -> None:
         mutations = {
             "prompt": lambda manifest: manifest["scenarios"][0].update(

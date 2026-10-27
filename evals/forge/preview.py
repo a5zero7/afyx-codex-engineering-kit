@@ -61,6 +61,19 @@ def extract_task_guidance(
 ) -> dict[str, Any]:
     """Extract directive contract and bounded execution guidance for a scenario."""
     candidate = manifest["candidates"][candidate_id]
+    materialization = candidate.get("materialization", {})
+    composition_order = (
+        list(materialization.get("components", []))
+        if materialization.get("kind") == "ordered_composition"
+        else []
+    )
+    component_definitions = [
+        {
+            "candidate_id": component_id,
+            "definition": manifest["candidates"][component_id]["definition"],
+        }
+        for component_id in composition_order
+    ]
     directive_file: str | None = None
     directive_summary = "(no additional directive)"
     directive_body = ""
@@ -86,6 +99,11 @@ def extract_task_guidance(
             if line.startswith("#"):
                 directive_summary = line.lstrip("# ").strip()
                 break
+    elif component_definitions:
+        directive_summary = "Ordered composition: " + " + ".join(
+            f"{component['candidate_id']} ({component['definition']})"
+            for component in component_definitions
+        )
 
     return {
         "candidate_id": candidate_id,
@@ -93,6 +111,8 @@ def extract_task_guidance(
         "comparison_role": candidate.get("comparison_role", "baseline"),
         "activation": candidate.get("activation", "none"),
         "entry_point": candidate.get("entry_point", "none"),
+        "composition_order": composition_order,
+        "component_definitions": component_definitions,
         "directive_file": directive_file,
         "directive_summary": directive_summary,
         "scenario_id": scenario["scenario_id"],
@@ -322,6 +342,13 @@ def run_preview_scenario(
 
 
 def main(argv: list[str] | None = None) -> int:
+    try:
+        manifest = forge_validate.load_json(forge_validate.MANIFEST_PATH)
+        validate_public_manifest(manifest)
+    except PreviewManifestInvalid as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 2
+
     parser = argparse.ArgumentParser(
         description="Afyx Forge A5: Opt-in Functional Development Preview Runner"
     )
@@ -333,7 +360,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--candidate",
         default="B2",
-        choices=["B0", "B1", "B2", "B4", "B5"],
+        choices=manifest["candidate_order"],
         help="Candidate engineering directive to evaluate (default: B2).",
     )
     parser.add_argument(
@@ -366,13 +393,6 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(msg)
         return 1
-
-    manifest = forge_validate.load_json(forge_validate.MANIFEST_PATH)
-    try:
-        validate_public_manifest(manifest)
-    except PreviewManifestInvalid as error:
-        print(f"ERROR: {error}", file=sys.stderr)
-        return 2
 
     if args.inspect_guidance_only:
         scenarios = {s["scenario_id"]: s for s in manifest["scenarios"]}
