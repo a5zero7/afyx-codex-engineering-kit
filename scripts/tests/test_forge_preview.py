@@ -4,14 +4,17 @@
 from __future__ import annotations
 
 import copy
+import io
 import json
 import os
 import subprocess
 import sys
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from unittest import mock
 
-from evals.forge import preview, validate as forge_validate
+from evals.forge import controller, preview, validate as forge_validate
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -59,6 +62,52 @@ class ForgePreviewTests(unittest.TestCase):
         self.assertIn("percentage-point", guidance["user_prompt"])
         self.assertIn("Baseline", guidance["directive_summary"])
 
+    def test_tampered_manifests_fail_before_preview_actions(self) -> None:
+        mutations = {
+            "prompt": lambda manifest: manifest["scenarios"][0].update(
+                user_prompt="substituted prompt"
+            ),
+            "command": lambda manifest: manifest["scenarios"][0].update(
+                validation_command=["python", "-c", "raise SystemExit(0)"]
+            ),
+            "candidate": lambda manifest: manifest["candidates"]["B2"].update(
+                content_identity="0" * 64
+            ),
+            "fixture": lambda manifest: manifest["scenarios"][0].update(
+                fixture="evals/forge/candidates/B2"
+            ),
+        }
+        for label, mutate in mutations.items():
+            with self.subTest(label=label):
+                tampered = copy.deepcopy(self.manifest)
+                mutate(tampered)
+                with (
+                    mock.patch.object(preview, "extract_task_guidance") as guidance,
+                    mock.patch.object(controller, "_copy_tree_contents") as materialize,
+                    mock.patch.object(preview, "execute_validation_command") as execute,
+                ):
+                    with self.assertRaises(preview.PreviewManifestInvalid):
+                        preview.run_preview_scenario(
+                            tampered, "B2", "forge-cross-module-001"
+                        )
+                guidance.assert_not_called()
+                materialize.assert_not_called()
+                execute.assert_not_called()
+
+    def test_inspect_guidance_rejects_tampered_manifest_before_read(self) -> None:
+        tampered = copy.deepcopy(self.manifest)
+        tampered["scenarios"][0]["user_prompt"] = "substituted prompt"
+        stderr = io.StringIO()
+        with (
+            mock.patch.object(forge_validate, "load_json", return_value=tampered),
+            mock.patch.object(preview, "extract_task_guidance") as guidance,
+            redirect_stderr(stderr),
+        ):
+            exit_code = preview.main(["--opt-in", "--inspect-guidance-only"])
+        self.assertEqual(exit_code, 2)
+        self.assertIn("frozen public Forge manifest validation failed", stderr.getvalue())
+        guidance.assert_not_called()
+
     def test_preview_end_to_end_baseline_and_target_validation(self) -> None:
         # Test candidate B2 on forge-cross-module-001 with synthetic fix
         result = preview.run_preview_scenario(
@@ -94,22 +143,91 @@ class ForgePreviewTests(unittest.TestCase):
         self.assertTrue(result["disposable_workspace_cleaned"])
 
     def test_preview_catches_scope_violation(self) -> None:
-        # Mutate the scenario to an artificially restricted scope that forbids tax.py
-        tampered_manifest = copy.deepcopy(self.manifest)
-        scenarios = {s["scenario_id"]: s for s in tampered_manifest["scenarios"]}
-        scenarios["forge-cross-module-001"]["allowed_file_scope"] = ["checkout.py"]
+        original_fix = preview.apply_scenario_synthetic_fix
 
-        result = preview.run_preview_scenario(
-            tampered_manifest,
-            "B2",
-            "forge-cross-module-001",
-            repository_root=ROOT,
-            apply_synthetic_fix=True,
-        )
-        # Because tax.py was changed and not in allowed_file_scope, scope_adherence is False
+        def out_of_scope_fix(scenario_id: str, work: Path) -> list[str]:
+            applied = original_fix(scenario_id, work)
+            (work / "unexpected.py").write_text("UNEXPECTED = True\n", encoding="utf-8")
+            return [*applied, "unexpected.py"]
+
+        with mock.patch.object(
+            preview, "apply_scenario_synthetic_fix", side_effect=out_of_scope_fix
+        ):
+            result = preview.run_preview_scenario(
+                self.manifest,
+                "B2",
+                "forge-cross-module-001",
+                repository_root=ROOT,
+                apply_synthetic_fix=True,
+            )
         self.assertFalse(result["scope_adherence"])
         self.assertEqual(result["verdict"], "FAIL")
         self.assertTrue(result["disposable_workspace_cleaned"])
+
+    def test_cleanup_false_fails_result_and_cli_exit(self) -> None:
+        original_manager = controller.DisposableWorkspaceManager
+
+        class FalseCleanupManager(original_manager):
+            def cleanup(self, lease: controller.WorkspaceLease) -> bool:
+                super().cleanup(lease)
+                return False
+
+        stdout = io.StringIO()
+        with (
+            mock.patch.object(controller, "DisposableWorkspaceManager", FalseCleanupManager),
+            redirect_stdout(stdout),
+        ):
+            exit_code = preview.main(
+                ["--opt-in", "--apply-synthetic-fix", "--json"]
+            )
+        result = json.loads(stdout.getvalue())
+        self.assertEqual(exit_code, 2)
+        self.assertEqual(result["verdict"], "FAIL")
+        self.assertFalse(result["disposable_workspace_cleaned"])
+        self.assertEqual(result["failure_codes"], ["workspace_cleanup_failed"])
+
+    def test_cleanup_exception_is_sanitized_and_fails(self) -> None:
+        original_manager = controller.DisposableWorkspaceManager
+
+        class RaisingCleanupManager(original_manager):
+            def cleanup(self, lease: controller.WorkspaceLease) -> bool:
+                super().cleanup(lease)
+                raise RuntimeError("private path must not be reported")
+
+        with mock.patch.object(
+            controller, "DisposableWorkspaceManager", RaisingCleanupManager
+        ):
+            result = preview.run_preview_scenario(
+                self.manifest,
+                "B2",
+                "forge-cross-module-001",
+                repository_root=ROOT,
+                apply_synthetic_fix=True,
+            )
+        serialized = json.dumps(result)
+        self.assertEqual(result["verdict"], "FAIL")
+        self.assertFalse(result["disposable_workspace_cleaned"])
+        self.assertEqual(result["failure_codes"], ["workspace_cleanup_failed"])
+        self.assertNotIn("private path", serialized)
+
+    def test_inventory_deadline_is_duration_bounded_to_30_seconds(self) -> None:
+        real_limits = controller.InventoryLimits
+        observed: list[float] = []
+
+        def capture_limits(**kwargs: object) -> controller.InventoryLimits:
+            observed.append(float(kwargs["deadline_seconds"]))
+            return real_limits(**kwargs)  # type: ignore[arg-type]
+
+        with mock.patch.object(controller, "InventoryLimits", side_effect=capture_limits):
+            result = preview.run_preview_scenario(
+                self.manifest,
+                "B4",
+                "forge-known-file-001",
+                repository_root=ROOT,
+                apply_synthetic_fix=True,
+            )
+        self.assertEqual(result["verdict"], "PASS")
+        self.assertEqual(observed, [30.0])
 
     def test_unknown_candidate_or_scenario_raises_value_error(self) -> None:
         with self.assertRaises(ValueError):

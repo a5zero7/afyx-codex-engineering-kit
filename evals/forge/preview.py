@@ -14,7 +14,6 @@ import os
 import subprocess
 import sys
 import tempfile
-import time
 import uuid
 from pathlib import Path
 from typing import Any, Mapping
@@ -33,9 +32,25 @@ class PreviewOptInRequired(RuntimeError):
     """Raised when Forge development preview is invoked without explicit opt-in."""
 
 
+class PreviewManifestInvalid(RuntimeError):
+    """Raised when preview input differs from the frozen public Forge manifest."""
+
+
 def check_opt_in(opt_in_flag: bool = False) -> bool:
     """Return True if explicit opt-in is provided via CLI argument or environment variable."""
     return bool(opt_in_flag or os.environ.get(PREVIEW_OPT_IN_ENV) == "1")
+
+
+def validate_public_manifest(manifest: Mapping[str, Any]) -> None:
+    """Fail closed unless input is the valid, exact frozen public manifest."""
+    try:
+        supplied = dict(manifest)
+        canonical = forge_validate.load_json(forge_validate.MANIFEST_PATH)
+        violations = forge_validate.validate_manifest(supplied)
+    except Exception:
+        raise PreviewManifestInvalid("frozen public Forge manifest validation failed") from None
+    if violations or supplied != canonical:
+        raise PreviewManifestInvalid("frozen public Forge manifest validation failed")
 
 
 def extract_task_guidance(
@@ -173,6 +188,7 @@ def run_preview_scenario(
     temp_dir: Path | None = None,
 ) -> dict[str, Any]:
     """Execute a single public preview scenario end-to-end in a disposable workspace."""
+    validate_public_manifest(manifest)
     if candidate_id not in manifest["candidates"]:
         raise ValueError(f"unknown candidate id: {candidate_id}")
 
@@ -197,7 +213,7 @@ def run_preview_scenario(
             max_files=100,
             max_file_bytes=1024 * 1024,
             max_total_bytes=10 * 1024 * 1024,
-            deadline_seconds=time.time() + 30.0,
+            deadline_seconds=30.0,
         )
 
         # 3. Materialize public fixture
@@ -287,6 +303,7 @@ def run_preview_scenario(
                 "stdout": target_stdout.strip(),
                 "stderr": target_stderr.strip(),
             },
+            "failure_codes": [],
             "verdict": "PASS" if passed else "FAIL",
             "disposable_workspace_cleaned": False,
         }
@@ -297,6 +314,9 @@ def run_preview_scenario(
             cleanup_succeeded = False
         if "result" in locals():
             result["disposable_workspace_cleaned"] = cleanup_succeeded
+            if not cleanup_succeeded:
+                result["failure_codes"].append("workspace_cleanup_failed")
+                result["verdict"] = "FAIL"
 
     return result
 
@@ -348,6 +368,11 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     manifest = forge_validate.load_json(forge_validate.MANIFEST_PATH)
+    try:
+        validate_public_manifest(manifest)
+    except PreviewManifestInvalid as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 2
 
     if args.inspect_guidance_only:
         scenarios = {s["scenario_id"]: s for s in manifest["scenarios"]}
