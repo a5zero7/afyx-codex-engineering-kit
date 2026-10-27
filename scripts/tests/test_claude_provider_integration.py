@@ -83,7 +83,9 @@ class ClaudeProviderIntegrationTests(unittest.TestCase):
         fake_server(self.entry)
         self.node = shutil.which("node") or "node"
         suffix = ".cmd" if os.name == "nt" else ""
-        self.claude = self.base / f"claude{suffix}"
+        fake_bin = self.base / "fake-bin"
+        fake_bin.mkdir()
+        self.claude = fake_bin / f"claude{suffix}"
         fake_claude(self.claude, self.base / "fake-claude.cjs")
 
     def tearDown(self) -> None:
