@@ -238,6 +238,26 @@ restored; any concurrent or foreign change makes recovery `INCOMPLETE` and must
 remain preserved and visible. This is bounded compensation, not a claim of a
 general distributed transaction or live provider acceptance.
 
+TB7 source-stability checkpoint (2026-10-28): the published
+`ProviderAdapter/v1`, `ProviderCapability/v1`,
+`ProviderCapabilityNegotiation/v1`, `AfyxEngineeringTask/v1`, and
+`AfyxEngineeringResult/v1` contracts are frozen for stable-v1 compatibility.
+The compatibility regression locks provider order, provider-specific scopes,
+side-effect-free fail-closed prevalidation diagnostics, and the TB6 recovery
+envelope. It does not impose artificial feature parity or convert fixture
+evidence into live-provider acceptance.
+
+| Provider | Structural contract | Configuration / ownership | MCP lifecycle | Authenticated agent-mediated | IDE |
+|---|---|---|---|---|---|
+| Codex | PASS (`ProviderAdapter/v1`, contract fixtures) | PASS (isolated/native evidence) | PASS (isolated/native evidence) | BLOCKED (`401`; authorization/session required) | `NOT_RUN` |
+| Antigravity | PASS (`ProviderAdapter/v1`, contract fixtures) | PASS (isolated fixture) | PASS (isolated fixture) | BLOCKED (`429`; authorized provider/session required) | `NOT_RUN` |
+| Claude Code | PASS (`ProviderAdapter/v1`, contract fixtures) | PASS (isolated `CLAUDE_CONFIG_DIR` fixture) | PASS (isolated fake-CLI fixture) | `NOT_RUN` (authenticated host not authorized) | `NOT_RUN` |
+
+TB7 is therefore **SOURCE_READY** for the generalized three-provider platform,
+not live-provider accepted and not T12 accepted. T12 still requires a signed,
+installed Unified Kit candidate plus authorized capability-appropriate host
+evidence; unavailable surfaces remain `BLOCKED` or `NOT_RUN`.
+
 ### Phase 8–11 critical path and parallel workstreams
 
 | Workstream | Jira/evidence | Current state | Completion gate | Dependency |
