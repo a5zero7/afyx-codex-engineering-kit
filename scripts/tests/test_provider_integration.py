@@ -76,9 +76,19 @@ console.log(JSON.stringify({{
             payload["contract"]["operations"],
             ["inspect", "plan", "apply", "verify", "uninstall"],
         )
-        self.assertEqual(payload["providers"], ["codex", "antigravity"])
-        self.assertEqual(payload["methods"], {"codex": True, "antigravity": True})
-        self.assertEqual(payload["scopes"], {"codex": ["global"], "antigravity": ["global", "workspace"]})
+        self.assertEqual(payload["providers"], ["codex", "antigravity", "claude"])
+        self.assertEqual(
+            payload["methods"],
+            {"codex": True, "antigravity": True, "claude": True},
+        )
+        self.assertEqual(
+            payload["scopes"],
+            {
+                "codex": ["global"],
+                "antigravity": ["global", "workspace"],
+                "claude": ["global", "workspace"],
+            },
+        )
 
     def test_capability_discovery_is_deterministic_read_only_and_evidence_aware(self) -> None:
         config = self.gemini / "config/mcp_config.json"
@@ -193,7 +203,7 @@ console.log(JSON.stringify({{missing,blocked,unsupported,unknown,malformed}}));"
         script = f"""import {{providerAdapters,runProviderLifecycle}} from {json.dumps(HELPER.as_uri())};
 const options={{scope:'global',node:process.execPath,entry:{json.dumps(str(self.entry))},codex:{json.dumps(str(fake_codex))},codexHome:{json.dumps(str(codex_home))},geminiHome:{json.dumps(str(self.gemini))},workspaceRoot:{json.dumps(str(self.workspace))}}};
 const planned=await providerAdapters.codex.plan(options);
-const unknown=await runProviderLifecycle({{...options,providers:['claude'],codexHome:{json.dumps(str(unknown_home))}}});
+const unknown=await runProviderLifecycle({{...options,providers:['future-provider'],codexHome:{json.dumps(str(unknown_home))}}});
 console.log(JSON.stringify({{planned,unknown}}));"""
         result = subprocess.run(
             ["node", "--input-type=module", "-e", script],
@@ -219,8 +229,8 @@ console.log(JSON.stringify({{planned,unknown}}));"""
         )
         self.assertEqual(blocked["status"], "BLOCKED")
         by_provider = {item["provider"]: item for item in blocked["providers"]}
-        self.assertEqual(by_provider["claude"]["reason"], "UNKNOWN_PROVIDER")
-        self.assertFalse(by_provider["claude"]["changed"])
+        self.assertEqual(by_provider["future-provider"]["reason"], "UNKNOWN_PROVIDER")
+        self.assertFalse(by_provider["future-provider"]["changed"])
         self.assertEqual(
             by_provider["antigravity"]["reason"], "PREVALIDATION_FAILED"
         )
@@ -229,12 +239,12 @@ console.log(JSON.stringify({{planned,unknown}}));"""
 
     def test_unknown_provider_after_accepted_provider_blocks_before_apply(self) -> None:
         self.assert_unknown_provider_prevalidation_preserves_configuration(
-            "antigravity,claude"
+            "antigravity,future-provider"
         )
 
     def test_unknown_provider_before_accepted_provider_blocks_before_apply(self) -> None:
         self.assert_unknown_provider_prevalidation_preserves_configuration(
-            "claude,antigravity"
+            "future-provider,antigravity"
         )
 
     def test_unsupported_scope_blocks_all_providers_before_apply(self) -> None:
@@ -267,7 +277,7 @@ console.log(JSON.stringify({{planned,unknown}}));"""
             "--apply",
             "--uninstall",
             expected=2,
-            providers="antigravity,claude",
+            providers="antigravity,future-provider",
         )
         self.assertEqual(blocked["status"], "BLOCKED")
         self.assertEqual(config.read_bytes(), config_before)

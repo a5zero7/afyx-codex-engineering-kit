@@ -12,7 +12,7 @@ const SEVERITIES = new Set(['INFO', 'WARNING', 'ERROR']);
 const VERIFICATION_LEVELS = new Set(['DECLARED', 'RUNTIME']);
 const INTEGRATION_COMPONENTS = new Set(['afyx-graph', 'afyx-context']);
 const KNOWN_CAPABILITIES = Object.freeze([
-  'configuration', 'hooks', 'lifecycle', 'mcp', 'provider-routing', 'skills',
+  'configuration', 'hooks', 'instructions', 'lifecycle', 'mcp', 'provider-routing', 'skills',
   'scope:cli-global', 'scope:global', 'scope:ide-global', 'scope:workspace',
   'surface:cli', 'surface:ide',
 ]);
@@ -150,11 +150,12 @@ export function discoverProviderCapabilities(definition, adapterCapabilities, op
     const lifecycleScopes = (adapterCapabilities?.scopes || []).map((item, index) => text(item, `adapter.scopes[${index}]`, 128));
     const mcpScopes = split(definition?.mcp_scopes).map((item, index) => text(item, `provider.mcp_scopes[${index}]`, 128));
     const skillScopes = split(definition?.skill_scopes).map((item, index) => text(item, `provider.skill_scopes[${index}]`, 128));
+    const instructionScopes = split(definition?.instruction_scopes).map((item, index) => text(item, `provider.instruction_scopes[${index}]`, 128));
     const host = hostObservation(options.host);
     const declared = new Set([
       ...split(definition?.capabilities),
       ...surfaces.map((item) => `surface:${item}`),
-      ...[...new Set([...lifecycleScopes, ...mcpScopes, ...skillScopes])].map((item) => `scope:${item}`),
+      ...[...new Set([...lifecycleScopes, ...mcpScopes, ...skillScopes, ...instructionScopes])].map((item) => `scope:${item}`),
       'configuration',
       'lifecycle',
     ]);
@@ -166,7 +167,7 @@ export function discoverProviderCapabilities(definition, adapterCapabilities, op
       status: hostStatus,
       host: { commands, ...host, status: hostStatus, runtimeVerified: false },
       surfaces,
-      scopes: { lifecycle: lifecycleScopes, mcp: mcpScopes, skills: skillScopes },
+      scopes: { lifecycle: lifecycleScopes, mcp: mcpScopes, skills: skillScopes, instructions: instructionScopes },
       ownership: { class: ownershipClass, configurationPolicy },
       capabilities,
       acceptance: 'NOT_RUN',

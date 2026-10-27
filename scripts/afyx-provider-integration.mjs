@@ -15,6 +15,7 @@ import { basename, dirname, isAbsolute, relative, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { integrate as integrateCodex, probeMcp } from './afyx-mcp-integration.mjs';
+import { integrateClaude } from './afyx-claude-integration.mjs';
 import {
   discoverProviderCapabilities,
   negotiateProviderCapabilities,
@@ -285,6 +286,7 @@ function defineProviderAdapter(provider, scopes, execute) {
   const invoke = (operation, options) => {
     const lifecycle = {
       ...options,
+      operation,
       apply: operation === 'apply' || (operation === 'uninstall' && Boolean(options.apply)),
       uninstall: operation === 'uninstall',
     };
@@ -297,7 +299,8 @@ function defineProviderAdapter(provider, scopes, execute) {
   });
   const observeHost = (options = {}) => {
     if (options.host !== undefined) return options.host;
-    const candidate = provider === 'codex' ? options.codex : options.antigravity;
+    const candidate = provider === 'codex' ? options.codex
+      : provider === 'claude' ? options.claude : options.antigravity;
     if (!candidate) return undefined;
     return {
       detected: existsSync(candidate),
@@ -324,6 +327,7 @@ function defineProviderAdapter(provider, scopes, execute) {
 export const providerAdapters = Object.freeze({
   codex: defineProviderAdapter('codex', ['global'], integrateCodexAdapter),
   antigravity: defineProviderAdapter('antigravity', ['global', 'workspace'], integrateAntigravity),
+  claude: defineProviderAdapter('claude', ['global', 'workspace'], integrateClaude),
 });
 
 export function getProviderAdapter(provider) {
@@ -401,6 +405,9 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
     codex: argument('--codex'),
     codexHome: argument('--codex-home', resolve(homedir(), '.codex')),
     geminiHome: argument('--gemini-home', resolve(homedir(), '.gemini')),
+    claude: argument('--claude'),
+    claudeConfigDir: argument('--claude-config-dir') || undefined,
+    providerTimeoutMs: Number(argument('--provider-timeout-ms', '15000')),
     apply: process.argv.includes('--apply'),
     uninstall: process.argv.includes('--uninstall'),
   };

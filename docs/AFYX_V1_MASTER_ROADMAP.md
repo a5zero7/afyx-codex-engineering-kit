@@ -203,6 +203,21 @@ works" claim:
 Claude Code must receive equivalent capability-appropriate coverage after TB1/TB2,
 but AFYX-294 does not claim or retroactively supply Claude evidence.
 
+TB5 source checkpoint (2026-10-27): the `ProviderAdapter/v1` registry includes
+Claude Code with independently declared CLI and IDE surfaces, user/project
+instruction and skill scopes, and ownership-safe MCP lifecycle mapping (`global`
+to Claude `user`, `workspace` to Claude `project`). Discovery and planning remain
+read-only; caller assertions and executable presence remain `UNVERIFIED`; apply
+and uninstall require explicit consent and use bounded native CLI calls with
+configuration read-back, Afyx ownership markers, rollback, and foreign-entry
+preservation. Native state remains in `~/.claude.json` by default and relocates
+to `<CLAUDE_CONFIG_DIR>/.claude.json` only under an explicit override; effective
+identity checks honor Claude's `local` → `project` → `user` precedence. Claude
+MCP `local` scope is inspected but intentionally not managed. Authenticated CLI, bundled
+VS Code CLI, IDE UI, and agent-mediated acceptance remain `NOT_RUN` pending an
+authorized host. TB6 must validate cross-provider degraded modes and applicable
+live acceptance without treating source implementation as provider acceptance.
+
 ### Phase 8–11 critical path and parallel workstreams
 
 | Workstream | Jira/evidence | Current state | Completion gate | Dependency |
@@ -211,7 +226,7 @@ but AFYX-294 does not claim or retroactively supply Claude evidence.
 | W2 Expert acceptance | AFYX-283, AFYX-67/68 | ACCEPTANCE_PENDING | Independent D.6 verdict, Case A reference/tool bounds, controlled A1/B1 quality comparison, sanitized provenance | Independent evaluator/owner boundary |
 | W3 Forge A0–A8 | AFYX-12, AFYX-88–96, AFYX-171–183 | A0–A3 contract complete; A4 implementation/candidate preparation complete with AFYX-92/178 `In Review`; A5 public harness preparation complete; formal `0/36 NOT_RUN` | Pending A4 acceptance where applicable, external prerequisites, formal campaign, A6/A7, explicit A8 decision | A8 blocks W4 |
 | W4 Forge A9–A12 | AFYX-97–100, AFYX-184–188 | NOT_STARTED/BLOCKED | Selected implementation, adaptive modes, dogfood, stable contract | Only after A8 GO; NO-GO requires redesign/owner decision |
-| W5 Platform Track B | AFYX-101–108; AFYX-53/56 and AFYX-294 as supporting evidence | PARTIAL: Codex and Antigravity paths/six-surface evidence exist, core is not yet generalized, Claude absent | TB0–TB7, AFYX-294 surface closure, and three-provider capability matrix | TB1/TB2 before Claude adapter; may run beside Forge evaluation |
+| W5 Platform Track B | AFYX-101–108; AFYX-53/56 and AFYX-294 as supporting evidence | PARTIAL: TB1–TB5 source contracts/adapters implemented in candidate; Claude live CLI/IDE acceptance and TB6/TB7 remain | TB0–TB7, AFYX-294 surface closure, and three-provider capability matrix | TB6 cross-provider hardening follows TB5; may run beside Forge evaluation |
 | W6 Phase 9 hardening | AFYX-58/59/62/63 and accepted CI/security/recovery evidence | SUBSTANTIAL REUSABLE EVIDENCE; final matrix pending | Only changed/untested release risks: installed exact artifact, corruption/interruption/rollback, resource bounds, 3OS packaging | After material component changes settle; focused reruns only |
 | W7 T12 combined acceptance | AFYX-248/249/269/283/12 | BLOCKED by component gates | Contract below passes on exact installed candidate | W1, W2, W4, W5, W6 complete |
 | W8 Phase 10 Private Beta | Existing Phase 10 program | NOT_STARTED | Controlled users/environments, upgrade/config stability, all release-blocking defects closed | Phase 8 + Phase 9 + T12 PASS |

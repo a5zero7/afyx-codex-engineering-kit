@@ -54,8 +54,8 @@ if set(document.get("supported_presets", "").split(";")) != PRESETS:
     fail("supported_presets must contain minimal, recommended, full and custom")
 providers = document.get("providers", [])
 provider_ids = [provider.get("provider") for provider in providers]
-if provider_ids != ["codex", "antigravity"] or document.get("default_provider") != "codex":
-    fail("provider registry must declare Codex first/default and Antigravity second")
+if provider_ids != ["codex", "antigravity", "claude"] or document.get("default_provider") != "codex":
+    fail("provider registry must declare Codex first/default, Antigravity second, and Claude third")
 if len(set(provider_ids)) != len(provider_ids):
     fail("duplicate provider id")
 for provider in providers:
