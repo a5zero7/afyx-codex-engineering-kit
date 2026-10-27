@@ -41,6 +41,15 @@ if document.get("provider_adapter_contract") != "ProviderAdapter/v1":
     fail("provider_adapter_contract must be ProviderAdapter/v1")
 if document.get("provider_adapter_operations") != "inspect;plan;apply;verify;uninstall":
     fail("provider_adapter_operations must declare the stable v1 lifecycle")
+expected_contracts = {
+    "provider_capability_contract": "ProviderCapability/v1",
+    "provider_negotiation_contract": "ProviderCapabilityNegotiation/v1",
+    "engineering_task_contract": "AfyxEngineeringTask/v1",
+    "engineering_result_contract": "AfyxEngineeringResult/v1",
+}
+for key, expected in expected_contracts.items():
+    if document.get(key) != expected:
+        fail(f"{key} must be {expected}")
 if set(document.get("supported_presets", "").split(";")) != PRESETS:
     fail("supported_presets must contain minimal, recommended, full and custom")
 providers = document.get("providers", [])
