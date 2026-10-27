@@ -131,7 +131,10 @@ class ControlPlaneContractTests(unittest.TestCase):
             contract["provider_adapter_operations"],
             "inspect;plan;apply;verify;uninstall",
         )
-        self.assertEqual([item["provider"] for item in contract["providers"]], ["codex", "antigravity"])
+        self.assertEqual(
+            [item["provider"] for item in contract["providers"]],
+            ["codex", "antigravity", "claude"],
+        )
         self.assertEqual(contract["providers"][0]["configuration_policy"], "merge-afyx-owned-entries-only")
         self.assertEqual(contract["providers"][1]["mcp_scopes"], "global;workspace")
         by_id = {item["id"]: item for item in contract["components"]}

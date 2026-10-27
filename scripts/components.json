@@ -33,6 +33,19 @@
       "mcp_scopes": "global;workspace",
       "skill_scopes": "ide-global;cli-global;workspace",
       "configuration_policy": "merge-afyx-owned-entries-only"
+    },
+    {
+      "provider": "claude",
+      "name": "Claude Code",
+      "primary": "false",
+      "ownership_class": "USER",
+      "capabilities": "instructions;skills;mcp;hooks",
+      "host_commands": "claude",
+      "surfaces": "cli;ide",
+      "mcp_scopes": "global;workspace",
+      "skill_scopes": "global;workspace",
+      "instruction_scopes": "global;workspace",
+      "configuration_policy": "merge-afyx-owned-entries-only"
     }
   ],
   "prerequisites": [
