@@ -4,6 +4,7 @@ export const PROVIDER_CAPABILITY_CONTRACT = 'ProviderCapability/v1';
 export const PROVIDER_NEGOTIATION_CONTRACT = 'ProviderCapabilityNegotiation/v1';
 export const ENGINEERING_TASK_CONTRACT = 'AfyxEngineeringTask/v1';
 export const ENGINEERING_RESULT_CONTRACT = 'AfyxEngineeringResult/v1';
+export const AGENT_GUARDRAILS_CONTRACT = 'AfyxAgentGuardrails/v1';
 
 const ACCEPTANCE_STATES = new Set(['PASS', 'FAIL', 'BLOCKED', 'NOT_RUN']);
 const COMPLETENESS_STATES = new Set(['COMPLETE', 'PARTIAL', 'UNKNOWN']);
@@ -15,6 +16,24 @@ const KNOWN_CAPABILITIES = Object.freeze([
   'configuration', 'hooks', 'instructions', 'lifecycle', 'mcp', 'provider-routing', 'skills',
   'scope:cli-global', 'scope:global', 'scope:ide-global', 'scope:workspace',
   'surface:cli', 'surface:ide',
+]);
+
+export const EVIDENCE_CLASSES = Object.freeze([
+  'DIRECT_EXECUTION',
+  'VERIFIED_SOURCE',
+  'GRAPH_INDEX',
+  'EXTERNAL_DOCS',
+  'INFERENCE',
+  'UNAVAILABLE',
+]);
+export const EXECUTION_TYPES = Object.freeze(['REAL', 'MOCK', 'SYNTHETIC', 'STATIC', 'NONE']);
+export const FRESHNESS_STATES = Object.freeze(['FRESH', 'STALE', 'UNKNOWN']);
+export const CONTROL_MODES = Object.freeze(['MECHANICAL', 'ADVISORY', 'HYBRID']);
+export const AUTHORIZATION_LEVELS = Object.freeze([
+  'READ_ONLY',
+  'WORKSPACE_WRITE',
+  'DESTRUCTIVE_APPROVED',
+  'ADMIN',
 ]);
 
 export class ContractValidationError extends Error {
@@ -273,12 +292,55 @@ function integrations(value, path) {
   });
 }
 
+function policyDefinition(value, path) {
+  if (value === undefined || value === null) return null;
+  const item = object(value, path, [
+    'contract',
+    'controlMode',
+    'allowedOperations',
+    'allowedFiles',
+    'excludedScope',
+    'expectedOutcomes',
+    'authorization',
+  ]);
+  const contract = item.contract === undefined
+    ? AGENT_GUARDRAILS_CONTRACT
+    : choice(item.contract, `${path}.contract`, new Set([AGENT_GUARDRAILS_CONTRACT]));
+  const controlMode = item.controlMode === undefined
+    ? 'HYBRID'
+    : choice(item.controlMode, `${path}.controlMode`, new Set(CONTROL_MODES));
+  const allowedOperations = item.allowedOperations === undefined
+    ? []
+    : list(item.allowedOperations, `${path}.allowedOperations`, 64).map((op, i) => text(op, `${path}.allowedOperations[${i}]`, 128));
+  const allowedFiles = item.allowedFiles === undefined
+    ? []
+    : list(item.allowedFiles, `${path}.allowedFiles`, 256).map((f, i) => text(f, `${path}.allowedFiles[${i}]`, 1024));
+  const excludedScope = item.excludedScope === undefined
+    ? []
+    : list(item.excludedScope, `${path}.excludedScope`, 256).map((f, i) => text(f, `${path}.excludedScope[${i}]`, 1024));
+  const expectedOutcomes = item.expectedOutcomes === undefined
+    ? []
+    : list(item.expectedOutcomes, `${path}.expectedOutcomes`, 64).map((o, i) => text(o, `${path}.expectedOutcomes[${i}]`, 1024));
+  const authorization = item.authorization === undefined
+    ? 'READ_ONLY'
+    : choice(item.authorization, `${path}.authorization`, new Set(AUTHORIZATION_LEVELS));
+  return {
+    contract,
+    controlMode,
+    allowedOperations,
+    allowedFiles,
+    excludedScope,
+    expectedOutcomes,
+    authorization,
+  };
+}
+
 export function createEngineeringTask(input) {
-  const root = object(input, 'taskContract', ['contract', 'task', 'workspace', 'context', 'requirements', 'integrations']);
+  const root = object(input, 'taskContract', ['contract', 'task', 'workspace', 'context', 'requirements', 'integrations', 'policy']);
   if (root.contract !== undefined && root.contract !== ENGINEERING_TASK_CONTRACT) {
     throw new ContractValidationError('taskContract.contract', 'has an unsupported contract version');
   }
-  const task = object(root.task, 'taskContract.task', ['id', 'operation']);
+  const task = object(root.task, 'taskContract.task', ['id', 'operation', 'objective']);
   const workspace = object(root.workspace, 'taskContract.workspace', ['id', 'root', 'revision']);
   const context = object(root.context, 'taskContract.context', ['sources', 'completeness']);
   const sources = list(context.sources, 'taskContract.context.sources', 256).map((source, index) => {
@@ -291,9 +353,14 @@ export function createEngineeringTask(input) {
       provenance: provenance(item.provenance, `${at}.provenance`),
     };
   });
+  const policy = root.policy === undefined ? null : policyDefinition(root.policy, 'taskContract.policy');
   return freeze({
     contract: ENGINEERING_TASK_CONTRACT,
-    task: { id: text(task.id, 'taskContract.task.id', 512), operation: text(task.operation, 'taskContract.task.operation', 256) },
+    task: {
+      id: text(task.id, 'taskContract.task.id', 512),
+      operation: text(task.operation, 'taskContract.task.operation', 256),
+      ...(task.objective === undefined ? {} : { objective: text(task.objective, 'taskContract.task.objective', 4096) }),
+    },
     workspace: {
       id: text(workspace.id, 'taskContract.workspace.id', 512),
       ...(workspace.root === undefined ? {} : { root: text(workspace.root, 'taskContract.workspace.root', 32_767) }),
@@ -302,6 +369,7 @@ export function createEngineeringTask(input) {
     context: { sources, completeness: choice(context.completeness, 'taskContract.context.completeness', COMPLETENESS_STATES) },
     requirements: capabilityRequirements(root.requirements, 'taskContract.requirements'),
     integrations: integrations(root.integrations, 'taskContract.integrations'),
+    ...(policy ? { policy } : {}),
   });
 }
 
@@ -319,12 +387,35 @@ export function createEngineeringResult(input) {
   }
   const evidence = list(root.evidence, 'resultContract.evidence', 256).map((entry, index) => {
     const at = `resultContract.evidence[${index}]`;
-    const item = object(entry, at, ['id', 'type', 'validation', 'provenance']);
+    const item = object(entry, at, ['id', 'type', 'validation', 'provenance', 'evidenceClass', 'executionType', 'freshness']);
+    const validation = choice(item.validation, `${at}.validation`, ACCEPTANCE_STATES);
+    const evidenceClass = item.evidenceClass === undefined ? null : choice(item.evidenceClass, `${at}.evidenceClass`, new Set(EVIDENCE_CLASSES));
+    const executionType = item.executionType === undefined ? null : choice(item.executionType, `${at}.executionType`, new Set(EXECUTION_TYPES));
+    const freshness = item.freshness === undefined ? null : choice(item.freshness, `${at}.freshness`, new Set(FRESHNESS_STATES));
+
+    if (validation === 'PASS') {
+      if (evidenceClass === 'INFERENCE' || evidenceClass === 'UNAVAILABLE') {
+        throw new ContractValidationError(
+          `${at}.validation`,
+          `unsupported claim cannot receive verified PASS status (evidenceClass: ${evidenceClass})`
+        );
+      }
+      if (executionType === 'MOCK' && evidenceClass === 'DIRECT_EXECUTION') {
+        throw new ContractValidationError(
+          `${at}.validation`,
+          'mock execution cannot receive verified direct execution PASS status'
+        );
+      }
+    }
+
     return {
       id: text(item.id, `${at}.id`, 512),
       type: text(item.type, `${at}.type`, 128),
-      validation: choice(item.validation, `${at}.validation`, ACCEPTANCE_STATES),
+      validation,
       provenance: provenance(item.provenance, `${at}.provenance`),
+      ...(evidenceClass ? { evidenceClass } : {}),
+      ...(executionType ? { executionType } : {}),
+      ...(freshness ? { freshness } : {}),
     };
   });
   const diagnostics = list(root.diagnostics, 'resultContract.diagnostics', 256).map((diagnostic, index) => {
@@ -352,4 +443,216 @@ export function validateEngineeringResult(value) {
     throw new ContractValidationError('resultContract.contract', 'must identify AfyxEngineeringResult/v1');
   }
   return createEngineeringResult(value);
+}
+
+function normalizePath(p) {
+  return String(p).replace(/\\/g, '/').replace(/^\.\//, '');
+}
+
+function matchesScopePattern(filePath, pattern) {
+  const normFile = normalizePath(filePath);
+  const normPattern = normalizePath(pattern);
+  if (normPattern === '*' || normPattern === '**') return true;
+  if (normFile === normPattern) return true;
+  if (normPattern.endsWith('/**')) {
+    const prefix = normPattern.slice(0, -3);
+    return normFile === prefix || normFile.startsWith(prefix + '/');
+  }
+  if (normPattern.endsWith('/*')) {
+    const prefix = normPattern.slice(0, -2);
+    if (!normFile.startsWith(prefix + '/')) return false;
+    const rest = normFile.slice(prefix.length + 1);
+    return !rest.includes('/');
+  }
+  return normFile.startsWith(normPattern.endsWith('/') ? normPattern : normPattern + '/');
+}
+
+export function validateTaskScope(task, requestedAction = {}) {
+  if (!isObject(task) || task.contract !== ENGINEERING_TASK_CONTRACT) {
+    throw new ContractValidationError('task', 'must be a valid AfyxEngineeringTask/v1');
+  }
+  const action = object(requestedAction, 'requestedAction', [
+    'operation',
+    'files',
+    'revision',
+    'mutation',
+  ]);
+
+  const violations = [];
+  const policy = task.policy;
+
+  // 1. Source revision check
+  if (action.revision !== undefined && action.revision !== null) {
+    const expectedRevision = task.workspace?.revision;
+    if (expectedRevision && action.revision !== expectedRevision) {
+      violations.push({
+        code: 'SOURCE_REVISION_MISMATCH',
+        message: `Current revision '${action.revision}' does not match task baseline revision '${expectedRevision}'.`,
+      });
+    }
+  }
+
+  // 2. Allowed operations check
+  if (action.operation !== undefined && policy?.allowedOperations?.length) {
+    if (!policy.allowedOperations.includes(action.operation)) {
+      violations.push({
+        code: 'UNAUTHORIZED_OPERATION',
+        message: `Operation '${action.operation}' is not within allowedOperations: [${policy.allowedOperations.join(', ')}].`,
+      });
+    }
+  }
+
+  // 3. Mutation authorization check
+  const isMutation = action.mutation === true || (Array.isArray(action.files) && action.files.length > 0 && action.operation !== 'inspect' && action.operation !== 'review');
+  if (isMutation && policy?.authorization === 'READ_ONLY') {
+    violations.push({
+      code: 'MUTATION_NOT_AUTHORIZED',
+      message: 'Task authorization is READ_ONLY; file mutations are not permitted.',
+    });
+  }
+
+  // 4. File scope checks (allowedFiles and excludedScope)
+  if (Array.isArray(action.files) && action.files.length > 0) {
+    for (const file of action.files) {
+      if (policy?.excludedScope?.length) {
+        const isExcluded = policy.excludedScope.some((pattern) => matchesScopePattern(file, pattern));
+        if (isExcluded) {
+          violations.push({
+            code: 'EXCLUDED_SCOPE_VIOLATION',
+            message: `File '${file}' matches excluded scope pattern.`,
+          });
+        }
+      }
+      if (policy?.allowedFiles?.length) {
+        const isAllowed = policy.allowedFiles.some((pattern) => matchesScopePattern(file, pattern));
+        if (!isAllowed) {
+          violations.push({
+            code: 'UNAUTHORIZED_FILE_SCOPE',
+            message: `File '${file}' is outside allowedFiles scope.`,
+          });
+        }
+      }
+    }
+  }
+
+  const allowed = violations.length === 0;
+  return freeze({
+    allowed,
+    status: allowed ? 'SCOPE_AUTHORIZED' : 'SCOPE_VIOLATION',
+    violations,
+  });
+}
+
+export function evaluateSearchEfficiency(input = {}) {
+  const options = object(input, 'searchEfficiencyOptions', [
+    'query',
+    'previousQueries',
+    'indexFreshness',
+    'newEvidenceAvailable',
+    'unresolvedQuestion',
+    'requiresRelationships',
+    'knownPath',
+  ]);
+
+  const query = text(options.query, 'searchEfficiencyOptions.query', 1024);
+  const previousQueries = options.previousQueries === undefined ? [] : list(options.previousQueries, 'searchEfficiencyOptions.previousQueries', 128);
+  const indexFreshness = options.indexFreshness === undefined ? 'FRESH' : choice(options.indexFreshness, 'searchEfficiencyOptions.indexFreshness', new Set(FRESHNESS_STATES));
+  const newEvidenceAvailable = boolean(options.newEvidenceAvailable, 'searchEfficiencyOptions.newEvidenceAvailable', false);
+  const unresolvedQuestion = optionalText(options.unresolvedQuestion, 'searchEfficiencyOptions.unresolvedQuestion', 2048);
+  const requiresRelationships = boolean(options.requiresRelationships, 'searchEfficiencyOptions.requiresRelationships', false);
+  const knownPath = optionalText(options.knownPath, 'searchEfficiencyOptions.knownPath', 1024);
+
+  // Preference 1: If exact path is known and relationships are not required, direct source inspection is preferred
+  if (knownPath && !requiresRelationships) {
+    return freeze({
+      action: 'DIRECT_INSPECTION',
+      target: knownPath,
+      reason: 'DIRECT_INSPECTION_PREFERRED',
+      message: `Exact path '${knownPath}' is known and relationship exploration is not required; inspect source directly.`,
+    });
+  }
+
+  // Check duplicate equivalent queries
+  const normalizedQuery = query.trim().toLowerCase();
+  const isDuplicate = previousQueries.some((prev) => {
+    const prevText = typeof prev === 'string' ? prev : prev?.query;
+    return typeof prevText === 'string' && prevText.trim().toLowerCase() === normalizedQuery;
+  });
+
+  if (isDuplicate) {
+    if (newEvidenceAvailable) {
+      return freeze({
+        action: 'EXECUTE',
+        reason: 'REQUERY_JUSTIFIED_BY_NEW_EVIDENCE',
+        message: 'Re-query is justified because new evidence or modified files became available.',
+      });
+    }
+    if (indexFreshness === 'STALE') {
+      return freeze({
+        action: 'EXECUTE',
+        reason: 'REQUERY_JUSTIFIED_BY_INDEX_STALENESS',
+        message: 'Re-query is justified because Graph index is stale and requires refreshed exploration.',
+      });
+    }
+    if (unresolvedQuestion) {
+      return freeze({
+        action: 'EXECUTE',
+        reason: 'REQUERY_JUSTIFIED_BY_UNRESOLVED_QUESTION',
+        message: `Re-query is justified to resolve specific question: ${unresolvedQuestion}`,
+      });
+    }
+    return freeze({
+      action: 'REUSE_PREVIOUS',
+      reason: 'DUPLICATE_QUERY_REUSE',
+      message: 'Equivalent search was previously executed; reuse prior evidence instead of redundant tool invocation.',
+    });
+  }
+
+  if (requiresRelationships) {
+    if (indexFreshness === 'STALE') {
+      return freeze({
+        action: 'GRAPH_EXPLORE',
+        reason: 'STALE_INDEX_FALLBACK_RECOMMENDED',
+        message: 'Graph relationships needed, but index is stale; combine with direct source cross-check.',
+      });
+    }
+    return freeze({
+      action: 'GRAPH_EXPLORE',
+      reason: 'RELATIONSHIP_ANALYSIS_REQUIRED',
+      message: 'Graph exploration selected because structural relationship or impact analysis is required.',
+    });
+  }
+
+  return freeze({
+    action: 'EXECUTE',
+    reason: 'INITIAL_QUERY',
+    message: 'Initial query execution permitted.',
+  });
+}
+
+export function evaluateProviderGuardrailsPolicy(providerId, negotiation) {
+  const provider = text(providerId, 'providerId', 128);
+  const negotiationObj = object(negotiation, 'negotiation', [
+    'contract',
+    'provider',
+    'status',
+    'requirements',
+    'mutationAuthorized',
+    'diagnostics',
+  ]);
+
+  const requirements = negotiationObj.requirements || [];
+  const unsupported = requirements.filter((r) => r.status === 'UNSUPPORTED');
+  const unverified = requirements.filter((r) => r.status === 'UNVERIFIED');
+
+  return freeze({
+    contract: AGENT_GUARDRAILS_CONTRACT,
+    provider,
+    mechanicalEnforcement: true,
+    osLevelEnforcement: false,
+    advisoryOnly: false,
+    unsupportedCapabilities: unsupported.map((u) => u.capability),
+    unverifiedCapabilities: unverified.map((u) => u.capability),
+    gracefullyDegraded: unsupported.length > 0 || unverified.length > 0,
+  });
 }

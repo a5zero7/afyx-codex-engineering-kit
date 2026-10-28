@@ -137,6 +137,341 @@ console.log(JSON.stringify({{task,result}}));
             payload["result"]["integrations"][0]["status"], "UNAVAILABLE"
         )
 
+    def test_authorized_and_unauthorized_scope_changes(self) -> None:
+        source = f"""
+import {{createEngineeringTask,validateTaskScope}} from {json.dumps(CONTRACTS.as_uri())};
+const task=createEngineeringTask({{
+  task:{{id:'task-scope-1',operation:'apply',objective:'Refactor auth guardrails'}},
+  workspace:{{id:'w1',revision:'rev-100'}},
+  context:{{sources:[],completeness:'COMPLETE'}},
+  requirements:[],
+  policy:{{
+    controlMode:'MECHANICAL',
+    allowedOperations:['apply','verify'],
+    allowedFiles:['scripts/afyx-integration-contracts.mjs','skills/afyx-engineering-expert/**'],
+    excludedScope:['evals/forge/vault/**','.env'],
+    expectedOutcomes:['Guardrails pass deterministic tests'],
+    authorization:'WORKSPACE_WRITE'
+  }}
+}});
+
+const authorized=validateTaskScope(task,{{
+  operation:'apply',
+  files:['scripts/afyx-integration-contracts.mjs'],
+  revision:'rev-100',
+  mutation:true
+}});
+
+const badOperation=validateTaskScope(task,{{
+  operation:'delete-database',
+  files:['scripts/afyx-integration-contracts.mjs']
+}});
+
+const badFile=validateTaskScope(task,{{
+  operation:'apply',
+  files:['src/unrelated.js'],
+  mutation:true
+}});
+
+const excludedFile=validateTaskScope(task,{{
+  operation:'apply',
+  files:['evals/forge/vault/secret.json'],
+  mutation:true
+}});
+
+const readOnlyTask=createEngineeringTask({{
+  task:{{id:'task-ro',operation:'review'}},
+  workspace:{{id:'w1',revision:'rev-100'}},
+  context:{{sources:[],completeness:'COMPLETE'}},
+  requirements:[],
+  policy:{{
+    allowedOperations:['review','inspect'],
+    allowedFiles:['**'],
+    authorization:'READ_ONLY'
+  }}
+}});
+
+const unauthorizedMutation=validateTaskScope(readOnlyTask,{{
+  operation:'apply',
+  files:['scripts/test.js'],
+  mutation:true
+}});
+
+console.log(JSON.stringify({{authorized,badOperation,badFile,excludedFile,unauthorizedMutation}}));
+"""
+        payload = run_node(source)
+        self.assertTrue(payload["authorized"]["allowed"])
+        self.assertEqual(payload["authorized"]["status"], "SCOPE_AUTHORIZED")
+
+        self.assertFalse(payload["badOperation"]["allowed"])
+        self.assertEqual(
+            payload["badOperation"]["violations"][0]["code"], "UNAUTHORIZED_OPERATION"
+        )
+
+        self.assertFalse(payload["badFile"]["allowed"])
+        self.assertEqual(
+            payload["badFile"]["violations"][0]["code"], "UNAUTHORIZED_FILE_SCOPE"
+        )
+
+        self.assertFalse(payload["excludedFile"]["allowed"])
+        self.assertEqual(
+            payload["excludedFile"]["violations"][0]["code"], "EXCLUDED_SCOPE_VIOLATION"
+        )
+
+        self.assertFalse(payload["unauthorizedMutation"]["allowed"])
+        codes = [v["code"] for v in payload["unauthorizedMutation"]["violations"]]
+        self.assertIn("MUTATION_NOT_AUTHORIZED", codes)
+
+    def test_unsupported_claim_rejection(self) -> None:
+        source = f"""
+import {{createEngineeringResult}} from {json.dumps(CONTRACTS.as_uri())};
+const capture=(fn)=>{{try{{fn();return null;}}catch(error){{return {{code:error.code,path:error.path,message:error.message}};}}}};
+
+const inferencePass=capture(()=>createEngineeringResult({{
+  taskId:'task-claims',status:'SUCCEEDED',diagnostics:[],
+  evidence:[{{id:'e1',type:'assertion',validation:'PASS',evidenceClass:'INFERENCE',provenance:{{source:'agent-assumption'}}}}]
+}}));
+
+const unavailablePass=capture(()=>createEngineeringResult({{
+  taskId:'task-claims',status:'SUCCEEDED',diagnostics:[],
+  evidence:[{{id:'e2',type:'check',validation:'PASS',evidenceClass:'UNAVAILABLE',provenance:{{source:'unreachable-host'}}}}]
+}}));
+
+const mockClaimedDirectPass=capture(()=>createEngineeringResult({{
+  taskId:'task-claims',status:'SUCCEEDED',diagnostics:[],
+  evidence:[{{id:'e3',type:'test',validation:'PASS',evidenceClass:'DIRECT_EXECUTION',executionType:'MOCK',provenance:{{source:'mock-runner'}}}}]
+}}));
+
+const validDirectPass=createEngineeringResult({{
+  taskId:'task-claims',status:'SUCCEEDED',diagnostics:[],
+  evidence:[{{id:'e4',type:'test',validation:'PASS',evidenceClass:'DIRECT_EXECUTION',executionType:'REAL',provenance:{{source:'pytest'}}}}]
+}});
+
+const validUnavailableSkip=createEngineeringResult({{
+  taskId:'task-claims',status:'BLOCKED',diagnostics:[],
+  evidence:[{{id:'e5',type:'integration',validation:'NOT_RUN',evidenceClass:'UNAVAILABLE',provenance:{{source:'vault'}}}}]
+}});
+
+console.log(JSON.stringify({{inferencePass,unavailablePass,mockClaimedDirectPass,validDirectPassValid:validDirectPass.evidence[0].validation,validUnavailableSkipValid:validUnavailableSkip.evidence[0].validation}}));
+"""
+        payload = run_node(source)
+        self.assertEqual(payload["inferencePass"]["code"], "INVALID_CONTRACT")
+        self.assertIn("unsupported claim cannot receive verified PASS status", payload["inferencePass"]["message"])
+
+        self.assertEqual(payload["unavailablePass"]["code"], "INVALID_CONTRACT")
+        self.assertIn("unsupported claim cannot receive verified PASS status", payload["unavailablePass"]["message"])
+
+        self.assertEqual(payload["mockClaimedDirectPass"]["code"], "INVALID_CONTRACT")
+        self.assertIn("mock execution cannot receive verified direct execution PASS status", payload["mockClaimedDirectPass"]["message"])
+
+        self.assertEqual(payload["validDirectPassValid"], "PASS")
+        self.assertEqual(payload["validUnavailableSkipValid"], "NOT_RUN")
+
+    def test_source_revision_mismatch(self) -> None:
+        source = f"""
+import {{createEngineeringTask,validateTaskScope}} from {json.dumps(CONTRACTS.as_uri())};
+const task=createEngineeringTask({{
+  task:{{id:'task-rev',operation:'apply'}},
+  workspace:{{id:'w-rev',revision:'commit-sha-474c0f5'}},
+  context:{{sources:[],completeness:'COMPLETE'}},
+  requirements:[],
+  policy:{{allowedOperations:['apply'],authorization:'WORKSPACE_WRITE'}}
+}});
+
+const mismatch=validateTaskScope(task,{{
+  operation:'apply',
+  revision:'commit-sha-89dfd58',
+  mutation:true
+}});
+
+const match=validateTaskScope(task,{{
+  operation:'apply',
+  revision:'commit-sha-474c0f5',
+  mutation:true
+}});
+
+console.log(JSON.stringify({{mismatch,match}}));
+"""
+        payload = run_node(source)
+        self.assertFalse(payload["mismatch"]["allowed"])
+        self.assertEqual(payload["mismatch"]["violations"][0]["code"], "SOURCE_REVISION_MISMATCH")
+        self.assertTrue(payload["match"]["allowed"])
+
+    def test_accurate_execution_and_skip_classification(self) -> None:
+        source = f"""
+import {{createEngineeringResult}} from {json.dumps(CONTRACTS.as_uri())};
+const result=createEngineeringResult({{
+  taskId:'task-classification',status:'SUCCEEDED',output:{{}},diagnostics:[],
+  evidence:[
+    {{id:'real-test',type:'unit-test',validation:'PASS',evidenceClass:'DIRECT_EXECUTION',executionType:'REAL',provenance:{{source:'unittest'}}}},
+    {{id:'static-audit',type:'static-check',validation:'PASS',evidenceClass:'VERIFIED_SOURCE',executionType:'STATIC',provenance:{{source:'linter'}}}},
+    {{id:'skipped-integration',type:'integration',validation:'NOT_RUN',evidenceClass:'UNAVAILABLE',executionType:'NONE',provenance:{{source:'optional-service'}}}},
+    {{id:'blocked-e2e',type:'e2e',validation:'BLOCKED',evidenceClass:'UNAVAILABLE',executionType:'NONE',provenance:{{source:'credential-missing'}}}}
+  ]
+}});
+console.log(JSON.stringify({{
+  evidence:result.evidence.map(e=>({{id:e.id,validation:e.validation,evidenceClass:e.evidenceClass,executionType:e.executionType}}))
+}}));
+"""
+        payload = run_node(source)
+        items = {e["id"]: e for e in payload["evidence"]}
+        self.assertEqual(items["real-test"]["validation"], "PASS")
+        self.assertEqual(items["real-test"]["evidenceClass"], "DIRECT_EXECUTION")
+        self.assertEqual(items["real-test"]["executionType"], "REAL")
+
+        self.assertEqual(items["static-audit"]["validation"], "PASS")
+        self.assertEqual(items["static-audit"]["evidenceClass"], "VERIFIED_SOURCE")
+        self.assertEqual(items["static-audit"]["executionType"], "STATIC")
+
+        self.assertEqual(items["skipped-integration"]["validation"], "NOT_RUN")
+        self.assertEqual(items["skipped-integration"]["executionType"], "NONE")
+
+        self.assertEqual(items["blocked-e2e"]["validation"], "BLOCKED")
+
+    def test_graph_freshness_and_justified_fallback(self) -> None:
+        source = f"""
+import {{evaluateSearchEfficiency}} from {json.dumps(CONTRACTS.as_uri())};
+const directInspection=evaluateSearchEfficiency({{
+  query:'find auth helper',
+  knownPath:'scripts/afyx-integration-contracts.mjs',
+  requiresRelationships:false
+}});
+
+const freshGraph=evaluateSearchEfficiency({{
+  query:'explore caller hierarchy of createEngineeringTask',
+  requiresRelationships:true,
+  indexFreshness:'FRESH'
+}});
+
+const staleGraph=evaluateSearchEfficiency({{
+  query:'explore caller hierarchy of createEngineeringTask',
+  requiresRelationships:true,
+  indexFreshness:'STALE'
+}});
+
+console.log(JSON.stringify({{directInspection,freshGraph,staleGraph}}));
+"""
+        payload = run_node(source)
+        self.assertEqual(payload["directInspection"]["action"], "DIRECT_INSPECTION")
+        self.assertEqual(payload["directInspection"]["target"], "scripts/afyx-integration-contracts.mjs")
+
+        self.assertEqual(payload["freshGraph"]["action"], "GRAPH_EXPLORE")
+        self.assertEqual(payload["freshGraph"]["reason"], "RELATIONSHIP_ANALYSIS_REQUIRED")
+
+        self.assertEqual(payload["staleGraph"]["action"], "GRAPH_EXPLORE")
+        self.assertEqual(payload["staleGraph"]["reason"], "STALE_INDEX_FALLBACK_RECOMMENDED")
+
+    def test_duplicate_search_reuse_and_justified_requery(self) -> None:
+        source = f"""
+import {{evaluateSearchEfficiency}} from {json.dumps(CONTRACTS.as_uri())};
+const previous=['find authentication tokens in scripts'];
+
+const duplicate=evaluateSearchEfficiency({{
+  query:'find authentication tokens in scripts',
+  previousQueries:previous,
+  newEvidenceAvailable:false,
+  indexFreshness:'FRESH'
+}});
+
+const requeryEvidence=evaluateSearchEfficiency({{
+  query:'find authentication tokens in scripts',
+  previousQueries:previous,
+  newEvidenceAvailable:true,
+  indexFreshness:'FRESH'
+}});
+
+const requeryStaleness=evaluateSearchEfficiency({{
+  query:'find authentication tokens in scripts',
+  previousQueries:previous,
+  newEvidenceAvailable:false,
+  indexFreshness:'STALE'
+}});
+
+const requeryUnresolved=evaluateSearchEfficiency({{
+  query:'find authentication tokens in scripts',
+  previousQueries:previous,
+  newEvidenceAvailable:false,
+  indexFreshness:'FRESH',
+  unresolvedQuestion:'Does Antigravity provider implement hooks?'
+}});
+
+console.log(JSON.stringify({{duplicate,requeryEvidence,requeryStaleness,requeryUnresolved}}));
+"""
+        payload = run_node(source)
+        self.assertEqual(payload["duplicate"]["action"], "REUSE_PREVIOUS")
+        self.assertEqual(payload["duplicate"]["reason"], "DUPLICATE_QUERY_REUSE")
+
+        self.assertEqual(payload["requeryEvidence"]["action"], "EXECUTE")
+        self.assertEqual(payload["requeryEvidence"]["reason"], "REQUERY_JUSTIFIED_BY_NEW_EVIDENCE")
+
+        self.assertEqual(payload["requeryStaleness"]["action"], "EXECUTE")
+        self.assertEqual(payload["requeryStaleness"]["reason"], "REQUERY_JUSTIFIED_BY_INDEX_STALENESS")
+
+        self.assertEqual(payload["requeryUnresolved"]["action"], "EXECUTE")
+        self.assertEqual(payload["requeryUnresolved"]["reason"], "REQUERY_JUSTIFIED_BY_UNRESOLVED_QUESTION")
+
+    def test_provider_capability_absence_and_control_separation(self) -> None:
+        source = f"""
+import {{discoverProviderCapabilities,negotiateProviderCapabilities,evaluateProviderGuardrailsPolicy}} from {json.dumps(CONTRACTS.as_uri())};
+const antigravityDef={{
+  provider:'antigravity',name:'Antigravity',ownership_class:'USER',
+  configuration_policy:'merge-afyx-owned-entries-only',
+  host_commands:'agy;antigravity',surfaces:'cli;ide',
+  capabilities:'skills;mcp',skill_scopes:'ide-global;cli-global;workspace',mcp_scopes:'global;workspace'
+}};
+
+const discovery=discoverProviderCapabilities(antigravityDef,{{scopes:['global']}});
+const negotiation=negotiateProviderCapabilities(discovery,[
+  {{capability:'skills',required:true,verification:'DECLARED'}},
+  {{capability:'hooks',required:false,verification:'DECLARED'}},
+  {{capability:'provider-routing',required:false,verification:'DECLARED'}}
+]);
+
+const policy=evaluateProviderGuardrailsPolicy('antigravity',negotiation);
+console.log(JSON.stringify({{negotiation,policy}}));
+"""
+        payload = run_node(source)
+        reqs = {r["capability"]: r for r in payload["negotiation"]["requirements"]}
+        self.assertEqual(reqs["skills"]["status"], "SUPPORTED")
+        self.assertEqual(reqs["hooks"]["status"], "UNSUPPORTED")
+        self.assertEqual(reqs["provider-routing"]["status"], "UNSUPPORTED")
+
+        policy = payload["policy"]
+        self.assertEqual(policy["contract"], "AfyxAgentGuardrails/v1")
+        self.assertTrue(policy["mechanicalEnforcement"])
+        self.assertFalse(policy["osLevelEnforcement"])
+        self.assertIn("hooks", policy["unsupportedCapabilities"])
+        self.assertIn("provider-routing", policy["unsupportedCapabilities"])
+        self.assertTrue(policy["gracefullyDegraded"])
+
+    def test_backward_compatibility_of_existing_contracts(self) -> None:
+        source = f"""
+import {{createEngineeringTask,validateEngineeringTask,createEngineeringResult,validateEngineeringResult,serializeContract}} from {json.dumps(CONTRACTS.as_uri())};
+const legacyTask=createEngineeringTask({{
+  task:{{id:'legacy-task-1',operation:'inspect'}},
+  workspace:{{id:'w-legacy'}},
+  context:{{sources:[],completeness:'UNKNOWN'}},
+  requirements:[]
+}});
+
+const legacyResult=createEngineeringResult({{
+  taskId:'legacy-task-1',status:'SUCCEEDED',diagnostics:[],
+  evidence:[{{id:'legacy-e1',type:'test',validation:'PASS',provenance:{{source:'legacy-tool'}}}}]
+}});
+
+console.log(JSON.stringify({{
+  taskValid:serializeContract(validateEngineeringTask(legacyTask))===serializeContract(legacyTask),
+  resultValid:serializeContract(validateEngineeringResult(legacyResult))===serializeContract(legacyResult),
+  taskHasPolicy:'policy' in legacyTask,
+  evidenceHasClass:'evidenceClass' in legacyResult.evidence[0]
+}}));
+"""
+        payload = run_node(source)
+        self.assertTrue(payload["taskValid"])
+        self.assertTrue(payload["resultValid"])
+        self.assertFalse(payload["taskHasPolicy"])
+        self.assertFalse(payload["evidenceHasClass"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
