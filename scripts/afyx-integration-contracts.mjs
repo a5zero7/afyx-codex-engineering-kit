@@ -480,6 +480,13 @@ function matchesScopePattern(filePath, pattern) {
   return normFile.startsWith(normPattern.endsWith('/') ? normPattern : normPattern + '/');
 }
 
+const READ_ONLY_OPERATIONS = new Set(['inspect', 'review', 'plan', 'verify', 'analyze', 'status', 'read']);
+
+function isMutatingOperation(op) {
+  if (typeof op !== 'string' || !op.trim()) return false;
+  return !READ_ONLY_OPERATIONS.has(op.trim().toLowerCase());
+}
+
 export function validateTaskScope(task, requestedAction = {}) {
   if (!isObject(task) || task.contract !== ENGINEERING_TASK_CONTRACT) {
     throw new ContractValidationError('task', 'must be a valid AfyxEngineeringTask/v1');
@@ -494,13 +501,65 @@ export function validateTaskScope(task, requestedAction = {}) {
   const violations = [];
   const policy = task.policy;
   const hasPolicy = Boolean(policy);
+  const isGuardedWrite = hasPolicy && policy.authorization !== 'READ_ONLY';
 
-  const isMutation = action.mutation === true
-    || (action.mutation !== false && Array.isArray(action.files) && action.files.length > 0 && action.operation !== 'inspect' && action.operation !== 'review');
+  // 0. Field type validation & malformed context checks
+  if (action.operation !== undefined && action.operation !== null) {
+    if (typeof action.operation !== 'string' || !action.operation.trim()) {
+      violations.push({
+        code: 'MALFORMED_ACTION_FIELD',
+        message: "Field 'operation' must be a non-empty string.",
+      });
+    }
+  }
 
-  // 1. Source revision check (F2: Fail closed on missing/mismatched revision for guarded tasks)
+  if (action.revision !== undefined && action.revision !== null) {
+    if (typeof action.revision !== 'string' || !action.revision.trim()) {
+      violations.push({
+        code: 'MALFORMED_ACTION_FIELD',
+        message: "Field 'revision' must be a non-empty string.",
+      });
+    }
+  }
+
+  if (action.mutation !== undefined && action.mutation !== null) {
+    if (typeof action.mutation !== 'boolean') {
+      violations.push({
+        code: 'MALFORMED_ACTION_FIELD',
+        message: "Field 'mutation' must be a boolean.",
+      });
+    }
+  }
+
+  if (action.files !== undefined && action.files !== null) {
+    if (!Array.isArray(action.files)) {
+      violations.push({
+        code: 'MALFORMED_ACTION_FIELD',
+        message: "Field 'files' must be an array of path strings.",
+      });
+    } else {
+      for (let i = 0; i < action.files.length; i++) {
+        const f = action.files[i];
+        if (typeof f !== 'string' || !f.trim()) {
+          violations.push({
+            code: 'INVALID_FILE_ENTRY',
+            message: `File entry at index ${i} must be a non-empty string.`,
+          });
+        }
+      }
+    }
+  }
+
+  // 1. Conservative mutation classification:
+  // Explicit mutation:false must not override evidence of an intended write
+  const hasMutatingOp = isMutatingOperation(action.operation);
+  const isExplicitMutation = action.mutation === true;
+  const isMutation = isExplicitMutation || hasMutatingOp
+    || (hasPolicy && Array.isArray(action.files) && action.files.length > 0 && action.operation === undefined);
+
+  // 2. Source revision check (Fail closed on missing/mismatched revision for guarded tasks)
   const expectedRevision = task.workspace?.revision;
-  if (hasPolicy && (isMutation || action.mutation === true) && expectedRevision) {
+  if (hasPolicy && isMutation && expectedRevision) {
     if (action.revision === undefined || action.revision === null || action.revision === '') {
       violations.push({
         code: 'MISSING_SOURCE_REVISION',
@@ -521,21 +580,33 @@ export function validateTaskScope(task, requestedAction = {}) {
     }
   }
 
-  // 2. Allowed operations check (F2: Fail closed on missing/unauthorized operation for guarded tasks)
-  if (hasPolicy && (isMutation || action.mutation === true) && policy.allowedOperations?.length) {
+  // 3. Allowed operations check
+  if (hasPolicy && isMutation) {
     if (action.operation === undefined || action.operation === null || action.operation === '') {
       violations.push({
         code: 'MISSING_OPERATION',
         message: 'Guarded mutation request must declare an operation to evaluate allowedOperations.',
       });
-    } else if (!policy.allowedOperations.includes(action.operation)) {
-      violations.push({
-        code: 'UNAUTHORIZED_OPERATION',
-        message: `Operation '${action.operation}' is not within allowedOperations: [${policy.allowedOperations.join(', ')}].`,
-      });
+    }
+  }
+
+  if (isGuardedWrite) {
+    // Explicit guarded write policy must not silently interpret missing allowedOperations as unrestricted
+    if (action.operation) {
+      if (!policy.allowedOperations || policy.allowedOperations.length === 0) {
+        violations.push({
+          code: 'UNAUTHORIZED_OPERATION',
+          message: `Guarded write policy does not authorize operation '${action.operation}'; allowedOperations is not configured. Use explicit wildcard or operation grants.`,
+        });
+      } else if (!policy.allowedOperations.includes('*') && !policy.allowedOperations.includes(action.operation)) {
+        violations.push({
+          code: 'UNAUTHORIZED_OPERATION',
+          message: `Operation '${action.operation}' is not within allowedOperations: [${policy.allowedOperations.join(', ')}].`,
+        });
+      }
     }
   } else if (action.operation !== undefined && policy?.allowedOperations?.length) {
-    if (!policy.allowedOperations.includes(action.operation)) {
+    if (!policy.allowedOperations.includes('*') && !policy.allowedOperations.includes(action.operation)) {
       violations.push({
         code: 'UNAUTHORIZED_OPERATION',
         message: `Operation '${action.operation}' is not within allowedOperations: [${policy.allowedOperations.join(', ')}].`,
@@ -543,15 +614,15 @@ export function validateTaskScope(task, requestedAction = {}) {
     }
   }
 
-  // 3. Mutation authorization check
-  if (isMutation || action.mutation === true) {
+  // 4. Mutation authorization check
+  if (isMutation) {
     if (policy?.authorization === 'READ_ONLY') {
       violations.push({
         code: 'MUTATION_NOT_AUTHORIZED',
         message: 'Task authorization is READ_ONLY; file mutations are not permitted.',
       });
     }
-    if (hasPolicy && action.mutation === true && (!Array.isArray(action.files) || action.files.length === 0)) {
+    if (hasPolicy && (!Array.isArray(action.files) || action.files.length === 0)) {
       violations.push({
         code: 'MISSING_TARGET_FILES',
         message: 'Guarded mutation requested without specifying target files.',
@@ -559,9 +630,12 @@ export function validateTaskScope(task, requestedAction = {}) {
     }
   }
 
-  // 4. File scope checks (F1: Absolute, UNC, drive paths rejected before allowlist matching; traversal and allowlist)
+  // 5. File scope checks (Absolute, UNC, drive paths rejected before allowlist matching; traversal and allowlist)
   if (Array.isArray(action.files) && action.files.length > 0) {
     for (const file of action.files) {
+      if (typeof file !== 'string' || !file.trim()) {
+        continue;
+      }
       if (isUnsafeAbsolutePath(file)) {
         violations.push({
           code: 'ABSOLUTE_PATH_REJECTED',
@@ -587,7 +661,23 @@ export function validateTaskScope(task, requestedAction = {}) {
           });
         }
       }
-      if (policy?.allowedFiles?.length) {
+      if (isGuardedWrite) {
+        // Explicit guarded write policy must not silently interpret missing allowedFiles as unrestricted
+        if (!policy.allowedFiles || policy.allowedFiles.length === 0) {
+          violations.push({
+            code: 'UNAUTHORIZED_FILE_SCOPE',
+            message: `File '${file}' is unauthorized; guarded write policy does not configure allowedFiles. Use explicit wildcard grants (e.g. ['**']) for broad access.`,
+          });
+        } else {
+          const isAllowed = policy.allowedFiles.some((pattern) => matchesScopePattern(normFile, pattern));
+          if (!isAllowed) {
+            violations.push({
+              code: 'UNAUTHORIZED_FILE_SCOPE',
+              message: `File '${file}' is outside allowedFiles scope.`,
+            });
+          }
+        }
+      } else if (policy?.allowedFiles?.length) {
         const isAllowed = policy.allowedFiles.some((pattern) => matchesScopePattern(normFile, pattern));
         if (!isAllowed) {
           violations.push({

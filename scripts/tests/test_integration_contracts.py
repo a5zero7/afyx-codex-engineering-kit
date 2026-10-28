@@ -692,6 +692,225 @@ console.log(JSON.stringify({{
         self.assertFalse(payload["taskHasPolicy"])
         self.assertFalse(payload["evidenceHasClass"])
 
+    def test_scope_validator_mutation_classification_and_context_closure(self) -> None:
+        source = f"""
+import {{createEngineeringTask,validateTaskScope}} from {json.dumps(CONTRACTS.as_uri())};
+
+// 1. READ_ONLY task
+const readOnlyTask = createEngineeringTask({{
+  task: {{id: 'ro-1', operation: 'review'}},
+  workspace: {{id: 'w-ro', revision: 'rev-ro'}},
+  context: {{sources: [], completeness: 'COMPLETE'}},
+  requirements: [],
+  policy: {{
+    allowedOperations: ['review', 'inspect'],
+    allowedFiles: ['**'],
+    authorization: 'READ_ONLY'
+  }}
+}});
+
+// 1a. READ_ONLY + apply + files + mutation:false -> REJECT (MUTATION_NOT_AUTHORIZED)
+const readOnlyApplyBypass = validateTaskScope(readOnlyTask, {{
+  operation: 'apply',
+  files: ['scripts/test.js'],
+  revision: 'rev-ro',
+  mutation: false
+}});
+
+// 1b. Valid inspect/review on READ_ONLY -> PASS
+const readOnlyInspect = validateTaskScope(readOnlyTask, {{
+  operation: 'inspect',
+  files: ['scripts/test.js'],
+  mutation: false
+}});
+
+const readOnlyReview = validateTaskScope(readOnlyTask, {{
+  operation: 'review',
+  files: ['scripts/test.js']
+}});
+
+// 2. Guarded write task
+const guardedWriteTask = createEngineeringTask({{
+  task: {{id: 'gw-1', operation: 'apply'}},
+  workspace: {{id: 'w-gw', revision: 'rev-gw'}},
+  context: {{sources: [], completeness: 'COMPLETE'}},
+  requirements: [],
+  policy: {{
+    allowedOperations: ['apply', 'verify'],
+    allowedFiles: ['scripts/**'],
+    authorization: 'WORKSPACE_WRITE'
+  }}
+}});
+
+// 2a. Guarded apply + missing revision + mutation:false -> REJECT (MISSING_SOURCE_REVISION)
+const guardedMissingRevBypass = validateTaskScope(guardedWriteTask, {{
+  operation: 'apply',
+  files: ['scripts/test.js'],
+  mutation: false
+}});
+
+// 2b. Guarded mutating operation without target files -> REJECT (MISSING_TARGET_FILES)
+const guardedApplyNoFiles = validateTaskScope(guardedWriteTask, {{
+  operation: 'apply',
+  revision: 'rev-gw',
+  mutation: false
+}});
+
+const guardedApplyEmptyFiles = validateTaskScope(guardedWriteTask, {{
+  operation: 'apply',
+  files: [],
+  revision: 'rev-gw'
+}});
+
+// 2c. Valid authorized mutation -> PASS
+const validMutation = validateTaskScope(guardedWriteTask, {{
+  operation: 'apply',
+  files: ['scripts/test.js'],
+  revision: 'rev-gw',
+  mutation: true
+}});
+
+// 3. Malformed mutation context or file entries -> REJECT
+const malformedMutationType = validateTaskScope(guardedWriteTask, {{
+  operation: 'apply',
+  files: ['scripts/test.js'],
+  revision: 'rev-gw',
+  mutation: 'false'
+}});
+
+const malformedFilesType = validateTaskScope(guardedWriteTask, {{
+  operation: 'apply',
+  files: 'scripts/test.js',
+  revision: 'rev-gw',
+  mutation: true
+}});
+
+const invalidFileEntryNull = validateTaskScope(guardedWriteTask, {{
+  operation: 'apply',
+  files: [null],
+  revision: 'rev-gw',
+  mutation: true
+}});
+
+const invalidFileEntryEmpty = validateTaskScope(guardedWriteTask, {{
+  operation: 'apply',
+  files: ['scripts/test.js', ''],
+  revision: 'rev-gw',
+  mutation: true
+}});
+
+const malformedOperationType = validateTaskScope(guardedWriteTask, {{
+  operation: 12345,
+  files: ['scripts/test.js'],
+  revision: 'rev-gw'
+}});
+
+// 4. Guarded write policy without allowlists -> REJECT (does not silently allow unrestricted access)
+const unconfiguredWriteTask = createEngineeringTask({{
+  task: {{id: 'unconf-1', operation: 'apply'}},
+  workspace: {{id: 'w-unconf', revision: 'rev-unconf'}},
+  context: {{sources: [], completeness: 'COMPLETE'}},
+  requirements: [],
+  policy: {{
+    authorization: 'WORKSPACE_WRITE'
+  }}
+}});
+
+const unconfiguredWriteAction = validateTaskScope(unconfiguredWriteTask, {{
+  operation: 'apply',
+  files: ['scripts/test.js'],
+  revision: 'rev-unconf',
+  mutation: true
+}});
+
+// 5. Legacy task compatibility -> PASS
+const legacyTask = createEngineeringTask({{
+  task: {{id: 'leg-1', operation: 'apply'}},
+  workspace: {{id: 'w-leg'}},
+  context: {{sources: [], completeness: 'COMPLETE'}},
+  requirements: []
+}});
+
+const legacyAction = validateTaskScope(legacyTask, {{
+  operation: 'apply',
+  files: ['scripts/test.js']
+}});
+
+console.log(JSON.stringify({{
+  readOnlyApplyBypass,
+  readOnlyInspect,
+  readOnlyReview,
+  guardedMissingRevBypass,
+  guardedApplyNoFiles,
+  guardedApplyEmptyFiles,
+  validMutation,
+  malformedMutationType,
+  malformedFilesType,
+  invalidFileEntryNull,
+  invalidFileEntryEmpty,
+  malformedOperationType,
+  unconfiguredWriteAction,
+  legacyAction
+}}));
+"""
+        payload = run_node(source)
+
+        # 1a. READ_ONLY + apply + files + mutation:false -> REJECT (MUTATION_NOT_AUTHORIZED)
+        self.assertFalse(payload["readOnlyApplyBypass"]["allowed"])
+        ro_codes = [v["code"] for v in payload["readOnlyApplyBypass"]["violations"]]
+        self.assertIn("MUTATION_NOT_AUTHORIZED", ro_codes)
+
+        # 1b. Valid inspect/review on READ_ONLY -> PASS
+        self.assertTrue(payload["readOnlyInspect"]["allowed"])
+        self.assertEqual(payload["readOnlyInspect"]["status"], "SCOPE_AUTHORIZED")
+        self.assertTrue(payload["readOnlyReview"]["allowed"])
+        self.assertEqual(payload["readOnlyReview"]["status"], "SCOPE_AUTHORIZED")
+
+        # 2a. Guarded apply + missing revision + mutation:false -> REJECT (MISSING_SOURCE_REVISION)
+        self.assertFalse(payload["guardedMissingRevBypass"]["allowed"])
+        rev_codes = [v["code"] for v in payload["guardedMissingRevBypass"]["violations"]]
+        self.assertIn("MISSING_SOURCE_REVISION", rev_codes)
+
+        # 2b. Guarded mutating operation without target files -> REJECT (MISSING_TARGET_FILES)
+        self.assertFalse(payload["guardedApplyNoFiles"]["allowed"])
+        no_files_codes = [v["code"] for v in payload["guardedApplyNoFiles"]["violations"]]
+        self.assertIn("MISSING_TARGET_FILES", no_files_codes)
+
+        self.assertFalse(payload["guardedApplyEmptyFiles"]["allowed"])
+        empty_files_codes = [v["code"] for v in payload["guardedApplyEmptyFiles"]["violations"]]
+        self.assertIn("MISSING_TARGET_FILES", empty_files_codes)
+
+        # 2c. Valid authorized mutation -> PASS
+        self.assertTrue(payload["validMutation"]["allowed"])
+        self.assertEqual(payload["validMutation"]["status"], "SCOPE_AUTHORIZED")
+
+        # 3. Malformed mutation context or file entries -> REJECT
+        self.assertFalse(payload["malformedMutationType"]["allowed"])
+        self.assertIn("MALFORMED_ACTION_FIELD", [v["code"] for v in payload["malformedMutationType"]["violations"]])
+
+        self.assertFalse(payload["malformedFilesType"]["allowed"])
+        self.assertIn("MALFORMED_ACTION_FIELD", [v["code"] for v in payload["malformedFilesType"]["violations"]])
+
+        self.assertFalse(payload["invalidFileEntryNull"]["allowed"])
+        self.assertIn("INVALID_FILE_ENTRY", [v["code"] for v in payload["invalidFileEntryNull"]["violations"]])
+
+        self.assertFalse(payload["invalidFileEntryEmpty"]["allowed"])
+        self.assertIn("INVALID_FILE_ENTRY", [v["code"] for v in payload["invalidFileEntryEmpty"]["violations"]])
+
+        self.assertFalse(payload["malformedOperationType"]["allowed"])
+        self.assertIn("MALFORMED_ACTION_FIELD", [v["code"] for v in payload["malformedOperationType"]["violations"]])
+
+        # 4. Guarded write policy without allowlists -> REJECT
+        self.assertFalse(payload["unconfiguredWriteAction"]["allowed"])
+        unconf_codes = [v["code"] for v in payload["unconfiguredWriteAction"]["violations"]]
+        self.assertIn("UNAUTHORIZED_OPERATION", unconf_codes)
+        self.assertIn("UNAUTHORIZED_FILE_SCOPE", unconf_codes)
+
+        # 5. Legacy task compatibility -> PASS
+        self.assertTrue(payload["legacyAction"]["allowed"])
+        self.assertEqual(payload["legacyAction"]["status"], "SCOPE_AUTHORIZED")
+        self.assertEqual(payload["legacyAction"]["violations"], [])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
