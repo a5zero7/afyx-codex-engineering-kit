@@ -164,18 +164,22 @@ const authorized=validateTaskScope(task,{{
 
 const badOperation=validateTaskScope(task,{{
   operation:'delete-database',
-  files:['scripts/afyx-integration-contracts.mjs']
+  files:['scripts/afyx-integration-contracts.mjs'],
+  revision:'rev-100',
+  mutation:true
 }});
 
 const badFile=validateTaskScope(task,{{
   operation:'apply',
   files:['src/unrelated.js'],
+  revision:'rev-100',
   mutation:true
 }});
 
 const excludedFile=validateTaskScope(task,{{
   operation:'apply',
   files:['evals/forge/vault/secret.json'],
+  revision:'rev-100',
   mutation:true
 }});
 
@@ -194,24 +198,28 @@ const readOnlyTask=createEngineeringTask({{
 const unauthorizedMutation=validateTaskScope(readOnlyTask,{{
   operation:'apply',
   files:['scripts/test.js'],
+  revision:'rev-100',
   mutation:true
 }});
 
 const windowsPathAuthorized=validateTaskScope(task,{{
   operation:'apply',
   files:['scripts\\\\afyx-integration-contracts.mjs'],
+  revision:'rev-100',
   mutation:true
 }});
 
 const traversalEscaping=validateTaskScope(task,{{
   operation:'apply',
   files:['../outside.txt'],
+  revision:'rev-100',
   mutation:true
 }});
 
 const traversalDisguised=validateTaskScope(task,{{
   operation:'apply',
   files:['scripts/../evals/forge/vault/secret.json'],
+  revision:'rev-100',
   mutation:true
 }});
 
@@ -250,6 +258,181 @@ console.log(JSON.stringify({{authorized,badOperation,badFile,excludedFile,unauth
         self.assertFalse(payload["traversalDisguised"]["allowed"])
         disguised_codes = [v["code"] for v in payload["traversalDisguised"]["violations"]]
         self.assertIn("EXCLUDED_SCOPE_VIOLATION", disguised_codes)
+
+    def test_scope_validator_rejects_unsafe_absolute_paths(self) -> None:
+        source = f"""
+import {{createEngineeringTask,validateTaskScope}} from {json.dumps(CONTRACTS.as_uri())};
+const task=createEngineeringTask({{
+  task:{{id:'task-abs',operation:'apply'}},
+  workspace:{{id:'w-abs',revision:'rev-1'}},
+  context:{{sources:[],completeness:'COMPLETE'}},
+  requirements:[],
+  policy:{{
+    allowedOperations:['apply'],
+    allowedFiles:['**'],
+    authorization:'WORKSPACE_WRITE'
+  }}
+}});
+
+const winDrive=validateTaskScope(task,{{
+  operation:'apply',
+  files:['C:\\\\Windows\\\\System32\\\\calc.exe'],
+  revision:'rev-1',
+  mutation:true
+}});
+
+const winDriveRelative=validateTaskScope(task,{{
+  operation:'apply',
+  files:['C:temp\\\\file.txt'],
+  revision:'rev-1',
+  mutation:true
+}});
+
+const winUNC=validateTaskScope(task,{{
+  operation:'apply',
+  files:['\\\\\\\\server\\\\share\\\\file.txt'],
+  revision:'rev-1',
+  mutation:true
+}});
+
+const forwardUNC=validateTaskScope(task,{{
+  operation:'apply',
+  files:['//server/share/file.txt'],
+  revision:'rev-1',
+  mutation:true
+}});
+
+const posixRoot=validateTaskScope(task,{{
+  operation:'apply',
+  files:['/etc/passwd'],
+  revision:'rev-1',
+  mutation:true
+}});
+
+const winRootRelative=validateTaskScope(task,{{
+  operation:'apply',
+  files:['\\\\Windows\\\\notepad.exe'],
+  revision:'rev-1',
+  mutation:true
+}});
+
+const validRelativeWin=validateTaskScope(task,{{
+  operation:'apply',
+  files:['scripts\\\\afyx-integration-contracts.mjs'],
+  revision:'rev-1',
+  mutation:true
+}});
+
+console.log(JSON.stringify({{
+  winDrive,
+  winDriveRelative,
+  winUNC,
+  forwardUNC,
+  posixRoot,
+  winRootRelative,
+  validRelativeWin
+}}));
+"""
+        payload = run_node(source)
+        self.assertFalse(payload["winDrive"]["allowed"])
+        self.assertIn("ABSOLUTE_PATH_REJECTED", [v["code"] for v in payload["winDrive"]["violations"]])
+
+        self.assertFalse(payload["winDriveRelative"]["allowed"])
+        self.assertIn("ABSOLUTE_PATH_REJECTED", [v["code"] for v in payload["winDriveRelative"]["violations"]])
+
+        self.assertFalse(payload["winUNC"]["allowed"])
+        self.assertIn("ABSOLUTE_PATH_REJECTED", [v["code"] for v in payload["winUNC"]["violations"]])
+
+        self.assertFalse(payload["forwardUNC"]["allowed"])
+        self.assertIn("ABSOLUTE_PATH_REJECTED", [v["code"] for v in payload["forwardUNC"]["violations"]])
+
+        self.assertFalse(payload["posixRoot"]["allowed"])
+        self.assertIn("ABSOLUTE_PATH_REJECTED", [v["code"] for v in payload["posixRoot"]["violations"]])
+
+        self.assertFalse(payload["winRootRelative"]["allowed"])
+        self.assertIn("ABSOLUTE_PATH_REJECTED", [v["code"] for v in payload["winRootRelative"]["violations"]])
+
+        self.assertEqual(payload["winDrive"]["status"], "SCOPE_VIOLATION")
+
+        self.assertTrue(payload["validRelativeWin"]["allowed"])
+        self.assertEqual(payload["validRelativeWin"]["status"], "SCOPE_AUTHORIZED")
+
+    def test_scope_validator_fails_closed_on_missing_mutation_context(self) -> None:
+        source = f"""
+import {{createEngineeringTask,validateTaskScope}} from {json.dumps(CONTRACTS.as_uri())};
+const guardedTask=createEngineeringTask({{
+  task:{{id:'task-guarded',operation:'apply'}},
+  workspace:{{id:'w-guarded',revision:'rev-abc'}},
+  context:{{sources:[],completeness:'COMPLETE'}},
+  requirements:[],
+  policy:{{
+    allowedOperations:['apply','verify'],
+    allowedFiles:['scripts/**'],
+    authorization:'WORKSPACE_WRITE'
+  }}
+}});
+
+const missingRevision=validateTaskScope(guardedTask,{{
+  operation:'apply',
+  files:['scripts/test.js'],
+  mutation:true
+}});
+
+const missingOperation=validateTaskScope(guardedTask,{{
+  files:['scripts/test.js'],
+  revision:'rev-abc',
+  mutation:true
+}});
+
+const missingFiles=validateTaskScope(guardedTask,{{
+  operation:'apply',
+  revision:'rev-abc',
+  mutation:true
+}});
+
+const emptyFiles=validateTaskScope(guardedTask,{{
+  operation:'apply',
+  files:[],
+  revision:'rev-abc',
+  mutation:true
+}});
+
+const legacyTask=createEngineeringTask({{
+  task:{{id:'task-legacy',operation:'apply'}},
+  workspace:{{id:'w-legacy'}},
+  context:{{sources:[],completeness:'COMPLETE'}},
+  requirements:[]
+}});
+
+const legacyAction=validateTaskScope(legacyTask,{{
+  operation:'apply',
+  files:['scripts/any.js']
+}});
+
+console.log(JSON.stringify({{
+  missingRevision,
+  missingOperation,
+  missingFiles,
+  emptyFiles,
+  legacyAction
+}}));
+"""
+        payload = run_node(source)
+        self.assertFalse(payload["missingRevision"]["allowed"])
+        self.assertIn("MISSING_SOURCE_REVISION", [v["code"] for v in payload["missingRevision"]["violations"]])
+
+        self.assertFalse(payload["missingOperation"]["allowed"])
+        self.assertIn("MISSING_OPERATION", [v["code"] for v in payload["missingOperation"]["violations"]])
+
+        self.assertFalse(payload["missingFiles"]["allowed"])
+        self.assertIn("MISSING_TARGET_FILES", [v["code"] for v in payload["missingFiles"]["violations"]])
+
+        self.assertFalse(payload["emptyFiles"]["allowed"])
+        self.assertIn("MISSING_TARGET_FILES", [v["code"] for v in payload["emptyFiles"]["violations"]])
+
+        self.assertTrue(payload["legacyAction"]["allowed"])
+        self.assertEqual(payload["legacyAction"]["status"], "SCOPE_AUTHORIZED")
+        self.assertEqual(payload["legacyAction"]["violations"], [])
 
     def test_unsupported_claim_rejection(self) -> None:
         source = f"""
@@ -304,17 +487,19 @@ const task=createEngineeringTask({{
   workspace:{{id:'w-rev',revision:'commit-sha-474c0f5'}},
   context:{{sources:[],completeness:'COMPLETE'}},
   requirements:[],
-  policy:{{allowedOperations:['apply'],authorization:'WORKSPACE_WRITE'}}
+  policy:{{allowedOperations:['apply'],allowedFiles:['src/**'],authorization:'WORKSPACE_WRITE'}}
 }});
 
 const mismatch=validateTaskScope(task,{{
   operation:'apply',
+  files:['src/file.js'],
   revision:'commit-sha-89dfd58',
   mutation:true
 }});
 
 const match=validateTaskScope(task,{{
   operation:'apply',
+  files:['src/file.js'],
   revision:'commit-sha-474c0f5',
   mutation:true
 }});

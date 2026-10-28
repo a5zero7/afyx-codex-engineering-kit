@@ -447,6 +447,15 @@ export function validateEngineeringResult(value) {
   return createEngineeringResult(value);
 }
 
+function isUnsafeAbsolutePath(rawPath) {
+  if (typeof rawPath !== 'string') return false;
+  const p = rawPath.trim();
+  if (p.startsWith('\\\\') || p.startsWith('//')) return true;
+  if (/^[a-zA-Z]:/u.test(p)) return true;
+  if (p.startsWith('/') || p.startsWith('\\')) return true;
+  return false;
+}
+
 function normalizePath(p) {
   const replaced = String(p).replace(/\\/g, '/');
   const posixNorm = path.posix.normalize(replaced);
@@ -484,10 +493,26 @@ export function validateTaskScope(task, requestedAction = {}) {
 
   const violations = [];
   const policy = task.policy;
+  const hasPolicy = Boolean(policy);
 
-  // 1. Source revision check
-  if (action.revision !== undefined && action.revision !== null) {
-    const expectedRevision = task.workspace?.revision;
+  const isMutation = action.mutation === true
+    || (action.mutation !== false && Array.isArray(action.files) && action.files.length > 0 && action.operation !== 'inspect' && action.operation !== 'review');
+
+  // 1. Source revision check (F2: Fail closed on missing/mismatched revision for guarded tasks)
+  const expectedRevision = task.workspace?.revision;
+  if (hasPolicy && (isMutation || action.mutation === true) && expectedRevision) {
+    if (action.revision === undefined || action.revision === null || action.revision === '') {
+      violations.push({
+        code: 'MISSING_SOURCE_REVISION',
+        message: 'Guarded mutation request must declare source revision matching task baseline.',
+      });
+    } else if (action.revision !== expectedRevision) {
+      violations.push({
+        code: 'SOURCE_REVISION_MISMATCH',
+        message: `Current revision '${action.revision}' does not match task baseline revision '${expectedRevision}'.`,
+      });
+    }
+  } else if (action.revision !== undefined && action.revision !== null) {
     if (expectedRevision && action.revision !== expectedRevision) {
       violations.push({
         code: 'SOURCE_REVISION_MISMATCH',
@@ -496,8 +521,20 @@ export function validateTaskScope(task, requestedAction = {}) {
     }
   }
 
-  // 2. Allowed operations check
-  if (action.operation !== undefined && policy?.allowedOperations?.length) {
+  // 2. Allowed operations check (F2: Fail closed on missing/unauthorized operation for guarded tasks)
+  if (hasPolicy && (isMutation || action.mutation === true) && policy.allowedOperations?.length) {
+    if (action.operation === undefined || action.operation === null || action.operation === '') {
+      violations.push({
+        code: 'MISSING_OPERATION',
+        message: 'Guarded mutation request must declare an operation to evaluate allowedOperations.',
+      });
+    } else if (!policy.allowedOperations.includes(action.operation)) {
+      violations.push({
+        code: 'UNAUTHORIZED_OPERATION',
+        message: `Operation '${action.operation}' is not within allowedOperations: [${policy.allowedOperations.join(', ')}].`,
+      });
+    }
+  } else if (action.operation !== undefined && policy?.allowedOperations?.length) {
     if (!policy.allowedOperations.includes(action.operation)) {
       violations.push({
         code: 'UNAUTHORIZED_OPERATION',
@@ -507,17 +544,32 @@ export function validateTaskScope(task, requestedAction = {}) {
   }
 
   // 3. Mutation authorization check
-  const isMutation = action.mutation === true || (Array.isArray(action.files) && action.files.length > 0 && action.operation !== 'inspect' && action.operation !== 'review');
-  if (isMutation && policy?.authorization === 'READ_ONLY') {
-    violations.push({
-      code: 'MUTATION_NOT_AUTHORIZED',
-      message: 'Task authorization is READ_ONLY; file mutations are not permitted.',
-    });
+  if (isMutation || action.mutation === true) {
+    if (policy?.authorization === 'READ_ONLY') {
+      violations.push({
+        code: 'MUTATION_NOT_AUTHORIZED',
+        message: 'Task authorization is READ_ONLY; file mutations are not permitted.',
+      });
+    }
+    if (hasPolicy && action.mutation === true && (!Array.isArray(action.files) || action.files.length === 0)) {
+      violations.push({
+        code: 'MISSING_TARGET_FILES',
+        message: 'Guarded mutation requested without specifying target files.',
+      });
+    }
   }
 
-  // 4. File scope checks (allowedFiles, excludedScope, traversal, and normalization)
+  // 4. File scope checks (F1: Absolute, UNC, drive paths rejected before allowlist matching; traversal and allowlist)
   if (Array.isArray(action.files) && action.files.length > 0) {
     for (const file of action.files) {
+      if (isUnsafeAbsolutePath(file)) {
+        violations.push({
+          code: 'ABSOLUTE_PATH_REJECTED',
+          message: `File '${file}' is an absolute or drive-qualified path; only workspace-relative paths are permitted.`,
+        });
+        continue;
+      }
+
       const normFile = normalizePath(file);
       if (normFile.startsWith('../') || normFile === '..') {
         violations.push({
