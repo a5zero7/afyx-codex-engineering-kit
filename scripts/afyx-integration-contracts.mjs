@@ -1,5 +1,7 @@
 /** Versioned provider-capability and provider-neutral engineering contracts. */
 
+import path from 'node:path';
+
 export const PROVIDER_CAPABILITY_CONTRACT = 'ProviderCapability/v1';
 export const PROVIDER_NEGOTIATION_CONTRACT = 'ProviderCapabilityNegotiation/v1';
 export const ENGINEERING_TASK_CONTRACT = 'AfyxEngineeringTask/v1';
@@ -446,7 +448,9 @@ export function validateEngineeringResult(value) {
 }
 
 function normalizePath(p) {
-  return String(p).replace(/\\/g, '/').replace(/^\.\//, '');
+  const replaced = String(p).replace(/\\/g, '/');
+  const posixNorm = path.posix.normalize(replaced);
+  return posixNorm.replace(/^\.\//, '');
 }
 
 function matchesScopePattern(filePath, pattern) {
@@ -511,11 +515,19 @@ export function validateTaskScope(task, requestedAction = {}) {
     });
   }
 
-  // 4. File scope checks (allowedFiles and excludedScope)
+  // 4. File scope checks (allowedFiles, excludedScope, traversal, and normalization)
   if (Array.isArray(action.files) && action.files.length > 0) {
     for (const file of action.files) {
+      const normFile = normalizePath(file);
+      if (normFile.startsWith('../') || normFile === '..') {
+        violations.push({
+          code: 'PATH_TRAVERSAL_DETECTED',
+          message: `File '${file}' attempts directory traversal outside workspace boundary.`,
+        });
+        continue;
+      }
       if (policy?.excludedScope?.length) {
-        const isExcluded = policy.excludedScope.some((pattern) => matchesScopePattern(file, pattern));
+        const isExcluded = policy.excludedScope.some((pattern) => matchesScopePattern(normFile, pattern));
         if (isExcluded) {
           violations.push({
             code: 'EXCLUDED_SCOPE_VIOLATION',
@@ -524,7 +536,7 @@ export function validateTaskScope(task, requestedAction = {}) {
         }
       }
       if (policy?.allowedFiles?.length) {
-        const isAllowed = policy.allowedFiles.some((pattern) => matchesScopePattern(file, pattern));
+        const isAllowed = policy.allowedFiles.some((pattern) => matchesScopePattern(normFile, pattern));
         if (!isAllowed) {
           violations.push({
             code: 'UNAUTHORIZED_FILE_SCOPE',

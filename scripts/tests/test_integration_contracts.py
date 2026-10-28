@@ -197,7 +197,25 @@ const unauthorizedMutation=validateTaskScope(readOnlyTask,{{
   mutation:true
 }});
 
-console.log(JSON.stringify({{authorized,badOperation,badFile,excludedFile,unauthorizedMutation}}));
+const windowsPathAuthorized=validateTaskScope(task,{{
+  operation:'apply',
+  files:['scripts\\\\afyx-integration-contracts.mjs'],
+  mutation:true
+}});
+
+const traversalEscaping=validateTaskScope(task,{{
+  operation:'apply',
+  files:['../outside.txt'],
+  mutation:true
+}});
+
+const traversalDisguised=validateTaskScope(task,{{
+  operation:'apply',
+  files:['scripts/../evals/forge/vault/secret.json'],
+  mutation:true
+}});
+
+console.log(JSON.stringify({{authorized,badOperation,badFile,excludedFile,unauthorizedMutation,windowsPathAuthorized,traversalEscaping,traversalDisguised}}));
 """
         payload = run_node(source)
         self.assertTrue(payload["authorized"]["allowed"])
@@ -221,6 +239,17 @@ console.log(JSON.stringify({{authorized,badOperation,badFile,excludedFile,unauth
         self.assertFalse(payload["unauthorizedMutation"]["allowed"])
         codes = [v["code"] for v in payload["unauthorizedMutation"]["violations"]]
         self.assertIn("MUTATION_NOT_AUTHORIZED", codes)
+
+        self.assertTrue(payload["windowsPathAuthorized"]["allowed"])
+        self.assertEqual(payload["windowsPathAuthorized"]["status"], "SCOPE_AUTHORIZED")
+
+        self.assertFalse(payload["traversalEscaping"]["allowed"])
+        traversal_codes = [v["code"] for v in payload["traversalEscaping"]["violations"]]
+        self.assertIn("PATH_TRAVERSAL_DETECTED", traversal_codes)
+
+        self.assertFalse(payload["traversalDisguised"]["allowed"])
+        disguised_codes = [v["code"] for v in payload["traversalDisguised"]["violations"]]
+        self.assertIn("EXCLUDED_SCOPE_VIOLATION", disguised_codes)
 
     def test_unsupported_claim_rejection(self) -> None:
         source = f"""
