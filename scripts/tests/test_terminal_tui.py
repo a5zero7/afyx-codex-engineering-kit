@@ -498,6 +498,154 @@ if ($withArg.WizardMode -or $withArg.Count -ne 1) { throw 'WithArg failed' }
             self.assertIn("existing healthy components were preserved", result.stdout)
             self.assertFalse((root / "skills").exists())
 
+    def test_native_host_keyinfo_navigation_and_selection(self) -> None:
+        script = f"""
+Import-Module '{MODULE}' -Force
+$terminal = [pscustomobject]@{{ Ansi = $false; Interactive = $true; Width = 80 }}
+$options = @(
+    [pscustomobject]@{{ Id = 'opt1'; Label = 'Option 1'; Enabled = $true }},
+    [pscustomobject]@{{ Id = 'opt2'; Label = 'Option 2'; Enabled = $false }},
+    [pscustomobject]@{{ Id = 'opt3'; Label = 'Option 3'; Enabled = $true }}
+)
+$keys = [Collections.Queue]::new()
+$keys.Enqueue([System.Management.Automation.Host.KeyInfo]::new(40, [char]0, [System.Management.Automation.Host.ControlKeyStates]0, $true))
+$keys.Enqueue([System.Management.Automation.Host.KeyInfo]::new(13, [char]13, [System.Management.Automation.Host.ControlKeyStates]0, $true))
+Read-AfyxSingleChoice -Prompt test -Options $options -DefaultId opt1 -Terminal $terminal -ReadKey {{$keys.Dequeue()}} -NoRender
+"""
+        result = self.run_ps(script)
+        self.assertEqual(result.stdout.strip(), "opt3")
+
+    def test_native_host_keyinfo_numeric_selection_and_disabled_guard(self) -> None:
+        script = f"""
+Import-Module '{MODULE}' -Force
+$terminal = [pscustomobject]@{{ Ansi = $false; Interactive = $true; Width = 80 }}
+$options = @(
+    [pscustomobject]@{{ Id = 'opt1'; Label = 'Option 1'; Enabled = $true }},
+    [pscustomobject]@{{ Id = 'opt2'; Label = 'Option 2'; Enabled = $false }},
+    [pscustomobject]@{{ Id = 'opt3'; Label = 'Option 3'; Enabled = $true }}
+)
+$keys1 = [Collections.Queue]::new()
+$keys1.Enqueue([System.Management.Automation.Host.KeyInfo]::new(51, [char]'3', [System.Management.Automation.Host.ControlKeyStates]0, $true))
+$r1 = Read-AfyxSingleChoice -Prompt test -Options $options -DefaultId opt1 -Terminal $terminal -ReadKey {{$keys1.Dequeue()}} -NoRender
+
+$keys2 = [Collections.Queue]::new()
+$keys2.Enqueue([System.Management.Automation.Host.KeyInfo]::new(99, [char]'3', [System.Management.Automation.Host.ControlKeyStates]0, $true))
+$r2 = Read-AfyxSingleChoice -Prompt test -Options $options -DefaultId opt1 -Terminal $terminal -ReadKey {{$keys2.Dequeue()}} -NoRender
+
+$keys3 = [Collections.Queue]::new()
+$keys3.Enqueue([System.Management.Automation.Host.KeyInfo]::new(50, [char]'2', [System.Management.Automation.Host.ControlKeyStates]0, $true))
+$keys3.Enqueue([System.Management.Automation.Host.KeyInfo]::new(13, [char]13, [System.Management.Automation.Host.ControlKeyStates]0, $true))
+$r3 = Read-AfyxSingleChoice -Prompt test -Options $options -DefaultId opt1 -Terminal $terminal -ReadKey {{$keys3.Dequeue()}} -NoRender
+
+[pscustomobject]@{{ Standard = $r1; Numpad = $r2; DisabledIgnored = $r3 }} | ConvertTo-Json -Compress
+"""
+        result = self.run_ps(script)
+        self.assertIn('"Standard":"opt3"', result.stdout)
+        self.assertIn('"Numpad":"opt3"', result.stdout)
+        self.assertIn('"DisabledIgnored":"opt1"', result.stdout)
+
+    def test_native_host_keyinfo_multiselect_spacebar_toggle(self) -> None:
+        script = f"""
+Import-Module '{MODULE}' -Force
+$terminal = [pscustomobject]@{{ Ansi = $false; Interactive = $true; Width = 80 }}
+$options = @(
+    [pscustomobject]@{{ Id = 'comp_a'; Label = 'Component A'; Enabled = $true }},
+    [pscustomobject]@{{ Id = 'comp_b'; Label = 'Component B'; Enabled = $true }}
+)
+$keys = [Collections.Queue]::new()
+$keys.Enqueue([System.Management.Automation.Host.KeyInfo]::new(32, [char]' ', [System.Management.Automation.Host.ControlKeyStates]0, $true))
+$keys.Enqueue([System.Management.Automation.Host.KeyInfo]::new(40, [char]0, [System.Management.Automation.Host.ControlKeyStates]0, $true))
+$keys.Enqueue([System.Management.Automation.Host.KeyInfo]::new(32, [char]' ', [System.Management.Automation.Host.ControlKeyStates]0, $true))
+$keys.Enqueue([System.Management.Automation.Host.KeyInfo]::new(13, [char]13, [System.Management.Automation.Host.ControlKeyStates]0, $true))
+
+@(Read-AfyxMultiChoice -Prompt test -Options $options -Terminal $terminal -ReadKey {{$keys.Dequeue()}} -NoRender) -join ','
+"""
+        result = self.run_ps(script)
+        self.assertEqual(result.stdout.strip(), "comp_a,comp_b")
+
+    def test_native_host_keyinfo_escape_and_q_cancels_before_mutation(self) -> None:
+        script = f"""
+Import-Module '{MODULE}' -Force
+$terminal = [pscustomobject]@{{ Ansi = $false; Interactive = $true; Width = 80 }}
+$options = @([pscustomobject]@{{ Id = 'opt1'; Label = 'Option 1'; Enabled = $true }})
+
+$escCancelled = $false
+try {{
+    Read-AfyxSingleChoice -Prompt test -Options $options -Terminal $terminal -ReadKey {{
+        [System.Management.Automation.Host.KeyInfo]::new(27, [char]27, [System.Management.Automation.Host.ControlKeyStates]0, $true)
+    }} -NoRender
+}} catch [OperationCanceledException] {{
+    $escCancelled = $true
+}}
+
+$qCancelled = $false
+try {{
+    Read-AfyxSingleChoice -Prompt test -Options $options -Terminal $terminal -ReadKey {{
+        [System.Management.Automation.Host.KeyInfo]::new(81, [char]'q', [System.Management.Automation.Host.ControlKeyStates]0, $true)
+    }} -NoRender
+}} catch [OperationCanceledException] {{
+    $qCancelled = $true
+}}
+
+[pscustomobject]@{{ Esc = $escCancelled; Q = $qCancelled }} | ConvertTo-Json -Compress
+"""
+        result = self.run_ps(script)
+        self.assertIn('"Esc":true', result.stdout)
+        self.assertIn('"Q":true', result.stdout)
+
+    def test_native_host_keyinfo_unsupported_and_keyup_events_are_safely_ignored(self) -> None:
+        script = f"""
+Import-Module '{MODULE}' -Force
+$terminal = [pscustomobject]@{{ Ansi = $false; Interactive = $true; Width = 80 }}
+$options = @(
+    [pscustomobject]@{{ Id = 'opt1'; Label = 'Option 1'; Enabled = $true }},
+    [pscustomobject]@{{ Id = 'opt2'; Label = 'Option 2'; Enabled = $true }}
+)
+$keys = [Collections.Queue]::new()
+$keys.Enqueue([System.Management.Automation.Host.KeyInfo]::new(13, [char]13, [System.Management.Automation.Host.ControlKeyStates]0, $false))
+$keys.Enqueue([System.Management.Automation.Host.KeyInfo]::new(9, [char]9, [System.Management.Automation.Host.ControlKeyStates]0, $true))
+$keys.Enqueue([System.Management.Automation.Host.KeyInfo]::new(112, [char]0, [System.Management.Automation.Host.ControlKeyStates]0, $true))
+$keys.Enqueue([System.Management.Automation.Host.KeyInfo]::new(40, [char]0, [System.Management.Automation.Host.ControlKeyStates]0, $true))
+$keys.Enqueue([System.Management.Automation.Host.KeyInfo]::new(13, [char]13, [System.Management.Automation.Host.ControlKeyStates]0, $true))
+
+Read-AfyxSingleChoice -Prompt test -Options $options -DefaultId opt1 -Terminal $terminal -ReadKey {{$keys.Dequeue()}} -NoRender
+"""
+        result = self.run_ps(script)
+        self.assertEqual(result.stdout.strip(), "opt2")
+
+    @unittest.skipUnless(os.name == "nt", "Windows PowerShell 5.1 is native to Windows")
+    def test_native_host_keyinfo_compatibility_in_windows_powershell_51(self) -> None:
+        windows_powershell = shutil.which("powershell.exe")
+        if not windows_powershell:
+            self.skipTest("Windows PowerShell 5.1 unavailable")
+        script = f"""
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+Import-Module '{MODULE}' -Force
+$terminal = [pscustomobject]@{{ Ansi = $false; Interactive = $true; Width = 80 }}
+$options = @(
+    [pscustomobject]@{{ Id = 'opt1'; Label = 'Option 1'; Enabled = $true }},
+    [pscustomobject]@{{ Id = 'opt2'; Label = 'Option 2'; Enabled = $true }}
+)
+$keys = [Collections.Queue]::new()
+$keys.Enqueue([System.Management.Automation.Host.KeyInfo]::new(13, [char]13, [System.Management.Automation.Host.ControlKeyStates]0, $false))
+$keys.Enqueue([System.Management.Automation.Host.KeyInfo]::new(40, [char]0, [System.Management.Automation.Host.ControlKeyStates]0, $true))
+$keys.Enqueue([System.Management.Automation.Host.KeyInfo]::new(13, [char]13, [System.Management.Automation.Host.ControlKeyStates]0, $true))
+
+$selected = Read-AfyxSingleChoice -Prompt test -Options $options -DefaultId opt1 -Terminal $terminal -ReadKey {{$keys.Dequeue()}} -NoRender
+if ($selected -ne 'opt2') {{ throw "PS5.1 KeyInfo expected 'opt2' but got '$selected'" }}
+'PS51_KEYINFO_PASS'
+"""
+        result = subprocess.run(
+            [windows_powershell, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            timeout=30,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("PS51_KEYINFO_PASS", result.stdout)
+
     def test_installer_keeps_wizard_separate_from_lifecycle_engine(self) -> None:
         source = (ROOT / "install.ps1").read_text(encoding="utf-8")
         self.assertIn("AfyxTerminal.psm1", source)

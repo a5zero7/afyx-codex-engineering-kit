@@ -193,6 +193,59 @@ function Test-AfyxAdvancedMenu {
     try { return $null -ne $Host.UI.RawUI } catch { return $false }
 }
 
+function Get-AfyxKeyAction {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)]$RawKey)
+    if ($null -eq $RawKey) { return $null }
+    $props = $RawKey.PSObject.Properties
+
+    if ($null -ne $props['KeyDown'] -and -not [bool]$props['KeyDown'].Value) {
+        return $null
+    }
+
+    $virtualCode = if ($null -ne $props['VirtualKeyCode']) { [int]$props['VirtualKeyCode'].Value }
+                   elseif ($null -ne $props['Key']) { [int][ConsoleKey]$props['Key'].Value }
+                   else { 0 }
+
+    $char = if ($null -ne $props['Character']) { [string]$props['Character'].Value }
+            elseif ($null -ne $props['KeyChar']) { [string]$props['KeyChar'].Value }
+            else { '' }
+
+    switch ($virtualCode) {
+        38 { return 'UpArrow' }
+        40 { return 'DownArrow' }
+        13 { return 'Enter' }
+        27 { return 'Escape' }
+        32 { return 'Spacebar' }
+        81 { return 'Escape' }
+    }
+
+    if ($virtualCode -ge 49 -and $virtualCode -le 57) {
+        return [string]($virtualCode - 48)
+    }
+    if ($virtualCode -ge 97 -and $virtualCode -le 105) {
+        return [string]($virtualCode - 96)
+    }
+
+    if ($char -match '^[1-9]$') {
+        return $char
+    }
+
+    if ($char -match '^(?i:q|esc)$') {
+        return 'Escape'
+    }
+
+    if ($char -eq [char]13 -or $char -eq [char]10) {
+        return 'Enter'
+    }
+
+    if ($char -eq ' ') {
+        return 'Spacebar'
+    }
+
+    return $null
+}
+
 function Read-AfyxSingleChoice {
     [CmdletBinding()]
     param(
@@ -223,20 +276,21 @@ function Read-AfyxSingleChoice {
     $frameLines = if (-not $NoRender) { Show-AfyxChoiceFrame -Prompt $Prompt -Options $Options -Selected $selected -Checked @{} -Terminal $Terminal } else { 0 }
     while ($true) {
         $key = if ($ReadKey) { & $ReadKey } else { $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown') }
-        switch ([string]$key.Key) {
-            'UpArrow' { $selected = Get-AfyxEnabledOptionIndex -Options $Options -Start $selected -Direction -1 }
-            'DownArrow' { $selected = Get-AfyxEnabledOptionIndex -Options $Options -Start $selected -Direction 1 }
-            'Escape' { throw [OperationCanceledException]::new('Installer cancelled by user.') }
-            'Enter' {
+        $action = Get-AfyxKeyAction -RawKey $key
+        if ($null -eq $action) { continue }
+        switch -Regex ($action) {
+            '^UpArrow$' { $selected = Get-AfyxEnabledOptionIndex -Options $Options -Start $selected -Direction -1 }
+            '^DownArrow$' { $selected = Get-AfyxEnabledOptionIndex -Options $Options -Start $selected -Direction 1 }
+            '^Escape$' { throw [OperationCanceledException]::new('Installer cancelled by user.') }
+            '^Enter$' {
                 $enabled = -not $Options[$selected].PSObject.Properties['Enabled'] -or [bool]$Options[$selected].Enabled
                 if ($enabled) { return [string]$Options[$selected].Id }
             }
-            default {
-                if ([string]$key.KeyChar -match '^\d$') {
-                    $at = [int]::Parse([string]$key.KeyChar) - 1
-                    if ($at -ge 0 -and $at -lt $Options.Count -and (-not $Options[$at].PSObject.Properties['Enabled'] -or [bool]$Options[$at].Enabled)) { return [string]$Options[$at].Id }
-                }
+            '^[1-9]$' {
+                $at = [int]$action - 1
+                if ($at -ge 0 -and $at -lt $Options.Count -and (-not $Options[$at].PSObject.Properties['Enabled'] -or [bool]$Options[$at].Enabled)) { return [string]$Options[$at].Id }
             }
+            default { }
         }
         if (-not $NoRender) {
             Reset-AfyxChoiceFrame -LineCount $frameLines -Terminal $Terminal
@@ -276,15 +330,26 @@ function Read-AfyxMultiChoice {
     $frameLines = if (-not $NoRender) { Show-AfyxChoiceFrame -Prompt $Prompt -Options $Options -Selected $selected -Checked $checked -Terminal $Terminal -Multiple } else { 0 }
     while ($true) {
         $key = if ($ReadKey) { & $ReadKey } else { $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown') }
-        switch ([string]$key.Key) {
-            'UpArrow' { $selected = Get-AfyxEnabledOptionIndex -Options $Options -Start $selected -Direction -1 }
-            'DownArrow' { $selected = Get-AfyxEnabledOptionIndex -Options $Options -Start $selected -Direction 1 }
-            'Escape' { throw [OperationCanceledException]::new('Installer cancelled by user.') }
-            'Spacebar' {
+        $action = Get-AfyxKeyAction -RawKey $key
+        if ($null -eq $action) { continue }
+        switch -Regex ($action) {
+            '^UpArrow$' { $selected = Get-AfyxEnabledOptionIndex -Options $Options -Start $selected -Direction -1 }
+            '^DownArrow$' { $selected = Get-AfyxEnabledOptionIndex -Options $Options -Start $selected -Direction 1 }
+            '^Escape$' { throw [OperationCanceledException]::new('Installer cancelled by user.') }
+            '^Spacebar$' {
                 $id = [string]$Options[$selected].Id
                 if ($checked.ContainsKey($id)) { $checked.Remove($id) } else { $checked[$id] = $true }
             }
-            'Enter' { return @($Options | Where-Object { $checked.ContainsKey([string]$_.Id) } | ForEach-Object { [string]$_.Id }) }
+            '^Enter$' { return @($Options | Where-Object { $checked.ContainsKey([string]$_.Id) } | ForEach-Object { [string]$_.Id }) }
+            '^[1-9]$' {
+                $at = [int]$action - 1
+                if ($at -ge 0 -and $at -lt $Options.Count -and (-not $Options[$at].PSObject.Properties['Enabled'] -or [bool]$Options[$at].Enabled)) {
+                    $id = [string]$Options[$at].Id
+                    if ($checked.ContainsKey($id)) { $checked.Remove($id) } else { $checked[$id] = $true }
+                    $selected = $at
+                }
+            }
+            default { }
         }
         if (-not $NoRender) {
             Reset-AfyxChoiceFrame -LineCount $frameLines -Terminal $Terminal
@@ -310,4 +375,4 @@ function Show-AfyxReceipt {
     foreach ($item in $Items) { Write-AfyxStatus -Status ([string]$item.Status) -Name ([string]$item.Name) -Detail ([string]$item.Detail) -Terminal $Terminal }
 }
 
-Export-ModuleMember -Function Test-AfyxAnsiSupport, Test-AfyxInteractiveTerminal, New-AfyxTerminalContext, Get-AfyxStyledText, Format-AfyxWrappedText, Write-AfyxText, Show-AfyxBanner, Write-AfyxSection, Write-AfyxStatus, Get-AfyxOutcomeStatus, Read-AfyxSingleChoice, Read-AfyxMultiChoice, Read-AfyxConfirmation, Show-AfyxReceipt
+Export-ModuleMember -Function Test-AfyxAnsiSupport, Test-AfyxInteractiveTerminal, New-AfyxTerminalContext, Get-AfyxStyledText, Format-AfyxWrappedText, Write-AfyxText, Show-AfyxBanner, Write-AfyxSection, Write-AfyxStatus, Get-AfyxOutcomeStatus, Get-AfyxKeyAction, Read-AfyxSingleChoice, Read-AfyxMultiChoice, Read-AfyxConfirmation, Show-AfyxReceipt
