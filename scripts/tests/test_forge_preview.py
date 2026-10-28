@@ -175,6 +175,167 @@ class ForgePreviewTests(unittest.TestCase):
         self.assertTrue(result["scope_adherence"])
         self.assertEqual(set(result["files_modified"]), {"checkout.py", "tax.py"})
         self.assertTrue(result["disposable_workspace_cleaned"])
+        self.assertFalse(result["quality_gate"]["enabled"])
+        self.assertEqual(result["quality_gate"]["verdict"], "NOT_TESTED")
+
+    def test_quality_gate_cli_passes_complete_public_synthetic_result(self) -> None:
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            exit_code = preview.main(
+                [
+                    "--opt-in",
+                    "--candidate",
+                    "B4",
+                    "--scenario",
+                    "forge-known-file-001",
+                    "--apply-synthetic-fix",
+                    "--quality-gate",
+                    "--json",
+                ]
+            )
+
+        result = json.loads(stdout.getvalue())
+        quality = result["quality_gate"]
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(
+            quality["quality_gate_id"],
+            "AFYX_FORGE_A6_PUBLIC_QUALITY_GATE",
+        )
+        self.assertEqual(result["verdict"], "PASS")
+        self.assertEqual(quality["verdict"], "PASS")
+        self.assertEqual(
+            set(quality["gate_results"].values()),
+            {"PASS"},
+        )
+        self.assertTrue(
+            quality["evidence"]["artifact_validation"]["passed"]
+        )
+
+    def test_quality_gate_fails_closed_for_invalid_or_incomplete_outcomes(self) -> None:
+        scenario = next(
+            item
+            for item in self.manifest["scenarios"]
+            if item["scenario_id"] == "forge-cross-module-001"
+        )
+
+        def complete_outcome() -> dict[str, object]:
+            return {
+                "baseline_validation": {
+                    "exit_code": 1,
+                    "expected_exit_code": 1,
+                    "matches_expected": True,
+                },
+                "target_validation": {
+                    "exit_code": 0,
+                    "expected_exit_code": 0,
+                    "matches_expected": True,
+                },
+                "synthetic_fix_applied": True,
+                "applied_files": ["checkout.py", "tax.py"],
+                "files_modified": ["checkout.py", "tax.py"],
+                "scope_adherence": True,
+                "disposable_workspace_cleaned": True,
+            }
+
+        cases: dict[str, tuple[dict[str, object], str]] = {}
+
+        missing_required = complete_outcome()
+        missing_required["applied_files"] = ["tax.py"]
+        missing_required["files_modified"] = ["tax.py"]
+        cases["exit_zero_missing_required_change"] = (
+            missing_required,
+            "required_changes_incomplete",
+        )
+
+        no_op = complete_outcome()
+        no_op["applied_files"] = []
+        no_op["files_modified"] = []
+        cases["no_op"] = (no_op, "required_changes_incomplete")
+
+        out_of_scope = complete_outcome()
+        out_of_scope["applied_files"] = ["checkout.py", "tax.py", "unexpected.py"]
+        out_of_scope["files_modified"] = ["checkout.py", "tax.py", "unexpected.py"]
+        out_of_scope["scope_adherence"] = False
+        cases["out_of_scope"] = (out_of_scope, "quality_scope_violation")
+
+        failed_regression = complete_outcome()
+        failed_regression["target_validation"] = {
+            "exit_code": 1,
+            "expected_exit_code": 0,
+            "matches_expected": False,
+        }
+        cases["failed_regression"] = (
+            failed_regression,
+            "regression_check_failed",
+        )
+
+        missing_evidence = complete_outcome()
+        missing_evidence.pop("target_validation")
+        cases["missing_evidence"] = (
+            missing_evidence,
+            "quality_evidence_incomplete",
+        )
+
+        inconsistent_evidence = complete_outcome()
+        inconsistent_evidence["files_modified"] = [
+            "checkout.py",
+            "tax.py",
+            "unexpected.py",
+        ]
+        cases["inconsistent_evidence"] = (
+            inconsistent_evidence,
+            "quality_evidence_inconsistent",
+        )
+
+        cleanup_failure = complete_outcome()
+        cleanup_failure["disposable_workspace_cleaned"] = False
+        cases["cleanup_failure"] = (
+            cleanup_failure,
+            "workspace_cleanup_failed",
+        )
+
+        for label, (outcome, expected_failure) in cases.items():
+            with self.subTest(label=label):
+                quality = preview.evaluate_public_quality_gate(scenario, outcome)
+                self.assertEqual(quality["verdict"], "FAIL")
+                self.assertIn(expected_failure, quality["failure_codes"])
+
+    def test_quality_gate_marks_trusted_no_change_without_validation_not_tested(
+        self,
+    ) -> None:
+        scenario = next(
+            item
+            for item in self.manifest["scenarios"]
+            if item["scenario_id"] == "forge-negative-simple-001"
+        )
+        outcome = {
+            "baseline_validation": {
+                "exit_code": 0,
+                "expected_exit_code": None,
+                "matches_expected": True,
+            },
+            "target_validation": {
+                "exit_code": 0,
+                "expected_exit_code": None,
+                "matches_expected": True,
+            },
+            "synthetic_fix_applied": False,
+            "applied_files": [],
+            "files_modified": [],
+            "scope_adherence": True,
+            "disposable_workspace_cleaned": True,
+        }
+
+        quality = preview.evaluate_public_quality_gate(scenario, outcome)
+
+        self.assertEqual(quality["verdict"], "NOT_TESTED")
+        self.assertEqual(quality["gate_results"]["task_fidelity"], "PASS")
+        self.assertEqual(quality["gate_results"]["scope_adherence"], "PASS")
+        self.assertEqual(quality["gate_results"]["evidence_quality"], "PASS")
+        self.assertEqual(quality["gate_results"]["correctness"], "NOT_TESTED")
+        self.assertEqual(
+            quality["gate_results"]["regression_safety"], "NOT_TESTED"
+        )
 
     def test_preview_candidate_b4_direct_scenario(self) -> None:
         # Test candidate B4 on forge-known-file-001 with synthetic fix

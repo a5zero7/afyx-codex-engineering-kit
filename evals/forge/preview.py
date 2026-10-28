@@ -151,6 +151,204 @@ def execute_validation_command(
         return 127, "", f"execution error: {error}"
 
 
+QUALITY_GATE_NAMES = (
+    "correctness",
+    "task_fidelity",
+    "scope_adherence",
+    "regression_safety",
+    "evidence_quality",
+)
+PUBLIC_QUALITY_GATE_ID = "AFYX_FORGE_A6_PUBLIC_QUALITY_GATE"
+
+
+def _quality_gate_not_requested() -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "quality_gate_id": PUBLIC_QUALITY_GATE_ID,
+        "enabled": False,
+        "verdict": "NOT_TESTED",
+        "gate_results": {gate: "NOT_TESTED" for gate in QUALITY_GATE_NAMES},
+        "failure_codes": [],
+        "not_tested_reasons": ["quality_gate_not_requested"],
+        "evidence": {},
+    }
+
+
+def evaluate_public_quality_gate(
+    scenario: Mapping[str, Any], outcome: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Evaluate a public preview outcome against its trusted task contract."""
+    gate_results = {gate: "NOT_TESTED" for gate in QUALITY_GATE_NAMES}
+    failure_codes: list[str] = []
+    not_tested_reasons: list[str] = []
+    required_evidence = {
+        "baseline_validation",
+        "target_validation",
+        "synthetic_fix_applied",
+        "applied_files",
+        "files_modified",
+        "scope_adherence",
+        "disposable_workspace_cleaned",
+    }
+    missing_evidence = sorted(required_evidence - set(outcome))
+    if missing_evidence:
+        gate_results["evidence_quality"] = "FAIL"
+        return {
+            "schema_version": 1,
+            "quality_gate_id": PUBLIC_QUALITY_GATE_ID,
+            "enabled": True,
+            "verdict": "FAIL",
+            "gate_results": gate_results,
+            "failure_codes": ["quality_evidence_incomplete"],
+            "not_tested_reasons": not_tested_reasons,
+            "evidence": {"missing_fields": missing_evidence},
+        }
+
+    baseline = outcome["baseline_validation"]
+    target = outcome["target_validation"]
+    files_modified = outcome["files_modified"]
+    applied_files = outcome["applied_files"]
+    evidence_well_formed = (
+        isinstance(baseline, Mapping)
+        and isinstance(target, Mapping)
+        and isinstance(files_modified, list)
+        and all(isinstance(path, str) for path in files_modified)
+        and len(files_modified) == len(set(files_modified))
+        and isinstance(applied_files, list)
+        and all(isinstance(path, str) for path in applied_files)
+        and type(outcome["synthetic_fix_applied"]) is bool
+        and type(outcome["scope_adherence"]) is bool
+        and type(outcome["disposable_workspace_cleaned"]) is bool
+    )
+
+    def validation_evidence_consistent(record: Mapping[str, Any]) -> bool:
+        required = {"exit_code", "expected_exit_code", "matches_expected"}
+        if not required.issubset(record) or type(record["matches_expected"]) is not bool:
+            return False
+        if record["exit_code"] is not None and type(record["exit_code"]) is not int:
+            return False
+        if (
+            record["expected_exit_code"] is not None
+            and type(record["expected_exit_code"]) is not int
+        ):
+            return False
+        expected = record["expected_exit_code"]
+        computed = expected is None or record["exit_code"] == expected
+        return record["matches_expected"] == computed
+
+    if evidence_well_formed:
+        evidence_well_formed = validation_evidence_consistent(
+            baseline
+        ) and validation_evidence_consistent(target)
+    if not evidence_well_formed:
+        gate_results["evidence_quality"] = "FAIL"
+        return {
+            "schema_version": 1,
+            "quality_gate_id": PUBLIC_QUALITY_GATE_ID,
+            "enabled": True,
+            "verdict": "FAIL",
+            "gate_results": gate_results,
+            "failure_codes": ["quality_evidence_incomplete"],
+            "not_tested_reasons": not_tested_reasons,
+            "evidence": {"malformed": True},
+        }
+
+    actual_files = set(files_modified) if isinstance(files_modified, list) else set()
+    allowed_files = set(scenario.get("allowed_file_scope", []))
+    expected_files = set(scenario.get("expected_file_scope", []))
+    computed_scope_adherence = not bool(actual_files - allowed_files)
+    required_file_set_complete = actual_files == expected_files
+    synthetic_evidence_consistent = (
+        not outcome["synthetic_fix_applied"] or set(applied_files) == actual_files
+    )
+    cleanup_complete = outcome["disposable_workspace_cleaned"] is True
+
+    artifact_validation = controller.ArtifactValidation(
+        command_exit_code=(
+            target.get("exit_code") if isinstance(target.get("exit_code"), int) else None
+        ),
+        content_checks={
+            "baseline_contract": bool(baseline.get("matches_expected")),
+            "target_expected_behavior": bool(target.get("matches_expected")),
+            "required_file_set": required_file_set_complete,
+            "allowed_file_scope": computed_scope_adherence,
+        },
+    )
+
+    gate_results["task_fidelity"] = (
+        "PASS" if required_file_set_complete else "FAIL"
+    )
+    if not required_file_set_complete:
+        failure_codes.append("required_changes_incomplete")
+
+    gate_results["scope_adherence"] = (
+        "PASS" if computed_scope_adherence else "FAIL"
+    )
+    if not computed_scope_adherence:
+        failure_codes.append("quality_scope_violation")
+
+    validation_available = scenario.get("validation_command") is not None
+    if validation_available:
+        correctness_passed = bool(
+            baseline.get("matches_expected") and target.get("matches_expected")
+        )
+        gate_results["correctness"] = "PASS" if correctness_passed else "FAIL"
+        gate_results["regression_safety"] = (
+            "PASS" if bool(target.get("matches_expected")) else "FAIL"
+        )
+        if not correctness_passed:
+            failure_codes.append("correctness_not_demonstrated")
+        if not target.get("matches_expected"):
+            failure_codes.append("regression_check_failed")
+    else:
+        not_tested_reasons.extend(
+            ["correctness_validation_unavailable", "regression_validation_unavailable"]
+        )
+
+    evidence_consistent = (
+        evidence_well_formed
+        and outcome["scope_adherence"] == computed_scope_adherence
+        and synthetic_evidence_consistent
+        and cleanup_complete
+    )
+    gate_results["evidence_quality"] = "PASS" if evidence_consistent else "FAIL"
+    if not synthetic_evidence_consistent or (
+        outcome["scope_adherence"] != computed_scope_adherence
+    ):
+        failure_codes.append("quality_evidence_inconsistent")
+    if not cleanup_complete:
+        failure_codes.append("workspace_cleanup_failed")
+
+    gate_values = set(gate_results.values())
+    if "FAIL" in gate_values:
+        verdict = "FAIL"
+    elif "NOT_TESTED" in gate_values:
+        verdict = "NOT_TESTED"
+    else:
+        verdict = "PASS"
+
+    return {
+        "schema_version": 1,
+        "quality_gate_id": PUBLIC_QUALITY_GATE_ID,
+        "enabled": True,
+        "verdict": verdict,
+        "gate_results": gate_results,
+        "failure_codes": list(dict.fromkeys(failure_codes)),
+        "not_tested_reasons": not_tested_reasons,
+        "evidence": {
+            "validation_command": scenario.get("validation_command"),
+            "expected_files": sorted(expected_files),
+            "observed_files": sorted(actual_files),
+            "artifact_validation": {
+                "command_exit_code": artifact_validation.command_exit_code,
+                "content_checks": dict(artifact_validation.content_checks),
+                "passed": artifact_validation.passed,
+            },
+            "cleanup_complete": cleanup_complete,
+        },
+    }
+
+
 def apply_scenario_synthetic_fix(scenario_id: str, work: Path) -> list[str]:
     """Apply a minimal scoped fix for public demonstration / testing."""
     if scenario_id in {"forge-direct-001", "forge-known-file-001"}:
@@ -204,6 +402,7 @@ def run_preview_scenario(
     *,
     repository_root: Path = REPO_ROOT,
     apply_synthetic_fix: bool = False,
+    quality_gate: bool = False,
     timeout: int = 30,
     temp_dir: Path | None = None,
 ) -> dict[str, Any]:
@@ -338,6 +537,18 @@ def run_preview_scenario(
                 result["failure_codes"].append("workspace_cleanup_failed")
                 result["verdict"] = "FAIL"
 
+    result["quality_gate"] = (
+        evaluate_public_quality_gate(scenario, result)
+        if quality_gate
+        else _quality_gate_not_requested()
+    )
+    if quality_gate:
+        for failure_code in result["quality_gate"]["failure_codes"]:
+            if failure_code not in result["failure_codes"]:
+                result["failure_codes"].append(failure_code)
+        if result["verdict"] == "PASS":
+            result["verdict"] = result["quality_gate"]["verdict"]
+
     return result
 
 
@@ -372,6 +583,11 @@ def main(argv: list[str] | None = None) -> int:
         "--apply-synthetic-fix",
         action="store_true",
         help="Apply the known scoped synthetic fix to verify target validation passes.",
+    )
+    parser.add_argument(
+        "--quality-gate",
+        action="store_true",
+        help="Evaluate the public outcome contract and emit PASS/FAIL/NOT_TESTED.",
     )
     parser.add_argument(
         "--json",
@@ -417,6 +633,7 @@ def main(argv: list[str] | None = None) -> int:
         args.candidate,
         args.scenario,
         apply_synthetic_fix=args.apply_synthetic_fix,
+        quality_gate=args.quality_gate,
     )
 
     if args.json:
@@ -430,6 +647,7 @@ def main(argv: list[str] | None = None) -> int:
         if result['synthetic_fix_applied']:
             print(f"Target:    exit={result['target_validation']['exit_code']} (expected={result['target_validation']['expected_exit_code']})")
             print(f"Files Mod: {result['files_modified']} (in-scope: {result['scope_adherence']})")
+        print(f"Quality: {result['quality_gate']['verdict']}")
         print(f"Workspace Cleaned: {result['disposable_workspace_cleaned']}")
 
     return 0 if result["verdict"] == "PASS" else 2
