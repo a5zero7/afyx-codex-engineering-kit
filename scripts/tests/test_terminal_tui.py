@@ -417,9 +417,18 @@ if ($withArg.WizardMode -or $withArg.Count -ne 1) { throw 'WithArg failed' }
     def test_default_invocation_with_zero_arguments_under_redirected_io(self) -> None:
         with tempfile.TemporaryDirectory(prefix="afyx-tui-default-") as raw:
             root = Path(raw)
+            fake_bin = root / "bin"
+            fake_bin.mkdir(parents=True)
+            if os.name == "nt":
+                (fake_bin / "codex.cmd").write_text("@echo codex-test\r\n", encoding="utf-8")
+            else:
+                codex = fake_bin / "codex"
+                codex.write_text("#!/bin/sh\necho codex-test\n", encoding="utf-8")
+                codex.chmod(codex.stat().st_mode | 0o755)
             env = os.environ.copy()
             env.update(
                 {
+                    "PATH": f"{fake_bin}{os.pathsep}{env.get('PATH', '')}",
                     "USERPROFILE": str(root / "profile"),
                     "HOME": str(root / "profile"),
                     "APPDATA": str(root / "appdata"),
@@ -457,9 +466,13 @@ if ($withArg.WizardMode -or $withArg.Count -ne 1) { throw 'WithArg failed' }
             self.skipTest("Windows PowerShell 5.1 unavailable")
         with tempfile.TemporaryDirectory(prefix="afyx-tui-default-ps51-") as raw:
             root = Path(raw)
+            fake_bin = root / "bin"
+            fake_bin.mkdir(parents=True)
+            (fake_bin / "codex.cmd").write_text("@echo codex-test\r\n", encoding="utf-8")
             env = os.environ.copy()
             env.update(
                 {
+                    "PATH": f"{fake_bin}{os.pathsep}{env.get('PATH', '')}",
                     "USERPROFILE": str(root / "profile"),
                     "HOME": str(root / "profile"),
                     "APPDATA": str(root / "appdata"),
