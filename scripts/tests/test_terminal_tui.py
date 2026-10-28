@@ -316,8 +316,106 @@ Read-AfyxSingleChoice -Prompt test -Options $options -Terminal $terminal -ReadLi
             after = {path.relative_to(runtime): path.read_bytes() for path in runtime.rglob("*") if path.is_file()}
             self.assertEqual(after, before)
 
-    def test_zero_argument_interactive_startup_reaches_preset_selection_and_cancels(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="afyx-tui-zeroarg-") as raw:
+    def test_terminal_interactive_safeguards_prevent_overrides_from_bypassing_ci_plain_or_redirect(self) -> None:
+        script = f"""
+Import-Module '{MODULE}' -Force
+
+$plainOverride = Test-AfyxInteractiveTerminal -ForceInteractive -ForcePlain
+$plainEnv = & {{ $env:AFYX_FORCE_INTERACTIVE='1'; Test-AfyxInteractiveTerminal -ForcePlain }}
+
+$ciOverride = & {{ $env:CI='1'; Test-AfyxInteractiveTerminal -ForceInteractive }}
+$ciEnv = & {{ $env:CI='1'; $env:AFYX_FORCE_INTERACTIVE='1'; Test-AfyxInteractiveTerminal }}
+
+$redirectOverride = & {{ $env:CI=$null; [Console]::IsOutputRedirected -and (Test-AfyxInteractiveTerminal -ForceInteractive) -eq $false }}
+$redirectEnv = & {{ $env:CI=$null; $env:AFYX_FORCE_INTERACTIVE='1'; [Console]::IsOutputRedirected -and (Test-AfyxInteractiveTerminal) -eq $false }}
+
+[pscustomobject]@{{
+    PlainOverride = $plainOverride
+    PlainEnv = $plainEnv
+    CiOverride = $ciOverride
+    CiEnv = $ciEnv
+    RedirectOverrideBlocked = $redirectOverride
+    RedirectEnvBlocked = $redirectEnv
+}} | ConvertTo-Json -Compress
+"""
+        result = self.run_ps(script)
+        self.assertIn('"PlainOverride":false', result.stdout)
+        self.assertIn('"PlainEnv":false', result.stdout)
+        self.assertIn('"CiOverride":false', result.stdout)
+        self.assertIn('"CiEnv":false', result.stdout)
+        self.assertIn('"RedirectOverrideBlocked":true', result.stdout)
+        self.assertIn('"RedirectEnvBlocked":true', result.stdout)
+
+    def test_zero_argument_strict_mode_contract_under_interactive_terminal(self) -> None:
+        script = """
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+function Test-Contract {
+    param([switch]$Force)
+    $terminal = [pscustomobject]@{ Interactive = $true; Ansi = $false; Width = 80 }
+    $ValidateOnly = $false
+    $WhatIfPreference = $false
+    $explicitSelection = @(
+        @('Preset', 'CustomComponent', 'ComponentAction', 'Provider', 'Force', 'UpdateInstalled', 'InstallUsageTracker', 'SkipUsageTracker', 'SkipProviderConfiguration', 'Confirm') |
+            Where-Object { $PSBoundParameters.ContainsKey($_) }
+    )
+    $wizardMode = $terminal.Interactive -and -not $ValidateOnly -and -not $WhatIfPreference -and $explicitSelection.Count -eq 0
+    return [pscustomobject]@{
+        IsArray = ($explicitSelection -is [System.Array])
+        Count = $explicitSelection.Count
+        WizardMode = $wizardMode
+    }
+}
+$zeroArg = Test-Contract
+$withArg = Test-Contract -Force
+[pscustomobject]@{ ZeroArg = $zeroArg; WithArg = $withArg } | ConvertTo-Json -Compress
+"""
+        result = self.run_ps(script)
+        self.assertIn('"ZeroArg":{"IsArray":true,"Count":0,"WizardMode":true}', result.stdout)
+        self.assertIn('"WithArg":{"IsArray":true,"Count":1,"WizardMode":false}', result.stdout)
+
+    @unittest.skipUnless(os.name == "nt", "Windows PowerShell 5.1 is native to Windows")
+    def test_zero_argument_strict_mode_contract_in_windows_powershell_51(self) -> None:
+        windows_powershell = shutil.which("powershell.exe")
+        if not windows_powershell:
+            self.skipTest("Windows PowerShell 5.1 unavailable")
+        script = """
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+function Test-Contract {
+    param([switch]$Force)
+    $terminal = [pscustomobject]@{ Interactive = $true; Ansi = $false; Width = 80 }
+    $ValidateOnly = $false
+    $WhatIfPreference = $false
+    $explicitSelection = @(
+        @('Preset', 'CustomComponent', 'ComponentAction', 'Provider', 'Force', 'UpdateInstalled', 'InstallUsageTracker', 'SkipUsageTracker', 'SkipProviderConfiguration', 'Confirm') |
+            Where-Object { $PSBoundParameters.ContainsKey($_) }
+    )
+    $wizardMode = $terminal.Interactive -and -not $ValidateOnly -and -not $WhatIfPreference -and $explicitSelection.Count -eq 0
+    return [pscustomobject]@{
+        IsArray = ($explicitSelection -is [System.Array])
+        Count = $explicitSelection.Count
+        WizardMode = $wizardMode
+    }
+}
+$zeroArg = Test-Contract
+$withArg = Test-Contract -Force
+if (-not $zeroArg.WizardMode -or $zeroArg.Count -ne 0) { throw 'ZeroArg failed' }
+if ($withArg.WizardMode -or $withArg.Count -ne 1) { throw 'WithArg failed' }
+'PS51_CONTRACT_PASS'
+"""
+        result = subprocess.run(
+            [windows_powershell, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            timeout=30,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("PS51_CONTRACT_PASS", result.stdout)
+
+    def test_default_invocation_with_zero_arguments_under_redirected_io(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="afyx-tui-default-") as raw:
             root = Path(raw)
             env = os.environ.copy()
             env.update(
@@ -328,37 +426,36 @@ Read-AfyxSingleChoice -Prompt test -Options $options -Terminal $terminal -ReadLi
                     "CODEX_HOME": str(root / "codex"),
                     "AFYX_GRAPH_RUNTIME_ROOT": str(root / "graph"),
                     "AFYX_CONTEXT_RUNTIME_ROOT": str(root / "context"),
-                    "AFYX_FORCE_INTERACTIVE": "1",
                     "NO_COLOR": "1",
                 }
             )
-            env.pop("CI", None)
             result = subprocess.run(
                 [self.shell, "-NoProfile", "-File", str(ROOT / "install.ps1")],
                 cwd=ROOT,
                 env=env,
-                input="q\n",
+                stdin=subprocess.DEVNULL,
                 text=True,
                 capture_output=True,
                 timeout=60,
             )
-            self.assertEqual(result.returncode, 130, result.stdout + result.stderr)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertNotIn("The property 'Count' cannot be found on this object", result.stdout + result.stderr)
             self.assertIn("Interactive Installer | Midnight Circuit", result.stdout)
-            self.assertIn("Welcome & Environment", result.stdout)
-            self.assertIn("Choose an installation preset", result.stdout)
-            self.assertIn("[1] Recommended", result.stdout)
-            self.assertIn("[2] Minimal", result.stdout)
-            self.assertIn("[3] Full", result.stdout)
-            self.assertIn("[4] Custom", result.stdout)
-            self.assertIn("Installation cancelled", result.stdout)
+            self.assertIn("Component Inventory", result.stdout)
+            self.assertIn("Prerequisite Inventory", result.stdout)
+            self.assertIn("Provider Plan", result.stdout)
+            self.assertIn("Installation Receipt", result.stdout)
+            self.assertIn("existing healthy components were preserved", result.stdout)
             self.assertFalse((root / "skills").exists())
             self.assertFalse((root / "codex").exists())
             self.assertFalse((root / "graph").exists())
 
     @unittest.skipUnless(os.name == "nt", "Windows PowerShell 5.1 is native to Windows")
-    def test_zero_argument_interactive_startup_in_windows_powershell_51(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="afyx-tui-zeroarg-ps51-") as raw:
+    def test_default_invocation_with_zero_arguments_in_windows_powershell_51(self) -> None:
+        windows_powershell = shutil.which("powershell.exe")
+        if not windows_powershell:
+            self.skipTest("Windows PowerShell 5.1 unavailable")
+        with tempfile.TemporaryDirectory(prefix="afyx-tui-default-ps51-") as raw:
             root = Path(raw)
             env = os.environ.copy()
             env.update(
@@ -369,25 +466,23 @@ Read-AfyxSingleChoice -Prompt test -Options $options -Terminal $terminal -ReadLi
                     "CODEX_HOME": str(root / "codex"),
                     "AFYX_GRAPH_RUNTIME_ROOT": str(root / "graph"),
                     "AFYX_CONTEXT_RUNTIME_ROOT": str(root / "context"),
-                    "AFYX_FORCE_INTERACTIVE": "1",
                     "NO_COLOR": "1",
                 }
             )
-            env.pop("CI", None)
             result = subprocess.run(
-                ["powershell.exe", "-NoProfile", "-File", str(ROOT / "install.ps1")],
+                [windows_powershell, "-NoProfile", "-File", str(ROOT / "install.ps1")],
                 cwd=ROOT,
                 env=env,
-                input="q\n",
+                stdin=subprocess.DEVNULL,
                 text=True,
                 capture_output=True,
                 timeout=60,
             )
-            self.assertEqual(result.returncode, 130, result.stdout + result.stderr)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertNotIn("The property 'Count' cannot be found on this object", result.stdout + result.stderr)
             self.assertIn("Interactive Installer | Midnight Circuit", result.stdout)
-            self.assertIn("Choose an installation preset", result.stdout)
-            self.assertIn("Installation cancelled", result.stdout)
+            self.assertIn("Installation Receipt", result.stdout)
+            self.assertIn("existing healthy components were preserved", result.stdout)
             self.assertFalse((root / "skills").exists())
 
     def test_installer_keeps_wizard_separate_from_lifecycle_engine(self) -> None:

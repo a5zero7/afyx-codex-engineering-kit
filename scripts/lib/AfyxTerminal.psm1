@@ -26,10 +26,10 @@ function Test-AfyxAnsiSupport {
 function Test-AfyxInteractiveTerminal {
     [CmdletBinding()]
     param([switch]$ForceInteractive, [switch]$ForcePlain)
-    if ($ForceInteractive -or $env:AFYX_FORCE_INTERACTIVE -eq '1') { return $true }
     if ($ForcePlain -or $env:CI) { return $false }
     try {
         if ([Console]::IsInputRedirected -or [Console]::IsOutputRedirected) { return $false }
+        if ($ForceInteractive -or $env:AFYX_FORCE_INTERACTIVE -eq '1') { return $true }
         return $null -ne $Host.UI.RawUI
     } catch { return $false }
 }
