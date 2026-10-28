@@ -10,12 +10,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import subprocess
 import sys
 import tempfile
 import uuid
 from pathlib import Path
+from time import monotonic
 from typing import Any, Mapping
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -127,9 +129,15 @@ def extract_task_guidance(
 
 
 def execute_validation_command(
-    command: list[str] | None, cwd: Path, timeout: int = 30
+    command: list[str] | None,
+    cwd: Path,
+    timeout: int = 30,
+    *,
+    observation: dict[str, bool] | None = None,
 ) -> tuple[int, str, str]:
     """Run validation command safely within the disposable workspace."""
+    if observation is not None:
+        observation["timed_out"] = False
     if not command:
         return 0, "", ""
     executable = command[0]
@@ -146,6 +154,8 @@ def execute_validation_command(
         )
         return proc.returncode, proc.stdout, proc.stderr
     except subprocess.TimeoutExpired:
+        if observation is not None:
+            observation["timed_out"] = True
         return 124, "", f"validation command timed out after {timeout} seconds"
     except Exception as error:
         return 127, "", f"execution error: {error}"
@@ -349,6 +359,221 @@ def evaluate_public_quality_gate(
     }
 
 
+PUBLIC_EFFICIENCY_REPORT_ID = "AFYX_FORGE_A7_PUBLIC_EFFICIENCY"
+EFFICIENCY_DURATION_LIMIT_SECONDS = 86_400.0
+PROVIDER_METRIC_UNAVAILABLE_REASON = (
+    "public_synthetic_preview_has_no_trustworthy_provider_adapter_telemetry"
+)
+
+
+def _available_metric(value: int | float, unit: str, source: str) -> dict[str, Any]:
+    return {
+        "availability": "AVAILABLE",
+        "value": value,
+        "unit": unit,
+        "source": source,
+    }
+
+
+def _unavailable_metric(unit: str, source: str, reason: str) -> dict[str, Any]:
+    return {
+        "availability": "NOT_AVAILABLE",
+        "value": None,
+        "unit": unit,
+        "source": source,
+        "reason": reason,
+    }
+
+
+def build_public_efficiency_report(
+    quality_gate: Mapping[str, Any], observation: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Build fail-closed public telemetry from directly observed preview activity."""
+    invalid_reasons: list[str] = []
+    required = {
+        "total_elapsed_seconds",
+        "baseline_validation_seconds",
+        "target_validation_seconds",
+        "validation_subprocess_invocations",
+        "validation_nonzero_exit_count",
+        "validation_contract_mismatch_count",
+        "validation_timeout_count",
+    }
+    missing = sorted(required - set(observation))
+    if missing:
+        invalid_reasons.append("efficiency_measurement_incomplete")
+
+    def valid_duration(value: Any, *, optional: bool = False) -> bool:
+        if optional and value is None:
+            return True
+        return (
+            type(value) in {int, float}
+            and math.isfinite(value)
+            and 0 <= value <= EFFICIENCY_DURATION_LIMIT_SECONDS
+        )
+
+    total = observation.get("total_elapsed_seconds")
+    baseline_duration = observation.get("baseline_validation_seconds")
+    target_duration = observation.get("target_validation_seconds")
+    durations_valid = (
+        valid_duration(total)
+        and valid_duration(baseline_duration, optional=True)
+        and valid_duration(target_duration, optional=True)
+    )
+    if not durations_valid:
+        invalid_reasons.append("efficiency_duration_invalid")
+
+    count_names = (
+        "validation_subprocess_invocations",
+        "validation_nonzero_exit_count",
+        "validation_contract_mismatch_count",
+        "validation_timeout_count",
+    )
+    counts = {name: observation.get(name) for name in count_names}
+    counts_valid = all(type(value) is int and value >= 0 for value in counts.values())
+    if not counts_valid:
+        invalid_reasons.append("efficiency_counter_invalid")
+    else:
+        invocations = counts["validation_subprocess_invocations"]
+        available_validation_durations = sum(
+            duration is not None for duration in (baseline_duration, target_duration)
+        )
+        if (
+            invocations != available_validation_durations
+            or counts["validation_timeout_count"]
+            > counts["validation_nonzero_exit_count"]
+            or counts["validation_nonzero_exit_count"] > invocations
+            or counts["validation_contract_mismatch_count"] > invocations
+        ):
+            invalid_reasons.append("efficiency_measurement_inconsistent")
+
+    if durations_valid:
+        measured_validation = sum(
+            duration or 0 for duration in (baseline_duration, target_duration)
+        )
+        if total < measured_validation:
+            invalid_reasons.append("efficiency_measurement_inconsistent")
+
+    quality_verdict = quality_gate.get("verdict")
+    quality_link_valid = (
+        quality_gate.get("quality_gate_id") == PUBLIC_QUALITY_GATE_ID
+        and quality_gate.get("enabled") is True
+    )
+    if (
+        not quality_link_valid
+        or quality_verdict not in {"PASS", "FAIL", "NOT_TESTED"}
+    ):
+        invalid_reasons.append("quality_gate_link_invalid")
+
+    invalid_reasons = list(dict.fromkeys(invalid_reasons))
+    comparison_reasons: list[str] = []
+    if invalid_reasons:
+        comparison_reasons.extend(invalid_reasons)
+    if quality_verdict != "PASS":
+        comparison_reasons.append(
+            "quality_failed"
+            if quality_verdict == "FAIL"
+            else "quality_not_tested"
+        )
+
+    metrics: dict[str, Any] = {
+        "total_elapsed": _available_metric(
+            total, "seconds", "python_time_monotonic"
+        )
+        if valid_duration(total)
+        else _unavailable_metric(
+            "seconds", "python_time_monotonic", "invalid_observation"
+        ),
+    }
+    for metric_name, observation_name, source in (
+        (
+            "validation_subprocess_invocations",
+            "validation_subprocess_invocations",
+            "preview_validation_dispatch",
+        ),
+        (
+            "validation_nonzero_exits",
+            "validation_nonzero_exit_count",
+            "preview_subprocess_exit_status",
+        ),
+        (
+            "validation_contract_mismatches",
+            "validation_contract_mismatch_count",
+            "public_task_contract",
+        ),
+        (
+            "validation_timeouts",
+            "validation_timeout_count",
+            "preview_subprocess_timeout",
+        ),
+    ):
+        observed_count = counts.get(observation_name)
+        metrics[metric_name] = (
+            _available_metric(observed_count, "count", source)
+            if type(observed_count) is int and observed_count >= 0
+            else _unavailable_metric("count", source, "invalid_observation")
+        )
+    for metric_name, duration in (
+        ("baseline_validation_duration", baseline_duration),
+        ("target_validation_duration", target_duration),
+    ):
+        metrics[metric_name] = (
+            _available_metric(duration, "seconds", "python_time_monotonic")
+            if valid_duration(duration, optional=False)
+            else _unavailable_metric(
+                "seconds",
+                "preview_validation_subprocess",
+                "validation_command_not_configured"
+                if duration is None
+                else "invalid_observation",
+            )
+        )
+
+    metrics["retry_count"] = _unavailable_metric(
+        "count",
+        "preview_execution",
+        "preview_has_no_instrumented_retry_loop",
+    )
+    for metric_name, unit in {
+        "input_tokens": "tokens",
+        "output_tokens": "tokens",
+        "reasoning_tokens": "tokens",
+        "context_usage": "tokens",
+        "cache_usage": "tokens",
+        "agent_tool_calls": "count",
+        "repeated_reads": "count",
+        "rework": "count",
+        "human_intervention": "count",
+        "provider_reported_cost": "currency",
+    }.items():
+        metrics[metric_name] = _unavailable_metric(
+            unit,
+            "provider_adapter",
+            PROVIDER_METRIC_UNAVAILABLE_REASON,
+        )
+
+    return {
+        "schema_version": 1,
+        "efficiency_report_id": PUBLIC_EFFICIENCY_REPORT_ID,
+        "measurement_status": "INVALID" if invalid_reasons else "AVAILABLE",
+        "quality_gate_id": quality_gate.get("quality_gate_id"),
+        "quality_verdict": quality_verdict,
+        "comparison_eligible": (
+            not invalid_reasons and quality_link_valid and quality_verdict == "PASS"
+        ),
+        "comparison_ineligibility_reasons": list(dict.fromkeys(comparison_reasons)),
+        "superiority_claim": "NOT_ESTABLISHED",
+        "metrics": metrics,
+        "provenance": {
+            "execution_surface": "public_development_preview",
+            "clock": "python_time_monotonic",
+            "validation_activity": "local_subprocess_observation",
+            "provider_activity": "not_observed",
+            "synthetic_activity_is_agent_activity": False,
+        },
+    }
+
+
 def apply_scenario_synthetic_fix(scenario_id: str, work: Path) -> list[str]:
     """Apply a minimal scoped fix for public demonstration / testing."""
     if scenario_id in {"forge-direct-001", "forge-known-file-001"}:
@@ -403,10 +628,12 @@ def run_preview_scenario(
     repository_root: Path = REPO_ROOT,
     apply_synthetic_fix: bool = False,
     quality_gate: bool = False,
+    efficiency_report: bool = False,
     timeout: int = 30,
     temp_dir: Path | None = None,
 ) -> dict[str, Any]:
     """Execute a single public preview scenario end-to-end in a disposable workspace."""
+    efficiency_started = monotonic() if efficiency_report else None
     validate_public_manifest(manifest)
     if candidate_id not in manifest["candidates"]:
         raise ValueError(f"unknown candidate id: {candidate_id}")
@@ -426,6 +653,11 @@ def run_preview_scenario(
     lease = workspace_manager.create(preview_run_id)
 
     cleanup_succeeded = False
+    baseline_validation_seconds: float | None = None
+    target_validation_seconds: float | None = None
+    validation_subprocess_invocations = 0
+    baseline_validation_observation = {"timed_out": False}
+    target_validation_observation = {"timed_out": False}
     try:
         work = lease.work
         limits = controller.InventoryLimits(
@@ -448,9 +680,22 @@ def run_preview_scenario(
 
         # 6. Baseline validation check
         validation_cmd = scenario.get("validation_command")
-        baseline_code, baseline_stdout, baseline_stderr = execute_validation_command(
-            validation_cmd, work, timeout=timeout
-        )
+        if efficiency_report and validation_cmd:
+            baseline_started = monotonic()
+            baseline_code, baseline_stdout, baseline_stderr = (
+                execute_validation_command(
+                    validation_cmd,
+                    work,
+                    timeout=timeout,
+                    observation=baseline_validation_observation,
+                )
+            )
+            baseline_validation_seconds = round(monotonic() - baseline_started, 6)
+            validation_subprocess_invocations += 1
+        else:
+            baseline_code, baseline_stdout, baseline_stderr = (
+                execute_validation_command(validation_cmd, work, timeout=timeout)
+            )
 
         expected_baseline_exit = scenario.get("baseline_expected_exit")
         baseline_matches_expected = (
@@ -482,9 +727,20 @@ def run_preview_scenario(
         scope_adherence = not bool(set(actual_code_changes) - allowed_scope)
 
         # 9. Target validation check
-        target_code, target_stdout, target_stderr = execute_validation_command(
-            validation_cmd, work, timeout=timeout
-        )
+        if efficiency_report and validation_cmd:
+            target_started = monotonic()
+            target_code, target_stdout, target_stderr = execute_validation_command(
+                validation_cmd,
+                work,
+                timeout=timeout,
+                observation=target_validation_observation,
+            )
+            target_validation_seconds = round(monotonic() - target_started, 6)
+            validation_subprocess_invocations += 1
+        else:
+            target_code, target_stdout, target_stderr = execute_validation_command(
+                validation_cmd, work, timeout=timeout
+            )
 
         expected_target_exit = scenario.get("target_validation_exit")
         target_matches_expected = (
@@ -537,17 +793,50 @@ def run_preview_scenario(
                 result["failure_codes"].append("workspace_cleanup_failed")
                 result["verdict"] = "FAIL"
 
+    quality_enabled = quality_gate or efficiency_report
     result["quality_gate"] = (
         evaluate_public_quality_gate(scenario, result)
-        if quality_gate
+        if quality_enabled
         else _quality_gate_not_requested()
     )
-    if quality_gate:
+    if quality_enabled:
         for failure_code in result["quality_gate"]["failure_codes"]:
             if failure_code not in result["failure_codes"]:
                 result["failure_codes"].append(failure_code)
         if result["verdict"] == "PASS":
             result["verdict"] = result["quality_gate"]["verdict"]
+
+    if efficiency_report:
+        assert efficiency_started is not None
+        total_elapsed_seconds = round(monotonic() - efficiency_started, 6)
+        validation_codes = (baseline_code, target_code) if validation_cmd else ()
+        validation_matches = (
+            (baseline_matches_expected, target_matches_expected)
+            if validation_cmd
+            else ()
+        )
+        result["efficiency_report"] = build_public_efficiency_report(
+            result["quality_gate"],
+            {
+                "total_elapsed_seconds": total_elapsed_seconds,
+                "baseline_validation_seconds": baseline_validation_seconds,
+                "target_validation_seconds": target_validation_seconds,
+                "validation_subprocess_invocations": validation_subprocess_invocations,
+                "validation_nonzero_exit_count": sum(
+                    code != 0 for code in validation_codes
+                ),
+                "validation_contract_mismatch_count": sum(
+                    not matches for matches in validation_matches
+                ),
+                "validation_timeout_count": sum(
+                    observation["timed_out"]
+                    for observation in (
+                        baseline_validation_observation,
+                        target_validation_observation,
+                    )
+                ),
+            },
+        )
 
     return result
 
@@ -588,6 +877,11 @@ def main(argv: list[str] | None = None) -> int:
         "--quality-gate",
         action="store_true",
         help="Evaluate the public outcome contract and emit PASS/FAIL/NOT_TESTED.",
+    )
+    parser.add_argument(
+        "--efficiency-report",
+        action="store_true",
+        help="Report directly observed preview timing and activity telemetry.",
     )
     parser.add_argument(
         "--json",
@@ -634,6 +928,7 @@ def main(argv: list[str] | None = None) -> int:
         args.scenario,
         apply_synthetic_fix=args.apply_synthetic_fix,
         quality_gate=args.quality_gate,
+        efficiency_report=args.efficiency_report,
     )
 
     if args.json:
@@ -648,6 +943,13 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Target:    exit={result['target_validation']['exit_code']} (expected={result['target_validation']['expected_exit_code']})")
             print(f"Files Mod: {result['files_modified']} (in-scope: {result['scope_adherence']})")
         print(f"Quality: {result['quality_gate']['verdict']}")
+        if "efficiency_report" in result:
+            efficiency = result["efficiency_report"]
+            print(
+                "Efficiency: "
+                f"{efficiency['measurement_status']} "
+                f"(comparison eligible: {efficiency['comparison_eligible']})"
+            )
         print(f"Workspace Cleaned: {result['disposable_workspace_cleaned']}")
 
     return 0 if result["verdict"] == "PASS" else 2
