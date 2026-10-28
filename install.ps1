@@ -54,8 +54,10 @@ $codexCommandDetected = Get-Command codex -ErrorAction SilentlyContinue
 $agyCommandDetected = Get-Command agy -ErrorAction SilentlyContinue
 $antigravityCommandDetected = if ($agyCommandDetected) { $agyCommandDetected } else { Get-Command antigravity -ErrorAction SilentlyContinue }
 $vscodeExtensionDetected = [bool](Get-ChildItem -Path (Join-Path $env:USERPROFILE '.vscode\extensions\openai.chatgpt-*') -Directory -ErrorAction SilentlyContinue | Select-Object -First 1)
-$explicitSelection = @('Preset', 'CustomComponent', 'ComponentAction', 'Provider', 'Force', 'UpdateInstalled', 'InstallUsageTracker', 'SkipUsageTracker', 'SkipProviderConfiguration', 'Confirm') |
-    Where-Object { $PSBoundParameters.ContainsKey($_) }
+$explicitSelection = @(
+    @('Preset', 'CustomComponent', 'ComponentAction', 'Provider', 'Force', 'UpdateInstalled', 'InstallUsageTracker', 'SkipUsageTracker', 'SkipProviderConfiguration', 'Confirm') |
+        Where-Object { $PSBoundParameters.ContainsKey($_) }
+)
 $wizardMode = $terminal.Interactive -and -not $ValidateOnly -and -not $WhatIfPreference -and -not $env:CI -and $explicitSelection.Count -eq 0
 
 if ($wizardMode) {

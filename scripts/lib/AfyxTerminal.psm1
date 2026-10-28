@@ -26,7 +26,7 @@ function Test-AfyxAnsiSupport {
 function Test-AfyxInteractiveTerminal {
     [CmdletBinding()]
     param([switch]$ForceInteractive, [switch]$ForcePlain)
-    if ($ForceInteractive) { return $true }
+    if ($ForceInteractive -or $env:AFYX_FORCE_INTERACTIVE -eq '1') { return $true }
     if ($ForcePlain -or $env:CI) { return $false }
     try {
         if ([Console]::IsInputRedirected -or [Console]::IsOutputRedirected) { return $false }

@@ -316,6 +316,80 @@ Read-AfyxSingleChoice -Prompt test -Options $options -Terminal $terminal -ReadLi
             after = {path.relative_to(runtime): path.read_bytes() for path in runtime.rglob("*") if path.is_file()}
             self.assertEqual(after, before)
 
+    def test_zero_argument_interactive_startup_reaches_preset_selection_and_cancels(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="afyx-tui-zeroarg-") as raw:
+            root = Path(raw)
+            env = os.environ.copy()
+            env.update(
+                {
+                    "USERPROFILE": str(root / "profile"),
+                    "HOME": str(root / "profile"),
+                    "APPDATA": str(root / "appdata"),
+                    "CODEX_HOME": str(root / "codex"),
+                    "AFYX_GRAPH_RUNTIME_ROOT": str(root / "graph"),
+                    "AFYX_CONTEXT_RUNTIME_ROOT": str(root / "context"),
+                    "AFYX_FORCE_INTERACTIVE": "1",
+                    "NO_COLOR": "1",
+                }
+            )
+            env.pop("CI", None)
+            result = subprocess.run(
+                [self.shell, "-NoProfile", "-File", str(ROOT / "install.ps1")],
+                cwd=ROOT,
+                env=env,
+                input="q\n",
+                text=True,
+                capture_output=True,
+                timeout=60,
+            )
+            self.assertEqual(result.returncode, 130, result.stdout + result.stderr)
+            self.assertNotIn("The property 'Count' cannot be found on this object", result.stdout + result.stderr)
+            self.assertIn("Interactive Installer | Midnight Circuit", result.stdout)
+            self.assertIn("Welcome & Environment", result.stdout)
+            self.assertIn("Choose an installation preset", result.stdout)
+            self.assertIn("[1] Recommended", result.stdout)
+            self.assertIn("[2] Minimal", result.stdout)
+            self.assertIn("[3] Full", result.stdout)
+            self.assertIn("[4] Custom", result.stdout)
+            self.assertIn("Installation cancelled", result.stdout)
+            self.assertFalse((root / "skills").exists())
+            self.assertFalse((root / "codex").exists())
+            self.assertFalse((root / "graph").exists())
+
+    @unittest.skipUnless(os.name == "nt", "Windows PowerShell 5.1 is native to Windows")
+    def test_zero_argument_interactive_startup_in_windows_powershell_51(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="afyx-tui-zeroarg-ps51-") as raw:
+            root = Path(raw)
+            env = os.environ.copy()
+            env.update(
+                {
+                    "USERPROFILE": str(root / "profile"),
+                    "HOME": str(root / "profile"),
+                    "APPDATA": str(root / "appdata"),
+                    "CODEX_HOME": str(root / "codex"),
+                    "AFYX_GRAPH_RUNTIME_ROOT": str(root / "graph"),
+                    "AFYX_CONTEXT_RUNTIME_ROOT": str(root / "context"),
+                    "AFYX_FORCE_INTERACTIVE": "1",
+                    "NO_COLOR": "1",
+                }
+            )
+            env.pop("CI", None)
+            result = subprocess.run(
+                ["powershell.exe", "-NoProfile", "-File", str(ROOT / "install.ps1")],
+                cwd=ROOT,
+                env=env,
+                input="q\n",
+                text=True,
+                capture_output=True,
+                timeout=60,
+            )
+            self.assertEqual(result.returncode, 130, result.stdout + result.stderr)
+            self.assertNotIn("The property 'Count' cannot be found on this object", result.stdout + result.stderr)
+            self.assertIn("Interactive Installer | Midnight Circuit", result.stdout)
+            self.assertIn("Choose an installation preset", result.stdout)
+            self.assertIn("Installation cancelled", result.stdout)
+            self.assertFalse((root / "skills").exists())
+
     def test_installer_keeps_wizard_separate_from_lifecycle_engine(self) -> None:
         source = (ROOT / "install.ps1").read_text(encoding="utf-8")
         self.assertIn("AfyxTerminal.psm1", source)
