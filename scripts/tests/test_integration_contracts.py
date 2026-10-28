@@ -467,8 +467,14 @@ console.log(JSON.stringify({{negotiation,policy}}));
 
         policy = payload["policy"]
         self.assertEqual(policy["contract"], "AfyxAgentGuardrails/v1")
-        self.assertTrue(policy["mechanicalEnforcement"])
+        self.assertEqual(policy["enforcementScope"], "VALIDATOR_ONLY")
+        self.assertTrue(policy["contractValidatorsAvailable"])
+        self.assertTrue(policy["explicitInvocationValidation"])
+        self.assertFalse(policy["automaticMutationInterception"])
+        self.assertFalse(policy["automaticGraphInterception"])
+        self.assertFalse(policy["runtimeEnforcementActive"])
         self.assertFalse(policy["osLevelEnforcement"])
+        self.assertFalse(policy["mechanicalEnforcement"])
         self.assertIn("hooks", policy["unsupportedCapabilities"])
         self.assertIn("provider-routing", policy["unsupportedCapabilities"])
         self.assertTrue(policy["gracefullyDegraded"])
