@@ -26,9 +26,16 @@ class ForgeWindowsLabTests(unittest.TestCase):
         self.evidence_root = self.root / "retained-evidence"
         self.workspace_root.mkdir()
         self.manifest = controller.load_public_manifest()
+        self.current_token = windows_lab._inspect_current_token()
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
+
+    def require_unelevated_host(self) -> None:
+        try:
+            windows_lab._require_nonprivileged_token(self.current_token)
+        except PermissionError as error:
+            self.skipTest(f"actual lab requires an unelevated token: {error}")
 
     def payload(self, timeout_seconds: int = 5) -> dict[str, object]:
         scenario = self.manifest["scenarios"][0]
@@ -98,6 +105,7 @@ class ForgeWindowsLabTests(unittest.TestCase):
         return sessions[0]
 
     def test_actual_windows_process_identity_retention_and_cleanup(self) -> None:
+        self.require_unelevated_host()
         result, recorder = self.run_lab()
         session = self.only_session()
         capture = json.loads((session / "capture.json").read_text("utf-8"))
@@ -124,10 +132,25 @@ class ForgeWindowsLabTests(unittest.TestCase):
         self.assertTrue(
             capture["process_state"]["profile_redirected_to_workspace"]
         )
+        self.assertEqual(
+            capture["process_state"]["expected_identity"],
+            self.current_token.public_identity,
+        )
+        self.assertEqual(
+            capture["process_state"]["observed_child_identity"],
+            self.current_token.public_identity,
+        )
+        self.assertFalse(
+            capture["process_state"]["observed_child_token_elevated"]
+        )
+        self.assertLessEqual(
+            capture["process_state"]["observed_child_integrity_rid"], 0x2000
+        )
         self.assertFalse(capture["process_state"]["timed_out"])
         self.assertTrue(capture["process_state"]["process_tree_terminated"])
 
     def test_timeout_terminates_owned_process_tree_and_retains_failure(self) -> None:
+        self.require_unelevated_host()
         result, _ = self.run_lab(mode="timeout")
         capture = json.loads(
             (self.only_session() / "capture.json").read_text("utf-8")
@@ -168,6 +191,7 @@ class ForgeWindowsLabTests(unittest.TestCase):
             another_restart.verify_readiness(binding, receipt)
 
     def test_capture_interruption_fails_without_false_finalization(self) -> None:
+        self.require_unelevated_host()
         result, recorder = self.run_lab(
             faults=windows_lab.WindowsLabFaults(capture_failure=True)
         )
@@ -181,6 +205,7 @@ class ForgeWindowsLabTests(unittest.TestCase):
     def test_failed_job_assignment_kills_actual_process_and_cleans_workspace(
         self,
     ) -> None:
+        self.require_unelevated_host()
         observed_pids: list[int] = []
 
         def reject_assignment(process) -> int:
@@ -203,6 +228,7 @@ class ForgeWindowsLabTests(unittest.TestCase):
         self.assertFalse(any(self.workspace_root.iterdir()))
 
     def test_corrupted_archive_is_rejected_after_actual_process(self) -> None:
+        self.require_unelevated_host()
         result, recorder = self.run_lab(
             faults=windows_lab.WindowsLabFaults(tamper_after_capture=True)
         )
@@ -215,6 +241,62 @@ class ForgeWindowsLabTests(unittest.TestCase):
         )
         self.assertFalse(result["evidence_retention"]["archive_finalized"])
         self.assertEqual(result["cleanup"], "PASS")
+
+    def test_elevated_parent_is_rejected_before_child_creation(self) -> None:
+        elevated = windows_lab.WindowsTokenIdentity(
+            sid=self.current_token.sid,
+            elevated=True,
+            integrity_rid=0x3000,
+        )
+        with mock.patch.object(
+            windows_lab, "_inspect_current_token", return_value=elevated
+        ), mock.patch.object(windows_lab.subprocess, "Popen") as popen:
+            result, recorder = self.run_lab()
+
+        popen.assert_not_called()
+        self.assertEqual(recorder.process_start_count, 0)
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn(
+            "launcher_failure", result["validation_outcomes"]["failure_codes"]
+        )
+        self.assertEqual(result["cleanup"], "PASS")
+
+    def test_observed_child_identity_mismatch_fails_closed(self) -> None:
+        self.require_unelevated_host()
+        mismatch = windows_lab.WindowsTokenIdentity(
+            sid="S-1-5-21-1-2-3-1001",
+            elevated=False,
+            integrity_rid=self.current_token.integrity_rid,
+        )
+        with mock.patch.object(
+            windows_lab, "_inspect_child_token", return_value=mismatch
+        ):
+            result, recorder = self.run_lab()
+
+        self.assertEqual(recorder.process_start_count, 1)
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn(
+            "launcher_failure", result["validation_outcomes"]["failure_codes"]
+        )
+        self.assertEqual(result["cleanup"], "PASS")
+        self.assertFalse(any(self.workspace_root.iterdir()))
+
+    def test_child_identity_observation_failure_fails_closed(self) -> None:
+        self.require_unelevated_host()
+        with mock.patch.object(
+            windows_lab,
+            "_inspect_child_token",
+            side_effect=OSError("injected child token observation failure"),
+        ):
+            result, recorder = self.run_lab()
+
+        self.assertEqual(recorder.process_start_count, 1)
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn(
+            "launcher_failure", result["validation_outcomes"]["failure_codes"]
+        )
+        self.assertEqual(result["cleanup"], "PASS")
+        self.assertFalse(any(self.workspace_root.iterdir()))
 
 
 if __name__ == "__main__":

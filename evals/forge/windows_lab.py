@@ -7,14 +7,13 @@ non-admin identity. It is not a privileged launcher or formal evaluator.
 
 from __future__ import annotations
 
-import csv
 import ctypes
-import io
 import json
 import os
 import subprocess
 import sys
 from ctypes import wintypes
+from dataclasses import dataclass
 from pathlib import Path
 
 from evals.forge import controller, wsl_lab
@@ -65,19 +64,177 @@ WindowsLabEvidenceRecorder = wsl_lab.WslLabEvidenceRecorder
 WindowsLabEvidenceVerifier = wsl_lab.WslLabEvidenceVerifier
 
 
-def expected_identity() -> str:
-    """Return the actual current Windows SID in a stable public form."""
-    completed = subprocess.run(
-        ["whoami.exe", "/user", "/fo", "csv", "/nh"],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=5,
+@dataclass(frozen=True)
+class WindowsTokenIdentity:
+    sid: str
+    elevated: bool
+    integrity_rid: int
+
+    @property
+    def public_identity(self) -> str:
+        return f"windows-sid:{self.sid}"
+
+
+class _SidAndAttributes(ctypes.Structure):
+    _fields_ = [("Sid", ctypes.c_void_p), ("Attributes", wintypes.DWORD)]
+
+
+class _TokenUser(ctypes.Structure):
+    _fields_ = [("User", _SidAndAttributes)]
+
+
+class _TokenMandatoryLabel(ctypes.Structure):
+    _fields_ = [("Label", _SidAndAttributes)]
+
+
+class _TokenElevation(ctypes.Structure):
+    _fields_ = [("TokenIsElevated", wintypes.DWORD)]
+
+
+def _token_information(token: wintypes.HANDLE, information_class: int) -> object:
+    advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
+    advapi32.GetTokenInformation.argtypes = [
+        wintypes.HANDLE,
+        ctypes.c_int,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        ctypes.POINTER(wintypes.DWORD),
+    ]
+    advapi32.GetTokenInformation.restype = wintypes.BOOL
+    size = wintypes.DWORD()
+    advapi32.GetTokenInformation(token, information_class, None, 0, ctypes.byref(size))
+    if size.value == 0:
+        raise OSError("Windows token information sizing failed")
+    buffer = ctypes.create_string_buffer(size.value)
+    if not advapi32.GetTokenInformation(
+        token,
+        information_class,
+        buffer,
+        size,
+        ctypes.byref(size),
+    ):
+        raise OSError("Windows token information query failed")
+    return buffer
+
+
+def _sid_string(sid: ctypes.c_void_p) -> str:
+    advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    advapi32.ConvertSidToStringSidW.argtypes = [
+        ctypes.c_void_p,
+        ctypes.POINTER(wintypes.LPWSTR),
+    ]
+    advapi32.ConvertSidToStringSidW.restype = wintypes.BOOL
+    kernel32.LocalFree.argtypes = [wintypes.HLOCAL]
+    kernel32.LocalFree.restype = wintypes.HLOCAL
+    value = wintypes.LPWSTR()
+    if not advapi32.ConvertSidToStringSidW(sid, ctypes.byref(value)):
+        raise OSError("Windows SID conversion failed")
+    try:
+        if not value.value:
+            raise OSError("Windows SID is empty")
+        return value.value
+    finally:
+        kernel32.LocalFree(value)
+
+
+def _integrity_rid(sid: ctypes.c_void_p) -> int:
+    advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
+    advapi32.GetSidSubAuthorityCount.argtypes = [ctypes.c_void_p]
+    advapi32.GetSidSubAuthorityCount.restype = ctypes.POINTER(ctypes.c_ubyte)
+    advapi32.GetSidSubAuthority.argtypes = [ctypes.c_void_p, wintypes.DWORD]
+    advapi32.GetSidSubAuthority.restype = ctypes.POINTER(wintypes.DWORD)
+    count = advapi32.GetSidSubAuthorityCount(sid)
+    if not count or count.contents.value == 0:
+        raise OSError("Windows integrity SID is invalid")
+    authority = advapi32.GetSidSubAuthority(sid, count.contents.value - 1)
+    if not authority:
+        raise OSError("Windows integrity RID is unavailable")
+    return authority.contents.value
+
+
+def _inspect_token(token: wintypes.HANDLE) -> WindowsTokenIdentity:
+    user_buffer = _token_information(token, 1)
+    elevation_buffer = _token_information(token, 20)
+    integrity_buffer = _token_information(token, 25)
+    user = ctypes.cast(user_buffer, ctypes.POINTER(_TokenUser)).contents
+    elevation = ctypes.cast(
+        elevation_buffer, ctypes.POINTER(_TokenElevation)
+    ).contents
+    integrity = ctypes.cast(
+        integrity_buffer, ctypes.POINTER(_TokenMandatoryLabel)
+    ).contents
+    return WindowsTokenIdentity(
+        sid=_sid_string(user.User.Sid),
+        elevated=bool(elevation.TokenIsElevated),
+        integrity_rid=_integrity_rid(integrity.Label.Sid),
     )
-    row = next(csv.reader(io.StringIO(completed.stdout)))
-    if len(row) != 2 or not row[1].startswith("S-1-"):
-        raise RuntimeError("Windows identity output is invalid")
-    return f"windows-sid:{row[1]}"
+
+
+def _close_token_after_inspection(token: wintypes.HANDLE) -> WindowsTokenIdentity:
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+    try:
+        return _inspect_token(token)
+    finally:
+        kernel32.CloseHandle(token)
+
+
+def _inspect_process_token(process_handle: wintypes.HANDLE) -> WindowsTokenIdentity:
+    advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
+    advapi32.OpenProcessToken.argtypes = [
+        wintypes.HANDLE,
+        wintypes.DWORD,
+        ctypes.POINTER(wintypes.HANDLE),
+    ]
+    advapi32.OpenProcessToken.restype = wintypes.BOOL
+    token = wintypes.HANDLE()
+    if not advapi32.OpenProcessToken(process_handle, 0x0008, ctypes.byref(token)):
+        raise OSError("Windows process token is unavailable")
+    return _close_token_after_inspection(token)
+
+
+def _inspect_current_token() -> WindowsTokenIdentity:
+    advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    advapi32.OpenThreadToken.argtypes = [
+        wintypes.HANDLE,
+        wintypes.DWORD,
+        wintypes.BOOL,
+        ctypes.POINTER(wintypes.HANDLE),
+    ]
+    advapi32.OpenThreadToken.restype = wintypes.BOOL
+    kernel32.GetCurrentThread.restype = wintypes.HANDLE
+    kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+    token = wintypes.HANDLE()
+    if advapi32.OpenThreadToken(
+        kernel32.GetCurrentThread(), 0x0008, True, ctypes.byref(token)
+    ):
+        return _close_token_after_inspection(token)
+    if ctypes.get_last_error() != 1008:
+        raise OSError("Windows effective thread token is unavailable")
+    return _inspect_process_token(kernel32.GetCurrentProcess())
+
+
+def _inspect_child_token(
+    process: subprocess.Popen[bytes],
+) -> WindowsTokenIdentity:
+    return _inspect_process_token(process._handle)
+
+
+def _require_nonprivileged_token(token: WindowsTokenIdentity) -> None:
+    if token.elevated:
+        raise PermissionError("elevated Windows token is not authorized")
+    if token.integrity_rid > 0x2000:
+        raise PermissionError("Windows token integrity is not authorized")
+    if token.sid.casefold() in {"s-1-5-18", "s-1-5-19", "s-1-5-20"}:
+        raise PermissionError("Windows service identity is not authorized")
+
+
+def expected_identity() -> str:
+    """Return the current effective token SID in a stable public form."""
+    return _inspect_current_token().public_identity
 
 
 def _pid_exists(pid: int) -> bool:
@@ -164,6 +321,20 @@ def _create_owned_job(process: subprocess.Popen[bytes]) -> int:
     return job
 
 
+def _abort_owned_process(
+    process: subprocess.Popen[bytes], job: int, exit_code: int
+) -> None:
+    kernel32 = ctypes.windll.kernel32
+    kernel32.TerminateJobObject.argtypes = [wintypes.HANDLE, wintypes.UINT]
+    kernel32.TerminateJobObject.restype = wintypes.BOOL
+    try:
+        if not kernel32.TerminateJobObject(job, exit_code):
+            process.kill()
+    finally:
+        kernel32.CloseHandle(job)
+    process.communicate(timeout=10)
+
+
 def _observed_child_pid(output: bytes | None) -> int | None:
     for line in (output or b"").decode("utf-8", errors="replace").splitlines():
         if line.startswith("child-pid="):
@@ -190,6 +361,8 @@ class WindowsSyntheticLauncher:
         self.mode = mode
 
     def launch(self, request: controller.LaunchRequest) -> controller.ProcessOutcome:
+        expected_token = _inspect_current_token()
+        _require_nonprivileged_token(expected_token)
         evidence_root = self.recorder.root
         workspace = request.workspace.resolve(strict=True)
         if (
@@ -230,14 +403,17 @@ class WindowsSyntheticLauncher:
             process.communicate()
             raise
         try:
+            observed_token = _inspect_child_token(process)
+            _require_nonprivileged_token(observed_token)
+            if observed_token.sid.casefold() != expected_token.sid.casefold():
+                raise PermissionError("launched child identity does not match")
+        except Exception:
+            _abort_owned_process(process, job, 126)
+            raise
+        try:
             gate_path.write_bytes(b"assigned")
         except Exception:
-            kernel32 = ctypes.windll.kernel32
-            kernel32.TerminateJobObject.argtypes = [wintypes.HANDLE, wintypes.UINT]
-            kernel32.TerminateJobObject.restype = wintypes.BOOL
-            kernel32.TerminateJobObject(job, 125)
-            kernel32.CloseHandle(job)
-            process.communicate()
+            _abort_owned_process(process, job, 125)
             raise
         timed_out = False
         process_tree_terminated = True
@@ -266,6 +442,10 @@ class WindowsSyntheticLauncher:
             "child_alive_after_cleanup": child_alive,
             "child_pid_observed": child_pid is not None,
             "exit_code": process.returncode,
+            "expected_identity": expected_token.public_identity,
+            "observed_child_identity": observed_token.public_identity,
+            "observed_child_integrity_rid": observed_token.integrity_rid,
+            "observed_child_token_elevated": observed_token.elevated,
             "launcher": "fixed-windows-synthetic-child-v1",
             "process_tree_terminated": process_tree_terminated,
             "profile_redirected_to_workspace": True,
@@ -280,7 +460,7 @@ class WindowsSyntheticLauncher:
         )
         truncated = self.recorder.faults.truncate_stdout
         return controller.ProcessOutcome(
-            identity=expected_identity(),
+            identity=observed_token.public_identity,
             exit_code=process.returncode,
             stdout=stdout.decode("utf-8", errors="replace"),
             stderr=stderr.decode("utf-8", errors="replace"),
