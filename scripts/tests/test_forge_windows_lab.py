@@ -8,6 +8,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from evals.forge import controller, windows_lab
 
@@ -174,6 +175,44 @@ class ForgeWindowsLabTests(unittest.TestCase):
         self.assertEqual(recorder.process_start_count, 1)
         self.assertEqual(result["result"], "FAIL")
         self.assertIn("launcher_failure", result["validation_outcomes"]["failure_codes"])
+        self.assertFalse(result["evidence_retention"]["archive_finalized"])
+        self.assertEqual(result["cleanup"], "PASS")
+
+    def test_failed_job_assignment_kills_actual_process_and_cleans_workspace(
+        self,
+    ) -> None:
+        observed_pids: list[int] = []
+
+        def reject_assignment(process) -> int:
+            observed_pids.append(process.pid)
+            raise OSError("injected job assignment failure")
+
+        with mock.patch.object(
+            windows_lab, "_create_owned_job", side_effect=reject_assignment
+        ):
+            result, recorder = self.run_lab()
+
+        self.assertEqual(len(observed_pids), 1)
+        self.assertFalse(windows_lab._pid_exists(observed_pids[0]))
+        self.assertEqual(recorder.process_start_count, 1)
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn(
+            "launcher_failure", result["validation_outcomes"]["failure_codes"]
+        )
+        self.assertEqual(result["cleanup"], "PASS")
+        self.assertFalse(any(self.workspace_root.iterdir()))
+
+    def test_corrupted_archive_is_rejected_after_actual_process(self) -> None:
+        result, recorder = self.run_lab(
+            faults=windows_lab.WindowsLabFaults(tamper_after_capture=True)
+        )
+
+        self.assertEqual(recorder.process_start_count, 1)
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn(
+            "evidence_archive_finalize_failed",
+            result["validation_outcomes"]["failure_codes"],
+        )
         self.assertFalse(result["evidence_retention"]["archive_finalized"])
         self.assertEqual(result["cleanup"], "PASS")
 

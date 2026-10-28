@@ -35,7 +35,13 @@ workspace = pathlib.Path.cwd().resolve()
 profile = pathlib.Path(os.environ["USERPROFILE"]).resolve()
 if profile != workspace:
     raise SystemExit(91)
-time.sleep(0.5)
+gate = pathlib.Path(os.environ["AFYX_JOB_GATE"])
+gate_deadline = time.monotonic() + 10
+while not gate.is_file():
+    if time.monotonic() >= gate_deadline:
+        raise SystemExit(92)
+    time.sleep(0.01)
+gate.unlink()
 if mode == "timeout":
     child = subprocess.Popen(
         [sys.executable, "-I", "-c", "import time; time.sleep(60)"],
@@ -80,11 +86,18 @@ def _pid_exists(pid: int) -> bool:
     kernel32.OpenProcess.restype = wintypes.HANDLE
     kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
     kernel32.CloseHandle.restype = wintypes.BOOL
+    kernel32.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.c_void_p]
+    kernel32.GetExitCodeProcess.restype = wintypes.BOOL
     process = kernel32.OpenProcess(0x1000, False, pid)
     if not process:
         return False
-    kernel32.CloseHandle(process)
-    return True
+    exit_code = wintypes.DWORD()
+    try:
+        if not kernel32.GetExitCodeProcess(process, ctypes.byref(exit_code)):
+            raise OSError("Windows process state query failed")
+        return exit_code.value == 259
+    finally:
+        kernel32.CloseHandle(process)
 
 
 class _JobBasicLimitInformation(ctypes.Structure):
@@ -186,7 +199,11 @@ class WindowsSyntheticLauncher:
         ):
             raise ValueError("evidence and execution roots must be separate")
 
+        gate_path = workspace / ".afyx-job-assigned"
+        if gate_path.exists():
+            raise ValueError("job assignment gate must not already exist")
         isolated_environment = {
+            "AFYX_JOB_GATE": str(gate_path),
             "PATH": str(Path(sys.executable).parent),
             "SystemRoot": os.environ["SystemRoot"],
             "TEMP": str(workspace),
@@ -205,13 +222,23 @@ class WindowsSyntheticLauncher:
                 subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW
             ),
         )
+        self.recorder.process_start_count += 1
         try:
             job = _create_owned_job(process)
         except Exception:
             process.kill()
             process.communicate()
             raise
-        self.recorder.process_start_count += 1
+        try:
+            gate_path.write_bytes(b"assigned")
+        except Exception:
+            kernel32 = ctypes.windll.kernel32
+            kernel32.TerminateJobObject.argtypes = [wintypes.HANDLE, wintypes.UINT]
+            kernel32.TerminateJobObject.restype = wintypes.BOOL
+            kernel32.TerminateJobObject(job, 125)
+            kernel32.CloseHandle(job)
+            process.communicate()
+            raise
         timed_out = False
         process_tree_terminated = True
         child_pid: int | None = None
