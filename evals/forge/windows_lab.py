@@ -43,7 +43,7 @@ while not gate.is_file():
 gate.unlink()
 if mode == "timeout":
     child = subprocess.Popen(
-        [sys.executable, "-I", "-c", "import time; time.sleep(60)"],
+        [getattr(sys, "_base_executable", sys.executable), "-I", "-c", "import time; time.sleep(60)"],
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -375,9 +375,10 @@ class WindowsSyntheticLauncher:
         gate_path = workspace / ".afyx-job-assigned"
         if gate_path.exists():
             raise ValueError("job assignment gate must not already exist")
+        executable = str(getattr(sys, "_base_executable", sys.executable))
         isolated_environment = {
             "AFYX_JOB_GATE": str(gate_path),
-            "PATH": str(Path(sys.executable).parent),
+            "PATH": str(Path(executable).parent),
             "SystemRoot": os.environ["SystemRoot"],
             "TEMP": str(workspace),
             "TMP": str(workspace),
@@ -385,7 +386,7 @@ class WindowsSyntheticLauncher:
             "WINDIR": os.environ["WINDIR"],
         }
         process = subprocess.Popen(
-            [sys.executable, "-I", "-c", SYNTHETIC_CHILD, self.mode],
+            [executable, "-I", "-c", SYNTHETIC_CHILD, self.mode],
             cwd=workspace,
             env=isolated_environment,
             stdin=subprocess.DEVNULL,

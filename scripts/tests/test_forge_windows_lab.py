@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -297,6 +298,59 @@ class ForgeWindowsLabTests(unittest.TestCase):
         )
         self.assertEqual(result["cleanup"], "PASS")
         self.assertFalse(any(self.workspace_root.iterdir()))
+
+    def test_negative_filesystem_path_traversal_control(self) -> None:
+        traversal_paths = [
+            "../outside.txt",
+            "..\\outside.txt",
+            "subdir/../../escaped.txt",
+            "/absolute/root.txt",
+            "C:\\Windows\\System32\\calc.exe",
+        ]
+        for bad_path in traversal_paths:
+            with self.subTest(bad_path=bad_path):
+                with self.assertRaises(controller.ContractViolation):
+                    controller.normalize_relative_path(bad_path)
+
+    def test_external_sentinel_boundary_and_integrity_preserved(self) -> None:
+        """Verify non-interference: out-of-workspace external sentinel is unmodified."""
+        self.require_unelevated_host()
+        external_sentinel = self.root / "external-sentinel.txt"
+        sentinel_content = b"afyx-forge-sentinel-ground-truth-unmodified"
+        external_sentinel.write_bytes(sentinel_content)
+
+        result, _ = self.run_lab()
+
+        self.assertEqual(result["result"], "PASS")
+        self.assertTrue(external_sentinel.is_file())
+        self.assertEqual(external_sentinel.read_bytes(), sentinel_content)
+
+    def test_disposable_os_enforced_acl_denial(self) -> None:
+        """Verify true Windows ACL enforcement on a disposable synthetic target."""
+        self.require_unelevated_host()
+        username = os.environ.get("USERNAME")
+        if not username:
+            self.skipTest("USERNAME environment variable is required for ACL test")
+
+        denied_target = self.root / "disposable-acl-denied.txt"
+        denied_target.write_text("initial protected content", encoding="utf-8")
+
+        acl_result = subprocess.run(
+            ["icacls", str(denied_target), "/deny", f"{username}:(W)"],
+            capture_output=True,
+            text=True,
+        )
+        if acl_result.returncode != 0:
+            self.skipTest(f"icacls /deny failed: {acl_result.stderr.strip()}")
+
+        try:
+            with self.assertRaises(PermissionError):
+                denied_target.write_text("tampered content", encoding="utf-8")
+        finally:
+            subprocess.run(
+                ["icacls", str(denied_target), "/remove:d", username],
+                capture_output=True,
+            )
 
 
 if __name__ == "__main__":
