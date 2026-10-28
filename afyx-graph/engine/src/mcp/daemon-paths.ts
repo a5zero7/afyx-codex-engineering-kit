@@ -49,7 +49,17 @@ const POSIX_SOCKET_PATH_LIMIT = 100;
 /** Short, stable, project-scoped identifier — the basis for both the tmpdir path and the Windows pipe name. */
 function projectHash(projectRoot: string): string {
   const resolvedRoot = path.resolve(projectRoot);
-  const canonicalRoot = usesExternalStateDir() ? fs.realpathSync(resolvedRoot) : resolvedRoot;
+  let canonicalRoot = resolvedRoot;
+  if (process.platform === 'win32') {
+    // `realpathSync()` preserves the caller's spelling on Windows, while the
+    // native variant returns the filesystem's stable component casing.  Keep
+    // the drive letter lower-case for compatibility with existing daemons
+    // launched from the common `d:\\...` project spelling.
+    try { canonicalRoot = fs.realpathSync.native(resolvedRoot); } catch { /* path may not exist yet */ }
+    canonicalRoot = canonicalRoot.replace(/^([A-Z]):/, (_, drive: string) => `${drive.toLowerCase()}:`);
+  } else if (usesExternalStateDir()) {
+    canonicalRoot = fs.realpathSync(resolvedRoot);
+  }
   const identity = usesExternalStateDir()
     ? `${canonicalRoot}\0${getAfyxGraphDir(canonicalRoot)}`
     : canonicalRoot;
