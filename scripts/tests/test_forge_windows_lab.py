@@ -328,29 +328,47 @@ class ForgeWindowsLabTests(unittest.TestCase):
     def test_disposable_os_enforced_acl_denial(self) -> None:
         """Verify true Windows ACL enforcement on a disposable synthetic target."""
         self.require_unelevated_host()
-        username = os.environ.get("USERNAME")
-        if not username:
-            self.skipTest("USERNAME environment variable is required for ACL test")
+        token_sid = self.current_token.sid if self.current_token else None
+        if not token_sid:
+            self.fail("Windows token SID is missing from current token inspection")
 
+        principal = f"*{token_sid}"
         denied_target = self.root / "disposable-acl-denied.txt"
         denied_target.write_text("initial protected content", encoding="utf-8")
 
         acl_result = subprocess.run(
-            ["icacls", str(denied_target), "/deny", f"{username}:(W)"],
+            ["icacls", str(denied_target), "/deny", f"{principal}:(W)"],
             capture_output=True,
             text=True,
         )
         if acl_result.returncode != 0:
-            self.skipTest(f"icacls /deny failed: {acl_result.stderr.strip()}")
+            self.fail(
+                f"icacls /deny setup failed (code {acl_result.returncode}): "
+                f"{acl_result.stderr.strip() or acl_result.stdout.strip()}"
+            )
 
+        restore_result = None
         try:
             with self.assertRaises(PermissionError):
                 denied_target.write_text("tampered content", encoding="utf-8")
         finally:
-            subprocess.run(
-                ["icacls", str(denied_target), "/remove:d", username],
+            restore_result = subprocess.run(
+                ["icacls", str(denied_target), "/remove:d", principal],
                 capture_output=True,
+                text=True,
             )
+
+        self.assertIsNotNone(restore_result)
+        self.assertEqual(
+            restore_result.returncode,
+            0,
+            f"icacls /remove:d failed: {restore_result.stderr.strip() or restore_result.stdout.strip()}",
+        )
+        denied_target.write_text("restored authorized content", encoding="utf-8")
+        self.assertEqual(
+            denied_target.read_text(encoding="utf-8"),
+            "restored authorized content",
+        )
 
 
 if __name__ == "__main__":
