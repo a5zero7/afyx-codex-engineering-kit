@@ -160,6 +160,7 @@ function Get-AfyxEnabledOptionIndex {
 
 function Show-AfyxChoiceFrame {
     param([string]$Prompt, [object[]]$Options, [int]$Selected, [hashtable]$Checked, $Terminal, [switch]$Multiple)
+    $lineCount = @(Format-AfyxWrappedText -Text $Prompt -Width $Terminal.Width).Count
     Write-AfyxText -Terminal $Terminal -Tone Text -Text $Prompt
     for ($i = 0; $i -lt $Options.Count; $i++) {
         $option = $Options[$i]
@@ -168,9 +169,28 @@ function Show-AfyxChoiceFrame {
         $mark = if ($Multiple) { if ($Checked.ContainsKey([string]$option.Id)) { '[x]' } else { '[ ]' } } else { "[$($i + 1)]" }
         $detail = if ($option.PSObject.Properties['Detail'] -and $option.Detail) { " - $($option.Detail)" } else { '' }
         $tone = if (-not $enabled) { 'Muted' } elseif ($i -eq $Selected) { 'Primary' } else { 'Text' }
-        Write-AfyxText -Terminal $Terminal -Tone $tone -Text "$cursor $mark $($option.Label)$detail" -Indent '  '
+        $optionText = "$cursor $mark $($option.Label)$detail"
+        $lineCount += @(Format-AfyxWrappedText -Text $optionText -Width $Terminal.Width -Indent '  ').Count
+        Write-AfyxText -Terminal $Terminal -Tone $tone -Text $optionText -Indent '  '
     }
-    Write-AfyxText -Terminal $Terminal -Tone Muted -Text $(if ($Multiple) { 'Up/Down move | Space toggle | Enter continue | Esc cancel' } else { 'Up/Down move | Enter select | Esc cancel' }) -Indent '  '
+    $helpText = if ($Multiple) { 'Up/Down move | Space toggle | Enter continue | Esc cancel' } else { 'Up/Down move | Enter select | Esc cancel' }
+    $lineCount += @(Format-AfyxWrappedText -Text $helpText -Width $Terminal.Width -Indent '  ').Count
+    Write-AfyxText -Terminal $Terminal -Tone Muted -Text $helpText -Indent '  '
+    return $lineCount
+}
+
+function Reset-AfyxChoiceFrame {
+    param([int]$LineCount, [Parameter(Mandatory)]$Terminal)
+    if ($LineCount -lt 1 -or -not $Terminal.Ansi) { return }
+    Write-Host -NoNewline "$script:AfyxAnsi[$($LineCount)A`r$script:AfyxAnsi[0J"
+}
+
+function Test-AfyxAdvancedMenu {
+    param([Parameter(Mandatory)]$Terminal, [scriptblock]$ReadKey)
+    if (-not $Terminal.Interactive) { return $false }
+    if ($ReadKey) { return $true }
+    if (-not $Terminal.Ansi) { return $false }
+    try { return $null -ne $Host.UI.RawUI } catch { return $false }
 }
 
 function Read-AfyxSingleChoice {
@@ -187,8 +207,8 @@ function Read-AfyxSingleChoice {
     if (-not $Options.Count) { throw 'At least one choice is required.' }
     $selected = 0
     for ($i = 0; $i -lt $Options.Count; $i++) { if ([string]$Options[$i].Id -eq $DefaultId) { $selected = $i; break } }
-    if ((-not $Terminal.Interactive) -or ((-not $ReadKey) -and (-not $Host.UI.RawUI))) {
-        if (-not $NoRender) { Show-AfyxChoiceFrame -Prompt $Prompt -Options $Options -Selected $selected -Checked @{} -Terminal $Terminal }
+    if (-not (Test-AfyxAdvancedMenu -Terminal $Terminal -ReadKey $ReadKey)) {
+        if (-not $NoRender) { $null = Show-AfyxChoiceFrame -Prompt $Prompt -Options $Options -Selected $selected -Checked @{} -Terminal $Terminal }
         $reader = if ($ReadLine) { $ReadLine } else { { Read-Host 'Selection' } }
         while ($true) {
             $answer = (& $reader).Trim()
@@ -200,7 +220,7 @@ function Read-AfyxSingleChoice {
             }
         }
     }
-    if (-not $NoRender) { Show-AfyxChoiceFrame -Prompt $Prompt -Options $Options -Selected $selected -Checked @{} -Terminal $Terminal }
+    $frameLines = if (-not $NoRender) { Show-AfyxChoiceFrame -Prompt $Prompt -Options $Options -Selected $selected -Checked @{} -Terminal $Terminal } else { 0 }
     while ($true) {
         $key = if ($ReadKey) { & $ReadKey } else { $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown') }
         switch ([string]$key.Key) {
@@ -218,7 +238,10 @@ function Read-AfyxSingleChoice {
                 }
             }
         }
-        if (-not $NoRender) { Show-AfyxChoiceFrame -Prompt $Prompt -Options $Options -Selected $selected -Checked @{} -Terminal $Terminal }
+        if (-not $NoRender) {
+            Reset-AfyxChoiceFrame -LineCount $frameLines -Terminal $Terminal
+            $frameLines = Show-AfyxChoiceFrame -Prompt $Prompt -Options $Options -Selected $selected -Checked @{} -Terminal $Terminal
+        }
     }
 }
 
@@ -235,8 +258,8 @@ function Read-AfyxMultiChoice {
     )
     $checked = @{}
     foreach ($id in $DefaultId) { $checked[[string]$id] = $true }
-    if ((-not $Terminal.Interactive) -or ((-not $ReadKey) -and (-not $Host.UI.RawUI))) {
-        if (-not $NoRender) { Show-AfyxChoiceFrame -Prompt $Prompt -Options $Options -Selected 0 -Checked $checked -Terminal $Terminal -Multiple }
+    if (-not (Test-AfyxAdvancedMenu -Terminal $Terminal -ReadKey $ReadKey)) {
+        if (-not $NoRender) { $null = Show-AfyxChoiceFrame -Prompt $Prompt -Options $Options -Selected 0 -Checked $checked -Terminal $Terminal -Multiple }
         $reader = if ($ReadLine) { $ReadLine } else { { Read-Host 'Selections (comma-separated numbers)' } }
         $answer = (& $reader).Trim()
         if ($answer -match '^(?i:q|quit|esc|escape)$') { throw [OperationCanceledException]::new('Installer cancelled by user.') }
@@ -250,7 +273,7 @@ function Read-AfyxMultiChoice {
         return @($result | Select-Object -Unique)
     }
     $selected = 0
-    if (-not $NoRender) { Show-AfyxChoiceFrame -Prompt $Prompt -Options $Options -Selected $selected -Checked $checked -Terminal $Terminal -Multiple }
+    $frameLines = if (-not $NoRender) { Show-AfyxChoiceFrame -Prompt $Prompt -Options $Options -Selected $selected -Checked $checked -Terminal $Terminal -Multiple } else { 0 }
     while ($true) {
         $key = if ($ReadKey) { & $ReadKey } else { $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown') }
         switch ([string]$key.Key) {
@@ -263,7 +286,10 @@ function Read-AfyxMultiChoice {
             }
             'Enter' { return @($Options | Where-Object { $checked.ContainsKey([string]$_.Id) } | ForEach-Object { [string]$_.Id }) }
         }
-        if (-not $NoRender) { Show-AfyxChoiceFrame -Prompt $Prompt -Options $Options -Selected $selected -Checked $checked -Terminal $Terminal -Multiple }
+        if (-not $NoRender) {
+            Reset-AfyxChoiceFrame -LineCount $frameLines -Terminal $Terminal
+            $frameLines = Show-AfyxChoiceFrame -Prompt $Prompt -Options $Options -Selected $selected -Checked $checked -Terminal $Terminal -Multiple
+        }
     }
 }
 

@@ -110,7 +110,7 @@ if ($wizardMode) {
 }
 
 if (-not $Provider.Count) {
-    if (-not $wizardMode -and -not $SkipProviderConfiguration -and -not $ValidateOnly -and -not $WhatIfPreference -and -not $env:CI -and -not [Console]::IsInputRedirected) {
+    if (-not $wizardMode -and -not $SkipProviderConfiguration -and -not $ValidateOnly -and -not $WhatIfPreference -and -not $env:CI -and $terminal.Interactive) {
         $detected = @()
         if ($codexCommandDetected) { $detected += 'codex' }
         if ($antigravityCommandDetected) { $detected += 'antigravity' }
@@ -199,7 +199,7 @@ function Get-ComponentAction([string]$Id, [string]$Label) {
     elseif ($controlPlan) {
         $planItem = @($controlPlan.Components | Where-Object { $_.Id -eq $Id })[0]
         if (-not $planItem.Desired -or $planItem.Drift -eq 'NOT_APPLICABLE') { $action = 'skip' }
-        elseif ($planItem.Repair -eq 'BLOCKED') { throw "$Label drift is $($planItem.Drift) with actual ownership $($planItem.ActualOwnership); automatic takeover is forbidden." }
+        elseif ($planItem.Repair -eq 'BLOCKED') { $action = 'blocked' }
         elseif ($planItem.Repair -eq 'INSTALL') { $action = 'install' }
         elseif ($planItem.Repair -eq 'REPAIR') { $action = 'repair' }
         elseif ($Id -eq 'afyx-context' -and $state.State -eq 'HEALTHY') { $action = 'update' }
@@ -217,7 +217,7 @@ function Get-ComponentAction([string]$Id, [string]$Label) {
         elseif ($Id -eq 'afyx-context' -and $state.State -eq 'HEALTHY') { $action = 'update' }
         elseif ($state.State -eq 'HEALTHY' -and $available -and (Compare-AfyxVersion $state.Version $available) -lt 0) { $action = 'update' }
         else { $action = 'skip' }
-    } elseif ($WhatIfPreference -or $env:CI -or [Console]::IsInputRedirected) { $action = 'skip' }
+    } elseif ($WhatIfPreference -or $env:CI -or -not $terminal.Interactive) { $action = 'skip' }
     else {
         $available = Get-AvailableVersion $Id
         $versionDetail = if ($state.Version -or $available) { " installed=$($state.Version) available=$available" } else { '' }
@@ -236,6 +236,7 @@ function Get-ComponentAction([string]$Id, [string]$Label) {
             $action = if ($answer -match '(?i)^(a|adopt)$') { 'adopt' } else { 'skip' }
         }
     }
+    if ($action -eq 'blocked') { return $action }
     $allowed = switch ($state.State) {
         'NOT INSTALLED' { @('install', 'skip') }
         'HEALTHY' { @('update', 'adopt', 'skip') }
@@ -247,6 +248,20 @@ function Get-ComponentAction([string]$Id, [string]$Label) {
     return $action
 }
 
+function Resolve-ComponentAction([string]$Id, [string]$Label) {
+    if ($Id -eq 'codex-usage-tracking') {
+        if ('codex' -notin $Provider) { return 'skip' }
+        if ($InstallUsageTracker) {
+            $state = $componentStates[$Id]
+            if ($state.State -eq 'NOT INSTALLED') { return 'install' }
+            if ($state.State -in @('INCOMPLETE', 'INVALID', 'DRIFTED')) { return 'repair' }
+            return 'update'
+        }
+        if ($SkipUsageTracker) { return 'skip' }
+    }
+    return Get-ComponentAction $Id $Label
+}
+
 function Test-SkillManifest([string]$SkillDirectory) {
     $manifest = Join-Path $SkillDirectory 'SKILL.md'
     if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) { return $false }
@@ -255,14 +270,14 @@ function Test-SkillManifest([string]$SkillDirectory) {
 
 function Read-ReplaceChoice([string]$Label) {
     if ($Force) { return 'Replace' }
-    if ($WhatIfPreference -or $env:CI -or [Console]::IsInputRedirected) { return 'Skip' }
+    if ($WhatIfPreference -or $env:CI -or -not $terminal.Interactive) { return 'Skip' }
     do { $answer = (Read-Host "$Label [S] Skip / [R] Replace [S]").Trim() } until ($answer -match '(?i)^(|s|skip|r|replace)$')
     if ($answer -match '(?i)^(r|replace)$') { return 'Replace' }
     return 'Skip'
 }
 
 function Read-InstallChoice([string]$Label) {
-    if ($WhatIfPreference -or $env:CI -or [Console]::IsInputRedirected) { return $false }
+    if ($WhatIfPreference -or $env:CI -or -not $terminal.Interactive) { return $false }
     do { $answer = (Read-Host "$Label [Y/N] [N]").Trim() } until ($answer -match '(?i)^(|y|yes|n|no)$')
     return $answer -match '(?i)^(y|yes)$'
 }
@@ -309,6 +324,21 @@ if (-not (Test-SkillManifest $bundledEngineeringExpert)) { throw 'Bundled Afyx E
 if (-not (Test-Path -LiteralPath $graphMetadataPath -PathType Leaf)) { throw 'Bundled Afyx Graph metadata is missing.' }
 if (-not (Test-Path -LiteralPath $contextMetadataPath -PathType Leaf)) { throw 'Bundled Afyx Context metadata is missing.' }
 
+$componentLabels = [ordered]@{
+    'efficient-coding' = 'Efficient Coding'
+    'odoo-engineering' = 'Odoo Engineering'
+    'afyx-engineering-expert' = 'Afyx Engineering Expert'
+    'afyx-graph' = 'Afyx Graph'
+    'afyx-context' = 'Afyx Context Engine'
+    'codex-usage-tracking' = 'Usage Tracking'
+}
+$actionDecisions = [ordered]@{}
+if ($controlPlan) {
+    foreach ($decision in $componentLabels.GetEnumerator()) {
+        $actionDecisions[$decision.Key] = Resolve-ComponentAction ([string]$decision.Key) ([string]$decision.Value)
+    }
+}
+
 $codexCliDetected = [bool]$codexCommandDetected
 $graphMetadata = Get-Content -Raw -LiteralPath $graphMetadataPath | ConvertFrom-Json
 $graphReleaseChannel = (Get-Content -Raw -LiteralPath (Join-Path $packageRoot 'afyx-graph\engine\scripts\distribution-product.json') | ConvertFrom-Json).releaseChannel
@@ -335,12 +365,13 @@ foreach ($entry in $states.GetEnumerator()) {
 if ($controlPlan) {
     Write-AfyxSection -Title "Desired State Plan | $($controlPlan.Identity)" -Terminal $terminal
     foreach ($item in $controlPlan.Components) {
-        $planStatus = if ($item.Drift -eq 'IN_SYNC') { 'NO CHANGE' }
+        $decidedAction = [string]$actionDecisions[[string]$item.Id]
+        $planStatus = if ($decidedAction -eq 'blocked') { 'BLOCKED' }
+            elseif ($decidedAction -ne 'skip') { 'PLANNED' }
+            elseif ($item.Drift -eq 'IN_SYNC') { 'NO CHANGE' }
             elseif ($item.Drift -eq 'EXTRA') { 'EXTRA' }
-            elseif ($item.Drift -eq 'NOT_APPLICABLE' -or -not $item.Desired) { 'SKIPPED' }
-            elseif ($item.Repair -eq 'BLOCKED') { 'BLOCKED' }
-            else { 'PLANNED' }
-        $planDetail = "desired=$($item.Desired); actual=$($item.ActualState); drift=$($item.Drift); ownership=$($item.ActualOwnership); repair=$($item.Repair)"
+            else { 'SKIPPED' }
+        $planDetail = "action=$decidedAction; desired=$($item.Desired); actual=$($item.ActualState); drift=$($item.Drift); ownership=$($item.ActualOwnership); repair=$($item.Repair)"
         if ($planStatus -eq 'EXTRA') { $planDetail += '; installed optional component is outside this desired preset and will be preserved' }
         Write-AfyxStatus -Status $planStatus -Name $item.Id -Detail $planDetail -Terminal $terminal
     }
@@ -438,20 +469,10 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) { throw 'Git is requir
 if ($wizardMode) {
     Write-AfyxSection -Title 'Review Actual Planned Changes' -Terminal $terminal
     $mutationPreview = @()
-    foreach ($item in @($controlPlan.Components | Where-Object { $_.Desired })) {
-        $previewAction = ''
-        if ($item.Repair -eq 'INSTALL') { $previewAction = 'install' }
-        elseif ($item.Repair -eq 'REPAIR') { $previewAction = 'repair' }
-        elseif ($item.Repair -eq 'BLOCKED') { $previewAction = 'blocked' }
-        else {
-            $available = Get-AvailableVersion ([string]$item.Id)
-            $state = $componentStates[[string]$item.Id]
-            if ($state.State -eq 'HEALTHY' -and $available -and (Compare-AfyxVersion $state.Version $available) -lt 0) { $previewAction = 'update' }
-        }
-        if ($previewAction) {
-            $mutationPreview += [pscustomobject]@{ Id = [string]$item.Id; Action = $previewAction }
-            Write-AfyxStatus -Status $(if ($previewAction -eq 'blocked') { 'BLOCKED' } else { 'PLANNED' }) -Name ([string]$item.Id) -Detail $previewAction -Terminal $terminal
-        }
+    foreach ($decision in $actionDecisions.GetEnumerator()) {
+        if ([string]$decision.Value -eq 'skip') { continue }
+        $mutationPreview += [pscustomobject]@{ Id = [string]$decision.Key; Action = [string]$decision.Value }
+        Write-AfyxStatus -Status PLANNED -Name ([string]$decision.Key) -Detail ([string]$decision.Value) -Terminal $terminal
     }
     if (-not $SkipProviderConfiguration) {
         foreach ($providerId in $Provider) { Write-AfyxStatus -Status PLANNED -Name "$providerId provider" -Detail "scope=$ProviderScope; Afyx-owned entries only" -Terminal $terminal }
@@ -476,7 +497,9 @@ $skillDefinitions = @(
     @{ Id = 'odoo-engineering'; Name = 'Odoo Engineering'; Source = $bundledOdooEngineering; Target = $odooTarget },
     @{ Id = 'afyx-engineering-expert'; Name = 'Afyx Engineering Expert'; Source = $bundledEngineeringExpert; Target = $expertTarget }
 )
-foreach ($component in $skillDefinitions) { $skillActions[$component.Id] = Get-ComponentAction $component.Id $component.Name }
+foreach ($component in $skillDefinitions) {
+    $skillActions[$component.Id] = if ($controlPlan) { [string]$actionDecisions[$component.Id] } else { Resolve-ComponentAction $component.Id $component.Name }
+}
 foreach ($additionalRoot in $additionalSkillRoots) {
     foreach ($component in $skillDefinitions) {
         $replicaDesired = if ($controlPlan) { $component.Id -in $controlPlan.DesiredComponents } else { $skillActions[$component.Id] -notin @('skip', 'adopt') }
@@ -517,7 +540,7 @@ foreach ($additionalRoot in $additionalSkillRoots) {
 }
 
 $graphState = $states['Afyx Graph']
-$graphAction = Get-ComponentAction 'afyx-graph' 'Afyx Graph'
+$graphAction = if ($controlPlan) { [string]$actionDecisions['afyx-graph'] } else { Resolve-ComponentAction 'afyx-graph' 'Afyx Graph' }
 if ($graphAction -eq 'skip') { $summary['Afyx Graph'] = 'skipped' }
 else {
     Write-AfyxStatus -Status PLANNED -Name 'Afyx Graph' -Detail "$graphAction in progress" -Terminal $terminal
@@ -555,7 +578,7 @@ if (-not $SkipGraphMcp -and -not $SkipProviderConfiguration -and 'antigravity' -
 }
 
 $contextState = $states['Afyx Context Engine']
-$contextAction = Get-ComponentAction 'afyx-context' 'Afyx Context Engine'
+$contextAction = if ($controlPlan) { [string]$actionDecisions['afyx-context'] } else { Resolve-ComponentAction 'afyx-context' 'Afyx Context Engine' }
 if ($contextAction -eq 'skip') { $summary['Afyx Context Engine'] = 'skipped' }
 else {
     Write-AfyxStatus -Status PLANNED -Name 'Afyx Context Engine' -Detail "$contextAction in progress; Graph integration remains default-OFF" -Terminal $terminal
@@ -568,11 +591,7 @@ else {
     if (-not $WhatIfPreference) { $changesApplied = $true }
 }
 
-$usageState = $states['Usage Tracking']
-$usageAction = if ('codex' -notin $Provider) { 'skip' }
-    elseif ($InstallUsageTracker) { if ($usageState -eq 'NOT INSTALLED') { 'install' } elseif ($usageState -in @('INCOMPLETE', 'INVALID')) { 'repair' } else { 'update' } }
-    elseif ($SkipUsageTracker) { 'skip' }
-    else { Get-ComponentAction 'codex-usage-tracking' 'Usage Tracking' }
+$usageAction = if ($controlPlan) { [string]$actionDecisions['codex-usage-tracking'] } else { Resolve-ComponentAction 'codex-usage-tracking' 'Usage Tracking' }
 if ($usageAction -eq 'skip') { $summary['Usage Tracking'] = 'skipped'; Write-Host 'Usage Tracking: skipped' }
 else {
     Write-AfyxStatus -Status PLANNED -Name 'Usage Tracking' -Detail "$usageAction in progress" -Terminal $terminal
