@@ -24,7 +24,6 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-Write-Host 'Afyx Codex Engineering Kit — Windows installer (PowerShell)'
 
 $packageRoot = $PSScriptRoot
 $bundledEfficientCoding = Join-Path $packageRoot 'skills\efficient-coding'
@@ -45,23 +44,83 @@ if ($InstallUsageTracker -and $SkipUsageTracker) { throw '-InstallUsageTracker a
 
 # One component truth: scripts/components.json, read through the shared module.
 Import-Module (Join-Path $packageRoot 'scripts\lib\AfyxComponents.psm1') -Force
-Import-Module (Join-Path $packageRoot 'scripts\lib\AfyxSkillLifecycle.psm1') -Force
+Import-Module (Join-Path $packageRoot 'scripts\lib\AfyxSkillLifecycle.psm1') -Force -DisableNameChecking
+Import-Module (Join-Path $packageRoot 'scripts\lib\AfyxTerminal.psm1') -Force
+$terminal = New-AfyxTerminalContext
+Show-AfyxBanner -Terminal $terminal -Subtitle 'Interactive Installer | Midnight Circuit'
 $providerRegistry = @(Get-AfyxProviderRegistry)
 $providerIds = @($providerRegistry | ForEach-Object { [string]$_.provider })
 $codexCommandDetected = Get-Command codex -ErrorAction SilentlyContinue
 $agyCommandDetected = Get-Command agy -ErrorAction SilentlyContinue
+$antigravityCommandDetected = if ($agyCommandDetected) { $agyCommandDetected } else { Get-Command antigravity -ErrorAction SilentlyContinue }
+$vscodeExtensionDetected = [bool](Get-ChildItem -Path (Join-Path $env:USERPROFILE '.vscode\extensions\openai.chatgpt-*') -Directory -ErrorAction SilentlyContinue | Select-Object -First 1)
+$explicitSelection = @('Preset', 'CustomComponent', 'ComponentAction', 'Provider', 'Force', 'UpdateInstalled', 'InstallUsageTracker', 'SkipUsageTracker', 'SkipProviderConfiguration', 'Confirm') |
+    Where-Object { $PSBoundParameters.ContainsKey($_) }
+$wizardMode = $terminal.Interactive -and -not $ValidateOnly -and -not $WhatIfPreference -and -not $env:CI -and $explicitSelection.Count -eq 0
+
+if ($wizardMode) {
+    try {
+        Write-AfyxSection -Title 'Welcome & Environment' -Terminal $terminal
+        Write-AfyxStatus -Status INFO -Name 'Forge' -Detail 'evaluation-only; not a selectable production component' -Terminal $terminal
+        Write-AfyxStatus -Status INFO -Name 'Afyx Context' -Detail 'optional; Graph integration remains default-OFF' -Terminal $terminal
+        $presetOptions = @(
+            [pscustomobject]@{ Id = 'recommended'; Label = 'Recommended'; Detail = 'Core skills + Engineering Expert'; Enabled = $true },
+            [pscustomobject]@{ Id = 'minimal'; Label = 'Minimal'; Detail = 'Core engineering skills'; Enabled = $true },
+            [pscustomobject]@{ Id = 'full'; Label = 'Full'; Detail = 'Recommended + Graph + Codex usage tracking'; Enabled = $true },
+            [pscustomobject]@{ Id = 'custom'; Label = 'Custom'; Detail = 'Choose exact components'; Enabled = $true }
+        )
+        $Preset = Read-AfyxSingleChoice -Prompt 'Choose an installation preset' -Options $presetOptions -DefaultId 'recommended' -Terminal $terminal
+        if ($Preset -eq 'custom') {
+            $componentOptions = @()
+            foreach ($component in @(Get-AfyxComponentContract)) {
+                $detail = "$($component.type); $($component.tier)"
+                if ([string]$component.id -eq 'afyx-context') { $detail += '; optional, integration default-OFF' }
+                elseif ([string]$component.id -eq 'codex-usage-tracking') { $detail += '; Codex/Windows only' }
+                $componentOptions += [pscustomobject]@{ Id = [string]$component.id; Label = [string]$component.name; Detail = $detail; Enabled = $true }
+            }
+            $CustomComponent = @(Read-AfyxMultiChoice -Prompt 'Select components' -Options $componentOptions -DefaultId @('efficient-coding', 'odoo-engineering') -Terminal $terminal)
+        }
+
+        $codexDetected = [bool]($codexCommandDetected -or $vscodeExtensionDetected)
+        $antigravityDetected = [bool]$antigravityCommandDetected
+        $providerOptions = @(
+            [pscustomobject]@{ Id = 'codex'; Label = 'Codex'; Detail = $(if ($codexDetected) { 'host detected' } else { 'unavailable: install Codex CLI or supported VS Code extension' }); Enabled = $codexDetected },
+            [pscustomobject]@{ Id = 'antigravity'; Label = 'Antigravity'; Detail = $(if ($antigravityDetected) { 'host detected' } else { 'unavailable: install agy/antigravity' }); Enabled = $antigravityDetected },
+            [pscustomobject]@{ Id = 'both'; Label = 'Codex + Antigravity'; Detail = 'configure both detected hosts'; Enabled = ($codexDetected -and $antigravityDetected) },
+            [pscustomobject]@{ Id = 'skip'; Label = 'Skip provider configuration'; Detail = 'skills/runtimes only; no MCP registration'; Enabled = $true }
+        )
+        $providerChoice = Read-AfyxSingleChoice -Prompt 'Choose provider integration' -Options $providerOptions -DefaultId $(if ($codexDetected) { 'codex' } else { 'skip' }) -Terminal $terminal
+        switch ($providerChoice) {
+            'codex' { $Provider = @('codex') }
+            'antigravity' { $Provider = @('antigravity') }
+            'both' { $Provider = @('codex', 'antigravity') }
+            default { $Provider = @(); $SkipProviderConfiguration = $true }
+        }
+        if ('antigravity' -in $Provider) {
+            $scopeOptions = @(
+                [pscustomobject]@{ Id = 'workspace'; Label = 'Workspace'; Detail = 'project-local skills and MCP configuration'; Enabled = $true },
+                [pscustomobject]@{ Id = 'global'; Label = 'Global'; Detail = 'user-level Antigravity IDE and CLI configuration'; Enabled = $true }
+            )
+            $ProviderScope = Read-AfyxSingleChoice -Prompt 'Choose Antigravity configuration scope' -Options $scopeOptions -DefaultId 'workspace' -Terminal $terminal
+        }
+    } catch [System.OperationCanceledException] {
+        Write-AfyxStatus -Status SKIPPED -Name 'Installation cancelled' -Detail 'no configuration changes were made' -Terminal $terminal
+        exit 130
+    }
+}
+
 if (-not $Provider.Count) {
-    if (-not $SkipProviderConfiguration -and -not $env:CI -and -not [Console]::IsInputRedirected) {
+    if (-not $wizardMode -and -not $SkipProviderConfiguration -and -not $ValidateOnly -and -not $WhatIfPreference -and -not $env:CI -and -not [Console]::IsInputRedirected) {
         $detected = @()
         if ($codexCommandDetected) { $detected += 'codex' }
-        if ($agyCommandDetected -or (Get-Command antigravity -ErrorAction SilentlyContinue)) { $detected += 'antigravity' }
+        if ($antigravityCommandDetected) { $detected += 'antigravity' }
         Write-Host "Provider hosts detected: $(if ($detected.Count) { $detected -join ', ' } else { 'none' })"
         do { $choice = (Read-Host 'Provider selection: [A] All detected / [R] Recommended Codex / [C] Custom / [S] Skip [R]').Trim() } until ($choice -match '(?i)^(|a|all|r|recommended|c|custom|s|skip)$')
         if ($choice -match '(?i)^(a|all)$') { $Provider = $detected }
         elseif ($choice -match '(?i)^(c|custom)$') { $Provider = @((Read-Host 'Provider ids (comma-separated)').Split(',') | ForEach-Object { $_.Trim() } | Where-Object { $_ }) }
         elseif ($choice -match '(?i)^(s|skip)$') { $SkipProviderConfiguration = $true }
         else { $Provider = @('codex') }
-    } else { $Provider = @('codex') }
+    } elseif (-not $SkipProviderConfiguration) { $Provider = @('codex') }
 }
 $unknownProviders = @($Provider | Where-Object { $_ -notin $providerIds })
 if ($unknownProviders.Count) { throw "Unknown provider(s): $($unknownProviders -join ', ')" }
@@ -251,7 +310,6 @@ if (-not (Test-Path -LiteralPath $graphMetadataPath -PathType Leaf)) { throw 'Bu
 if (-not (Test-Path -LiteralPath $contextMetadataPath -PathType Leaf)) { throw 'Bundled Afyx Context metadata is missing.' }
 
 $codexCliDetected = [bool]$codexCommandDetected
-$vscodeExtensionDetected = [bool](Get-ChildItem -Path (Join-Path $env:USERPROFILE '.vscode\extensions\openai.chatgpt-*') -Directory -ErrorAction SilentlyContinue | Select-Object -First 1)
 $graphMetadata = Get-Content -Raw -LiteralPath $graphMetadataPath | ConvertFrom-Json
 $graphReleaseChannel = (Get-Content -Raw -LiteralPath (Join-Path $packageRoot 'afyx-graph\engine\scripts\distribution-product.json') | ConvertFrom-Json).releaseChannel
 $states = [ordered]@{
@@ -262,52 +320,61 @@ $states = [ordered]@{
     'Afyx Context Engine' = $componentStates['afyx-context'].State
     'Usage Tracking' = $componentStates['codex-usage-tracking'].State
 }
-Write-Host ''
-Write-Host 'Component Inventory'
+Write-AfyxSection -Title 'Component Inventory' -Terminal $terminal
 foreach ($entry in $states.GetEnumerator()) {
     $id = switch ($entry.Key) { 'Efficient Coding' { 'efficient-coding' } 'Odoo Engineering' { 'odoo-engineering' } 'Afyx Engineering Expert' { 'afyx-engineering-expert' } 'Afyx Graph' { 'afyx-graph' } 'Afyx Context Engine' { 'afyx-context' } default { 'codex-usage-tracking' } }
     $installed = $componentStates[$id].Version
     $available = Get-AvailableVersion $id
-    Write-Host ("{0}: {1}; installed={2}; available={3}; ownership={4}" -f $entry.Key, $entry.Value, $(if ($installed) { $installed } else { 'n/a' }), $(if ($available) { $available } else { 'external/n/a' }), $componentStates[$id].Ownership)
+    $status = if ($entry.Value -eq 'HEALTHY' -and $installed -and $available -and (Compare-AfyxVersion $installed $available) -lt 0) { 'UPDATE AVAILABLE' }
+        elseif ($entry.Value -eq 'HEALTHY') { 'HEALTHY' }
+        elseif ($entry.Value -eq 'NOT INSTALLED') { 'NOT INSTALLED' }
+        else { 'BLOCKED' }
+    $detail = "installed=$(if ($installed) { $installed } else { 'n/a' }); available=$(if ($available) { $available } else { 'external/n/a' }); ownership=$($componentStates[$id].Ownership)"
+    Write-AfyxStatus -Status $status -Name $entry.Key -Detail $detail -Terminal $terminal
 }
 if ($controlPlan) {
-    Write-Host ''
-    Write-Host "Desired State Plan: $($controlPlan.Identity)"
+    Write-AfyxSection -Title "Desired State Plan | $($controlPlan.Identity)" -Terminal $terminal
     foreach ($item in $controlPlan.Components) {
-        Write-Host ("{0}: desired={1}; actual={2}; drift={3}; ownership={4}; repair={5}" -f $item.Id, $item.Desired, $item.ActualState, $item.Drift, $item.ActualOwnership, $item.Repair)
+        $planStatus = if ($item.Drift -eq 'IN_SYNC') { 'NO CHANGE' }
+            elseif ($item.Drift -eq 'EXTRA') { 'EXTRA' }
+            elseif ($item.Drift -eq 'NOT_APPLICABLE' -or -not $item.Desired) { 'SKIPPED' }
+            elseif ($item.Repair -eq 'BLOCKED') { 'BLOCKED' }
+            else { 'PLANNED' }
+        $planDetail = "desired=$($item.Desired); actual=$($item.ActualState); drift=$($item.Drift); ownership=$($item.ActualOwnership); repair=$($item.Repair)"
+        if ($planStatus -eq 'EXTRA') { $planDetail += '; installed optional component is outside this desired preset and will be preserved' }
+        Write-AfyxStatus -Status $planStatus -Name $item.Id -Detail $planDetail -Terminal $terminal
     }
 }
-Write-Host ''
-Write-Host 'Prerequisite Inventory'
+Write-AfyxSection -Title 'Prerequisite Inventory' -Terminal $terminal
 $gitVersion = try { (& git --version 2>$null) -join ' ' } catch { '' }
 $nodeVersion = try { (& node --version 2>$null) -join ' ' } catch { '' }
 $npmVersion = try { (& npm --version 2>$null) -join ' ' } catch { '' }
-Write-Host "[REQUIRED] OS/architecture: $([System.Runtime.InteropServices.RuntimeInformation]::OSDescription) / $([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)"
-Write-Host "[REQUIRED] Platform shell: PowerShell $($PSVersionTable.PSVersion)"
-Write-Host "[REQUIRED] Git: $(if ($gitVersion) { $gitVersion } else { 'MISSING — install Git for Windows from https://git-scm.com/' })"
-Write-Host "[REQUIRED] Codex host: $(if ($codexCliDetected -or $vscodeExtensionDetected) { 'detected' } else { 'MISSING — install Codex CLI or the supported VS Code extension' })"
-Write-Host "[REQUIRED] Antigravity host: $(if ($agyCommandDetected) { "detected ($(& $agyCommandDetected.Source --version 2>$null))" } else { 'not detected' })"
-Write-Host "[COMPONENT_REQUIRED:Afyx Graph] Node.js >=22.5.0: $(if ($nodeVersion) { $nodeVersion } else { 'MISSING — install from https://nodejs.org/' })"
-Write-Host "[BUILD_ONLY:Afyx Graph] npm: $(if ($npmVersion) { $npmVersion } else { 'MISSING — needed only for automatic local fallback' })"
-Write-Host '[COMPONENT_REQUIRED:Afyx Graph] Archive/checksum: Expand-Archive + Get-FileHash available'
-Write-Host "[COMPONENT_REQUIRED:Afyx Context] Node.js >=22.5.0: $(if ($nodeVersion) { $nodeVersion } else { 'MISSING — install from https://nodejs.org/' })"
+Write-AfyxStatus -Status HEALTHY -Name 'OS/architecture [REQUIRED]' -Detail "$([System.Runtime.InteropServices.RuntimeInformation]::OSDescription) / $([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)" -Terminal $terminal
+Write-AfyxStatus -Status HEALTHY -Name 'Platform shell [REQUIRED]' -Detail "PowerShell $($PSVersionTable.PSVersion)" -Terminal $terminal
+Write-AfyxStatus -Status $(if ($gitVersion) { 'HEALTHY' } else { 'BLOCKED' }) -Name 'Git [REQUIRED]' -Detail $(if ($gitVersion) { $gitVersion } else { 'missing; install Git for Windows from https://git-scm.com/' }) -Terminal $terminal
+Write-AfyxStatus -Status $(if ($codexCliDetected -or $vscodeExtensionDetected) { 'HEALTHY' } else { 'BLOCKED' }) -Name 'Codex host [REQUIRED]' -Detail $(if ($codexCliDetected -or $vscodeExtensionDetected) { 'detected' } else { 'missing; install Codex CLI or the supported VS Code extension' }) -Terminal $terminal
+Write-AfyxStatus -Status $(if ($antigravityCommandDetected) { 'HEALTHY' } else { 'SKIPPED' }) -Name 'Antigravity host' -Detail $(if ($antigravityCommandDetected) { "detected ($(& $antigravityCommandDetected.Source --version 2>$null))" } else { 'not detected; required only when selected' }) -Terminal $terminal
+Write-AfyxStatus -Status $(if ($nodeVersion) { 'HEALTHY' } else { 'BLOCKED' }) -Name 'Node.js >=22.5.0 [COMPONENT_REQUIRED:Graph/Context]' -Detail $(if ($nodeVersion) { $nodeVersion } else { 'missing; install from https://nodejs.org/ before selecting Graph or Context' }) -Terminal $terminal
+Write-AfyxStatus -Status $(if ($npmVersion) { 'HEALTHY' } else { 'SKIPPED' }) -Name 'npm [BUILD_ONLY:Afyx Graph]' -Detail $(if ($npmVersion) { $npmVersion } else { 'missing; needed only for automatic local fallback' }) -Terminal $terminal
+Write-AfyxStatus -Status HEALTHY -Name 'Archive/checksum [COMPONENT_REQUIRED:Afyx Graph]' -Detail 'Expand-Archive + Get-FileHash available' -Terminal $terminal
 $sourceBranch = if ($gitVersion) { (& git -C $packageRoot branch --show-current 2>$null) -join '' } else { 'unavailable' }
 $sourceCommit = if ($gitVersion) { (& git -C $packageRoot rev-parse HEAD 2>$null) -join '' } else { 'unavailable' }
-Write-Host "Source: branch=$sourceBranch; commit=$sourceCommit; channel=$graphReleaseChannel"
-Write-Host ''
-Write-Host 'Provider Plan'
-if ($SkipProviderConfiguration) { Write-Host 'Provider configuration: skipped explicitly' }
+$sourceDirty = if ($gitVersion) { [bool]((& git -C $packageRoot status --porcelain 2>$null) -join '') } else { $false }
+if (-not $sourceBranch) { $sourceBranch = 'DETACHED' }
+Write-AfyxStatus -Status $(if ($sourceDirty) { 'WARNING' } else { 'HEALTHY' }) -Name 'Source identity' -Detail "branch=$sourceBranch; commit=$sourceCommit; dirty=$sourceDirty; channel=$graphReleaseChannel" -Terminal $terminal
+Write-AfyxSection -Title 'Provider Plan' -Terminal $terminal
+if ($SkipProviderConfiguration) { Write-AfyxStatus -Status SKIPPED -Name 'Provider configuration' -Detail 'skipped explicitly; no provider configuration will change' -Terminal $terminal }
 foreach ($providerId in $Provider) {
     $providerRecord = @($providerRegistry | Where-Object { $_.provider -eq $providerId })[0]
-    $detected = if ($providerId -eq 'codex') { [bool]$codexCommandDetected } else { [bool]$agyCommandDetected }
+    $detected = if ($providerId -eq 'codex') { [bool]($codexCommandDetected -or $vscodeExtensionDetected) } else { [bool]$antigravityCommandDetected }
     $configPath = if ($providerId -eq 'codex') { Join-Path $codexHome 'config.toml' }
         elseif ($ProviderScope -eq 'workspace') { Join-Path $WorkspaceRoot '.agents\mcp_config.json' }
         else { Join-Path $GeminiHome 'config\mcp_config.json' }
-    Write-Host ("{0}: detected={1}; scope={2}; capabilities={3}; planned-config={4}" -f $providerRecord.name, $detected, $ProviderScope, $providerRecord.capabilities, $configPath)
+    Write-AfyxStatus -Status $(if ($detected) { 'PLANNED' } else { 'BLOCKED' }) -Name $providerRecord.name -Detail "detected=$detected; scope=$ProviderScope; capabilities=$($providerRecord.capabilities); planned-config=$configPath" -Terminal $terminal
     if ($providerId -eq 'antigravity') {
         $plannedSkills = if ($ProviderScope -eq 'workspace') { Join-Path $WorkspaceRoot '.agents\skills' }
             else { @((Join-Path $GeminiHome 'config\skills'), (Join-Path $GeminiHome 'antigravity-cli\skills')) -join ';' }
-        Write-Host "Antigravity planned skills: $plannedSkills"
+        Write-AfyxStatus -Status PLANNED -Name 'Antigravity skills' -Detail $plannedSkills -Terminal $terminal
     }
 }
 if (-not $SkipGraphMcp -and -not $SkipProviderConfiguration -and 'antigravity' -in $Provider -and (Get-Command node -ErrorAction SilentlyContinue)) {
@@ -368,7 +435,41 @@ if ('codex' -in $Provider -and -not $codexCliDetected -and -not $vscodeExtension
 if ('antigravity' -in $Provider -and -not $agyCommandDetected -and -not (Get-Command antigravity -ErrorAction SilentlyContinue)) { throw 'Selected Antigravity provider host was not detected.' }
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) { throw 'Git is required for Afyx source validation and lifecycle updates.' }
 
+if ($wizardMode) {
+    Write-AfyxSection -Title 'Review Actual Planned Changes' -Terminal $terminal
+    $mutationPreview = @()
+    foreach ($item in @($controlPlan.Components | Where-Object { $_.Desired })) {
+        $previewAction = ''
+        if ($item.Repair -eq 'INSTALL') { $previewAction = 'install' }
+        elseif ($item.Repair -eq 'REPAIR') { $previewAction = 'repair' }
+        elseif ($item.Repair -eq 'BLOCKED') { $previewAction = 'blocked' }
+        else {
+            $available = Get-AvailableVersion ([string]$item.Id)
+            $state = $componentStates[[string]$item.Id]
+            if ($state.State -eq 'HEALTHY' -and $available -and (Compare-AfyxVersion $state.Version $available) -lt 0) { $previewAction = 'update' }
+        }
+        if ($previewAction) {
+            $mutationPreview += [pscustomobject]@{ Id = [string]$item.Id; Action = $previewAction }
+            Write-AfyxStatus -Status $(if ($previewAction -eq 'blocked') { 'BLOCKED' } else { 'PLANNED' }) -Name ([string]$item.Id) -Detail $previewAction -Terminal $terminal
+        }
+    }
+    if (-not $SkipProviderConfiguration) {
+        foreach ($providerId in $Provider) { Write-AfyxStatus -Status PLANNED -Name "$providerId provider" -Detail "scope=$ProviderScope; Afyx-owned entries only" -Terminal $terminal }
+    }
+    if (-not $mutationPreview.Count) { Write-AfyxStatus -Status 'NO CHANGE' -Name 'Components' -Detail 'selected component versions and ownership are already healthy' -Terminal $terminal }
+    try {
+        if (($mutationPreview.Count -or (-not $SkipProviderConfiguration -and $Provider.Count)) -and -not (Read-AfyxConfirmation -Prompt 'Apply the reviewed plan?' -Terminal $terminal)) {
+            Write-AfyxStatus -Status SKIPPED -Name 'Installation cancelled' -Detail 'no configuration changes were made' -Terminal $terminal
+            exit 0
+        }
+    } catch [System.OperationCanceledException] {
+        Write-AfyxStatus -Status SKIPPED -Name 'Installation cancelled' -Detail 'no configuration changes were made' -Terminal $terminal
+        exit 130
+    }
+}
+
 $summary = [ordered]@{}
+$changesApplied = $false
 $skillActions = @{}
 $skillDefinitions = @(
     @{ Id = 'efficient-coding'; Name = 'Efficient Coding'; Source = $bundledEfficientCoding; Target = $efficientTarget },
@@ -390,8 +491,10 @@ foreach ($additionalRoot in $additionalSkillRoots) {
 foreach ($component in $skillDefinitions) {
     $action = $skillActions[$component.Id]
     if ($action -eq 'skip') { $summary[$component.Name] = 'skipped'; continue }
+    Write-AfyxStatus -Status PLANNED -Name $component.Name -Detail "$action in progress" -Terminal $terminal
     if ($action -eq 'adopt') { $summary[$component.Name] = Adopt-LegacySkillSafely $component.Id $component.Name $component.Target }
     else { $summary[$component.Name] = Install-ManagedSkillSafely $component.Id $component.Name $component.Source $component.Target ($action -in @('update', 'repair')) }
+    if (-not $WhatIfPreference) { $changesApplied = $true }
 }
 foreach ($additionalRoot in $additionalSkillRoots) {
     foreach ($component in $skillDefinitions) {
@@ -409,6 +512,7 @@ foreach ($additionalRoot in $additionalSkillRoots) {
         }
         $replicate = Install-ManagedSkillSafely $component.Id $component.Name $component.Source $target ($ownership -ne 'NOT_INSTALLED') $additionalRoot ($ownership -eq 'AFYX_OWNED_MODIFIED')
         $summary["$($component.Name) [$additionalRoot]"] = $replicate
+        if (-not $WhatIfPreference) { $changesApplied = $true }
     }
 }
 
@@ -416,6 +520,7 @@ $graphState = $states['Afyx Graph']
 $graphAction = Get-ComponentAction 'afyx-graph' 'Afyx Graph'
 if ($graphAction -eq 'skip') { $summary['Afyx Graph'] = 'skipped' }
 else {
+    Write-AfyxStatus -Status PLANNED -Name 'Afyx Graph' -Detail "$graphAction in progress" -Terminal $terminal
     $arguments = if ($graphState -eq 'NOT INSTALLED') { @{} } elseif ($graphAction -eq 'update') { @{ Update = $true } } else { @{ Replace = $true } }
     $arguments.RuntimeRoot = $graphRuntimeRoot
     if ($Offline) { $arguments.Offline = $true }
@@ -426,6 +531,10 @@ else {
     & $graphInstaller -Confirm:$false -WhatIf:$WhatIfPreference @arguments
     if (-not $?) { throw 'Afyx Graph installation failed.' }
     $summary['Afyx Graph'] = $graphAction
+    if (-not $WhatIfPreference) { $changesApplied = $true }
+    if (-not $SkipGraphMcp -and -not $SkipProviderConfiguration -and 'codex' -in $Provider) {
+        $summary['Codex MCP'] = $(if ($WhatIfPreference) { 'planned' } else { 'restart required' })
+    }
 }
 
 if (-not $SkipGraphMcp -and -not $SkipProviderConfiguration -and 'antigravity' -in $Provider) {
@@ -441,6 +550,7 @@ if (-not $SkipGraphMcp -and -not $SkipProviderConfiguration -and 'antigravity' -
         Write-Host "Antigravity provider: $($providerResult.status)"
         if ($LASTEXITCODE -ne 0 -or $providerResult.status -eq 'BLOCKED') { throw "Antigravity provider configuration failed: $providerJson" }
         $summary['Antigravity MCP'] = $providerResult.status
+        if (@($providerResult.providers | Where-Object { $_.changed }).Count) { $changesApplied = $true }
     } elseif ($graphAction -ne 'skip') { throw 'Installed Graph entry is unavailable for Antigravity configuration.' }
 }
 
@@ -448,12 +558,14 @@ $contextState = $states['Afyx Context Engine']
 $contextAction = Get-ComponentAction 'afyx-context' 'Afyx Context Engine'
 if ($contextAction -eq 'skip') { $summary['Afyx Context Engine'] = 'skipped' }
 else {
+    Write-AfyxStatus -Status PLANNED -Name 'Afyx Context Engine' -Detail "$contextAction in progress; Graph integration remains default-OFF" -Terminal $terminal
     $contextArguments = @{ RuntimeRoot = $ContextRuntimeRoot }
     if ($contextAction -eq 'update') { $contextArguments.Update = $true }
     elseif ($contextAction -eq 'repair') { $contextArguments.Repair = $true }
     & $contextInstaller -Confirm:$false -WhatIf:$WhatIfPreference @contextArguments
     if (-not $?) { throw 'Afyx Context installation failed.' }
     $summary['Afyx Context Engine'] = $contextAction
+    if (-not $WhatIfPreference) { $changesApplied = $true }
 }
 
 $usageState = $states['Usage Tracking']
@@ -463,13 +575,32 @@ $usageAction = if ('codex' -notin $Provider) { 'skip' }
     else { Get-ComponentAction 'codex-usage-tracking' 'Usage Tracking' }
 if ($usageAction -eq 'skip') { $summary['Usage Tracking'] = 'skipped'; Write-Host 'Usage Tracking: skipped' }
 else {
+    Write-AfyxStatus -Status PLANNED -Name 'Usage Tracking' -Detail "$usageAction in progress" -Terminal $terminal
     & $usageTrackerInstaller -Confirm:$false -WhatIf:$WhatIfPreference
     if (-not $?) { throw 'Codex Usage Tracking installation failed.' }
     $summary['Usage Tracking'] = $usageAction
+    if (-not $WhatIfPreference) { $changesApplied = $true }
 }
 
-Write-Host ''
-Write-Host 'Installation Summary'
-foreach ($entry in $summary.GetEnumerator()) { Write-Host "[$($entry.Value.ToUpperInvariant())] $($entry.Key)" }
-if ($WhatIfPreference) { Write-Host 'WhatIf completed; no files or configuration were changed.' }
-else { Write-Host 'Start a new Codex session to load installed components.' }
+$receipt = @()
+foreach ($entry in $summary.GetEnumerator()) {
+    $componentId = switch ($entry.Key) {
+        'Efficient Coding' { 'efficient-coding' }
+        'Odoo Engineering' { 'odoo-engineering' }
+        'Afyx Engineering Expert' { 'afyx-engineering-expert' }
+        'Afyx Graph' { 'afyx-graph' }
+        'Afyx Context Engine' { 'afyx-context' }
+        'Usage Tracking' { 'codex-usage-tracking' }
+        default { '' }
+    }
+    $componentState = if ($componentId) { [string]$componentStates[$componentId].State } else { '' }
+    $receipt += [pscustomobject]@{
+        Status = Get-AfyxOutcomeStatus -ComponentState $componentState -Action ([string]$entry.Value) -WhatIf:$WhatIfPreference
+        Name = [string]$entry.Key
+        Detail = "outcome=$($entry.Value)"
+    }
+}
+Show-AfyxReceipt -Items $receipt -Terminal $terminal
+if ($WhatIfPreference) { Write-AfyxStatus -Status PLANNED -Name 'WhatIf complete' -Detail 'no files or configuration were changed' -Terminal $terminal }
+elseif ($changesApplied) { Write-AfyxStatus -Status 'RESTART REQUIRED' -Name 'Provider session' -Detail 'start a new provider session to load installed components' -Terminal $terminal }
+else { Write-AfyxStatus -Status 'NO CHANGE' -Name 'Installation' -Detail 'existing healthy components were preserved' -Terminal $terminal }

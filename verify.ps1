@@ -16,15 +16,22 @@ $coreFailure = $false
 $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' }
 $configPath = Join-Path $codexHome 'config.toml'
 $graphRoot = if ($env:AFYX_GRAPH_RUNTIME_ROOT) { $env:AFYX_GRAPH_RUNTIME_ROOT } else { Join-Path $env:USERPROFILE '.afyx\graph' }
+Import-Module (Join-Path $PSScriptRoot 'scripts\lib\AfyxTerminal.psm1') -Force
+$terminal = New-AfyxTerminalContext
 
 function Write-Result([string]$State, [string]$Name, [string]$Detail = '') {
-    $suffix = if ($Detail) { " — $Detail" } else { '' }
-    Write-Host "[$State] $Name$suffix"
+    $status = switch ($State) {
+        'OK' { 'HEALTHY' }
+        'FAIL' { 'BLOCKED' }
+        'WARN' { 'WARNING' }
+        default { $State }
+    }
+    Write-AfyxStatus -Status $status -Name $Name -Detail $Detail -Terminal $terminal
 }
 
 # One component truth: scripts/components.json, read through the shared module.
 Import-Module (Join-Path $PSScriptRoot 'scripts\lib\AfyxComponents.psm1') -Force
-Import-Module (Join-Path $PSScriptRoot 'scripts\lib\AfyxSkillLifecycle.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'scripts\lib\AfyxSkillLifecycle.psm1') -Force -DisableNameChecking
 $providerIds = @(Get-AfyxProviderRegistry | ForEach-Object { [string]$_.provider })
 $unknownProviders = @($Provider | Where-Object { $_ -notin $providerIds })
 if ($unknownProviders.Count) { throw "Unknown provider(s): $($unknownProviders -join ', ')" }
@@ -61,7 +68,15 @@ foreach ($id in $CustomComponent) {
 }
 $controlPlan = if ($Preset) { Get-AfyxControlPlan -Preset $Preset -CustomComponent $CustomComponent -Provider $Provider -Context $componentContext -StateById $componentStates } else { $null }
 
-Write-Host 'Afyx Codex Engineering Kit — readiness verification (Windows PowerShell)'
+Show-AfyxBanner -Terminal $terminal -Subtitle 'Readiness Verification | Midnight Circuit'
+$gitSource = Get-Command git -ErrorAction SilentlyContinue
+if ($gitSource) {
+    $sourceCommit = (& git -C $PSScriptRoot rev-parse HEAD 2>$null) -join ''
+    $sourceBranch = (& git -C $PSScriptRoot branch --show-current 2>$null) -join ''
+    if (-not $sourceBranch) { $sourceBranch = 'DETACHED' }
+    $sourceDirty = [bool]((& git -C $PSScriptRoot status --porcelain 2>$null) -join '')
+    Write-Result $(if ($sourceDirty) { 'WARN' } else { 'OK' }) 'Source identity' "branch=$sourceBranch; commit=$sourceCommit; dirty=$sourceDirty"
+}
 foreach ($providerRecord in (Get-AfyxProviderRegistry)) {
     Write-Result 'INFO' "Provider adapter: $($providerRecord.name)" "primary=$($providerRecord.primary); ownership=$($providerRecord.ownership_class); capabilities=$($providerRecord.capabilities); policy=$($providerRecord.configuration_policy)"
 }
