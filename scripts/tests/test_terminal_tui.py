@@ -183,6 +183,9 @@ Read-AfyxSingleChoice -Prompt test -Options $options -Terminal $terminal -ReadLi
                     "NO_COLOR": "1",
                 }
             )
+            git = shutil.which("git")
+            self.assertIsNotNone(git)
+            env["PATH"] = str(Path(git).parent)
             validate = subprocess.run(
                 [self.shell, "-NoProfile", "-NonInteractive", "-File", str(ROOT / "install.ps1"),
                  "-ValidateOnly", "-Preset", "custom", "-Provider", "codex", "-SkipProviderConfiguration"],
@@ -200,6 +203,7 @@ Read-AfyxSingleChoice -Prompt test -Options $options -Terminal $terminal -ReadLi
             )
             self.assertEqual(whatif.returncode, 0, whatif.stdout + whatif.stderr)
             self.assertIn("no files or configuration were changed", whatif.stdout)
+            self.assertIn("[SKIPPED] Provider configuration", whatif.stdout)
             self.assertFalse((root / "skills").exists())
             self.assertFalse((root / "graph").exists())
             self.assertFalse((root / "context").exists())

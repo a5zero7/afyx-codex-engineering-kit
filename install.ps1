@@ -431,8 +431,8 @@ if ($controlPlan) {
     }
 }
 
-if ('codex' -in $Provider -and -not $codexCliDetected -and -not $vscodeExtensionDetected) { throw 'Selected Codex provider host was not detected.' }
-if ('antigravity' -in $Provider -and -not $agyCommandDetected -and -not (Get-Command antigravity -ErrorAction SilentlyContinue)) { throw 'Selected Antigravity provider host was not detected.' }
+if (-not $SkipProviderConfiguration -and 'codex' -in $Provider -and -not $codexCliDetected -and -not $vscodeExtensionDetected) { throw 'Selected Codex provider host was not detected.' }
+if (-not $SkipProviderConfiguration -and 'antigravity' -in $Provider -and -not $agyCommandDetected -and -not (Get-Command antigravity -ErrorAction SilentlyContinue)) { throw 'Selected Antigravity provider host was not detected.' }
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) { throw 'Git is required for Afyx source validation and lifecycle updates.' }
 
 if ($wizardMode) {
