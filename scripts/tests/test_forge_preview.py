@@ -275,11 +275,24 @@ class ForgePreviewTests(unittest.TestCase):
             (1, "", ""),
             (124, "", "validation command timed out after 30 seconds"),
         ]
+
+        def observed_validation(
+            command: list[str] | None,
+            cwd: Path,
+            timeout: int = 30,
+            *,
+            observation: dict[str, bool] | None = None,
+        ) -> tuple[int, str, str]:
+            result = validation_results.pop(0)
+            if result[0] == 124 and observation is not None:
+                observation["timed_out"] = True
+            return result
+
         with (
             mock.patch.object(
                 preview,
                 "execute_validation_command",
-                side_effect=validation_results,
+                side_effect=observed_validation,
             ),
             mock.patch.object(
                 preview,
@@ -303,11 +316,38 @@ class ForgePreviewTests(unittest.TestCase):
         self.assertEqual(report["metrics"]["validation_contract_mismatches"]["value"], 1)
         self.assertEqual(report["metrics"]["validation_timeouts"]["value"], 1)
 
+    def test_exit_124_is_not_timeout_without_timeout_observation(self) -> None:
+        observation: dict[str, bool] = {}
+        code, _, _ = preview.execute_validation_command(
+            [sys.executable, "-c", "raise SystemExit(124)"],
+            ROOT,
+            observation=observation,
+        )
+
+        self.assertEqual(code, 124)
+        self.assertFalse(observation["timed_out"])
+
+        with mock.patch.object(
+            preview.subprocess,
+            "run",
+            side_effect=subprocess.TimeoutExpired(["python"], 1),
+        ):
+            code, _, _ = preview.execute_validation_command(
+                [sys.executable, "-c", "pass"],
+                ROOT,
+                timeout=1,
+                observation=observation,
+            )
+
+        self.assertEqual(code, 124)
+        self.assertTrue(observation["timed_out"])
+
     def test_efficiency_measurements_fail_closed_when_invalid_or_inconsistent(
         self,
     ) -> None:
         quality_pass = {
             "quality_gate_id": preview.PUBLIC_QUALITY_GATE_ID,
+            "enabled": True,
             "verdict": "PASS",
         }
 
@@ -353,6 +393,42 @@ class ForgePreviewTests(unittest.TestCase):
         zero_report = preview.build_public_efficiency_report(quality_pass, zero)
         self.assertEqual(zero_report["measurement_status"], "AVAILABLE")
         self.assertTrue(zero_report["comparison_eligible"])
+
+    def test_efficiency_rejects_invalid_or_disabled_quality_gate_link(self) -> None:
+        observation = {
+            "total_elapsed_seconds": 5.0,
+            "baseline_validation_seconds": 1.0,
+            "target_validation_seconds": 2.0,
+            "validation_subprocess_invocations": 2,
+            "validation_nonzero_exit_count": 1,
+            "validation_contract_mismatch_count": 0,
+            "validation_timeout_count": 0,
+        }
+        quality_links = {
+            "missing_identity": {"enabled": True, "verdict": "PASS"},
+            "incorrect_identity": {
+                "quality_gate_id": "AFYX_FORGE_UNKNOWN_QUALITY_GATE",
+                "enabled": True,
+                "verdict": "PASS",
+            },
+            "disabled": {
+                "quality_gate_id": preview.PUBLIC_QUALITY_GATE_ID,
+                "enabled": False,
+                "verdict": "PASS",
+            },
+        }
+
+        for label, quality in quality_links.items():
+            with self.subTest(label=label):
+                report = preview.build_public_efficiency_report(
+                    quality, observation
+                )
+                self.assertEqual(report["measurement_status"], "INVALID")
+                self.assertFalse(report["comparison_eligible"])
+                self.assertIn(
+                    "quality_gate_link_invalid",
+                    report["comparison_ineligibility_reasons"],
+                )
 
     def test_efficiency_cleanup_failure_retains_diagnostics_but_blocks_comparison(
         self,

@@ -129,9 +129,15 @@ def extract_task_guidance(
 
 
 def execute_validation_command(
-    command: list[str] | None, cwd: Path, timeout: int = 30
+    command: list[str] | None,
+    cwd: Path,
+    timeout: int = 30,
+    *,
+    observation: dict[str, bool] | None = None,
 ) -> tuple[int, str, str]:
     """Run validation command safely within the disposable workspace."""
+    if observation is not None:
+        observation["timed_out"] = False
     if not command:
         return 0, "", ""
     executable = command[0]
@@ -148,6 +154,8 @@ def execute_validation_command(
         )
         return proc.returncode, proc.stdout, proc.stderr
     except subprocess.TimeoutExpired:
+        if observation is not None:
+            observation["timed_out"] = True
         return 124, "", f"validation command timed out after {timeout} seconds"
     except Exception as error:
         return 127, "", f"execution error: {error}"
@@ -447,7 +455,14 @@ def build_public_efficiency_report(
             invalid_reasons.append("efficiency_measurement_inconsistent")
 
     quality_verdict = quality_gate.get("verdict")
-    if quality_verdict not in {"PASS", "FAIL", "NOT_TESTED"}:
+    quality_link_valid = (
+        quality_gate.get("quality_gate_id") == PUBLIC_QUALITY_GATE_ID
+        and quality_gate.get("enabled") is True
+    )
+    if (
+        not quality_link_valid
+        or quality_verdict not in {"PASS", "FAIL", "NOT_TESTED"}
+    ):
         invalid_reasons.append("quality_gate_link_invalid")
 
     invalid_reasons = list(dict.fromkeys(invalid_reasons))
@@ -543,7 +558,9 @@ def build_public_efficiency_report(
         "measurement_status": "INVALID" if invalid_reasons else "AVAILABLE",
         "quality_gate_id": quality_gate.get("quality_gate_id"),
         "quality_verdict": quality_verdict,
-        "comparison_eligible": not invalid_reasons and quality_verdict == "PASS",
+        "comparison_eligible": (
+            not invalid_reasons and quality_link_valid and quality_verdict == "PASS"
+        ),
         "comparison_ineligibility_reasons": list(dict.fromkeys(comparison_reasons)),
         "superiority_claim": "NOT_ESTABLISHED",
         "metrics": metrics,
@@ -639,6 +656,8 @@ def run_preview_scenario(
     baseline_validation_seconds: float | None = None
     target_validation_seconds: float | None = None
     validation_subprocess_invocations = 0
+    baseline_validation_observation = {"timed_out": False}
+    target_validation_observation = {"timed_out": False}
     try:
         work = lease.work
         limits = controller.InventoryLimits(
@@ -664,7 +683,12 @@ def run_preview_scenario(
         if efficiency_report and validation_cmd:
             baseline_started = monotonic()
             baseline_code, baseline_stdout, baseline_stderr = (
-                execute_validation_command(validation_cmd, work, timeout=timeout)
+                execute_validation_command(
+                    validation_cmd,
+                    work,
+                    timeout=timeout,
+                    observation=baseline_validation_observation,
+                )
             )
             baseline_validation_seconds = round(monotonic() - baseline_started, 6)
             validation_subprocess_invocations += 1
@@ -706,7 +730,10 @@ def run_preview_scenario(
         if efficiency_report and validation_cmd:
             target_started = monotonic()
             target_code, target_stdout, target_stderr = execute_validation_command(
-                validation_cmd, work, timeout=timeout
+                validation_cmd,
+                work,
+                timeout=timeout,
+                observation=target_validation_observation,
             )
             target_validation_seconds = round(monotonic() - target_started, 6)
             validation_subprocess_invocations += 1
@@ -802,7 +829,11 @@ def run_preview_scenario(
                     not matches for matches in validation_matches
                 ),
                 "validation_timeout_count": sum(
-                    code == 124 for code in validation_codes
+                    observation["timed_out"]
+                    for observation in (
+                        baseline_validation_observation,
+                        target_validation_observation,
+                    )
                 ),
             },
         )
