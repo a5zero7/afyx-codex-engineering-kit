@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import re
+import stat
 import sys
 from pathlib import Path
 from typing import Any
@@ -23,6 +24,15 @@ DEFAULT_MAX_SIZE = 128 * 1024 * 1024
 
 class DiscoveryError(ValueError):
     pass
+
+
+def link_kind(path: Path) -> str | None:
+    """Classify links without following them, including Windows reparse points."""
+    if path.is_symlink():
+        return "SYMLINK"
+    attributes = getattr(path.lstat(), "st_file_attributes", 0)
+    reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+    return "REPARSE_POINT" if attributes & reparse_flag else None
 
 
 def default_root() -> Path:
@@ -76,7 +86,8 @@ def discover(root: Path, thread_ids: list[str], *, max_files: int = 4000,
     result: dict[str, Any] = {"schema_version": 1, "scope": "EXPLICIT_ROOT_ONLY", "default_root_used": False,
                                "raw_content_exported": False, "provider_calls": 0,
                                "file_scan": {"visited": 0, "unreadable": 0, "oversized": 0,
-                                             "unidentified": 0, "symlinks_skipped": 0, "cap_reached": False},
+                                             "unidentified": 0, "symlinks_skipped": 0,
+                                             "reparse_points_skipped": 0, "cap_reached": False},
                                "runs": {t: {"status": "NOT_FOUND_IN_SCOPE", "matches": []} for t in target_ids}}
     if not base.is_dir():
         result["scope_status"] = "ROOT_NOT_FOUND"
@@ -85,8 +96,23 @@ def discover(root: Path, thread_ids: list[str], *, max_files: int = 4000,
         return result
     result["scope_status"] = "SCANNED"
     files: list[Path] = []
+    counters = result["file_scan"]
     for directory, names, filenames in os.walk(base, followlinks=False):
-        names[:] = sorted(n for n in names if not (Path(directory) / n).is_symlink())
+        retained_names = []
+        for name in sorted(names):
+            candidate = Path(directory) / name
+            try:
+                kind = link_kind(candidate)
+            except OSError:
+                counters["unreadable"] += 1
+                continue
+            if kind == "SYMLINK":
+                counters["symlinks_skipped"] += 1
+            elif kind == "REPARSE_POINT":
+                counters["reparse_points_skipped"] += 1
+            else:
+                retained_names.append(name)
+        names[:] = retained_names
         for filename in sorted(filenames):
             if (filename.startswith("rollout-") and filename.endswith(".jsonl")) or (include_cli_json and filename.endswith(".jsonl")):
                 files.append(Path(directory) / filename)
@@ -96,12 +122,15 @@ def discover(root: Path, thread_ids: list[str], *, max_files: int = 4000,
         if result["file_scan"]["cap_reached"]:
             break
     for path in files[:max_files]:
-        counters = result["file_scan"]
         counters["visited"] += 1
-        if path.is_symlink():
-            counters["symlinks_skipped"] += 1
-            continue
         try:
+            kind = link_kind(path)
+            if kind == "SYMLINK":
+                counters["symlinks_skipped"] += 1
+                continue
+            if kind == "REPARSE_POINT":
+                counters["reparse_points_skipped"] += 1
+                continue
             st = path.stat()
             if st.st_size > max_file_bytes:
                 counters["oversized"] += 1
@@ -118,10 +147,14 @@ def discover(root: Path, thread_ids: list[str], *, max_files: int = 4000,
             })
         except (OSError, DiscoveryError):
             counters["unreadable"] += 1
-    incomplete = any(result["file_scan"][k] for k in ("unreadable", "oversized", "symlinks_skipped", "cap_reached"))
+    incomplete = any(result["file_scan"][k] for k in
+                     ("unreadable", "oversized", "symlinks_skipped",
+                      "reparse_points_skipped", "cap_reached"))
     for item in result["runs"].values():
         count = len(item["matches"])
-        item["status"] = "FOUND" if count == 1 else "MULTIPLE_MATCHES" if count > 1 else "INCOMPLETE_SCAN" if incomplete else "NOT_FOUND_IN_SCOPE"
+        item["status"] = ("MULTIPLE_MATCHES" if count > 1 else
+                          "INCOMPLETE_SCAN" if incomplete else
+                          "FOUND" if count == 1 else "NOT_FOUND_IN_SCOPE")
     return result
 
 

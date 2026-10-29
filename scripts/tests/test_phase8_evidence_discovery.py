@@ -3,11 +3,14 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
 
 SOURCE = Path(__file__).resolve().parents[1] / "phase8_evidence_discovery.py"
 SPEC = importlib.util.spec_from_file_location("phase8_evidence_discovery", SOURCE)
@@ -61,6 +64,64 @@ class DiscoveryTests(unittest.TestCase):
         r = mod.discover(self.root, [T1])
         self.assertEqual(r["runs"][T1]["status"], "INCOMPLETE_SCAN")
         self.assertEqual(r["file_scan"]["unreadable"], 1)
+
+    def test_found_match_remains_incomplete_when_scan_is_partial(self):
+        self.write("rollout-found.jsonl", [
+            {"type": "session_meta", "payload": {"id": T1}}
+        ])
+        (self.root / "rollout-bad.jsonl").write_text("{bad-json}\n", encoding="utf-8")
+
+        r = mod.discover(self.root, [T1])
+
+        self.assertEqual(len(r["runs"][T1]["matches"]), 1)
+        self.assertEqual(r["runs"][T1]["status"], "INCOMPLETE_SCAN")
+
+    def test_directory_links_are_counted_and_make_scan_incomplete(self):
+        self.write("symlink-dir/rollout-symlink.jsonl", [
+            {"type": "session_meta", "payload": {"id": T1}}
+        ])
+        self.write("junction-dir/rollout-junction.jsonl", [
+            {"type": "session_meta", "payload": {"id": T1}}
+        ])
+        original = mod.link_kind
+
+        def classify(path):
+            if path.name == "symlink-dir":
+                return "SYMLINK"
+            if path.name == "junction-dir":
+                return "REPARSE_POINT"
+            return original(path)
+
+        with mock.patch.object(mod, "link_kind", side_effect=classify):
+            r = mod.discover(self.root, [T1])
+
+        self.assertEqual(r["file_scan"]["symlinks_skipped"], 1)
+        self.assertEqual(r["file_scan"]["reparse_points_skipped"], 1)
+        self.assertEqual(r["runs"][T1]["status"], "INCOMPLETE_SCAN")
+
+    def test_windows_reparse_attribute_is_detected_without_following(self):
+        path = mock.Mock()
+        path.is_symlink.return_value = False
+        path.lstat.return_value = SimpleNamespace(st_file_attributes=0x400)
+
+        self.assertEqual(mod.link_kind(path), "REPARSE_POINT")
+
+    @unittest.skipUnless(os.name == "nt", "Windows junctions are platform-specific")
+    def test_windows_junction_is_counted_as_incomplete(self):
+        target = self.root / "target"
+        target.mkdir()
+        junction = self.root / "junction"
+        created = subprocess.run(
+            ["cmd", "/d", "/c", "mklink", "/J", str(junction), str(target)],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(created.returncode, 0, created.stderr)
+
+        r = mod.discover(self.root, [T1])
+
+        self.assertEqual(r["file_scan"]["reparse_points_skipped"], 1)
+        self.assertEqual(r["runs"][T1]["status"], "INCOMPLETE_SCAN")
 
     def test_oversized_file_marks_incomplete(self):
         self.write("rollout-too-big.jsonl", [{"type": "session_meta", "payload": {"id": T2}}])
