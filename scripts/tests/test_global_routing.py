@@ -125,6 +125,31 @@ class GlobalRoutingTests(unittest.TestCase):
         self.assertEqual(self.run_tool("--verify")["providers"][2]["status"], "IN_SYNC")
         self.assertFalse(self.run_tool("--apply")["changed"])
 
+    def test_crlf_policy_idempotence(self):
+        policy = Path(self.tmp.name) / "policy.md"
+        source_policy = ROOT / "scripts" / "afyx-global-routing-policy.md"
+        policy.write_bytes(source_policy.read_bytes().replace(b"\n", b"\r\n"))
+        script = (
+            "import {runGlobalRouting} from " + json.dumps(SOURCE.as_uri()) + ";"
+            "const result=runGlobalRouting(JSON.parse(process.argv[1]));"
+            "console.log(JSON.stringify(result));"
+        )
+        options = {
+            "operation": "apply",
+            "apply": True,
+            "policyFile": str(policy),
+            "roots": {
+                "codexHome": str(self.codex),
+                "geminiHome": str(self.gemini),
+                "claudeHome": str(self.claude),
+            },
+        }
+        command = ["node", "--input-type=module", "-e", script, json.dumps(options)]
+        first = subprocess.run(command, text=True, capture_output=True, check=True)
+        self.assertTrue(json.loads(first.stdout)["changed"])
+        second = subprocess.run(command, text=True, capture_output=True, check=True)
+        self.assertFalse(json.loads(second.stdout)["changed"])
+
     def test_invalid_utf8_blocked(self):
         self.codex.mkdir(parents=True)
         self.targets["codex"].write_bytes(b"\xff\xfe\xfa")

@@ -111,7 +111,7 @@ export function runGlobalRouting({operation='plan',providers=SUPPORTED,
       providers.some(p=>!SUPPORTED.includes(p))) throw Error('UNSUPPORTED_PROVIDER');
   if((operation==='apply'||operation==='uninstall')&&!apply) throw Error('EXPLICIT_APPLY_REQUIRED');
   const targets = providerTargets(roots);
-  const policy = readFileSync(policyFile,'utf8');
+  const policy = readFileSync(policyFile,'utf8').replace(/\r\n/gu,'\n');
   if (!policy.includes('Afyx adaptive tool routing') || policy.trim().length<100) throw Error('INVALID_POLICY');
   const inspected = [...new Set(providers)].map(provider => {
     const target=targets[provider];
