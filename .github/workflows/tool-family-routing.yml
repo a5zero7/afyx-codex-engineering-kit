@@ -4,6 +4,9 @@ on:
   pull_request:
     paths:
       - 'scripts/afyx-tool-family-routing.mjs'
+      - 'scripts/afyx-global-routing.mjs'
+      - 'scripts/afyx-global-routing-policy.md'
+      - 'scripts/tests/test_global_routing.py'
       - 'scripts/tests/test_tool_family_routing.py'
       - 'skills/efficient-coding/references/tool-routing.md'
       - 'scripts/tests/test_efficient_coding_refinement.py'
@@ -38,4 +41,4 @@ jobs:
         with:
           python-version: '3.12'
       - name: Verify pure routing policy and efficient-coding contract
-        run: python -m unittest scripts.tests.test_tool_family_routing scripts.tests.test_efficient_coding_refinement -v
+        run: python -m unittest scripts.tests.test_tool_family_routing scripts.tests.test_efficient_coding_refinement scripts.tests.test_global_routing -v
