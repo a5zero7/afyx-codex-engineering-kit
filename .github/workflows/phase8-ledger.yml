@@ -5,12 +5,16 @@ on:
     paths:
       - 'scripts/phase8_event_ledger.py'
       - 'scripts/tests/test_phase8_event_ledger.py'
+      - 'scripts/phase8_evidence_discovery.py'
+      - 'scripts/tests/test_phase8_evidence_discovery.py'
       - '.github/workflows/phase8-ledger.yml'
   push:
     branches: [dev]
     paths:
       - 'scripts/phase8_event_ledger.py'
       - 'scripts/tests/test_phase8_event_ledger.py'
+      - 'scripts/phase8_evidence_discovery.py'
+      - 'scripts/tests/test_phase8_evidence_discovery.py'
       - '.github/workflows/phase8-ledger.yml'
 
 permissions:
@@ -30,4 +34,4 @@ jobs:
         with:
           python-version: '3.12'
       - name: Verify offline ledger parser contract
-        run: python -m unittest scripts.tests.test_phase8_event_ledger -v
+        run: python -m unittest scripts.tests.test_phase8_event_ledger scripts.tests.test_phase8_evidence_discovery -v
