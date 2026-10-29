@@ -125,6 +125,72 @@ class LedgerTests(unittest.TestCase):
         with self.assertRaisesRegex(ledger.EvidenceError, "thread identity"):
             ledger.analyze("R", self.events, expected_thread_id="other")
 
+    def test_official_codex_completed_only_message_and_file_change(self):
+        # Public Codex JSONL reference includes agent_message item.completed
+        # without a corresponding item.started. File changes are also allowed
+        # as completion-only events; neither is a tool invocation.
+        data = valid_events()
+        data.insert(-1, {"type": "item.completed", "item": {"id": "message", "type": "agent_message", "text": "done"}})
+        data.insert(-1, {"type": "item.completed", "item": {"id": "change", "type": "file_change", "status": "completed"}})
+        write_lines(self.events, data)
+        output = ledger.analyze("R", self.events)
+        self.assertEqual(output["tool_events"]["observed_started"], 2)
+        self.assertEqual(output["tokens"]["values"]["total_tokens"], 150)
+
+    def test_orphan_tool_completion_still_rejected(self):
+        data = valid_events()
+        data.insert(-1, {"type": "item.completed", "item": {"id": "unseen-tool", "type": "mcp_tool_call", "status": "completed"}})
+        write_lines(self.events, data)
+        with self.assertRaisesRegex(ledger.EvidenceError, "orphan tool completion"):
+            ledger.analyze("R", self.events)
+
+    def test_collab_agent_call_is_counted_as_tool(self):
+        data = valid_events()
+        data.insert(-1, {"type": "item.started", "item": {"id": "subagent", "type": "collab_tool_call"}})
+        data.insert(-1, {"type": "item.completed", "item": {"id": "subagent", "type": "collab_tool_call", "status": "completed"}})
+        write_lines(self.events, data)
+        output = ledger.analyze("R", self.events)
+        self.assertEqual(output["tool_events"]["observed_started"], 3)
+
+    def test_declined_and_nonzero_exit_are_failures(self):
+        data = valid_events()
+        data[3]["item"]["status"] = "declined"
+        data[5]["item"]["status"] = "completed"
+        data[5]["item"]["exit_code"] = 1
+        data[5]["type"] = "item.completed"
+        write_lines(self.events, data)
+        self.assertEqual(ledger.analyze("R", self.events)["tool_events"]["observed_item_failures"], 2)
+
+    def test_turn_failed_and_error_event_are_blocking(self):
+        for failure in ({"type": "turn.failed", "error": {"message": "oops"}},
+                        {"type": "error", "message": "fatal"}):
+            data = valid_events()
+            data.insert(-1, failure)
+            write_lines(self.events, data)
+            with self.assertRaisesRegex(ledger.EvidenceError, "failed or incomplete"):
+                ledger.analyze("R", self.events)
+
+    def test_duplicate_and_missing_turn_start_are_blocking(self):
+        data = valid_events()
+        data.insert(2, {"type": "turn.started"})
+        write_lines(self.events, data)
+        with self.assertRaisesRegex(ledger.EvidenceError, "duplicate turn.started"):
+            ledger.analyze("R", self.events)
+        data = valid_events()
+        data.pop(1)
+        write_lines(self.events, data)
+        with self.assertRaisesRegex(ledger.EvidenceError, "outside active turn"):
+            ledger.analyze("R", self.events)
+
+    def test_unknown_item_type_does_not_claim_complete_tool_capture(self):
+        data = valid_events()
+        data.insert(-1, {"type": "item.started", "item": {"id": "novel", "type": "new_vendor_tool"}})
+        data.insert(-1, {"type": "item.completed", "item": {"id": "novel", "type": "new_vendor_tool"}})
+        write_lines(self.events, data)
+        output = ledger.analyze("R", self.events)["tool_events"]
+        self.assertEqual(output["availability"], "OBSERVED_ONLY")
+        self.assertEqual(output["unknown_item_types"], ["new_vendor_tool"])
+
     def test_cli_creates_once_and_never_overwrites(self):
         output_path = self.root / "summary.json"
         args = [sys.executable, str(SOURCE), "--run-id", "R", "--events", str(self.events), "--output", str(output_path)]
