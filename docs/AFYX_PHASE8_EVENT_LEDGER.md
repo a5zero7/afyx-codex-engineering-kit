@@ -12,7 +12,11 @@ Capture or locate a prior `codex exec --json` output file **locally**, without p
 python scripts/phase8_event_ledger.py --run-id T1-ON --events D:\\private-evidence\\t1-on.jsonl --expected-thread-id <thread-id> --output D:\\private-evidence\\t1-on-summary.json
 ```
 
-The parser refuses duplicate/missing `turn.completed`, unpaired item events, conflicting thread identities, invalid usage totals, negative tokens, and cached input greater than input. For missing usage fields, it emits `NOT_AVAILABLE` or `INCOMPLETE`. Its `observed_started` tool count is **capture-scoped**, not a claim to all internal agent calls; tool process success does not prove a nested operation escaped an ACL denial.
+The parser accepts Codex's legitimate completion-only *non-tool* items (for example, an `agent_message` or `file_change` emitted as `item.completed` with no preceding `item.started`). This matches the public Codex JSONL event example and avoids rejecting a valid agent answer. It **continues to reject** orphan tool completion, missing/duplicate turn boundaries, inconsistent item IDs/types, invalid token usage, nonzero command exit codes, and explicit failed/declined terminal tool states. It recognizes `collab_tool_call` as an observed agent/tool event rather than quietly omitting sub-agent calls. `turn.failed` and fatal top-level `error` are blocking incomplete runs. Unknown item types are reported with downgraded capture availability.
+
+For missing usage fields, the report emits `NOT_AVAILABLE` or `INCOMPLETE`. Its `observed_started` tool count is **capture-scoped**, not proof of all internal agent calls; a successful tool process does not prove an inner ACL operation succeeded. No aggregate financial cost or provider usage is inferred from bytes.
+
+Event reference: https://github.com/openai/codex/blob/main/codex-rs/exec/src/exec_events.rs
 
 Optional adjudicated sidecar `annotations.jsonl` (one JSON object per line) can contain:
 
