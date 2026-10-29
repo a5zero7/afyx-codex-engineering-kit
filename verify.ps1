@@ -7,6 +7,8 @@ param(
     [ValidateSet('global', 'workspace')][string]$ProviderScope = 'global',
     [string]$WorkspaceRoot = (Get-Location).Path,
     [string]$GeminiHome = $(if ($env:AFYX_GEMINI_HOME) { $env:AFYX_GEMINI_HOME } else { Join-Path $env:USERPROFILE '.gemini' }),
+    [string]$ClaudeHome = $(if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $env:USERPROFILE '.claude' }),
+    [string]$ClaudeConfigDir = $(if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { '' }),
     [string]$ContextRuntimeRoot = $(if ($env:AFYX_CONTEXT_RUNTIME_ROOT) { $env:AFYX_CONTEXT_RUNTIME_ROOT } else { Join-Path $env:USERPROFILE '.afyx\context' })
 )
 
@@ -35,15 +37,22 @@ Import-Module (Join-Path $PSScriptRoot 'scripts\lib\AfyxSkillLifecycle.psm1') -F
 $providerIds = @(Get-AfyxProviderRegistry | ForEach-Object { [string]$_.provider })
 $unknownProviders = @($Provider | Where-Object { $_ -notin $providerIds })
 if ($unknownProviders.Count) { throw "Unknown provider(s): $($unknownProviders -join ', ')" }
-if (-not $PSBoundParameters.ContainsKey('SkillsRoot') -and $ProviderScope -eq 'workspace' -and 'antigravity' -in $Provider) {
-    $SkillsRoot = Join-Path $WorkspaceRoot '.agents\skills'
+$providerSkillRoots = @()
+if ('codex' -in $Provider) {
+    $providerSkillRoots += $(if ($PSBoundParameters.ContainsKey('SkillsRoot')) { $SkillsRoot } else { Join-Path $env:USERPROFILE '.agents\skills' })
 }
-$additionalSkillRoots = @()
-if ($ProviderScope -eq 'global' -and 'antigravity' -in $Provider) {
-    $antigravitySkillRoots = @((Join-Path $GeminiHome 'config\skills'), (Join-Path $GeminiHome 'antigravity-cli\skills'))
-    if (-not $PSBoundParameters.ContainsKey('SkillsRoot') -and $Provider.Count -eq 1) { $SkillsRoot = $antigravitySkillRoots[0] }
-    $additionalSkillRoots = @($antigravitySkillRoots | Where-Object { [System.IO.Path]::GetFullPath($_) -ne [System.IO.Path]::GetFullPath($SkillsRoot) })
+if ('antigravity' -in $Provider) {
+    if ($ProviderScope -eq 'workspace') { $providerSkillRoots += (Join-Path $WorkspaceRoot '.agents\skills') }
+    else { $providerSkillRoots += @((Join-Path $GeminiHome 'config\skills'), (Join-Path $GeminiHome 'antigravity-cli\skills')) }
 }
+if ('claude' -in $Provider) {
+    $providerSkillRoots += $(if ($ProviderScope -eq 'workspace') { Join-Path $WorkspaceRoot '.claude\skills' } else { Join-Path $ClaudeHome 'skills' })
+}
+if (-not $PSBoundParameters.ContainsKey('SkillsRoot') -and $providerSkillRoots.Count) { $SkillsRoot = $providerSkillRoots[0] }
+$primarySkillsPath = [System.IO.Path]::GetFullPath($SkillsRoot)
+$additionalSkillRoots = @($providerSkillRoots |
+    Where-Object { [System.IO.Path]::GetFullPath($_) -ne $primarySkillsPath } |
+    Select-Object -Unique)
 $componentContext = New-AfyxComponentContext -SkillsRoot $SkillsRoot -GraphRoot $graphRoot -ContextRoot $ContextRuntimeRoot -CodexHome $codexHome
 $componentStates = @{}
 foreach ($componentState in (Get-AfyxComponentStates -Context $componentContext)) { $componentStates[$componentState.Id] = $componentState }
@@ -80,19 +89,29 @@ if ($gitSource) {
 foreach ($providerRecord in (Get-AfyxProviderRegistry)) {
     Write-Result 'INFO' "Provider adapter: $($providerRecord.name)" "primary=$($providerRecord.primary); ownership=$($providerRecord.ownership_class); capabilities=$($providerRecord.capabilities); policy=$($providerRecord.configuration_policy)"
 }
-if ('antigravity' -in $Provider) {
+if ($Provider.Count) {
     $nodeCommand = Get-Command node -ErrorAction SilentlyContinue
     $entry = Join-Path $graphRoot 'current\lib\dist\bin\afyx-graph.js'
     if ($nodeCommand -and (Test-Path -LiteralPath $entry -PathType Leaf)) {
         $providerTool = Join-Path $PSScriptRoot 'scripts\afyx-provider-integration.mjs'
-        $providerJson = (& $nodeCommand.Source $providerTool --providers antigravity --scope $ProviderScope --workspace-root $WorkspaceRoot --gemini-home $GeminiHome --node $nodeCommand.Source --entry $entry) -join ''
+        $providerArguments = @($providerTool, '--providers', ($Provider -join ','), '--scope', $ProviderScope,
+            '--workspace-root', $WorkspaceRoot, '--gemini-home', $GeminiHome, '--codex-home', $codexHome,
+            '--node', $nodeCommand.Source, '--entry', $entry)
+        $codexCommand = Get-Command codex -ErrorAction SilentlyContinue
+        $claudeCommand = Get-Command claude -ErrorAction SilentlyContinue
+        if ($codexCommand) { $providerArguments += @('--codex', $codexCommand.Source) }
+        if ($claudeCommand) { $providerArguments += @('--claude', $claudeCommand.Source) }
+        if ($ClaudeConfigDir) { $providerArguments += @('--claude-config-dir', $ClaudeConfigDir) }
+        $providerJson = (& $nodeCommand.Source @providerArguments) -join ''
         try {
             $providerResult = $providerJson | ConvertFrom-Json -Depth 20
-            $level = if ($providerResult.status -in @('READY', 'CONFIGURED_RESTART_REQUIRED')) { 'OK' } elseif ($providerResult.status -eq 'BLOCKED') { 'FAIL' } else { 'INFO' }
-            Write-Result $level 'Antigravity MCP' "$($providerResult.status): $($providerResult.providers[0].detail)"
-            if ($level -eq 'FAIL') { $coreFailure = $true }
-        } catch { Write-Result 'FAIL' 'Antigravity MCP' 'provider status was not valid JSON'; $coreFailure = $true }
-    } else { Write-Result 'INFO' 'Antigravity MCP' 'BLOCKED: Graph runtime or Node.js unavailable' }
+            foreach ($providerEntry in $providerResult.providers) {
+                $level = if ($providerEntry.status -in @('READY', 'CONFIGURED', 'CONFIGURED_RESTART_REQUIRED')) { 'OK' } elseif ($providerEntry.status -in @('BLOCKED', 'INCOMPATIBLE')) { 'FAIL' } else { 'INFO' }
+                Write-Result $level "$($providerEntry.provider) MCP" "$($providerEntry.status): $($providerEntry.detail)"
+                if ($level -eq 'FAIL') { $coreFailure = $true }
+            }
+        } catch { Write-Result 'FAIL' 'Provider MCP' 'provider status was not valid JSON'; $coreFailure = $true }
+    } else { Write-Result 'INFO' 'Provider MCP' 'BLOCKED: Graph runtime or Node.js unavailable' }
 }
 if ($controlPlan) {
     Write-Result 'INFO' 'Desired state plan' $controlPlan.Identity
@@ -107,9 +126,9 @@ foreach ($additionalRoot in $additionalSkillRoots) {
         $desired = -not $controlPlan -or [string]$component.id -in $controlPlan.DesiredComponents
         $target = Join-Path $additionalRoot ([string]$component.install_path)
         $ownership = Get-AfyxSkillOwnership -Target $target -Component ([string]$component.id) -ExpectedOwner ([string]$component.ownership)
-        if ($ownership -eq 'AFYX_OWNED_UNMODIFIED') { Write-Result 'OK' "Antigravity skill/$($component.id)" "$additionalRoot; ownership verified" }
-        elseif ($ownership -eq 'NOT_INSTALLED' -and -not $desired) { Write-Result 'INFO' "Antigravity skill/$($component.id)" "$additionalRoot; not selected" }
-        elseif ($desired) { Write-Result 'FAIL' "Antigravity skill/$($component.id)" "$additionalRoot; $ownership"; $coreFailure = $true }
+        if ($ownership -eq 'AFYX_OWNED_UNMODIFIED') { Write-Result 'OK' "Provider skill/$($component.id)" "$additionalRoot; ownership verified" }
+        elseif ($ownership -eq 'NOT_INSTALLED' -and -not $desired) { Write-Result 'INFO' "Provider skill/$($component.id)" "$additionalRoot; not selected" }
+        elseif ($desired) { Write-Result 'FAIL' "Provider skill/$($component.id)" "$additionalRoot; $ownership"; $coreFailure = $true }
     }
 }
 $git = Get-Command git -ErrorAction SilentlyContinue

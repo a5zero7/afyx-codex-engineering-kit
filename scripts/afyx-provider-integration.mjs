@@ -479,10 +479,13 @@ function operationSucceeded(result, uninstall) {
   return accepted.has(result.status);
 }
 
-function aggregateStatus(results) {
-  return results.some((item) => item.status === 'BLOCKED') ? 'BLOCKED'
-    : results.some((item) => item.status === 'CONFIGURED_RESTART_REQUIRED') ? 'CONFIGURED_RESTART_REQUIRED'
-      : results.every((item) => item.status === 'READY') ? 'READY' : 'PARTIAL';
+function aggregateStatus(results, uninstall = false) {
+  if (results.some((item) => item.status === 'BLOCKED')) return 'BLOCKED';
+  if (uninstall) {
+    return results.every((item) => item.status === 'UNAVAILABLE') ? 'READY' : 'PARTIAL';
+  }
+  return results.some((item) => item.status === 'CONFIGURED_RESTART_REQUIRED') ? 'CONFIGURED_RESTART_REQUIRED'
+    : results.every((item) => item.status === 'READY') ? 'READY' : 'PARTIAL';
 }
 
 function recoveryBlockedResult(provider, reason, detail) {
@@ -593,7 +596,7 @@ async function runTransactionalLifecycle(options, selection) {
       recovery: { status: recoveryStatus, failedProvider },
     };
   }
-  return { providers: results, status: aggregateStatus(results), recovery: { status: 'NOT_REQUIRED' } };
+  return { providers: results, status: aggregateStatus(results, Boolean(options.uninstall)), recovery: { status: 'NOT_REQUIRED' } };
 }
 
 export async function runProviderLifecycle(options) {
@@ -618,7 +621,7 @@ export async function runProviderLifecycle(options) {
   }
   return {
     providers: results,
-    status: aggregateStatus(results),
+    status: aggregateStatus(results, Boolean(options.uninstall)),
   };
 }
 
