@@ -20,7 +20,7 @@ function candidateValid(c, i) {
   for (const field of ['installed','enabled','reachable','healthy','authorized','compatible']) {
     if (typeof c[field] !== 'boolean') throw invalid('candidate ' + i + ' missing verified ' + field);
   }
-  if (c.fresh !== undefined && typeof c.fresh !== 'boolean') {
+  if (typeof c.fresh !== 'boolean') {
     throw invalid('candidate ' + i + ' invalid freshness');
   }
 }
@@ -52,7 +52,7 @@ export function resolveAfyxToolFamilyRoute(config) {
   if (intent === 'exact-source') return decision('DIRECT_SOURCE', 'EXACT_SOURCE');
   const usable = candidates.filter((c) =>
     c.capabilities.includes(capability) && c.installed && c.enabled &&
-    c.reachable && c.healthy && c.authorized && c.compatible && c.fresh !== false
+    c.reachable && c.healthy && c.authorized && c.compatible && c.fresh
   ).sort((a,b) => a.id.localeCompare(b.id) || a.surface.localeCompare(b.surface));
   const native = usable.find((c) => c.ownership === 'AFYX');
   if (native) return decision('AFYX', 'NATIVE_READY', native);
