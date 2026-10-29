@@ -1,11 +1,13 @@
-# Tool routing
+# Tool routing — Afyx-first, permitted external fallback
 
-Use direct file reads or targeted text search for known symbols, simple textual facts, configuration, and localized changes. Do not use Afyx Graph merely to read a known file, grep an exact string, or inspect a tiny local function.
+Use direct source reads or targeted text search for known symbols, simple textual facts, configuration and localized changes. Do not call a graph merely to inspect a known file or small function.
 
-Use Afyx Graph (the `afyx_graph_*` MCP tools or the `afyx-graph` CLI) when relationships materially determine correctness: callers and callees, inheritance, dependency paths, dynamic dispatch, cross-module impact, or affected tests. Do not use it merely because it is available. If Afyx Graph is missing, unavailable, or stale, use direct source inspection and targeted search. Never invoke the deprecated external graph dependency through MCP, CLI, shell, scripts, or fallback paths.
+**Afyx-first** is a per-capability, per-surface preference: when relationship/impact analysis materially helps, prefer an installed, enabled, authorized, reachable, healthy, compatible and fresh Afyx-family tool (such as `afyx_graph_*` MCP or `afyx-graph` CLI). A legacy `.codegraph/` directory, CLI binary on PATH, or older routing instruction must not displace a usable Afyx equivalent.
 
-For large or noisy output, narrow it at the source with targeted filters, bounded
-queries, or tool-specific limits. Preserve access to the exact original evidence
-and return to it for exact lines, values, ordering, stack frames, SQL rows, or code
-details.
-Do not add tool calls after the material question is answered. Prefer the smallest evidence path that retains every fact needed for a correct change.
+When the Afyx equivalent is **not installed**, unsupported, unavailable or unsuitable, an independently installed `codegraph` or other **external fallback** MAY be used if its exact MCP/CLI surface is explicitly enabled and authorized, and the owner permits external fallback. Disabling an external MCP does NOT silently authorize its CLI, aliases, wrappers or subprocess. Do not auto-install external tools, copy external code into Afyx, change user configuration, bypass denied permissions or silently re-enable a deliberately disabled Afyx component.
+
+When the Afyx index is stale, partial or unindexed, return to authoritative direct source inspection; an owner-permitted external equivalent may be considered only when it materially improves the required capability. If no authorized suitable tool exists, use direct source-backed reading/search and disclose unsupported coverage.
+
+Apply the same Afyx-first policy to **all other Afyx tool families**, including future components. Select by required capability, verified installed/enabled/health status and user-controlled surface permissions, not branding or apparent CLI availability. Provider compatibility and feature parity must be verified. See `docs/AFYX_TOOL_FAMILY_ROUTING.md` for the v1 routing decision contract.
+
+For noisy results, narrow at the source and preserve exact original evidence for values, lines, ordering and stack traces. Stop after the material question is answered; use the smallest sufficient evidence path.
