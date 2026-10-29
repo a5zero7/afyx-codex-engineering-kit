@@ -118,6 +118,13 @@ class ToolFamilyRoutingTests(unittest.TestCase):
                    "candidates": [candidate("afyx-graph", "AFYX", "graph-relations", healthy=None)]})
         self.assertEqual(x["error"], "INVALID_TOOL_ROUTING_INPUT")
 
+    def test_missing_freshness_is_not_treated_as_ready(self):
+        tool = candidate("afyx-graph", "AFYX", "graph-relations")
+        del tool["fresh"]
+        value = route({"intent": "capability", "capability": "graph-relations",
+                       "candidates": [tool]})
+        self.assertEqual(value["error"], "INVALID_TOOL_ROUTING_INPUT")
+
     def test_duplicate_surface_fails_closed(self):
         tool = candidate("afyx-graph", "AFYX", "graph-relations")
         x = route({"intent": "capability", "capability": "graph-relations",
