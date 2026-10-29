@@ -79,6 +79,45 @@ documented skill root if rollback is needed.
 
 ## Windows Native / PowerShell
 
+### Interactive installer
+
+Run the Windows installer without selection flags from an attached terminal to
+open the native Afyx wizard:
+
+```powershell
+.\install.ps1
+```
+
+The Midnight Circuit interface uses Up/Down to move, Space to toggle custom
+components, Enter to continue, and Esc to cancel before mutation. It guides the
+operator through environment detection, preset/components, provider and scope,
+the authoritative desired-state plan, explicit confirmation, real lifecycle
+work, and a final receipt. Forge is shown only as evaluation information and is
+not selectable. Afyx Context remains optional and Graph integration remains
+default OFF.
+
+The installer never changes the terminal background. On capable terminals it
+uses the Afyx Electric Cyan, Soft Violet, Emerald, Amber, and Soft Coral palette.
+Set `NO_COLOR=1` for monochrome output. Redirected streams, CI, unsupported
+terminals, and explicit read-only commands use the same facts in deterministic
+plain text. Windows PowerShell 5.1 remains supported, and a terminal without
+advanced key handling uses numbered prompts instead.
+
+Explicit automation remains unchanged and bypasses the wizard:
+
+```powershell
+.\install.ps1 -ValidateOnly
+.\install.ps1 -WhatIf -Preset recommended
+.\install.ps1 -Preset recommended -Provider codex -Confirm:$false
+```
+
+`-ValidateOnly` and `-WhatIf` never prompt or mutate. Cancellation before the
+confirmation boundary leaves component and provider configuration unchanged.
+Status labels distinguish healthy/no-change components from skipped attempts,
+planned work, blocked work, updates, and restart requirements. An installed
+optional component outside the selected preset is reported as `EXTRA` and is
+preserved; it is not treated as a failure or silently removed.
+
 ### Clone and inspect
 
 ```powershell
