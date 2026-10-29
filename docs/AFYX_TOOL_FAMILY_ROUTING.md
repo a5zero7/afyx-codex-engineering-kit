@@ -22,7 +22,7 @@ If graph evidence is stale/partial/unsupported, verify exact source rather than 
 
 ## Versioned pure resolver (reference only)
 
-`scripts/afyx-tool-family-routing.mjs` exports `AfyxToolFamilyRouting/v1` and `resolveAfyxToolFamilyRoute`. It accepts caller-verified candidate observations per MCP/CLI surface: `id`, `ownership: AFYX|EXTERNAL`, `surface`, `capabilities[]`, `installed`, `enabled`, `reachable`, `healthy`, `authorized`, `compatible` and optional `fresh`. `allowExternalFallback` defaults to false. It returns a route and reason **without probing, invoking, installing, or changing any tool or setting**.
+`scripts/afyx-tool-family-routing.mjs` exports `AfyxToolFamilyRouting/v1` and `resolveAfyxToolFamilyRoute`. It accepts caller-verified candidate observations per MCP/CLI surface: `id`, `ownership: AFYX|EXTERNAL`, `surface`, `capabilities[]`, `installed`, `enabled`, `reachable`, `healthy`, `authorized`, `compatible` and verified boolean `fresh`. `allowExternalFallback` defaults to false. It returns a route and reason **without probing, invoking, installing, or changing any tool or setting**.
 
 This candidate is **not wired into an arbitrary live agent or provider adapter yet**. Host-agnostic synthetic tests establish routing semantics only; an uncontrolled agent can still execute `codegraph` if it reads stale workspace instructions.
 
