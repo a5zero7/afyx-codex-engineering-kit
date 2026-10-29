@@ -93,6 +93,7 @@ class UnifiedInstallerIntegrationTests(unittest.TestCase):
             encoding="utf-8",
         )
 
+        system_paths = [p for p in os.environ.get("PATH", "").split(os.pathsep) if "npm" not in p.lower() and "codex" not in p.lower()]
         self.environment = {
             **os.environ,
             "HOME": str(self.home),
@@ -102,7 +103,7 @@ class UnifiedInstallerIntegrationTests(unittest.TestCase):
             "AFYX_GRAPH_RUNTIME_ROOT": str(self.graph),
             "AFYX_CONTEXT_RUNTIME_ROOT": str(self.context),
             "CI": "1",
-            "PATH": str(self.fake_bin) + os.pathsep + os.environ.get("PATH", ""),
+            "PATH": str(self.fake_bin) + os.pathsep + os.pathsep.join(system_paths),
         }
 
     def tearDown(self) -> None:
@@ -213,6 +214,35 @@ class UnifiedInstallerIntegrationTests(unittest.TestCase):
         result = self.invoke("install.ps1", self.common(providers="@('claude')") + " -Confirm:$false", expected=1)
         self.assertIn("Selected Claude Code provider host was not detected", result.stdout + result.stderr)
         self.assertFalse((self.claude_home / "skills").exists())
+
+    def test_claude_only_verification_succeeds_without_codex(self) -> None:
+        (self.fake_bin / "codex.cmd").unlink()
+        args = self.common(providers="@('claude')")
+        installed = self.invoke("install.ps1", args + " -Confirm:$false")
+        self.assertIn("Provider transaction: READY", installed.stdout)
+        self.assertNotIn("Codex host [REQUIRED]", installed.stdout)
+        verified = self.invoke("verify.ps1", args)
+        self.assertIn("[HEALTHY] claude MCP", verified.stdout)
+        self.assertIn("[HEALTHY] Claude Code host", verified.stdout)
+        self.assertIn("[HEALTHY] Core readiness", verified.stdout)
+
+    def test_antigravity_only_verification_succeeds_without_codex(self) -> None:
+        (self.fake_bin / "codex.cmd").unlink()
+        args = self.common(providers="@('antigravity')")
+        installed = self.invoke("install.ps1", args + " -Confirm:$false")
+        self.assertIn("Provider transaction: CONFIGURED_RESTART_REQUIRED", installed.stdout)
+        self.assertNotIn("Codex host [REQUIRED]", installed.stdout)
+        verified = self.invoke("verify.ps1", args)
+        self.assertIn("[HEALTHY] antigravity MCP", verified.stdout)
+        self.assertIn("[HEALTHY] Antigravity host", verified.stdout)
+        self.assertIn("[HEALTHY] Core readiness", verified.stdout)
+
+    def test_codex_selected_without_codex_fails_verification(self) -> None:
+        (self.fake_bin / "codex.cmd").unlink()
+        args = self.common(providers="@('codex')")
+        verified = self.invoke("verify.ps1", args, expected=1)
+        self.assertIn("[BLOCKED] Codex host", verified.stdout)
+        self.assertIn("[BLOCKED] Core readiness", verified.stdout)
 
     def test_wizard_contract_uses_three_provider_multiselect(self) -> None:
         source = (ROOT / "install.ps1").read_text(encoding="utf-8")

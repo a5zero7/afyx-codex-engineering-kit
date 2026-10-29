@@ -400,7 +400,11 @@ $npmVersion = try { (& npm --version 2>$null) -join ' ' } catch { '' }
 Write-AfyxStatus -Status HEALTHY -Name 'OS/architecture [REQUIRED]' -Detail "$([System.Runtime.InteropServices.RuntimeInformation]::OSDescription) / $([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)" -Terminal $terminal
 Write-AfyxStatus -Status HEALTHY -Name 'Platform shell [REQUIRED]' -Detail "PowerShell $($PSVersionTable.PSVersion)" -Terminal $terminal
 Write-AfyxStatus -Status $(if ($gitVersion) { 'HEALTHY' } else { 'BLOCKED' }) -Name 'Git [REQUIRED]' -Detail $(if ($gitVersion) { $gitVersion } else { 'missing; install Git for Windows from https://git-scm.com/' }) -Terminal $terminal
-Write-AfyxStatus -Status $(if ($codexCliDetected -or $vscodeExtensionDetected) { 'HEALTHY' } else { 'BLOCKED' }) -Name 'Codex host [REQUIRED]' -Detail $(if ($codexCliDetected -or $vscodeExtensionDetected) { 'detected' } else { 'missing; install Codex CLI or the supported VS Code extension' }) -Terminal $terminal
+$codexRequired = 'codex' -in $Provider -or -not $Provider.Count
+$codexStatus = if ($codexCliDetected -or $vscodeExtensionDetected) { 'HEALTHY' } elseif ($codexRequired) { 'BLOCKED' } else { 'SKIPPED' }
+$codexLabel = if ($codexRequired) { 'Codex host [REQUIRED]' } else { 'Codex host' }
+$codexDetail = if ($codexCliDetected -or $vscodeExtensionDetected) { 'detected' } elseif ($codexRequired) { 'missing; install Codex CLI or the supported VS Code extension' } else { 'not detected; required only when selected' }
+Write-AfyxStatus -Status $codexStatus -Name $codexLabel -Detail $codexDetail -Terminal $terminal
 Write-AfyxStatus -Status $(if ($antigravityCommandDetected) { 'HEALTHY' } else { 'SKIPPED' }) -Name 'Antigravity host' -Detail $(if ($antigravityCommandDetected) { "detected ($(& $antigravityCommandDetected.Source --version 2>$null))" } else { 'not detected; required only when selected' }) -Terminal $terminal
 Write-AfyxStatus -Status $(if ($claudeCommandDetected) { 'HEALTHY' } else { 'SKIPPED' }) -Name 'Claude Code host' -Detail $(if ($claudeCommandDetected) { 'detected' } else { 'not detected; required only when selected' }) -Terminal $terminal
 Write-AfyxStatus -Status $(if ($nodeVersion) { 'HEALTHY' } else { 'BLOCKED' }) -Name 'Node.js >=22.5.0 [COMPONENT_REQUIRED:Graph/Context]' -Detail $(if ($nodeVersion) { $nodeVersion } else { 'missing; install from https://nodejs.org/ before selecting Graph or Context' }) -Terminal $terminal

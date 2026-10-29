@@ -147,6 +147,10 @@ if ($node) { Write-Result 'OK' 'Node.js [COMPONENT_REQUIRED:Afyx Context]' ((& n
 else { Write-Result 'INFO' 'Node.js [COMPONENT_REQUIRED:Afyx Context]' 'missing; required only when Afyx Context is selected' }
 if ($npm) { Write-Result 'OK' 'npm [BUILD_ONLY:Afyx Graph]' ((& npm --version 2>$null) -join ' ') } else { Write-Result 'INFO' 'npm [BUILD_ONLY:Afyx Graph]' 'missing; required only for local artifact fallback' }
 Write-Result 'OK' 'Archive/checksum [COMPONENT_REQUIRED:Afyx Graph]' 'Expand-Archive and Get-FileHash available'
+$codexRequired = 'codex' -in $Provider -or -not $Provider.Count
+$antigravityRequired = 'antigravity' -in $Provider
+$claudeRequired = 'claude' -in $Provider
+
 $codex = Get-Command codex.exe -ErrorAction SilentlyContinue
 if (-not $codex) { $codex = Get-Command codex.cmd -ErrorAction SilentlyContinue }
 $extension = [bool](Get-ChildItem -Path (Join-Path $env:USERPROFILE '.vscode\extensions\openai.chatgpt-*') -Directory -ErrorAction SilentlyContinue | Select-Object -First 1)
@@ -156,10 +160,51 @@ if ($codex) {
         if ($LASTEXITCODE -ne 0) { throw 'version command returned a non-zero exit code' }
         Write-Result 'OK' 'Codex CLI' $version
     }
-    catch { Write-Result 'FAIL' 'Codex CLI' 'version command failed'; $coreFailure = $true }
-} else { Write-Result 'INFO' 'Codex CLI' 'not found' }
+    catch {
+        Write-Result $(if ($codexRequired) { 'FAIL' } else { 'WARN' }) 'Codex CLI' 'version command failed'
+        if ($codexRequired) { $coreFailure = $true }
+    }
+} else { Write-Result 'INFO' 'Codex CLI' $(if ($codexRequired) { 'not found' } else { 'not found (optional)' }) }
 if ($extension) { Write-Result 'OK' 'VS Code extension' 'detected' } else { Write-Result 'INFO' 'VS Code extension' 'not detected' }
-if (-not $codex -and -not $extension) { $coreFailure = $true }
+if ($codexRequired -and -not $codex -and -not $extension) {
+    Write-Result 'FAIL' 'Codex host' 'Codex CLI or supported VS Code extension is required when Codex is selected'
+    $coreFailure = $true
+}
+
+if ($antigravityRequired) {
+    $antigravity = Get-Command agy -ErrorAction SilentlyContinue
+    if (-not $antigravity) { $antigravity = Get-Command antigravity -ErrorAction SilentlyContinue }
+    if ($antigravity) {
+        try {
+            $version = (& $antigravity.Source --version 2>$null) -join ' '
+            Write-Result 'OK' 'Antigravity host' "detected ($version)"
+        } catch {
+            Write-Result 'FAIL' 'Antigravity host' 'version command failed'
+            $coreFailure = $true
+        }
+    } else {
+        Write-Result 'FAIL' 'Antigravity host' 'not found; install agy/antigravity'
+        $coreFailure = $true
+    }
+}
+
+if ($claudeRequired) {
+    $claude = Get-Command claude.exe -ErrorAction SilentlyContinue
+    if (-not $claude) { $claude = Get-Command claude.cmd -ErrorAction SilentlyContinue }
+    if (-not $claude) { $claude = Get-Command claude -ErrorAction SilentlyContinue }
+    if ($claude) {
+        try {
+            $version = (& claude --version 2>$null) -join ' '
+            Write-Result 'OK' 'Claude Code host' "detected ($version)"
+        } catch {
+            Write-Result 'FAIL' 'Claude Code host' 'version command failed'
+            $coreFailure = $true
+        }
+    } else {
+        Write-Result 'FAIL' 'Claude Code host' 'not found; install Claude Code CLI'
+        $coreFailure = $true
+    }
+}
 
 $requiredIds = if ($controlPlan) { @($controlPlan.DesiredComponents) } else { @('efficient-coding', 'odoo-engineering') }
 foreach ($component in ($componentStates.Values | Where-Object { $_.Id -in $requiredIds -and $_.Type -eq 'skill' } | Sort-Object { $requiredIds.IndexOf($_.Id) })) {
@@ -191,18 +236,20 @@ switch ($graph.State) {
     'INVALID' { Write-Result 'WARN' 'Afyx Graph' 'invalid metadata (optional)' }
     default { Write-Result 'WARN' 'Afyx Graph' "state $($graph.State): $($graph.Detail) (optional)" }
 }
-if ($graph.State -eq 'HEALTHY' -and $node -and $codex) {
-    $entry = Join-Path $graph.Path 'current\lib\dist\bin\afyx-graph.js'
-    $integrationTool = Join-Path $PSScriptRoot 'scripts\afyx-mcp-integration.mjs'
-    $integrationJson = (& $node.Source $integrationTool --node $node.Source --entry $entry --codex $codex.Source --codex-home $codexHome 2>$null) -join ''
-    try {
-        $integration = $integrationJson | ConvertFrom-Json
-        $level = if ($integration.mcp -eq 'MCP_REACHABLE') { 'OK' } elseif ($integration.mcp -eq 'MCP_NOT_CONFIGURED') { 'INFO' } else { 'WARN' }
-        Write-Result $level 'Afyx Graph MCP' "$($integration.mcp): $($integration.detail)"
-    } catch { Write-Result 'WARN' 'Afyx Graph MCP' 'MCP_BLOCKED: integration status unavailable' }
-} elseif (-not $codex) { Write-Result 'INFO' 'Afyx Graph MCP' 'MCP_BLOCKED: Codex CLI unavailable' }
-elseif ($graph.State -ne 'HEALTHY') { Write-Result 'INFO' 'Afyx Graph MCP' 'MCP_BLOCKED: Graph runtime unavailable' }
-else { Write-Result 'INFO' 'Afyx Graph MCP' 'MCP_NOT_CONFIGURED' }
+if ($codexRequired) {
+    if ($graph.State -eq 'HEALTHY' -and $node -and $codex) {
+        $entry = Join-Path $graph.Path 'current\lib\dist\bin\afyx-graph.js'
+        $integrationTool = Join-Path $PSScriptRoot 'scripts\afyx-mcp-integration.mjs'
+        $integrationJson = (& $node.Source $integrationTool --node $node.Source --entry $entry --codex $codex.Source --codex-home $codexHome 2>$null) -join ''
+        try {
+            $integration = $integrationJson | ConvertFrom-Json
+            $level = if ($integration.mcp -eq 'MCP_REACHABLE') { 'OK' } elseif ($integration.mcp -eq 'MCP_NOT_CONFIGURED') { 'INFO' } else { 'WARN' }
+            Write-Result $level 'Afyx Graph MCP' "$($integration.mcp): $($integration.detail)"
+        } catch { Write-Result 'WARN' 'Afyx Graph MCP' 'MCP_BLOCKED: integration status unavailable' }
+    } elseif (-not $codex) { Write-Result 'INFO' 'Afyx Graph MCP' 'MCP_BLOCKED: Codex CLI unavailable' }
+    elseif ($graph.State -ne 'HEALTHY') { Write-Result 'INFO' 'Afyx Graph MCP' 'MCP_BLOCKED: Graph runtime unavailable' }
+    else { Write-Result 'INFO' 'Afyx Graph MCP' 'MCP_NOT_CONFIGURED' }
+}
 $context = $componentStates['afyx-context']
 switch ($context.State) {
     'NOT INSTALLED' { Write-Result 'INFO' 'Afyx Context Engine' 'not installed (optional; explicit selection only)' }
@@ -218,8 +265,10 @@ switch ($context.State) {
     }
     default { Write-Result 'WARN' 'Afyx Context Engine' "$($context.State): $($context.Detail) (optional)" }
 }
-if (Test-Path -LiteralPath $configPath -PathType Leaf) { Write-Result 'OK' 'Codex config' 'read-only check completed' }
-else { Write-Result 'WARN' 'Codex config' 'not found; optional MCP entries unavailable' }
+if ($codexRequired) {
+    if (Test-Path -LiteralPath $configPath -PathType Leaf) { Write-Result 'OK' 'Codex config' 'read-only check completed' }
+    else { Write-Result 'WARN' 'Codex config' 'not found; optional MCP entries unavailable' }
+}
 
 $usageComponent = $componentStates['codex-usage-tracking']
 $hooksPath = Join-Path $codexHome 'hooks.json'
