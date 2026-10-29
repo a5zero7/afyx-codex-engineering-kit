@@ -10,7 +10,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -22,7 +21,13 @@ CATEGORIES = {
     "rework": "agent",
     "explicit_retry": "agent",
 }
-TOOL_TYPES = frozenset({"command_execution", "mcp_tool_call", "web_search", "dynamic_tool_call", "function_call"})
+TOOL_TYPES = frozenset({
+    "command_execution", "mcp_tool_call", "collab_tool_call", "web_search",
+    "dynamic_tool_call", "function_call",
+})
+# Codex may emit these as item.completed without an item.started notification.
+# They are NOT tool calls and must not be counted as one.
+TERMINAL_ONLY_TYPES = frozenset({"agent_message", "reasoning", "file_change", "todo_list", "plan", "error"})
 USAGE_FIELDS = ("input_tokens", "cached_input_tokens", "cache_write_input_tokens", "output_tokens", "reasoning_output_tokens")
 
 
@@ -125,40 +130,74 @@ def analyze(run_id: str, event_file: Path, annotations: Path | None = None,
     completed: list[dict[str, Any]] = []
     threads: set[str] = set()
     unrecognized_item_types: set[str] = set()
+    turns_started = 0
+    terminal_seen = False
 
     for event in events:
         kind = event.get("type")
         if kind == "thread.started":
             tid = event.get("thread_id")
-            if not isinstance(tid, str) or not tid:
-                raise EvidenceError("thread.started missing thread_id")
+            if not isinstance(tid, str) or not tid or threads or turns_started:
+                raise EvidenceError("duplicate, late or invalid thread.started")
             threads.add(tid)
-        if kind == "turn.completed":
+        elif kind == "turn.started":
+            if not threads or turns_started:
+                raise EvidenceError("missing thread or duplicate turn.started")
+            turns_started += 1
+        elif kind == "turn.completed":
+            if turns_started != 1 or terminal_seen:
+                raise EvidenceError("missing turn.started or duplicate turn.completed")
+            terminal_seen = True
             completed.append(event)
-        if kind in ("item.started", "item.completed", "item.failed"):
+        elif kind in ("turn.failed", "error"):
+            raise EvidenceError("failed or incomplete Codex event stream")
+        elif kind in ("item.started", "item.updated", "item.completed", "item.failed"):
+            if turns_started != 1 or terminal_seen:
+                raise EvidenceError("item event outside active turn")
             item = event.get("item")
-            if not isinstance(item, dict) or not isinstance(item.get("id"), str):
+            if not isinstance(item, dict) or not isinstance(item.get("id"), str) or not item["id"]:
                 raise EvidenceError("item event missing item.id")
             key = item["id"]
-            item_type = str(item.get("type", ""))
+            item_type = item.get("type")
+            if not isinstance(item_type, str) or not item_type:
+                raise EvidenceError("item type missing")
+            if item_type not in TOOL_TYPES and item_type not in TERMINAL_ONLY_TYPES:
+                unrecognized_item_types.add(item_type)
             if kind == "item.started":
-                if key in started:
+                if key in started or key in finished:
                     raise EvidenceError("duplicate item.started")
                 started[key] = item_type
+            elif kind == "item.updated":
+                # Updates must refer to an existing item, but need not carry
+                # a tool-specific payload. An unknown item cannot disappear.
+                if key not in started or key in finished or started[key] != item_type:
+                    raise EvidenceError("orphan or inconsistent item.updated")
             else:
-                if key not in started or key in finished:
-                    raise EvidenceError("orphan or duplicate item completion")
+                if key in finished:
+                    raise EvidenceError("duplicate item completion")
+                if key in started:
+                    if started[key] != item_type:
+                        raise EvidenceError("item type changed between start and completion")
+                elif item_type not in TERMINAL_ONLY_TYPES:
+                    # A tool completed without a corresponding start means the
+                    # observed tool-call count and event completeness are unsafe.
+                    raise EvidenceError("orphan tool completion")
                 finished.add(key)
-                if kind == "item.failed" or item.get("status") == "failed":
+                status = item.get("status")
+                if kind == "item.failed" or status in ("failed", "declined"):
                     failures += 1
-            if item_type and item_type not in TOOL_TYPES and item_type not in {"agent_message", "reasoning", "file_change", "plan"}:
-                unrecognized_item_types.add(item_type)
+                elif item_type == "command_execution" and type(item.get("exit_code")) is int and item["exit_code"] != 0:
+                    failures += 1
+        elif kind is None:
+            raise EvidenceError("event missing type")
+        else:
+            raise EvidenceError("unsupported top-level event type")
 
     if not threads or len(threads) != 1 or (expected_thread_id and expected_thread_id not in threads):
         raise EvidenceError("thread identity missing or does not match")
-    if len(completed) != 1:
-        raise EvidenceError("expected exactly one turn.completed")
-    if set(started) != finished:
+    if turns_started != 1 or len(completed) != 1:
+        raise EvidenceError("expected exactly one complete turn")
+    if set(started) - finished:
         raise EvidenceError("unclosed item events")
     tool_ids = [key for key, kind in started.items() if kind in TOOL_TYPES]
     return {
