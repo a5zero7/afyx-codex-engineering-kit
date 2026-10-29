@@ -43,7 +43,7 @@ class ToolFamilyRoutingTests(unittest.TestCase):
             raise unittest.SkipTest("Node unavailable")
 
     def test_native_healthy_wins_over_external(self):
-        tools = [candidate("codegraph", "EXTERNAL", "graph-relations", "cli"),
+        tools = [candidate("external-graph", "EXTERNAL", "graph-relations", "cli"),
                  candidate("afyx-graph", "AFYX", "graph-relations")]
         x = route({"intent": "capability", "capability": "graph-relations",
                    "allowExternalFallback": True, "candidates": tools})["result"]
@@ -51,27 +51,27 @@ class ToolFamilyRoutingTests(unittest.TestCase):
 
     def test_native_missing_external_explicitly_allowed(self):
         tools = [candidate("afyx-graph", "AFYX", "graph-relations", installed=False),
-                 candidate("codegraph", "EXTERNAL", "graph-relations", "cli")]
+                 candidate("external-graph", "EXTERNAL", "graph-relations", "cli")]
         x = route({"intent": "capability", "capability": "graph-relations",
                    "allowExternalFallback": True, "candidates": tools})["result"]
         self.assertEqual(x["route"], "EXTERNAL")
-        self.assertEqual(x["toolId"], "codegraph")
+        self.assertEqual(x["toolId"], "external-graph")
 
     def test_external_never_automatically_enabled(self):
         x = route({"intent": "capability", "capability": "graph-relations",
-                   "candidates": [candidate("codegraph", "EXTERNAL", "graph-relations", "cli")]})["result"]
+                   "candidates": [candidate("external-graph", "EXTERNAL", "graph-relations", "cli")]})["result"]
         self.assertEqual(x["route"], "DIRECT_SOURCE")
 
     def test_disabled_mcp_does_not_enable_external_cli(self):
-        tools = [candidate("codegraph", "EXTERNAL", "graph-relations", enabled=False),
-                 candidate("codegraph", "EXTERNAL", "graph-relations", "cli", authorized=False)]
+        tools = [candidate("external-graph", "EXTERNAL", "graph-relations", enabled=False),
+                 candidate("external-graph", "EXTERNAL", "graph-relations", "cli", authorized=False)]
         x = route({"intent": "capability", "capability": "graph-relations",
                    "allowExternalFallback": True, "candidates": tools})["result"]
         self.assertEqual(x["route"], "DIRECT_SOURCE")
 
     def test_cli_can_be_separately_authorized(self):
-        tools = [candidate("codegraph", "EXTERNAL", "graph-relations", enabled=False),
-                 candidate("codegraph", "EXTERNAL", "graph-relations", "cli", authorized=True)]
+        tools = [candidate("external-graph", "EXTERNAL", "graph-relations", enabled=False),
+                 candidate("external-graph", "EXTERNAL", "graph-relations", "cli", authorized=True)]
         x = route({"intent": "capability", "capability": "graph-relations",
                    "allowExternalFallback": True, "candidates": tools})["result"]
         self.assertEqual((x["route"], x["surface"]), ("EXTERNAL", "cli"))
@@ -83,7 +83,7 @@ class ToolFamilyRoutingTests(unittest.TestCase):
 
     def test_stale_native_external_only_if_authorized(self):
         tools = [candidate("afyx-graph", "AFYX", "graph-relations", fresh=False),
-                 candidate("codegraph", "EXTERNAL", "graph-relations", "cli")]
+                 candidate("external-graph", "EXTERNAL", "graph-relations", "cli")]
         x = {"intent": "capability", "capability": "graph-relations",
              "allowExternalFallback": True, "candidates": tools}
         self.assertEqual(route(x)["result"]["route"], "EXTERNAL")
