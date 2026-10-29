@@ -24,12 +24,12 @@ If graph evidence is stale/partial/unsupported, verify exact source rather than 
 
 `scripts/afyx-tool-family-routing.mjs` exports `AfyxToolFamilyRouting/v1` and `resolveAfyxToolFamilyRoute`. It accepts caller-verified candidate observations per MCP/CLI surface: `id`, `ownership: AFYX|EXTERNAL`, `surface`, `capabilities[]`, `installed`, `enabled`, `reachable`, `healthy`, `authorized`, `compatible` and verified boolean `fresh`. `allowExternalFallback` defaults to false. It returns a route and reason **without probing, invoking, installing, or changing any tool or setting**.
 
-This candidate is **not wired into an arbitrary live agent or provider adapter yet**. Host-agnostic synthetic tests establish routing semantics only; an uncontrolled agent can still execute `codegraph` if it reads stale workspace instructions.
+This candidate is **not wired into an arbitrary live agent or provider adapter yet**. Host-agnostic synthetic tests establish routing semantics only; an uncontrolled agent can still invoke a legacy external binary if it reads stale workspace instructions.
 
 ## Remaining live acceptance (AFYX-302)
 
 1. Investigate effective user, parent and workspace `AGENTS.md`, installed skills and session policy in the Odoo 17 DEV-2026-4885 workspace; locate the instruction that caused the observed external graph exploration shell call.
 2. Update installed/user instructions only after owner approval, preserving unrelated configuration and existing external installations.
-3. Run a fresh real-agent comparison: known-source direct read; relational native Afyx first even with CodeGraph on PATH and `.codegraph/` present; Afyx missing + independently authorized CodeGraph fallback; disabled external MCP and unauthorized CLI both rejected.
+3. Run a fresh real-agent comparison: known-source direct read; relational native Afyx first even with an external graph executable on PATH and legacy external index state present; Afyx missing + independently authorized external fallback; disabled external MCP and unauthorized CLI both rejected.
 4. Extend the helper's integration to real host surfaces under a separate reviewed change; this source-only policy must not be claimed as end-to-end enforcement.
 5. Preserve owner Odoo files, source worktrees, and independent PRs #126/#127. Do not auto-merge.
