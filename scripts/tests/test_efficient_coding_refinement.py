@@ -46,7 +46,7 @@ class EfficientCodingRefinementTests(unittest.TestCase):
 
     def test_cost_tool_and_version_contract(self) -> None:
         text = corpus(CANDIDATE)
-        for anchor in ("n+1", "memory", "i/o", "concurrency", "never invoke the deprecated external graph dependency"):
+        for anchor in ("n+1", "memory", "i/o", "concurrency", "afyx-first", "external fallback"):
             self.assertIn(anchor, text)
         self.assertRegex((CANDIDATE / "SKILL.md").read_text(encoding="utf-8"), r'(?m)^\s+version: "1\.2\.1"$')
 
