@@ -11,6 +11,8 @@ param(
     [ValidateSet('global', 'workspace')][string]$ProviderScope = 'global',
     [string]$WorkspaceRoot = (Get-Location).Path,
     [string]$GeminiHome = $(if ($env:AFYX_GEMINI_HOME) { $env:AFYX_GEMINI_HOME } else { Join-Path $env:USERPROFILE '.gemini' }),
+    [string]$ClaudeHome = $(if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $env:USERPROFILE '.claude' }),
+    [string]$ClaudeConfigDir = $(if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { '' }),
     [string]$ContextRuntimeRoot = $(if ($env:AFYX_CONTEXT_RUNTIME_ROOT) { $env:AFYX_CONTEXT_RUNTIME_ROOT } else { Join-Path $env:USERPROFILE '.afyx\context' })
 )
 
@@ -18,15 +20,22 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 Write-Host 'Afyx Codex Engineering Kit — Windows uninstaller (PowerShell)'
-if (-not $PSBoundParameters.ContainsKey('SkillsRoot') -and $ProviderScope -eq 'workspace' -and 'antigravity' -in $Provider) {
-    $SkillsRoot = Join-Path $WorkspaceRoot '.agents\skills'
+$providerSkillRoots = @()
+if ('codex' -in $Provider) {
+    $providerSkillRoots += $(if ($PSBoundParameters.ContainsKey('SkillsRoot')) { $SkillsRoot } else { Join-Path $env:USERPROFILE '.agents\skills' })
 }
-$additionalSkillRoots = @()
-if ($ProviderScope -eq 'global' -and 'antigravity' -in $Provider) {
-    $antigravitySkillRoots = @((Join-Path $GeminiHome 'config\skills'), (Join-Path $GeminiHome 'antigravity-cli\skills'))
-    if (-not $PSBoundParameters.ContainsKey('SkillsRoot') -and $Provider.Count -eq 1) { $SkillsRoot = $antigravitySkillRoots[0] }
-    $additionalSkillRoots = @($antigravitySkillRoots | Where-Object { [System.IO.Path]::GetFullPath($_) -ne [System.IO.Path]::GetFullPath($SkillsRoot) })
+if ('antigravity' -in $Provider) {
+    if ($ProviderScope -eq 'workspace') { $providerSkillRoots += (Join-Path $WorkspaceRoot '.agents\skills') }
+    else { $providerSkillRoots += @((Join-Path $GeminiHome 'config\skills'), (Join-Path $GeminiHome 'antigravity-cli\skills')) }
 }
+if ('claude' -in $Provider) {
+    $providerSkillRoots += $(if ($ProviderScope -eq 'workspace') { Join-Path $WorkspaceRoot '.claude\skills' } else { Join-Path $ClaudeHome 'skills' })
+}
+if (-not $PSBoundParameters.ContainsKey('SkillsRoot') -and $providerSkillRoots.Count) { $SkillsRoot = $providerSkillRoots[0] }
+$primarySkillsPath = [System.IO.Path]::GetFullPath($SkillsRoot)
+$additionalSkillRoots = @($providerSkillRoots |
+    Where-Object { [System.IO.Path]::GetFullPath($_) -ne $primarySkillsPath } |
+    Select-Object -Unique)
 
 # One component truth: scripts/components.json. Only Afyx-owned skills are removable.
 Import-Module (Join-Path $PSScriptRoot 'scripts\lib\AfyxComponents.psm1') -Force
@@ -86,12 +95,15 @@ if ($RemoveProviderConfiguration) {
     if (-not $codexCommand -and -not [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)) {
         $codexCommand = Get-Command codex -ErrorAction SilentlyContinue
     }
+    $claudeCommand = Get-Command claude -ErrorAction SilentlyContinue
     $installedEntry = Join-Path $graphRoot 'current\lib\dist\bin\afyx-graph.js'
     if (-not $nodeCommand) { throw 'Node.js is required to remove owned provider entries.' }
     $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' }
     $arguments = @((Join-Path $PSScriptRoot 'scripts\afyx-provider-integration.mjs'), '--providers', ($Provider -join ','), '--scope', $ProviderScope,
         '--workspace-root', $WorkspaceRoot, '--gemini-home', $GeminiHome, '--codex-home', $codexHome, '--node', $nodeCommand.Source, '--entry', $installedEntry, '--uninstall')
     if ($codexCommand) { $arguments += @('--codex', $codexCommand.Source) }
+    if ($claudeCommand) { $arguments += @('--claude', $claudeCommand.Source) }
+    if ($ClaudeConfigDir) { $arguments += @('--claude-config-dir', $ClaudeConfigDir) }
     if (-not $WhatIfPreference) { $arguments += '--apply' }
     if ($WhatIfPreference) { Write-Host "WhatIf: would remove only Afyx-owned provider MCP entries at $ProviderScope scope" }
     else {

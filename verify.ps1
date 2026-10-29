@@ -7,6 +7,8 @@ param(
     [ValidateSet('global', 'workspace')][string]$ProviderScope = 'global',
     [string]$WorkspaceRoot = (Get-Location).Path,
     [string]$GeminiHome = $(if ($env:AFYX_GEMINI_HOME) { $env:AFYX_GEMINI_HOME } else { Join-Path $env:USERPROFILE '.gemini' }),
+    [string]$ClaudeHome = $(if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $env:USERPROFILE '.claude' }),
+    [string]$ClaudeConfigDir = $(if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { '' }),
     [string]$ContextRuntimeRoot = $(if ($env:AFYX_CONTEXT_RUNTIME_ROOT) { $env:AFYX_CONTEXT_RUNTIME_ROOT } else { Join-Path $env:USERPROFILE '.afyx\context' })
 )
 
@@ -35,15 +37,22 @@ Import-Module (Join-Path $PSScriptRoot 'scripts\lib\AfyxSkillLifecycle.psm1') -F
 $providerIds = @(Get-AfyxProviderRegistry | ForEach-Object { [string]$_.provider })
 $unknownProviders = @($Provider | Where-Object { $_ -notin $providerIds })
 if ($unknownProviders.Count) { throw "Unknown provider(s): $($unknownProviders -join ', ')" }
-if (-not $PSBoundParameters.ContainsKey('SkillsRoot') -and $ProviderScope -eq 'workspace' -and 'antigravity' -in $Provider) {
-    $SkillsRoot = Join-Path $WorkspaceRoot '.agents\skills'
+$providerSkillRoots = @()
+if ('codex' -in $Provider) {
+    $providerSkillRoots += $(if ($PSBoundParameters.ContainsKey('SkillsRoot')) { $SkillsRoot } else { Join-Path $env:USERPROFILE '.agents\skills' })
 }
-$additionalSkillRoots = @()
-if ($ProviderScope -eq 'global' -and 'antigravity' -in $Provider) {
-    $antigravitySkillRoots = @((Join-Path $GeminiHome 'config\skills'), (Join-Path $GeminiHome 'antigravity-cli\skills'))
-    if (-not $PSBoundParameters.ContainsKey('SkillsRoot') -and $Provider.Count -eq 1) { $SkillsRoot = $antigravitySkillRoots[0] }
-    $additionalSkillRoots = @($antigravitySkillRoots | Where-Object { [System.IO.Path]::GetFullPath($_) -ne [System.IO.Path]::GetFullPath($SkillsRoot) })
+if ('antigravity' -in $Provider) {
+    if ($ProviderScope -eq 'workspace') { $providerSkillRoots += (Join-Path $WorkspaceRoot '.agents\skills') }
+    else { $providerSkillRoots += @((Join-Path $GeminiHome 'config\skills'), (Join-Path $GeminiHome 'antigravity-cli\skills')) }
 }
+if ('claude' -in $Provider) {
+    $providerSkillRoots += $(if ($ProviderScope -eq 'workspace') { Join-Path $WorkspaceRoot '.claude\skills' } else { Join-Path $ClaudeHome 'skills' })
+}
+if (-not $PSBoundParameters.ContainsKey('SkillsRoot') -and $providerSkillRoots.Count) { $SkillsRoot = $providerSkillRoots[0] }
+$primarySkillsPath = [System.IO.Path]::GetFullPath($SkillsRoot)
+$additionalSkillRoots = @($providerSkillRoots |
+    Where-Object { [System.IO.Path]::GetFullPath($_) -ne $primarySkillsPath } |
+    Select-Object -Unique)
 $componentContext = New-AfyxComponentContext -SkillsRoot $SkillsRoot -GraphRoot $graphRoot -ContextRoot $ContextRuntimeRoot -CodexHome $codexHome
 $componentStates = @{}
 foreach ($componentState in (Get-AfyxComponentStates -Context $componentContext)) { $componentStates[$componentState.Id] = $componentState }
@@ -80,19 +89,29 @@ if ($gitSource) {
 foreach ($providerRecord in (Get-AfyxProviderRegistry)) {
     Write-Result 'INFO' "Provider adapter: $($providerRecord.name)" "primary=$($providerRecord.primary); ownership=$($providerRecord.ownership_class); capabilities=$($providerRecord.capabilities); policy=$($providerRecord.configuration_policy)"
 }
-if ('antigravity' -in $Provider) {
+if ($Provider.Count) {
     $nodeCommand = Get-Command node -ErrorAction SilentlyContinue
     $entry = Join-Path $graphRoot 'current\lib\dist\bin\afyx-graph.js'
     if ($nodeCommand -and (Test-Path -LiteralPath $entry -PathType Leaf)) {
         $providerTool = Join-Path $PSScriptRoot 'scripts\afyx-provider-integration.mjs'
-        $providerJson = (& $nodeCommand.Source $providerTool --providers antigravity --scope $ProviderScope --workspace-root $WorkspaceRoot --gemini-home $GeminiHome --node $nodeCommand.Source --entry $entry) -join ''
+        $providerArguments = @($providerTool, '--providers', ($Provider -join ','), '--scope', $ProviderScope,
+            '--workspace-root', $WorkspaceRoot, '--gemini-home', $GeminiHome, '--codex-home', $codexHome,
+            '--node', $nodeCommand.Source, '--entry', $entry)
+        $codexCommand = Get-Command codex -ErrorAction SilentlyContinue
+        $claudeCommand = Get-Command claude -ErrorAction SilentlyContinue
+        if ($codexCommand) { $providerArguments += @('--codex', $codexCommand.Source) }
+        if ($claudeCommand) { $providerArguments += @('--claude', $claudeCommand.Source) }
+        if ($ClaudeConfigDir) { $providerArguments += @('--claude-config-dir', $ClaudeConfigDir) }
+        $providerJson = (& $nodeCommand.Source @providerArguments) -join ''
         try {
             $providerResult = $providerJson | ConvertFrom-Json -Depth 20
-            $level = if ($providerResult.status -in @('READY', 'CONFIGURED_RESTART_REQUIRED')) { 'OK' } elseif ($providerResult.status -eq 'BLOCKED') { 'FAIL' } else { 'INFO' }
-            Write-Result $level 'Antigravity MCP' "$($providerResult.status): $($providerResult.providers[0].detail)"
-            if ($level -eq 'FAIL') { $coreFailure = $true }
-        } catch { Write-Result 'FAIL' 'Antigravity MCP' 'provider status was not valid JSON'; $coreFailure = $true }
-    } else { Write-Result 'INFO' 'Antigravity MCP' 'BLOCKED: Graph runtime or Node.js unavailable' }
+            foreach ($providerEntry in $providerResult.providers) {
+                $level = if ($providerEntry.status -in @('READY', 'CONFIGURED', 'CONFIGURED_RESTART_REQUIRED')) { 'OK' } elseif ($providerEntry.status -in @('BLOCKED', 'INCOMPATIBLE')) { 'FAIL' } else { 'INFO' }
+                Write-Result $level "$($providerEntry.provider) MCP" "$($providerEntry.status): $($providerEntry.detail)"
+                if ($level -eq 'FAIL') { $coreFailure = $true }
+            }
+        } catch { Write-Result 'FAIL' 'Provider MCP' 'provider status was not valid JSON'; $coreFailure = $true }
+    } else { Write-Result 'INFO' 'Provider MCP' 'BLOCKED: Graph runtime or Node.js unavailable' }
 }
 if ($controlPlan) {
     Write-Result 'INFO' 'Desired state plan' $controlPlan.Identity
@@ -107,9 +126,9 @@ foreach ($additionalRoot in $additionalSkillRoots) {
         $desired = -not $controlPlan -or [string]$component.id -in $controlPlan.DesiredComponents
         $target = Join-Path $additionalRoot ([string]$component.install_path)
         $ownership = Get-AfyxSkillOwnership -Target $target -Component ([string]$component.id) -ExpectedOwner ([string]$component.ownership)
-        if ($ownership -eq 'AFYX_OWNED_UNMODIFIED') { Write-Result 'OK' "Antigravity skill/$($component.id)" "$additionalRoot; ownership verified" }
-        elseif ($ownership -eq 'NOT_INSTALLED' -and -not $desired) { Write-Result 'INFO' "Antigravity skill/$($component.id)" "$additionalRoot; not selected" }
-        elseif ($desired) { Write-Result 'FAIL' "Antigravity skill/$($component.id)" "$additionalRoot; $ownership"; $coreFailure = $true }
+        if ($ownership -eq 'AFYX_OWNED_UNMODIFIED') { Write-Result 'OK' "Provider skill/$($component.id)" "$additionalRoot; ownership verified" }
+        elseif ($ownership -eq 'NOT_INSTALLED' -and -not $desired) { Write-Result 'INFO' "Provider skill/$($component.id)" "$additionalRoot; not selected" }
+        elseif ($desired) { Write-Result 'FAIL' "Provider skill/$($component.id)" "$additionalRoot; $ownership"; $coreFailure = $true }
     }
 }
 $git = Get-Command git -ErrorAction SilentlyContinue
@@ -128,6 +147,10 @@ if ($node) { Write-Result 'OK' 'Node.js [COMPONENT_REQUIRED:Afyx Context]' ((& n
 else { Write-Result 'INFO' 'Node.js [COMPONENT_REQUIRED:Afyx Context]' 'missing; required only when Afyx Context is selected' }
 if ($npm) { Write-Result 'OK' 'npm [BUILD_ONLY:Afyx Graph]' ((& npm --version 2>$null) -join ' ') } else { Write-Result 'INFO' 'npm [BUILD_ONLY:Afyx Graph]' 'missing; required only for local artifact fallback' }
 Write-Result 'OK' 'Archive/checksum [COMPONENT_REQUIRED:Afyx Graph]' 'Expand-Archive and Get-FileHash available'
+$codexRequired = 'codex' -in $Provider -or -not $Provider.Count
+$antigravityRequired = 'antigravity' -in $Provider
+$claudeRequired = 'claude' -in $Provider
+
 $codex = Get-Command codex.exe -ErrorAction SilentlyContinue
 if (-not $codex) { $codex = Get-Command codex.cmd -ErrorAction SilentlyContinue }
 $extension = [bool](Get-ChildItem -Path (Join-Path $env:USERPROFILE '.vscode\extensions\openai.chatgpt-*') -Directory -ErrorAction SilentlyContinue | Select-Object -First 1)
@@ -137,10 +160,51 @@ if ($codex) {
         if ($LASTEXITCODE -ne 0) { throw 'version command returned a non-zero exit code' }
         Write-Result 'OK' 'Codex CLI' $version
     }
-    catch { Write-Result 'FAIL' 'Codex CLI' 'version command failed'; $coreFailure = $true }
-} else { Write-Result 'INFO' 'Codex CLI' 'not found' }
+    catch {
+        Write-Result $(if ($codexRequired) { 'FAIL' } else { 'WARN' }) 'Codex CLI' 'version command failed'
+        if ($codexRequired) { $coreFailure = $true }
+    }
+} else { Write-Result 'INFO' 'Codex CLI' $(if ($codexRequired) { 'not found' } else { 'not found (optional)' }) }
 if ($extension) { Write-Result 'OK' 'VS Code extension' 'detected' } else { Write-Result 'INFO' 'VS Code extension' 'not detected' }
-if (-not $codex -and -not $extension) { $coreFailure = $true }
+if ($codexRequired -and -not $codex -and -not $extension) {
+    Write-Result 'FAIL' 'Codex host' 'Codex CLI or supported VS Code extension is required when Codex is selected'
+    $coreFailure = $true
+}
+
+if ($antigravityRequired) {
+    $antigravity = Get-Command agy -ErrorAction SilentlyContinue
+    if (-not $antigravity) { $antigravity = Get-Command antigravity -ErrorAction SilentlyContinue }
+    if ($antigravity) {
+        try {
+            $version = (& $antigravity.Source --version 2>$null) -join ' '
+            Write-Result 'OK' 'Antigravity host' "detected ($version)"
+        } catch {
+            Write-Result 'FAIL' 'Antigravity host' 'version command failed'
+            $coreFailure = $true
+        }
+    } else {
+        Write-Result 'FAIL' 'Antigravity host' 'not found; install agy/antigravity'
+        $coreFailure = $true
+    }
+}
+
+if ($claudeRequired) {
+    $claude = Get-Command claude.exe -ErrorAction SilentlyContinue
+    if (-not $claude) { $claude = Get-Command claude.cmd -ErrorAction SilentlyContinue }
+    if (-not $claude) { $claude = Get-Command claude -ErrorAction SilentlyContinue }
+    if ($claude) {
+        try {
+            $version = (& claude --version 2>$null) -join ' '
+            Write-Result 'OK' 'Claude Code host' "detected ($version)"
+        } catch {
+            Write-Result 'FAIL' 'Claude Code host' 'version command failed'
+            $coreFailure = $true
+        }
+    } else {
+        Write-Result 'FAIL' 'Claude Code host' 'not found; install Claude Code CLI'
+        $coreFailure = $true
+    }
+}
 
 $requiredIds = if ($controlPlan) { @($controlPlan.DesiredComponents) } else { @('efficient-coding', 'odoo-engineering') }
 foreach ($component in ($componentStates.Values | Where-Object { $_.Id -in $requiredIds -and $_.Type -eq 'skill' } | Sort-Object { $requiredIds.IndexOf($_.Id) })) {
@@ -172,18 +236,20 @@ switch ($graph.State) {
     'INVALID' { Write-Result 'WARN' 'Afyx Graph' 'invalid metadata (optional)' }
     default { Write-Result 'WARN' 'Afyx Graph' "state $($graph.State): $($graph.Detail) (optional)" }
 }
-if ($graph.State -eq 'HEALTHY' -and $node -and $codex) {
-    $entry = Join-Path $graph.Path 'current\lib\dist\bin\afyx-graph.js'
-    $integrationTool = Join-Path $PSScriptRoot 'scripts\afyx-mcp-integration.mjs'
-    $integrationJson = (& $node.Source $integrationTool --node $node.Source --entry $entry --codex $codex.Source --codex-home $codexHome 2>$null) -join ''
-    try {
-        $integration = $integrationJson | ConvertFrom-Json
-        $level = if ($integration.mcp -eq 'MCP_REACHABLE') { 'OK' } elseif ($integration.mcp -eq 'MCP_NOT_CONFIGURED') { 'INFO' } else { 'WARN' }
-        Write-Result $level 'Afyx Graph MCP' "$($integration.mcp): $($integration.detail)"
-    } catch { Write-Result 'WARN' 'Afyx Graph MCP' 'MCP_BLOCKED: integration status unavailable' }
-} elseif (-not $codex) { Write-Result 'INFO' 'Afyx Graph MCP' 'MCP_BLOCKED: Codex CLI unavailable' }
-elseif ($graph.State -ne 'HEALTHY') { Write-Result 'INFO' 'Afyx Graph MCP' 'MCP_BLOCKED: Graph runtime unavailable' }
-else { Write-Result 'INFO' 'Afyx Graph MCP' 'MCP_NOT_CONFIGURED' }
+if ($codexRequired) {
+    if ($graph.State -eq 'HEALTHY' -and $node -and $codex) {
+        $entry = Join-Path $graph.Path 'current\lib\dist\bin\afyx-graph.js'
+        $integrationTool = Join-Path $PSScriptRoot 'scripts\afyx-mcp-integration.mjs'
+        $integrationJson = (& $node.Source $integrationTool --node $node.Source --entry $entry --codex $codex.Source --codex-home $codexHome 2>$null) -join ''
+        try {
+            $integration = $integrationJson | ConvertFrom-Json
+            $level = if ($integration.mcp -eq 'MCP_REACHABLE') { 'OK' } elseif ($integration.mcp -eq 'MCP_NOT_CONFIGURED') { 'INFO' } else { 'WARN' }
+            Write-Result $level 'Afyx Graph MCP' "$($integration.mcp): $($integration.detail)"
+        } catch { Write-Result 'WARN' 'Afyx Graph MCP' 'MCP_BLOCKED: integration status unavailable' }
+    } elseif (-not $codex) { Write-Result 'INFO' 'Afyx Graph MCP' 'MCP_BLOCKED: Codex CLI unavailable' }
+    elseif ($graph.State -ne 'HEALTHY') { Write-Result 'INFO' 'Afyx Graph MCP' 'MCP_BLOCKED: Graph runtime unavailable' }
+    else { Write-Result 'INFO' 'Afyx Graph MCP' 'MCP_NOT_CONFIGURED' }
+}
 $context = $componentStates['afyx-context']
 switch ($context.State) {
     'NOT INSTALLED' { Write-Result 'INFO' 'Afyx Context Engine' 'not installed (optional; explicit selection only)' }
@@ -199,8 +265,10 @@ switch ($context.State) {
     }
     default { Write-Result 'WARN' 'Afyx Context Engine' "$($context.State): $($context.Detail) (optional)" }
 }
-if (Test-Path -LiteralPath $configPath -PathType Leaf) { Write-Result 'OK' 'Codex config' 'read-only check completed' }
-else { Write-Result 'WARN' 'Codex config' 'not found; optional MCP entries unavailable' }
+if ($codexRequired) {
+    if (Test-Path -LiteralPath $configPath -PathType Leaf) { Write-Result 'OK' 'Codex config' 'read-only check completed' }
+    else { Write-Result 'WARN' 'Codex config' 'not found; optional MCP entries unavailable' }
+}
 
 $usageComponent = $componentStates['codex-usage-tracking']
 $hooksPath = Join-Path $codexHome 'hooks.json'

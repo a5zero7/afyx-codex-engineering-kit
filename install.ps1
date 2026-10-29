@@ -18,6 +18,8 @@ param(
     [ValidateSet('global', 'workspace')][string]$ProviderScope = 'global',
     [string]$WorkspaceRoot = (Get-Location).Path,
     [string]$GeminiHome = $(if ($env:AFYX_GEMINI_HOME) { $env:AFYX_GEMINI_HOME } else { Join-Path $env:USERPROFILE '.gemini' }),
+    [string]$ClaudeHome = $(if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $env:USERPROFILE '.claude' }),
+    [string]$ClaudeConfigDir = $(if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { '' }),
     [switch]$SkipProviderConfiguration,
     [string]$ContextRuntimeRoot = $(if ($env:AFYX_CONTEXT_RUNTIME_ROOT) { $env:AFYX_CONTEXT_RUNTIME_ROOT } else { Join-Path $env:USERPROFILE '.afyx\context' })
 )
@@ -53,6 +55,7 @@ $providerIds = @($providerRegistry | ForEach-Object { [string]$_.provider })
 $codexCommandDetected = Get-Command codex -ErrorAction SilentlyContinue
 $agyCommandDetected = Get-Command agy -ErrorAction SilentlyContinue
 $antigravityCommandDetected = if ($agyCommandDetected) { $agyCommandDetected } else { Get-Command antigravity -ErrorAction SilentlyContinue }
+$claudeCommandDetected = Get-Command claude -ErrorAction SilentlyContinue
 $vscodeExtensionDetected = [bool](Get-ChildItem -Path (Join-Path $env:USERPROFILE '.vscode\extensions\openai.chatgpt-*') -Directory -ErrorAction SilentlyContinue | Select-Object -First 1)
 $explicitSelection = @(
     @('Preset', 'CustomComponent', 'ComponentAction', 'Provider', 'Force', 'UpdateInstalled', 'InstallUsageTracker', 'SkipUsageTracker', 'SkipProviderConfiguration', 'Confirm') |
@@ -85,25 +88,29 @@ if ($wizardMode) {
 
         $codexDetected = [bool]($codexCommandDetected -or $vscodeExtensionDetected)
         $antigravityDetected = [bool]$antigravityCommandDetected
+        $claudeDetected = [bool]$claudeCommandDetected
         $providerOptions = @(
             [pscustomobject]@{ Id = 'codex'; Label = 'Codex'; Detail = $(if ($codexDetected) { 'host detected' } else { 'unavailable: install Codex CLI or supported VS Code extension' }); Enabled = $codexDetected },
             [pscustomobject]@{ Id = 'antigravity'; Label = 'Antigravity'; Detail = $(if ($antigravityDetected) { 'host detected' } else { 'unavailable: install agy/antigravity' }); Enabled = $antigravityDetected },
-            [pscustomobject]@{ Id = 'both'; Label = 'Codex + Antigravity'; Detail = 'configure both detected hosts'; Enabled = ($codexDetected -and $antigravityDetected) },
+            [pscustomobject]@{ Id = 'claude'; Label = 'Claude Code'; Detail = $(if ($claudeDetected) { 'host detected' } else { 'unavailable: install Claude Code CLI' }); Enabled = $claudeDetected },
             [pscustomobject]@{ Id = 'skip'; Label = 'Skip provider configuration'; Detail = 'skills/runtimes only; no MCP registration'; Enabled = $true }
         )
-        $providerChoice = Read-AfyxSingleChoice -Prompt 'Choose provider integration' -Options $providerOptions -DefaultId $(if ($codexDetected) { 'codex' } else { 'skip' }) -Terminal $terminal
-        switch ($providerChoice) {
-            'codex' { $Provider = @('codex') }
-            'antigravity' { $Provider = @('antigravity') }
-            'both' { $Provider = @('codex', 'antigravity') }
-            default { $Provider = @(); $SkipProviderConfiguration = $true }
+        $providerChoice = @(Read-AfyxMultiChoice -Prompt 'Select provider integrations' -Options $providerOptions -DefaultId @($(if ($codexDetected) { 'codex' } else { 'skip' })) -Terminal $terminal)
+        if ('skip' -in $providerChoice) {
+            if ($providerChoice.Count -ne 1) { throw 'Skip provider configuration cannot be combined with a provider.' }
+            $Provider = @()
+            $SkipProviderConfiguration = $true
+        } else {
+            $Provider = @($providerChoice)
+            if (-not $Provider.Count) { $SkipProviderConfiguration = $true }
         }
-        if ('antigravity' -in $Provider) {
+        if (@($Provider | Where-Object { $_ -in @('antigravity', 'claude') }).Count) {
+            $workspaceCompatible = 'codex' -notin $Provider
             $scopeOptions = @(
-                [pscustomobject]@{ Id = 'workspace'; Label = 'Workspace'; Detail = 'project-local skills and MCP configuration'; Enabled = $true },
-                [pscustomobject]@{ Id = 'global'; Label = 'Global'; Detail = 'user-level Antigravity IDE and CLI configuration'; Enabled = $true }
+                [pscustomobject]@{ Id = 'workspace'; Label = 'Workspace'; Detail = $(if ($workspaceCompatible) { 'project-local provider skills and MCP configuration' } else { 'unavailable when Codex is selected; Codex MCP is user-scoped' }); Enabled = $workspaceCompatible },
+                [pscustomobject]@{ Id = 'global'; Label = 'Global'; Detail = 'user-level configuration for every selected provider'; Enabled = $true }
             )
-            $ProviderScope = Read-AfyxSingleChoice -Prompt 'Choose Antigravity configuration scope' -Options $scopeOptions -DefaultId 'workspace' -Terminal $terminal
+            $ProviderScope = Read-AfyxSingleChoice -Prompt 'Choose compatible provider scope' -Options $scopeOptions -DefaultId $(if ($workspaceCompatible) { 'workspace' } else { 'global' }) -Terminal $terminal
         }
     } catch [System.OperationCanceledException] {
         Write-AfyxStatus -Status SKIPPED -Name 'Installation cancelled' -Detail 'no configuration changes were made' -Terminal $terminal
@@ -116,6 +123,7 @@ if (-not $Provider.Count) {
         $detected = @()
         if ($codexCommandDetected) { $detected += 'codex' }
         if ($antigravityCommandDetected) { $detected += 'antigravity' }
+        if ($claudeCommandDetected) { $detected += 'claude' }
         Write-Host "Provider hosts detected: $(if ($detected.Count) { $detected -join ', ' } else { 'none' })"
         do { $choice = (Read-Host 'Provider selection: [A] All detected / [R] Recommended Codex / [C] Custom / [S] Skip [R]').Trim() } until ($choice -match '(?i)^(|a|all|r|recommended|c|custom|s|skip)$')
         if ($choice -match '(?i)^(a|all)$') { $Provider = $detected }
@@ -127,15 +135,22 @@ if (-not $Provider.Count) {
 $unknownProviders = @($Provider | Where-Object { $_ -notin $providerIds })
 if ($unknownProviders.Count) { throw "Unknown provider(s): $($unknownProviders -join ', ')" }
 $Provider = @($providerIds | Where-Object { $_ -in $Provider })
-if (-not $PSBoundParameters.ContainsKey('SkillsRoot') -and $ProviderScope -eq 'workspace' -and 'antigravity' -in $Provider) {
-    $SkillsRoot = Join-Path $WorkspaceRoot '.agents\skills'
+$providerSkillRoots = @()
+if ('codex' -in $Provider) {
+    $providerSkillRoots += $(if ($PSBoundParameters.ContainsKey('SkillsRoot')) { $SkillsRoot } else { Join-Path $env:USERPROFILE '.agents\skills' })
 }
-$additionalSkillRoots = @()
-if ($ProviderScope -eq 'global' -and 'antigravity' -in $Provider) {
-    $antigravitySkillRoots = @((Join-Path $GeminiHome 'config\skills'), (Join-Path $GeminiHome 'antigravity-cli\skills'))
-    if (-not $PSBoundParameters.ContainsKey('SkillsRoot') -and $Provider.Count -eq 1) { $SkillsRoot = $antigravitySkillRoots[0] }
-    $additionalSkillRoots = @($antigravitySkillRoots | Where-Object { [System.IO.Path]::GetFullPath($_) -ne [System.IO.Path]::GetFullPath($SkillsRoot) })
+if ('antigravity' -in $Provider) {
+    if ($ProviderScope -eq 'workspace') { $providerSkillRoots += (Join-Path $WorkspaceRoot '.agents\skills') }
+    else { $providerSkillRoots += @((Join-Path $GeminiHome 'config\skills'), (Join-Path $GeminiHome 'antigravity-cli\skills')) }
 }
+if ('claude' -in $Provider) {
+    $providerSkillRoots += $(if ($ProviderScope -eq 'workspace') { Join-Path $WorkspaceRoot '.claude\skills' } else { Join-Path $ClaudeHome 'skills' })
+}
+if (-not $PSBoundParameters.ContainsKey('SkillsRoot') -and $providerSkillRoots.Count) { $SkillsRoot = $providerSkillRoots[0] }
+$primarySkillsPath = [System.IO.Path]::GetFullPath($SkillsRoot)
+$additionalSkillRoots = @($providerSkillRoots |
+    Where-Object { [System.IO.Path]::GetFullPath($_) -ne $primarySkillsPath } |
+    Select-Object -Unique)
 $efficientTarget = Join-Path $SkillsRoot 'efficient-coding'
 $odooTarget = Join-Path $SkillsRoot 'odoo-engineering'
 $expertTarget = Join-Path $SkillsRoot 'afyx-engineering-expert'
@@ -385,8 +400,13 @@ $npmVersion = try { (& npm --version 2>$null) -join ' ' } catch { '' }
 Write-AfyxStatus -Status HEALTHY -Name 'OS/architecture [REQUIRED]' -Detail "$([System.Runtime.InteropServices.RuntimeInformation]::OSDescription) / $([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)" -Terminal $terminal
 Write-AfyxStatus -Status HEALTHY -Name 'Platform shell [REQUIRED]' -Detail "PowerShell $($PSVersionTable.PSVersion)" -Terminal $terminal
 Write-AfyxStatus -Status $(if ($gitVersion) { 'HEALTHY' } else { 'BLOCKED' }) -Name 'Git [REQUIRED]' -Detail $(if ($gitVersion) { $gitVersion } else { 'missing; install Git for Windows from https://git-scm.com/' }) -Terminal $terminal
-Write-AfyxStatus -Status $(if ($codexCliDetected -or $vscodeExtensionDetected) { 'HEALTHY' } else { 'BLOCKED' }) -Name 'Codex host [REQUIRED]' -Detail $(if ($codexCliDetected -or $vscodeExtensionDetected) { 'detected' } else { 'missing; install Codex CLI or the supported VS Code extension' }) -Terminal $terminal
+$codexRequired = 'codex' -in $Provider -or -not $Provider.Count
+$codexStatus = if ($codexCliDetected -or $vscodeExtensionDetected) { 'HEALTHY' } elseif ($codexRequired) { 'BLOCKED' } else { 'SKIPPED' }
+$codexLabel = if ($codexRequired) { 'Codex host [REQUIRED]' } else { 'Codex host' }
+$codexDetail = if ($codexCliDetected -or $vscodeExtensionDetected) { 'detected' } elseif ($codexRequired) { 'missing; install Codex CLI or the supported VS Code extension' } else { 'not detected; required only when selected' }
+Write-AfyxStatus -Status $codexStatus -Name $codexLabel -Detail $codexDetail -Terminal $terminal
 Write-AfyxStatus -Status $(if ($antigravityCommandDetected) { 'HEALTHY' } else { 'SKIPPED' }) -Name 'Antigravity host' -Detail $(if ($antigravityCommandDetected) { "detected ($(& $antigravityCommandDetected.Source --version 2>$null))" } else { 'not detected; required only when selected' }) -Terminal $terminal
+Write-AfyxStatus -Status $(if ($claudeCommandDetected) { 'HEALTHY' } else { 'SKIPPED' }) -Name 'Claude Code host' -Detail $(if ($claudeCommandDetected) { 'detected' } else { 'not detected; required only when selected' }) -Terminal $terminal
 Write-AfyxStatus -Status $(if ($nodeVersion) { 'HEALTHY' } else { 'BLOCKED' }) -Name 'Node.js >=22.5.0 [COMPONENT_REQUIRED:Graph/Context]' -Detail $(if ($nodeVersion) { $nodeVersion } else { 'missing; install from https://nodejs.org/ before selecting Graph or Context' }) -Terminal $terminal
 Write-AfyxStatus -Status $(if ($npmVersion) { 'HEALTHY' } else { 'SKIPPED' }) -Name 'npm [BUILD_ONLY:Afyx Graph]' -Detail $(if ($npmVersion) { $npmVersion } else { 'missing; needed only for automatic local fallback' }) -Terminal $terminal
 Write-AfyxStatus -Status HEALTHY -Name 'Archive/checksum [COMPONENT_REQUIRED:Afyx Graph]' -Detail 'Expand-Archive + Get-FileHash available' -Terminal $terminal
@@ -399,26 +419,54 @@ Write-AfyxSection -Title 'Provider Plan' -Terminal $terminal
 if ($SkipProviderConfiguration) { Write-AfyxStatus -Status SKIPPED -Name 'Provider configuration' -Detail 'skipped explicitly; no provider configuration will change' -Terminal $terminal }
 foreach ($providerId in $Provider) {
     $providerRecord = @($providerRegistry | Where-Object { $_.provider -eq $providerId })[0]
-    $detected = if ($providerId -eq 'codex') { [bool]($codexCommandDetected -or $vscodeExtensionDetected) } else { [bool]$antigravityCommandDetected }
+    $detected = if ($providerId -eq 'codex') { [bool]($codexCommandDetected -or $vscodeExtensionDetected) }
+        elseif ($providerId -eq 'antigravity') { [bool]$antigravityCommandDetected }
+        else { [bool]$claudeCommandDetected }
     $configPath = if ($providerId -eq 'codex') { Join-Path $codexHome 'config.toml' }
-        elseif ($ProviderScope -eq 'workspace') { Join-Path $WorkspaceRoot '.agents\mcp_config.json' }
-        else { Join-Path $GeminiHome 'config\mcp_config.json' }
-    Write-AfyxStatus -Status $(if ($detected) { 'PLANNED' } else { 'BLOCKED' }) -Name $providerRecord.name -Detail "detected=$detected; scope=$ProviderScope; capabilities=$($providerRecord.capabilities); planned-config=$configPath" -Terminal $terminal
+        elseif ($providerId -eq 'antigravity' -and $ProviderScope -eq 'workspace') { Join-Path $WorkspaceRoot '.agents\mcp_config.json' }
+        elseif ($providerId -eq 'antigravity') { Join-Path $GeminiHome 'config\mcp_config.json' }
+        elseif ($ProviderScope -eq 'workspace') { Join-Path $WorkspaceRoot '.mcp.json' }
+        elseif ($ClaudeConfigDir) { Join-Path $ClaudeConfigDir '.claude.json' }
+        else { Join-Path $env:USERPROFILE '.claude.json' }
+    $effectiveScope = if ($providerId -eq 'codex') { 'global' } else { $ProviderScope }
+    Write-AfyxStatus -Status $(if ($detected) { 'PLANNED' } else { 'BLOCKED' }) -Name $providerRecord.name -Detail "detected=$detected; scope=$effectiveScope; capabilities=$($providerRecord.capabilities); planned-config=$configPath" -Terminal $terminal
     if ($providerId -eq 'antigravity') {
         $plannedSkills = if ($ProviderScope -eq 'workspace') { Join-Path $WorkspaceRoot '.agents\skills' }
             else { @((Join-Path $GeminiHome 'config\skills'), (Join-Path $GeminiHome 'antigravity-cli\skills')) -join ';' }
         Write-AfyxStatus -Status PLANNED -Name 'Antigravity skills' -Detail $plannedSkills -Terminal $terminal
+    } elseif ($providerId -eq 'claude') {
+        $plannedSkills = if ($ProviderScope -eq 'workspace') { Join-Path $WorkspaceRoot '.claude\skills' } else { Join-Path $ClaudeHome 'skills' }
+        Write-AfyxStatus -Status PLANNED -Name 'Claude Code skills' -Detail $plannedSkills -Terminal $terminal
     }
 }
-if (-not $SkipGraphMcp -and -not $SkipProviderConfiguration -and 'antigravity' -in $Provider -and (Get-Command node -ErrorAction SilentlyContinue)) {
-    $providerTool = Join-Path $packageRoot 'scripts\afyx-provider-integration.mjs'
-    $plannedEntry = Join-Path $graphRuntimeRoot 'current\lib\dist\bin\afyx-graph.js'
-    $preflightJson = (& (Get-Command node).Source $providerTool --providers antigravity --scope $ProviderScope --workspace-root $WorkspaceRoot --gemini-home $GeminiHome --node (Get-Command node).Source --entry $plannedEntry 2>$null) -join ''
+$graphState = $states['Afyx Graph']
+$graphAction = if ($ValidateOnly) { 'skip' } elseif ($controlPlan) { [string]$actionDecisions['afyx-graph'] } else { Resolve-ComponentAction 'afyx-graph' 'Afyx Graph' }
+$providerTool = Join-Path $packageRoot 'scripts\afyx-provider-integration.mjs'
+$nodeCommand = Get-Command node -ErrorAction SilentlyContinue
+$plannedProviderEntry = Join-Path $graphRuntimeRoot 'current\lib\dist\bin\afyx-graph.js'
+$providerMcpRequested = -not $SkipGraphMcp -and -not $SkipProviderConfiguration -and $Provider.Count -and `
+    ($graphAction -ne 'skip' -or (Test-Path -LiteralPath $plannedProviderEntry -PathType Leaf))
+function Get-AfyxProviderArguments([string]$Entry) {
+    $arguments = @($providerTool, '--providers', ($Provider -join ','), '--scope', $ProviderScope,
+        '--workspace-root', $WorkspaceRoot, '--gemini-home', $GeminiHome, '--codex-home', $codexHome,
+        '--node', $nodeCommand.Source, '--entry', $Entry)
+    if ($codexCommandDetected) { $arguments += @('--codex', $codexCommandDetected.Source) }
+    if ($claudeCommandDetected) { $arguments += @('--claude', $claudeCommandDetected.Source) }
+    if ($ClaudeConfigDir) { $arguments += @('--claude-config-dir', $ClaudeConfigDir) }
+    return $arguments
+}
+if (-not $ValidateOnly -and $providerMcpRequested -and $nodeCommand) {
+    $preflightArguments = Get-AfyxProviderArguments $plannedProviderEntry
+    $preflightJson = (& $nodeCommand.Source @preflightArguments 2>$null) -join ''
     try { $preflightResult = $preflightJson | ConvertFrom-Json -Depth 20 }
-    catch { throw 'Antigravity provider preflight did not return valid JSON.' }
-    $preflightProvider = $preflightResult.providers[0]
-    if ($preflightResult.status -eq 'BLOCKED' -and $preflightProvider.reason -ne 'GRAPH_RUNTIME_UNAVAILABLE') {
-        throw "Antigravity provider plan is blocked before mutation: $($preflightProvider.reason): $($preflightProvider.detail)"
+    catch { throw 'Provider preflight did not return valid JSON.' }
+    $preflightBlocked = @($preflightResult.providers | Where-Object {
+        $_.status -in @('BLOCKED', 'INCOMPATIBLE') -and
+        -not ($_.reason -eq 'GRAPH_RUNTIME_UNAVAILABLE' -and $graphAction -ne 'skip')
+    })
+    if ($preflightBlocked.Count) {
+        $blocked = $preflightBlocked[0]
+        throw "Provider plan is blocked before mutation: $($blocked.provider): $($blocked.reason): $($blocked.detail)"
     }
 }
 
@@ -466,6 +514,8 @@ if ($controlPlan) {
 
 if (-not $SkipProviderConfiguration -and 'codex' -in $Provider -and -not $codexCliDetected -and -not $vscodeExtensionDetected) { throw 'Selected Codex provider host was not detected.' }
 if (-not $SkipProviderConfiguration -and 'antigravity' -in $Provider -and -not $agyCommandDetected -and -not (Get-Command antigravity -ErrorAction SilentlyContinue)) { throw 'Selected Antigravity provider host was not detected.' }
+if (-not $SkipProviderConfiguration -and 'claude' -in $Provider -and -not $claudeCommandDetected) { throw 'Selected Claude Code provider host was not detected.' }
+if ($providerMcpRequested -and -not $nodeCommand) { throw 'Node.js is required for selected provider MCP configuration.' }
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) { throw 'Git is required for Afyx source validation and lifecycle updates.' }
 
 if ($wizardMode) {
@@ -477,7 +527,10 @@ if ($wizardMode) {
         Write-AfyxStatus -Status PLANNED -Name ([string]$decision.Key) -Detail ([string]$decision.Value) -Terminal $terminal
     }
     if (-not $SkipProviderConfiguration) {
-        foreach ($providerId in $Provider) { Write-AfyxStatus -Status PLANNED -Name "$providerId provider" -Detail "scope=$ProviderScope; Afyx-owned entries only" -Terminal $terminal }
+        foreach ($providerId in $Provider) {
+            $effectiveScope = if ($providerId -eq 'codex') { 'global' } else { $ProviderScope }
+            Write-AfyxStatus -Status PLANNED -Name "$providerId provider" -Detail "scope=$effectiveScope; Afyx-owned entries only" -Terminal $terminal
+        }
     }
     if (-not $mutationPreview.Count) { Write-AfyxStatus -Status 'NO CHANGE' -Name 'Components' -Detail 'selected component versions and ownership are already healthy' -Terminal $terminal }
     try {
@@ -541,8 +594,6 @@ foreach ($additionalRoot in $additionalSkillRoots) {
     }
 }
 
-$graphState = $states['Afyx Graph']
-$graphAction = if ($controlPlan) { [string]$actionDecisions['afyx-graph'] } else { Resolve-ComponentAction 'afyx-graph' 'Afyx Graph' }
 if ($graphAction -eq 'skip') { $summary['Afyx Graph'] = 'skipped' }
 else {
     Write-AfyxStatus -Status PLANNED -Name 'Afyx Graph' -Detail "$graphAction in progress" -Terminal $terminal
@@ -552,31 +603,27 @@ else {
     if ($NoBuildFallback) { $arguments.NoBuildFallback = $true }
     if ($AllowDirtySource) { $arguments.AllowDirtySource = $true }
     if ($SkipGraphPathUpdate) { $arguments.SkipPathUpdate = $true }
-    if ($SkipGraphMcp -or $SkipProviderConfiguration -or 'codex' -notin $Provider) { $arguments.SkipMcp = $true } else { $arguments.ConfigureMcp = $true }
+    # ProviderAdapter/v1 owns one transactional MCP configuration pass for every selected provider.
+    $arguments.SkipMcp = $true
     & $graphInstaller -Confirm:$false -WhatIf:$WhatIfPreference @arguments
     if (-not $?) { throw 'Afyx Graph installation failed.' }
     $summary['Afyx Graph'] = $graphAction
     if (-not $WhatIfPreference) { $changesApplied = $true }
-    if (-not $SkipGraphMcp -and -not $SkipProviderConfiguration -and 'codex' -in $Provider) {
-        $summary['Codex MCP'] = $(if ($WhatIfPreference) { 'planned' } else { 'restart required' })
-    }
 }
 
-if (-not $SkipGraphMcp -and -not $SkipProviderConfiguration -and 'antigravity' -in $Provider) {
-    $providerTool = Join-Path $packageRoot 'scripts\afyx-provider-integration.mjs'
+if ($providerMcpRequested) {
     $installedEntry = Join-Path $graphRuntimeRoot 'current\lib\dist\bin\afyx-graph.js'
-    $providerArguments = @($providerTool, '--providers', 'antigravity', '--scope', $ProviderScope, '--workspace-root', $WorkspaceRoot,
-        '--gemini-home', $GeminiHome, '--node', (Get-Command node).Source, '--entry', $installedEntry)
+    $providerArguments = Get-AfyxProviderArguments $installedEntry
     if (-not $WhatIfPreference) { $providerArguments += '--apply' }
-    if ($WhatIfPreference) { Write-Host "WhatIf: would configure Antigravity MCP at the planned $ProviderScope scope" }
+    if ($WhatIfPreference) { Write-Host "WhatIf: would configure selected provider MCP entries through ProviderAdapter/v1" }
     elseif (Test-Path -LiteralPath $installedEntry -PathType Leaf) {
-        $providerJson = (& (Get-Command node).Source @providerArguments) -join ''
+        $providerJson = (& $nodeCommand.Source @providerArguments) -join ''
         $providerResult = $providerJson | ConvertFrom-Json -Depth 20
-        Write-Host "Antigravity provider: $($providerResult.status)"
-        if ($LASTEXITCODE -ne 0 -or $providerResult.status -eq 'BLOCKED') { throw "Antigravity provider configuration failed: $providerJson" }
-        $summary['Antigravity MCP'] = $providerResult.status
+        Write-Host "Provider transaction: $($providerResult.status)"
+        if ($LASTEXITCODE -ne 0 -or $providerResult.status -eq 'BLOCKED') { throw "Provider configuration failed: $providerJson" }
+        foreach ($providerEntry in $providerResult.providers) { $summary["$($providerEntry.provider) MCP"] = $providerEntry.status }
         if (@($providerResult.providers | Where-Object { $_.changed }).Count) { $changesApplied = $true }
-    } elseif ($graphAction -ne 'skip') { throw 'Installed Graph entry is unavailable for Antigravity configuration.' }
+    } else { throw 'Installed Graph entry is unavailable for selected provider configuration.' }
 }
 
 $contextState = $states['Afyx Context Engine']
