@@ -45,3 +45,25 @@ Without the coverage attestation, even an empty sidecar yields `NOT_AVAILABLE`, 
 - Do not commit raw rollouts, transcripts, or private annotation evidence to GitHub. Keep PR #126 and owner-modified `.github/workflows/ci.yml` untouched.
 
 Run focused tests with `python -m unittest scripts.tests.test_phase8_event_ledger -v`.
+
+## Discover AFYX-67 historical sessions without provider calls
+
+The independent `scripts/phase8_evidence_discovery.py` tool performs **bounded read-only discovery**, looking only for exact structured `session_meta.payload.id` or `thread.started.thread_id` identities. It does not text-search prompts, call Codex, or upload session data. By default it searches `%CODEX_HOME%\\sessions` if `CODEX_HOME` is set, else `~/.codex/sessions`. Use this in the **owner's Windows terminal**, not in a public CI runner:
+
+```powershell
+$threadIds = @(
+  '01a183a6-1ff8-73f2-9371-d82bfcc0cb25' # T1 OFF
+  '01a183a6-f803-7842-b4b8-71eef5d0384c' # T1 ON
+  '01a183a8-795c-7703-9669-2ccf0a0c29a5' # T2 OFF
+  '01a183aa-0c77-7e22-bcc1-3d054bff1cd6' # T2 ON
+)
+$argsList = @('scripts/phase8_evidence_discovery.py')
+foreach ($id in $threadIds) { $argsList += @('--thread-id', $id) }
+python @argsList
+```
+
+Results are `FOUND`, `MULTIPLE_MATCHES`, `NOT_FOUND_IN_SCOPE`, or `INCOMPLETE_SCAN`. `NOT_FOUND_IN_SCOPE` means only that **these exact identities were not found in the bounded scanned directory**; it is not proof that no copies exist elsewhere or that missing token usage can be reconstructed. `INCOMPLETE_SCAN` explicitly flags a missing root, unreadable, oversized, symlink, or file-count-limited scan. Output contains relative paths, size/hash, and status only. Never attach raw session files to Jira or GitHub.
+
+For separately persisted `codex exec --json` files in an **explicit owner-selected directory**, pass `--root 'D:\\private-evidence'` and `--include-cli-json`. Do not scan the entire home drive. To create a local JSON report, add `--output '<new local filename>.json'`; the tool refuses to overwrite an existing report.
+
+A discovered session is **evidence existence only**. It is not authoritative telemetry until a separate parser verifies the complete event record, model/effort/fixture match, and the correct run/thread boundaries. Run the Phase 8 ledger on a *known-complete CLI JSONL* only. Historical `--ephemeral` sessions may correctly return `NOT_FOUND_IN_SCOPE`—report the gap, do not substitute unrelated sessions or start new provider runs.
