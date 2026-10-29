@@ -21,8 +21,11 @@ function safeTarget(root, file) {
   let cursor = file;
   for (;;) {
     if (existsSync(cursor) && lstatSync(cursor).isSymbolicLink()) throw Error('SYMLINK_OR_REPARSE_BLOCKED');
+    // The provider root is the caller-authorized boundary. macOS may have
+    // legitimate system symlinks above it (e.g. /var -> /private/var).
+    if (cursor === root) break;
     const parent = dirname(cursor);
-    if (parent === cursor) break;
+    if (parent === cursor) throw Error('PATH_OUTSIDE_PROVIDER_ROOT');
     cursor = parent;
   }
 }
