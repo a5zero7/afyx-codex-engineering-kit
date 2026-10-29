@@ -11,12 +11,12 @@ For a required *capability*, prefer an **installed, enabled, authorized, reachab
 | Exact known file, symbol or small source question | Direct source inspection / `rg` |
 | Native Afyx component is ready for the required capability | Native Afyx MCP/CLI first |
 | Native Afyx component absent, unsupported, unhealthy, stale or otherwise unsuitable | External equivalent *only if* independently installed, individually enabled/authorized and fallback expressly permitted; otherwise direct source |
-| CodeGraph MCP disabled, CodeGraph CLI on PATH | Do not infer CLI consent from binary presence; separate CLI authorization required |
+| External graph MCP disabled, external graph CLI on PATH | Do not infer CLI consent from binary presence; separate CLI authorization required |
 | Native Afyx deliberately disabled | Do not silently re-enable or override its user setting |
-| Legacy `.codegraph/` folder exists, Afyx Graph available | Afyx Graph wins on relevant relational queries |
+| Legacy external index folder exists, Afyx Graph available | Afyx Graph wins on relevant relational queries |
 | External unavailable or forbidden | Direct source inspection; report unsupported functionality when needed |
 
-External fallback includes CodeGraph or another comparable independently installed tool. **No external code is bundled, copied, relicensed, auto-downloaded or auto-configured as an Afyx component.** External tools retain their own ownership and licensing. Never bypass a denied permission or disabled endpoint through a shell, alias or second surface. The user can explicitly authorize an alternative for a task, subject to applicable access controls.
+External fallback includes a compatible independently installed graph indexer or other tool. **No external code is bundled, copied, relicensed, auto-downloaded or auto-configured as an Afyx component.** External tools retain their own ownership and licensing. Never bypass a denied permission or disabled endpoint through a shell, alias or second surface. The user can explicitly authorize an alternative for a task, subject to applicable access controls.
 
 If graph evidence is stale/partial/unsupported, verify exact source rather than treating an index as authoritative. The same functional routing rules govern each installed provider; presence of a tool schema on one host never proves it exists on another.
 
@@ -28,7 +28,7 @@ This candidate is **not wired into an arbitrary live agent or provider adapter y
 
 ## Remaining live acceptance (AFYX-302)
 
-1. Investigate effective user, parent and workspace `AGENTS.md`, installed skills and session policy in the Odoo 17 DEV-2026-4885 workspace; locate the instruction that caused the observed `codegraph explore` shell call.
+1. Investigate effective user, parent and workspace `AGENTS.md`, installed skills and session policy in the Odoo 17 DEV-2026-4885 workspace; locate the instruction that caused the observed external graph exploration shell call.
 2. Update installed/user instructions only after owner approval, preserving unrelated configuration and existing external installations.
 3. Run a fresh real-agent comparison: known-source direct read; relational native Afyx first even with CodeGraph on PATH and `.codegraph/` present; Afyx missing + independently authorized CodeGraph fallback; disabled external MCP and unauthorized CLI both rejected.
 4. Extend the helper's integration to real host surfaces under a separate reviewed change; this source-only policy must not be claimed as end-to-end enforcement.
