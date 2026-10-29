@@ -270,6 +270,36 @@ def _validate_and_resolve_identities(
     )
 
 
+def _validate_execution_provenance(
+    execution_mode: str, forge_outcome: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Classify only provenance that this public contract can independently verify."""
+    if execution_mode == "PUBLIC_SYNTHETIC_PREVIEW":
+        return {
+            "status": "VERIFIED_SYNTHETIC",
+            "real_agent_verified": False,
+            "verification_contract": "PUBLIC_PREVIEW_SCHEMA_V1",
+            "reason": "public_preview_is_not_real_agent_execution",
+        }
+
+    preview_markers = sorted(
+        key
+        for key in ("preview_run_id", "preview_task", "guidance")
+        if key in forge_outcome
+    )
+    if preview_markers:
+        raise SharedEvidenceError(
+            "synthetic preview outcome cannot be relabeled as correlated execution; "
+            f"preview markers present: {', '.join(preview_markers)}"
+        )
+    return {
+        "status": "UNVERIFIED_CORRELATED_RECORD",
+        "real_agent_verified": False,
+        "verification_contract": None,
+        "reason": "independent_execution_attestation_contract_unavailable",
+    }
+
+
 def _validate_quality_and_efficiency(
     scenario: Mapping[str, Any],
     forge_outcome: Mapping[str, Any],
@@ -506,8 +536,9 @@ def _validate_expert_evidence(
                 "disclosure_bounded": False,
                 "disclosure_verdict": "FAIL",
                 "failure_reason": "expert_reference_telemetry_missing",
-                "d6_substantive_verdict": expert_evidence.get(
-                    "d6_substantive_verdict", "BLOCKED"
+                "d6_substantive_verdict": "BLOCKED",
+                "d6_verification_reason": (
+                    "independent_evaluator_acceptance_contract_unavailable"
                 ),
             }
         if not all(isinstance(r, str) and r.startswith("references/") for r in initial_reads):
@@ -542,8 +573,9 @@ def _validate_expert_evidence(
             "disclosure_bounded": bounded,
             "disclosure_verdict": "PASS" if bounded else "FAIL",
             "failure_reason": failure_reason,
-            "d6_substantive_verdict": expert_evidence.get(
-                "d6_substantive_verdict", "BLOCKED"
+            "d6_substantive_verdict": "BLOCKED",
+            "d6_verification_reason": (
+                "independent_evaluator_acceptance_contract_unavailable"
             ),
         }
 
@@ -559,8 +591,9 @@ def _validate_expert_evidence(
         "disclosure_bounded": True,
         "disclosure_verdict": "PASS",
         "failure_reason": None,
-        "d6_substantive_verdict": expert_evidence.get(
-            "d6_substantive_verdict", "BLOCKED"
+        "d6_substantive_verdict": "BLOCKED",
+        "d6_verification_reason": (
+            "independent_evaluator_acceptance_contract_unavailable"
         ),
     }
 
@@ -646,6 +679,7 @@ def _build_combined_metrics(
 def _map_jira_acceptance(
     *,
     execution_mode: str,
+    execution_provenance: Mapping[str, Any],
     forge_outcome: Mapping[str, Any],
     quality_gate: Mapping[str, Any],
     efficiency_report: Mapping[str, Any],
@@ -670,7 +704,7 @@ def _map_jira_acceptance(
         "disposition": afyx_93_verdict,
         "scope": "scenario_identity_fixture_integrity_and_preview_harness",
         "coverage_scope": (
-            "REPRESENTATIVE_MULTI_SCENARIO"
+            "CALLER_REPORTED_MULTI_SCENARIO_UNVERIFIED"
             if representative_multi_scenario
             else "SINGLE_SCENARIO_BOUNDED"
         ),
@@ -684,9 +718,11 @@ def _map_jira_acceptance(
         "quality_gate_id": quality_gate["quality_gate_id"],
         "gate_results": dict(quality_gate["gate_results"]),
         "failure_codes": list(quality_gate["failure_codes"]),
-        "real_agent_correctness_established": (
-            execution_mode == "CORRELATED_AGENT_EXECUTION" and qg_verdict == "PASS"
+        "real_agent_correctness_established": bool(
+            execution_provenance["real_agent_verified"] and qg_verdict == "PASS"
         ),
+        "execution_provenance_status": execution_provenance["status"],
+        "execution_provenance_reason": execution_provenance["reason"],
     }
 
     # AFYX-95: Observed efficiency metrics and comparison eligibility (A7)
@@ -788,10 +824,8 @@ def _map_jira_acceptance(
     else:
         disc_verdict = expert_summary["disclosure_verdict"]
         d6_verdict = expert_summary["d6_substantive_verdict"]
-        if disc_verdict == "FAIL" or d6_verdict == "REJECT":
+        if disc_verdict == "FAIL":
             afyx_283_verdict = "FAIL"
-        elif disc_verdict == "PASS" and d6_verdict == "KEEP":
-            afyx_283_verdict = "PASS"
         else:
             afyx_283_verdict = "BLOCKED"
         afyx_283 = {
@@ -803,6 +837,7 @@ def _map_jira_acceptance(
             "justified_expansion_reads": expert_summary["justified_expansion_reads"],
             "failure_reason": expert_summary["failure_reason"],
             "d6_substantive_verdict": d6_verdict,
+            "d6_verification_reason": expert_summary["d6_verification_reason"],
         }
 
     # AFYX-70: Engineering-value evidence, if representative and sufficient
@@ -815,17 +850,11 @@ def _map_jira_acceptance(
         afyx_70_reason = (
             "synthetic_preview_is_not_real_agent_engineering_value_evidence"
         )
-    elif (
-        qg_verdict == "PASS"
-        and afyx_68["disposition"] == "PASS"
-        and afyx_69["disposition"] == "PASS"
-        and representative_multi_scenario
-    ):
-        afyx_70_verdict = "PASS"
-        afyx_70_reason = "representative_correlated_evidence_complete"
     else:
         afyx_70_verdict = "BLOCKED"
-        afyx_70_reason = "single_scenario_or_incomplete_telemetry_coverage"
+        afyx_70_reason = (
+            "independent_representative_acceptance_contract_unavailable"
+        )
 
     afyx_70 = {
         "disposition": afyx_70_verdict,
@@ -906,6 +935,10 @@ def build_shared_evidence_bundle(
             raise SharedEvidenceError(
                 "synthetic preview_run_id cannot be used in CORRELATED_AGENT_EXECUTION"
             )
+
+    execution_provenance = _validate_execution_provenance(
+        execution_mode, forge_outcome
+    )
 
     quality_gate, efficiency_report = _validate_quality_and_efficiency(
         scenario, forge_outcome, execution_mode
@@ -1016,28 +1049,53 @@ def build_shared_evidence_bundle(
     for extra_ref in additional_evidence_refs or ():
         if not isinstance(extra_ref, Mapping):
             raise SharedEvidenceError("additional_evidence_refs entries must be mappings")
+        allowed_fields = {
+            "role",
+            "schema_version",
+            "sha256",
+            "run_id",
+            "event_stream_sha256",
+        }
+        unexpected_fields = sorted(set(extra_ref) - allowed_fields)
+        if unexpected_fields:
+            raise SharedEvidenceError(
+                "unexpected additional evidence reference fields: "
+                + ", ".join(unexpected_fields)
+            )
         role = extra_ref.get("role")
         schema_ver = extra_ref.get("schema_version")
         digest = extra_ref.get("sha256")
+        rec_run_id = extra_ref.get("run_id")
+        event_stream_sha = extra_ref.get("event_stream_sha256")
         if (
             not isinstance(role, str)
             or not role
             or type(schema_ver) is not int
             or not _is_sha256_hex(digest)
+            or (rec_run_id is not None and not isinstance(rec_run_id, str))
+            or (
+                event_stream_sha is not None
+                and not _is_sha256_hex(event_stream_sha)
+            )
         ):
             raise SharedEvidenceError("invalid additional evidence reference entry")
-        extra_fields = {k: v for k, v in extra_ref.items() if k not in {"role", "schema_version", "sha256", "run_id"}}
+        extra_fields = (
+            {"event_stream_sha256": event_stream_sha}
+            if event_stream_sha is not None
+            else None
+        )
         register_ref(
             role,
             schema_ver,
             digest,
-            extra_ref.get("run_id"),
-            extra_fields if extra_fields else None,
+            rec_run_id,
+            extra_fields,
         )
 
     combined_metrics = _build_combined_metrics(efficiency_report, validated_ledger)
     jira_acceptance = _map_jira_acceptance(
         execution_mode=execution_mode,
+        execution_provenance=execution_provenance,
         forge_outcome=forge_outcome,
         quality_gate=quality_gate,
         efficiency_report=efficiency_report,
@@ -1051,6 +1109,7 @@ def build_shared_evidence_bundle(
         "schema_version": SHARED_EVIDENCE_SCHEMA_VERSION,
         "execution_id": execution_id,
         "execution_mode": execution_mode,
+        "execution_provenance": execution_provenance,
         "synthetic_preview": execution_mode == "PUBLIC_SYNTHETIC_PREVIEW",
         "identities": {
             "manifest_sha256": manifest_sha,
@@ -1080,10 +1139,7 @@ def build_shared_evidence_bundle(
             "private_payload_retained": False,
             "forge_b0_b5_campaign_status": "0/36 NOT_RUN",
             "a8_architecture_go_granted": False,
-            "d6_independent_review_asserted": (
-                expert_summary is not None
-                and expert_summary["d6_substantive_verdict"] == "KEEP"
-            ),
+            "d6_independent_review_asserted": False,
             "superiority_or_savings_claimed": False,
         },
     }

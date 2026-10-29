@@ -111,6 +111,8 @@ class SharedEvidenceTests(unittest.TestCase):
     def _correlated_forge_outcome(self, run_id: str = "cell-b4-cross-001") -> dict:
         outcome = copy.deepcopy(self.synthetic_pass_outcome)
         outcome.pop("preview_run_id", None)
+        outcome.pop("preview_task", None)
+        outcome.pop("guidance", None)
         outcome["run_id"] = run_id
         outcome["candidate_id"] = "B4"
         outcome["synthetic_fix_applied"] = False
@@ -165,6 +167,23 @@ class SharedEvidenceTests(unittest.TestCase):
         self.assertNotIn(
             self.synthetic_pass_outcome["guidance"]["user_prompt"], serialized
         )
+
+    def test_synthetic_preview_cannot_be_relabelled_as_agent_execution(self) -> None:
+        relabelled = copy.deepcopy(self.synthetic_pass_outcome)
+        relabelled["run_id"] = "claimed-agent-run-001"
+        relabelled.pop("preview_run_id", None)
+        relabelled["synthetic_fix_applied"] = False
+
+        with self.assertRaisesRegex(
+            shared_evidence.SharedEvidenceError,
+            "synthetic preview outcome cannot be relabeled",
+        ):
+            shared_evidence.build_shared_evidence_bundle(
+                relabelled,
+                manifest=self.manifest,
+                repository_root=ROOT,
+                execution_mode="CORRELATED_AGENT_EXECUTION",
+            )
 
     def test_correlated_agent_execution_supports_multiple_jira_acceptances(self) -> None:
         run_id = "cell-b4-cross-001"
@@ -225,7 +244,11 @@ class SharedEvidenceTests(unittest.TestCase):
             jira = bundle["jira_acceptance"]
             self.assertEqual(jira["AFYX-93"]["disposition"], "PASS")
             self.assertEqual(jira["AFYX-94"]["disposition"], "PASS")
-            self.assertTrue(jira["AFYX-94"]["real_agent_correctness_established"])
+            self.assertFalse(jira["AFYX-94"]["real_agent_correctness_established"])
+            self.assertEqual(
+                jira["AFYX-94"]["execution_provenance_status"],
+                "UNVERIFIED_CORRELATED_RECORD",
+            )
             self.assertEqual(jira["AFYX-95"]["disposition"], "PASS")
             self.assertTrue(jira["AFYX-95"]["provider_telemetry_available"])
             self.assertEqual(jira["AFYX-68"]["disposition"], "PASS")
@@ -236,7 +259,7 @@ class SharedEvidenceTests(unittest.TestCase):
             # AFYX-70 remains BLOCKED on single scenario
             self.assertEqual(jira["AFYX-70"]["disposition"], "BLOCKED")
 
-            # When representative_multi_scenario=True and D.6=KEEP, both become PASS
+            # Caller claims cannot self-authorize representative or D.6 acceptance.
             expert_keep = copy.deepcopy(expert_rec)
             expert_keep["d6_substantive_verdict"] = "KEEP"
             bundle_full = shared_evidence.build_shared_evidence_bundle(
@@ -250,10 +273,22 @@ class SharedEvidenceTests(unittest.TestCase):
                 representative_multi_scenario=True,
             )
             self.assertEqual(
-                bundle_full["jira_acceptance"]["AFYX-283"]["disposition"], "PASS"
+                bundle_full["jira_acceptance"]["AFYX-283"]["disposition"],
+                "BLOCKED",
             )
             self.assertEqual(
-                bundle_full["jira_acceptance"]["AFYX-70"]["disposition"], "PASS"
+                bundle_full["jira_acceptance"]["AFYX-283"][
+                    "d6_substantive_verdict"
+                ],
+                "BLOCKED",
+            )
+            self.assertEqual(
+                bundle_full["jira_acceptance"]["AFYX-70"]["disposition"],
+                "BLOCKED",
+            )
+            self.assertEqual(
+                bundle_full["jira_acceptance"]["AFYX-93"]["coverage_scope"],
+                "CALLER_REPORTED_MULTI_SCENARIO_UNVERIFIED",
             )
 
     def test_valid_telemetry_from_failed_task_and_failed_tool_calls(self) -> None:
@@ -389,6 +424,25 @@ class SharedEvidenceTests(unittest.TestCase):
                 manifest=self.manifest,
                 repository_root=ROOT,
                 additional_evidence_refs=refs + conflicting,
+            )
+
+    def test_additional_evidence_reference_rejects_unexpected_fields(self) -> None:
+        ref = {
+            "role": "sanitized_supporting_record",
+            "schema_version": 1,
+            "sha256": "a" * 64,
+            "private_note": "must not be projected",
+        }
+
+        with self.assertRaisesRegex(
+            shared_evidence.SharedEvidenceError,
+            "unexpected additional evidence reference fields: private_note",
+        ):
+            shared_evidence.build_shared_evidence_bundle(
+                self.synthetic_pass_outcome,
+                manifest=self.manifest,
+                repository_root=ROOT,
+                additional_evidence_refs=[ref],
             )
 
     def test_wrong_source_fixture_candidate_or_expert_identity_rejected(self) -> None:
