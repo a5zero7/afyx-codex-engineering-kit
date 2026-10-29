@@ -128,7 +128,9 @@ class GlobalRoutingTests(unittest.TestCase):
     def test_crlf_policy_idempotence(self):
         policy = Path(self.tmp.name) / "policy.md"
         source_policy = ROOT / "scripts" / "afyx-global-routing-policy.md"
-        policy.write_bytes(source_policy.read_bytes().replace(b"\n", b"\r\n"))
+        policy.write_bytes(
+            source_policy.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
+        )
         script = (
             "import {runGlobalRouting} from " + json.dumps(SOURCE.as_uri()) + ";"
             "const result=runGlobalRouting(JSON.parse(process.argv[1]));"
