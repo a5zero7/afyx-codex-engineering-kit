@@ -70,6 +70,10 @@ class UnifiedInstallerIntegrationTests(unittest.TestCase):
             + codex_script.read_text(encoding="utf-8"),
             encoding="utf-8",
         )
+        (self.fake_bin / "codex.ps1").write_text(
+            "throw 'PowerShell shim must not be selected for native MCP configuration'\n",
+            encoding="utf-8",
+        )
         claude_script = self.base / "fake-claude.cjs"
         fake_claude(self.fake_bin / f"claude{suffix}", claude_script)
         claude_script.write_text(
@@ -93,7 +97,11 @@ class UnifiedInstallerIntegrationTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-        system_paths = [p for p in os.environ.get("PATH", "").split(os.pathsep) if "npm" not in p.lower() and "codex" not in p.lower()]
+        system_paths = [
+            p
+            for p in os.environ.get("PATH", "").split(os.pathsep)
+            if not any(token in p.lower() for token in ("npm", "codex", "openai.chatgpt", ".vscode"))
+        ]
         self.environment = {
             **os.environ,
             "HOME": str(self.home),
@@ -214,6 +222,17 @@ class UnifiedInstallerIntegrationTests(unittest.TestCase):
         result = self.invoke("install.ps1", self.common(providers="@('claude')") + " -Confirm:$false", expected=1)
         self.assertIn("Selected Claude Code provider host was not detected", result.stdout + result.stderr)
         self.assertFalse((self.claude_home / "skills").exists())
+
+    def test_extension_only_codex_selection_fails_before_mutation(self) -> None:
+        (self.fake_bin / "codex.cmd").unlink()
+        extension = self.home / ".vscode" / "extensions" / "openai.chatgpt-fixture"
+        extension.mkdir(parents=True)
+        result = self.invoke("install.ps1", self.common(providers="@('codex')") + " -Confirm:$false", expected=1)
+        output = result.stdout + result.stderr
+        self.assertIn("native Codex CLI", output)
+        self.assertFalse(self.skills.exists())
+        self.assertFalse(self.context.exists())
+        self.assertFalse(self.codex_home.exists())
 
     def test_claude_only_verification_succeeds_without_codex(self) -> None:
         (self.fake_bin / "codex.cmd").unlink()

@@ -11,7 +11,7 @@ only selected Afyx-owned destinations, but those changes are real.
 | Git | Always | Clone, source identity, and safe fast-forward update |
 | Windows PowerShell 5.1+ or PowerShell 7 | Windows | Native Windows path; WSL is not required |
 | Bash 3.2+ | Linux/macOS | `install.sh`, `update.sh`, `verify.sh`, `uninstall.sh` |
-| Codex CLI / VS Code extension or Antigravity (`agy`) | Skill/MCP host | Select only hosts that are installed |
+| Codex CLI, Antigravity (`agy`), or Claude Code CLI | Skill/MCP host | Native Codex MCP configuration requires `codex.exe` or `codex.cmd` on Windows; the VS Code extension alone is not a CLI |
 | Node.js 22.5+ | Graph or ACE | External runtime; not bundled in archives |
 | npm | Local build fallback/development | Not required by an already packaged runtime |
 | Archive and SHA-256 support | Graph artifact install | Platform package integrity checks |
@@ -36,25 +36,34 @@ Components outside the desired plan are preserved, not removed.
 ## Provider-aware onboarding
 
 Codex remains the default provider. Provider adapters are not Kit components, and
-shared runtimes are installed once. Select Antigravity explicitly:
+shared runtimes are installed once. PowerShell supports Codex at global/user scope,
+Antigravity at global or workspace scope, and Claude Code at user/global or
+project/workspace scope through the existing adapter. Any selection containing
+Codex must use `global`, because Codex MCP configuration is user-scoped:
 
 ```powershell
-# Shared workspace skills + workspace MCP configuration
+# Codex + Antigravity use the compatible global/user scope
 .\install.ps1 -Preset full -Provider codex,antigravity `
+  -ProviderScope global
+
+# Antigravity and Claude Code may use project-local configuration
+.\install.ps1 -Preset full -Provider antigravity,claude `
   -ProviderScope workspace -WorkspaceRoot (Get-Location)
 
-# Antigravity global IDE/CLI skills + unified global MCP configuration
-.\install.ps1 -Preset full -Provider antigravity -ProviderScope global
+# Preview and verify the same global multi-provider selection
+.\install.ps1 -WhatIf -Preset full -Provider codex,antigravity,claude -ProviderScope global
+.\verify.ps1 -Preset full -Provider codex,antigravity,claude -ProviderScope global
 ```
 
 ```bash
-./install.sh --preset full --provider codex,antigravity \
-  --provider-scope workspace --workspace-root "$PWD"
+./install.sh --preset full --provider codex,antigravity --provider-scope global
 ./install.sh --preset full --provider antigravity --provider-scope global
 ```
 
-Workspace scope uses `.agents/skills/` and `.agents/mcp_config.json`. Global
-Antigravity scope uses `~/.gemini/config/skills/`,
+The Bash lifecycle currently supports Codex and Antigravity only; it does not
+claim Claude Code support or full Windows adapter parity. Antigravity workspace
+scope uses `.agents/skills/` and `.agents/mcp_config.json`. Global Antigravity
+scope uses `~/.gemini/config/skills/`,
 `~/.gemini/antigravity-cli/skills/`, and the shared
 `~/.gemini/config/mcp_config.json`. The installer preserves unrelated JSON and
 refuses foreign `afyx_graph`, malformed, reparse-point, or ambiguous legacy
@@ -66,6 +75,7 @@ scope arguments. Remove provider configuration only when explicitly requested:
 
 ```powershell
 .\uninstall.ps1 -RemoveProviderConfiguration -Provider antigravity -ProviderScope global
+.\uninstall.ps1 -RemoveProviderConfiguration -Provider codex,antigravity,claude -ProviderScope global
 ```
 
 ```bash

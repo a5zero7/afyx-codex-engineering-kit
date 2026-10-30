@@ -97,7 +97,8 @@ if ($Provider.Count) {
         $providerArguments = @($providerTool, '--providers', ($Provider -join ','), '--scope', $ProviderScope,
             '--workspace-root', $WorkspaceRoot, '--gemini-home', $GeminiHome, '--codex-home', $codexHome,
             '--node', $nodeCommand.Source, '--entry', $entry)
-        $codexCommand = Get-Command codex -ErrorAction SilentlyContinue
+        $codexHost = Get-AfyxCodexHost
+        $codexCommand = if ($codexHost.State -eq 'CLI_READY') { [pscustomobject]@{ Source = $codexHost.Path } } else { $null }
         $claudeCommand = Get-Command claude -ErrorAction SilentlyContinue
         if ($codexCommand) { $providerArguments += @('--codex', $codexCommand.Source) }
         if ($claudeCommand) { $providerArguments += @('--claude', $claudeCommand.Source) }
@@ -151,12 +152,12 @@ $codexRequired = 'codex' -in $Provider -or -not $Provider.Count
 $antigravityRequired = 'antigravity' -in $Provider
 $claudeRequired = 'claude' -in $Provider
 
-$codex = Get-Command codex.exe -ErrorAction SilentlyContinue
-if (-not $codex) { $codex = Get-Command codex.cmd -ErrorAction SilentlyContinue }
+$codexHost = Get-AfyxCodexHost
+$codex = if ($codexHost.State -eq 'CLI_READY') { [pscustomobject]@{ Source = $codexHost.Path } } else { $null }
 $extension = [bool](Get-ChildItem -Path (Join-Path $env:USERPROFILE '.vscode\extensions\openai.chatgpt-*') -Directory -ErrorAction SilentlyContinue | Select-Object -First 1)
 if ($codex) {
     try {
-        $version = (& codex --version 2>$null) -join ' '
+        $version = (& $codex.Source --version 2>$null) -join ' '
         if ($LASTEXITCODE -ne 0) { throw 'version command returned a non-zero exit code' }
         Write-Result 'OK' 'Codex CLI' $version
     }
@@ -166,8 +167,8 @@ if ($codex) {
     }
 } else { Write-Result 'INFO' 'Codex CLI' $(if ($codexRequired) { 'not found' } else { 'not found (optional)' }) }
 if ($extension) { Write-Result 'OK' 'VS Code extension' 'detected' } else { Write-Result 'INFO' 'VS Code extension' 'not detected' }
-if ($codexRequired -and -not $codex -and -not $extension) {
-    Write-Result 'FAIL' 'Codex host' 'Codex CLI or supported VS Code extension is required when Codex is selected'
+if ($codexRequired -and -not $codex) {
+    Write-Result 'FAIL' 'Codex host' "$($codexHost.Detail) A VS Code extension does not provide native MCP configuration."
     $coreFailure = $true
 }
 
