@@ -16,6 +16,56 @@ function Get-AfyxPlatform {
     return 'windows'
 }
 
+function Get-AfyxCodexHost {
+    [CmdletBinding()]
+    param()
+
+    if ((Get-AfyxPlatform) -eq 'windows') {
+        foreach ($name in @('codex.exe', 'codex.cmd')) {
+            $command = Get-Command $name -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($command) {
+                return [pscustomobject]@{
+                    State = 'CLI_READY'
+                    Path = [string]$command.Source
+                    Command = $name
+                    Detail = "Compatible native Codex launcher detected: $name"
+                }
+            }
+        }
+        $shim = Get-Command codex.ps1 -CommandType ExternalScript -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($shim) {
+            return [pscustomobject]@{
+                State = 'UNSUPPORTED_POWERSHELL_SHIM'
+                Path = [string]$shim.Source
+                Command = 'codex.ps1'
+                Detail = 'codex.ps1 cannot be passed to the native Node.js MCP lifecycle; install or expose codex.exe or codex.cmd.'
+            }
+        }
+        return [pscustomobject]@{
+            State = 'CLI_NOT_FOUND'
+            Path = ''
+            Command = ''
+            Detail = 'No compatible Codex CLI launcher was found; install or expose codex.exe or codex.cmd.'
+        }
+    }
+
+    $command = Get-Command codex -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($command) {
+        return [pscustomobject]@{
+            State = 'CLI_READY'
+            Path = [string]$command.Source
+            Command = 'codex'
+            Detail = 'Codex CLI detected.'
+        }
+    }
+    return [pscustomobject]@{
+        State = 'CLI_NOT_FOUND'
+        Path = ''
+        Command = ''
+        Detail = 'No compatible Codex CLI launcher was found.'
+    }
+}
+
 function New-AfyxComponentContext {
     [CmdletBinding()]
     param(
@@ -339,4 +389,4 @@ function Get-AfyxComponentStates {
     }
 }
 
-Export-ModuleMember -Function Get-AfyxPlatform, New-AfyxComponentContext, Get-AfyxComponentContract, Get-AfyxControlPlaneContract, Get-AfyxProviderRegistry, Get-AfyxDesiredComponentIds, Get-AfyxControlPlan, Get-AfyxComponentRoot, Test-AfyxSkillManifest, Get-AfyxSkillVersion, Get-AfyxComponentState, Get-AfyxComponentStates
+Export-ModuleMember -Function Get-AfyxPlatform, Get-AfyxCodexHost, New-AfyxComponentContext, Get-AfyxComponentContract, Get-AfyxControlPlaneContract, Get-AfyxProviderRegistry, Get-AfyxDesiredComponentIds, Get-AfyxControlPlan, Get-AfyxComponentRoot, Test-AfyxSkillManifest, Get-AfyxSkillVersion, Get-AfyxComponentState, Get-AfyxComponentStates

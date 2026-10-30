@@ -88,16 +88,12 @@ if ($RemoveUsageTracker) {
 $graphRoot = $componentContext.GraphRoot
 if ($RemoveProviderConfiguration) {
     $nodeCommand = Get-Command node -ErrorAction SilentlyContinue
-    # Node cannot spawn a PowerShell .ps1 command shim directly on Windows.
-    # Prefer the native launchers, matching the Graph installer integration.
-    $codexCommand = Get-Command codex.exe -ErrorAction SilentlyContinue
-    if (-not $codexCommand) { $codexCommand = Get-Command codex.cmd -ErrorAction SilentlyContinue }
-    if (-not $codexCommand -and -not [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)) {
-        $codexCommand = Get-Command codex -ErrorAction SilentlyContinue
-    }
+    $codexHost = Get-AfyxCodexHost
+    $codexCommand = if ($codexHost.State -eq 'CLI_READY') { [pscustomobject]@{ Source = $codexHost.Path } } else { $null }
     $claudeCommand = Get-Command claude -ErrorAction SilentlyContinue
     $installedEntry = Join-Path $graphRoot 'current\lib\dist\bin\afyx-graph.js'
     if (-not $nodeCommand) { throw 'Node.js is required to remove owned provider entries.' }
+    if ('codex' -in $Provider -and -not $codexCommand) { throw "Codex MCP removal requires a native Codex CLI. $($codexHost.Detail)" }
     $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' }
     $arguments = @((Join-Path $PSScriptRoot 'scripts\afyx-provider-integration.mjs'), '--providers', ($Provider -join ','), '--scope', $ProviderScope,
         '--workspace-root', $WorkspaceRoot, '--gemini-home', $GeminiHome, '--codex-home', $codexHome, '--node', $nodeCommand.Source, '--entry', $installedEntry, '--uninstall')

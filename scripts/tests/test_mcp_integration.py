@@ -35,6 +35,68 @@ lines.on('line',(line)=>{const m=JSON.parse(line);if(m.id===1)console.log(JSON.s
 
 
 class McpIntegrationTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == "nt", "Windows .cmd launcher regression")
+    def test_missing_codex_home_plan_is_read_only_then_first_apply_succeeds(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            base = Path(raw)
+            codex_home = base / "missing-codex-home"
+            entry = base / "runtime/current/lib/dist/bin/afyx-graph.js"
+            fake_server(entry)
+            invocation = base / "codex-invoked"
+            fake_codex = base / "fake-codex.mjs"
+            fake_codex.write_text(
+                """import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+writeFileSync(process.env.AFYX_FIXTURE_INVOCATION, 'invoked');
+const home=process.env.CODEX_HOME;
+const state=resolve(home,'fixture-state.json');
+const config=resolve(home,'config.toml');
+const [scope,action,name,...rest]=process.argv.slice(2);
+if(scope!=='mcp'||name!=='afyx_graph') process.exit(9);
+if(action==='get') {
+  if(!existsSync(state)){console.error('MCP server afyx_graph not found');process.exit(1);}
+  console.log(readFileSync(state,'utf8'));
+} else if(action==='add') {
+  const separator=rest.indexOf('--');
+  const command=rest.slice(separator+1);
+  mkdirSync(home,{recursive:true});
+  writeFileSync(state,JSON.stringify({transport:{type:'stdio',command:command[0],args:command.slice(1)}}));
+  writeFileSync(config,'[mcp_servers.afyx_graph]\\n');
+} else process.exit(8);
+""",
+                encoding="utf-8",
+            )
+            launcher = base / "codex.cmd"
+            launcher.write_text(
+                f'@echo off\r\n"{shutil.which("node")}" "%~dp0fake-codex.mjs" %*\r\n',
+                encoding="utf-8",
+            )
+            command = [
+                "node", str(HELPER), "--node", shutil.which("node") or "node",
+                "--entry", str(entry), "--codex", str(launcher), "--codex-home", str(codex_home),
+            ]
+            environment = {**os.environ, "AFYX_FIXTURE_INVOCATION": str(invocation)}
+
+            planned = subprocess.run(command, cwd=ROOT, env=environment, capture_output=True, text=True)
+            self.assertEqual(planned.returncode, 0, planned.stdout + planned.stderr)
+            planned_payload = json.loads(planned.stdout)
+            self.assertEqual(planned_payload["mcp"], "MCP_NOT_CONFIGURED")
+            self.assertEqual(planned_payload["reason"], "MCP_ENTRY_NOT_FOUND")
+            self.assertFalse(codex_home.exists())
+            self.assertFalse(invocation.exists())
+
+            applied = subprocess.run(command + ["--apply"], cwd=ROOT, env=environment, capture_output=True, text=True)
+            self.assertEqual(applied.returncode, 0, applied.stdout + applied.stderr)
+            self.assertEqual(json.loads(applied.stdout)["mcp"], "MCP_REACHABLE")
+            self.assertTrue(codex_home.is_dir())
+            self.assertTrue(invocation.is_file())
+
+            repeated = subprocess.run(command + ["--apply"], cwd=ROOT, env=environment, capture_output=True, text=True)
+            self.assertEqual(repeated.returncode, 0, repeated.stdout + repeated.stderr)
+            repeated_payload = json.loads(repeated.stdout)
+            self.assertEqual(repeated_payload["mcp"], "MCP_REACHABLE")
+            self.assertFalse(repeated_payload["changed"])
+
     def test_symlinked_codex_configuration_boundary_is_refused(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             base = Path(raw)

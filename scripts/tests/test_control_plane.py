@@ -362,12 +362,13 @@ class ControlPlaneContractTests(unittest.TestCase):
 
     def test_uninstaller_prefers_native_codex_launcher_for_node_subprocess(self) -> None:
         source = (ROOT / "uninstall.ps1").read_text(encoding="utf-8")
-        exe_lookup = source.index("Get-Command codex.exe")
-        cmd_lookup = source.index("Get-Command codex.cmd")
+        resolver = (ROOT / "scripts/lib/AfyxComponents.psm1").read_text(encoding="utf-8")
+        exe_lookup = resolver.index("'codex.exe', 'codex.cmd'")
+        cmd_lookup = source.index("Get-AfyxCodexHost")
         provider_arguments = source.index("$arguments += @('--codex', $codexCommand.Source)")
-        self.assertLess(exe_lookup, cmd_lookup)
         self.assertLess(cmd_lookup, provider_arguments)
-        self.assertNotIn("$codexCommand = Get-Command codex -ErrorAction SilentlyContinue\n", source[:cmd_lookup])
+        self.assertGreaterEqual(exe_lookup, 0)
+        self.assertNotIn("$codexCommand = Get-Command codex -ErrorAction SilentlyContinue\n", source)
 
     def test_afyx_owned_drift_is_detected_and_repaired_with_backup(self) -> None:
         self.install_preset()

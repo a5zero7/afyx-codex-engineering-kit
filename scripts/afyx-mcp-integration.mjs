@@ -312,9 +312,15 @@ export async function integrate(options) {
     result.detail = 'Codex CLI is unavailable; Graph runtime remains healthy.';
     return result;
   }
-  // Inspection/planning must not create provider state. The native Codex CLI
-  // can report an absent entry against a non-existent CODEX_HOME; only an
-  // explicitly consented apply may prepare that directory.
+  // Inspection/planning must not create provider state or invoke a provider
+  // against a home that does not exist yet. Only an explicitly consented
+  // apply may prepare the first CODEX_HOME.
+  if (!existsSync(options.codexHome) && !options.apply) {
+    result.mcp = 'MCP_NOT_CONFIGURED';
+    result.reason = 'MCP_ENTRY_NOT_FOUND';
+    result.detail = 'No Codex home exists; registration is available but was not consented.';
+    return result;
+  }
   if (options.apply) mkdirSync(options.codexHome, { recursive: true });
   let inspection;
   try {
