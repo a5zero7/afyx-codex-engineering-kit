@@ -6,6 +6,7 @@
  */
 
 import { LANGUAGES, Language } from '../types';
+import { isOdooAccessCsv } from './odoo';
 
 /**
  * File extension to Language mapping
@@ -143,6 +144,7 @@ export const EXTENSION_MAP: Record<string, Language> = {
  * to the built-ins. Omitting it is byte-identical to the zero-config behavior.
  */
 export function isSourceFile(filePath: string, overrides?: Record<string, Language>): boolean {
+  if (isOdooAccessCsv(filePath)) return true; // Odoo access-control CSV files
   if (isPlayRoutesFile(filePath)) return true; // Play `conf/routes` is extensionless
   if (isShopifyLiquidJson(filePath)) return true; // Shopify OS 2.0 JSON templates / section groups
   if (isErlangAppFile(filePath)) return true; // OTP `.app`/`.app.src` resource files
@@ -196,6 +198,7 @@ export function isPlayRoutesFile(filePath: string): boolean {
  * `EXTENSION_MAP`. Omitting it is byte-identical to the zero-config behavior.
  */
 export function detectLanguage(filePath: string, source?: string, overrides?: Record<string, Language>): Language {
+  if (isOdooAccessCsv(filePath)) return 'csv';
   // Play `conf/routes` has no grammar — route through the no-symbol path; the
   // Play framework resolver extracts route nodes from it.
   if (isPlayRoutesFile(filePath)) return 'yaml';
@@ -357,6 +360,7 @@ export function getLanguageDisplayName(language: Language): string {
     terraform: 'Terraform',
     markdown: 'Markdown',
     json: 'JSON',
+    csv: 'CSV',
     arkts: 'ArkTS',
     unknown: 'Unknown',
   };

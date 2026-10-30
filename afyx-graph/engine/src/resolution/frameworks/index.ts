@@ -35,6 +35,7 @@ import { expoRouterResolver } from './expo-router';
 import { fabricViewResolver } from './fabric';
 import { cicsResolver } from './cics';
 import { terraformResolver } from './terraform';
+import { odooResolver } from './odoo';
 
 /**
  * All registered framework resolvers
@@ -64,6 +65,7 @@ const FRAMEWORK_RESOLVERS: FrameworkResolver[] = [
   djangoResolver,
   flaskResolver,
   fastapiResolver,
+  odooResolver,
   // Ruby
   railsResolver,
   // Java

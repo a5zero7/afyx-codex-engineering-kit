@@ -120,6 +120,7 @@ export const LANGUAGES = [
   'terraform',
   'markdown',
   'json',
+  'csv',
   'unknown',
 ] as const;
 
