@@ -187,6 +187,64 @@ class ContextLifecycleContractTests(unittest.TestCase):
             self.assertEqual(digest(runtime / "metadata.json"), runtime_hash)
             self.assertEqual(digest(recovery / "metadata.json"), recovery_hash)
 
+    @unittest.skipUnless(os.name == "nt" and (shutil.which("pwsh") or shutil.which("powershell")),
+                         "Windows PowerShell lifecycle requires a Windows host")
+    def test_installer_idempotency_and_version_governance_windows(self) -> None:
+        shell = shutil.which("pwsh") or shutil.which("powershell")
+        assert shell
+        with tempfile.TemporaryDirectory(prefix="afyx-context-idempotent-") as temporary:
+            lab = Path(temporary)
+            runtime = lab / "runtime"
+            home = lab / "home"
+            (home / ".codex").mkdir(parents=True)
+            environment = {**os.environ, "USERPROFILE": str(home), "CODEX_HOME": str(home / ".codex"), "CI": "1"}
+
+            # 1. Install fresh instance
+            control_install = [shell, "-NoProfile", "-NonInteractive", "-File", str(ROOT / "install.ps1"),
+                               "-SkillsRoot", str(home / ".agents" / "skills"), "-ContextRuntimeRoot", str(runtime),
+                               "-ComponentAction", "afyx-context=install", "-Confirm:$false"]
+            installed = subprocess.run(control_install, env=environment, text=True, capture_output=True)
+            self.assertEqual(installed.returncode, 0, installed.stdout + installed.stderr)
+            metadata = json.loads((runtime / "metadata.json").read_text(encoding="utf-8"))
+            initial_digest = digest(runtime / "metadata.json")
+
+            # 2. Subsequent run with same version must SKIP (idempotent, no update loop)
+            idempotent_cmd = [shell, "-NoProfile", "-NonInteractive", "-File", str(ROOT / "install.ps1"),
+                              "-SkillsRoot", str(home / ".agents" / "skills"), "-ContextRuntimeRoot", str(runtime),
+                              "-Preset", "custom", "-CustomComponent", "afyx-context", "-WhatIf"]
+            preview = subprocess.run(idempotent_cmd, env=environment, text=True, capture_output=True)
+            self.assertEqual(preview.returncode, 0, preview.stdout + preview.stderr)
+            output = preview.stdout + preview.stderr
+            self.assertIn("afyx-context - action=skip", output)
+            self.assertIn("Afyx Context Engine - outcome=skipped", output)
+            self.assertNotIn("afyx-context - action=update", output)
+            self.assertEqual(digest(runtime / "metadata.json"), initial_digest)
+
+            # 3. Corrupt/missing file triggers repair under -UpdateInstalled
+            cli_js = runtime / "current" / "dist" / "cli.js"
+            cli_backup = runtime / "current" / "dist" / "cli.js.bak"
+            cli_js.rename(cli_backup)
+            try:
+                repair_preview = subprocess.run(idempotent_cmd + ["-UpdateInstalled"], env=environment, text=True, capture_output=True)
+                self.assertEqual(repair_preview.returncode, 0, repair_preview.stdout + repair_preview.stderr)
+                repair_output = repair_preview.stdout + repair_preview.stderr
+                self.assertIn("afyx-context - action=repair", repair_output)
+            finally:
+                if cli_backup.exists():
+                    cli_backup.rename(cli_js)
+
+            # 4. Rollback and recovery verification on interrupted update (.afyx-old)
+            recovery_dir = Path(f"{runtime}.afyx-old")
+            runtime.rename(recovery_dir)
+            self.assertTrue(recovery_dir.is_dir())
+            self.assertFalse(runtime.exists())
+            recover_cmd = [shell, "-NoProfile", "-NonInteractive", "-File", str(PS_INSTALLER), "-RuntimeRoot", str(runtime)]
+            recovered = subprocess.run(recover_cmd, env=environment, text=True, capture_output=True)
+            self.assertEqual(recovered.returncode, 0, recovered.stdout + recovered.stderr)
+            self.assertTrue(runtime.is_dir())
+            self.assertFalse(recovery_dir.exists())
+            self.assertEqual(digest(runtime / "metadata.json"), initial_digest)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
