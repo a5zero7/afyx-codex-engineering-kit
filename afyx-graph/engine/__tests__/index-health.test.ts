@@ -3,6 +3,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { buildIndexHealth, type IndexHealthSource } from '../src/index-health';
+import { EXTRACTION_VERSION } from '../src/extraction/extraction-version';
 
 describe('shared index health contract', () => {
   let root: string;
@@ -14,7 +15,7 @@ describe('shared index health contract', () => {
     return {
       getIndexState: () => 'complete',
       getIndexAccounting: () => null,
-      getIndexBuildInfo: () => ({ version: '1.0.0', extractionVersion: 28 }),
+      getIndexBuildInfo: () => ({ version: '1.0.0', extractionVersion: EXTRACTION_VERSION }),
       isIndexStale: () => false,
       getPendingReferenceCount: () => 0,
       isWatching: () => true,
@@ -62,7 +63,7 @@ describe('shared index health contract', () => {
     expect(health.extraction.state).toBe('complete');
     expect(health.compatibility).toMatchObject({
       builtWithExtractionVersion: 26,
-      currentExtractionVersion: 28,
+      currentExtractionVersion: EXTRACTION_VERSION,
       reindexRecommended: true,
     });
   });

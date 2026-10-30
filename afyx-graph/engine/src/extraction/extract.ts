@@ -10,6 +10,14 @@ import { AstroExtractor } from './astro-extractor';
 import { DfmExtractor } from './dfm-extractor';
 import { VueExtractor } from './vue-extractor';
 import { MyBatisExtractor } from './mybatis-extractor';
+import {
+  OdooManifestExtractor,
+  OdooAccessCsvExtractor,
+  OdooSecurityXmlExtractor,
+  isOdooManifest,
+  isOdooAccessCsv,
+  isOdooXml,
+} from './odoo';
 import { extractNativeFacts } from './native/fact-extractor';
 import { extractNativeCfmlFacts } from './native/cfml-facts';
 import { getAllFrameworkResolvers, getApplicableFrameworks } from '../resolution/frameworks';
@@ -33,11 +41,17 @@ export function extractFromSource(
 
   if (detectedLanguage === 'cfml' || detectedLanguage === 'cfscript' || detectedLanguage === 'cfquery') {
     result = extractNativeCfmlFacts(filePath, source, detectedLanguage);
+  } else if (detectedLanguage === 'csv' || isOdooAccessCsv(filePath)) {
+    result = new OdooAccessCsvExtractor(filePath, source).extract();
   } else if (
     NATIVE_FACT_LANGUAGES.has(detectedLanguage) &&
     !(detectedLanguage === 'pascal' && (fileExtension === '.dfm' || fileExtension === '.fmx'))
   ) {
-    result = extractNativeFacts(filePath, source, detectedLanguage);
+    if (detectedLanguage === 'python' && isOdooManifest(filePath)) {
+      result = new OdooManifestExtractor(filePath, source).extract();
+    } else {
+      result = extractNativeFacts(filePath, source, detectedLanguage);
+    }
   } else if (detectedLanguage === 'svelte') {
     result = new SvelteExtractor(filePath, source).extract();
   } else if (detectedLanguage === 'vue') {
@@ -49,7 +63,11 @@ export function extractFromSource(
   } else if (detectedLanguage === 'razor') {
     result = new RazorExtractor(filePath, source).extract();
   } else if (detectedLanguage === 'xml') {
-    result = new MyBatisExtractor(filePath, source).extract();
+    if (isOdooXml(source, filePath)) {
+      result = new OdooSecurityXmlExtractor(filePath, source).extract();
+    } else {
+      result = new MyBatisExtractor(filePath, source).extract();
+    }
   } else if (isFileLevelOnlyLanguage(detectedLanguage)) {
     result = { nodes: [], edges: [], unresolvedReferences: [], errors: [], durationMs: 0 };
   } else if (

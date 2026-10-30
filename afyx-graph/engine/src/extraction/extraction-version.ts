@@ -26,4 +26,7 @@
 // material extracted content and should be rebuilt.
 // v28: supported Python class-level static string assignments now contribute
 // source-located property facts for exact structural inventories.
-export const EXTRACTION_VERSION = 28;
+// v29: added native Odoo security and configuration asset extractors:
+// __manifest__.py (module metadata & dependencies), ir.model.access.csv (ACL
+// model grants), and security XML (record rules, security groups & category definitions).
+export const EXTRACTION_VERSION = 29;

@@ -78,7 +78,7 @@ import {
 import { BROWSER_ENV, DEFAULT_UI_PORT } from '../ui-server/constants';
 import type { UiServerHandle } from '../ui-server';
 import { lookupSymbolNodes, describeSymbolNode, groupDefinitions } from '../graph/symbol-lookup';
-import { analyzeAffectedTests, mergeSymbolImpact, computeAffectedTests } from '../impact';
+import { analyzeAffectedTests, mergeSymbolImpact, computeAffectedTests, computeOdooImpact } from '../impact';
 import type { Node, Edge } from '../types';
 import { buildIndexHealth } from '../index-health';
 
@@ -2392,6 +2392,11 @@ program
         customFilter,
       });
       const { affectedTests: sortedTests, totalDependentsTraversed } = affectedResult;
+      const odooImpact = computeOdooImpact(cg, changedFiles, { maxDepth });
+      const combinedTests = Array.from(
+        new Set([...sortedTests, ...(odooImpact.isOdooProject ? odooImpact.affectedTests : [])])
+      ).sort();
+
       let affectedTestsAnalysis: ReturnType<typeof analyzeAffectedTests> | undefined;
       if (options.explain) {
         const diskChanges = cg.getChangedFiles();
@@ -2414,14 +2419,15 @@ program
       if (options.json) {
         console.log(JSON.stringify({
           changedFiles,
-          affectedTests: sortedTests,
+          affectedTests: combinedTests,
           totalDependentsTraversed,
           ...(affectedTestsAnalysis ? { affectedTestsAnalysis } : {}),
+          ...(odooImpact.isOdooProject ? { odooImpact } : {}),
         }, null, 2));
       } else if (options.quiet) {
-        for (const t of sortedTests) console.log(t);
+        for (const t of combinedTests) console.log(t);
       } else {
-        if (sortedTests.length === 0) {
+        if (combinedTests.length === 0) {
           if (!affectedTestsAnalysis) {
             info('No test files affected by the changed files.');
           } else if (affectedTestsAnalysis.emptyReason === 'NO_INDEXED_TESTS') {
@@ -2432,11 +2438,42 @@ program
             info(`Affected tests are indeterminate because graph evidence is insufficient (${affectedTestsAnalysis.limitations.join(', ')}).`);
           }
         } else {
-          console.log(chalk.bold(`\nAffected test files (${sortedTests.length}):\n`));
-          for (const t of sortedTests) {
+          console.log(chalk.bold(`\nAffected test files (${combinedTests.length}):\n`));
+          for (const t of combinedTests) {
             console.log('  ' + chalk.cyan(t));
           }
           console.log();
+        }
+
+        if (odooImpact.isOdooProject) {
+          if (odooImpact.affectedModels.length > 0) {
+            console.log(chalk.bold(`Affected Odoo Models (${odooImpact.affectedModels.length}):`));
+            for (const m of odooImpact.affectedModels) {
+              const relLabel = m.relationship.replace(/_/g, ' ');
+              console.log(`  ${chalk.cyan(m.name.padEnd(28))} ${chalk.dim(`[${relLabel}]`)} ${chalk.dim(`(${m.direction}, hop: ${m.hopCount})`)}`);
+            }
+            console.log();
+          }
+
+          if (odooImpact.affectedSecurityAssets.length > 0) {
+            console.log(chalk.bold(`Affected Odoo Security Assets (${odooImpact.affectedSecurityAssets.length}):`));
+            for (const s of odooImpact.affectedSecurityAssets) {
+              console.log(`  ${chalk.yellow(s.ruleId.padEnd(32))} ${chalk.dim(s.semantics)} ${chalk.dim(`(${s.direction})`)}`);
+            }
+            console.log();
+          }
+
+          if (odooImpact.affectedModules.length > 0) {
+            console.log(chalk.bold(`Affected Odoo Modules (${odooImpact.affectedModules.length}):`));
+            for (const mod of odooImpact.affectedModules) {
+              console.log(`  ${chalk.cyan(mod.moduleName.padEnd(28))} ${chalk.dim(`[${mod.reason.replace(/_/g, ' ')}]`)} ${chalk.dim(`(${mod.direction}, hop: ${mod.hopCount})`)}`);
+            }
+            console.log();
+          }
+
+          if (odooImpact.disclaimer) {
+            console.log(chalk.dim(`Note: ${odooImpact.disclaimer}\n`));
+          }
         }
       }
 
