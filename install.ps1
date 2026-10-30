@@ -220,7 +220,6 @@ function Get-ComponentAction([string]$Id, [string]$Label) {
         elseif ($planItem.Repair -eq 'BLOCKED') { $action = 'blocked' }
         elseif ($planItem.Repair -eq 'INSTALL') { $action = 'install' }
         elseif ($planItem.Repair -eq 'REPAIR') { $action = 'repair' }
-        elseif ($Id -eq 'afyx-context' -and $state.State -eq 'HEALTHY') { $action = 'update' }
         else {
             $available = Get-AvailableVersion $Id
             $action = if ($state.State -eq 'HEALTHY' -and $available -and (Compare-AfyxVersion $state.Version $available) -lt 0) { 'update' } else { 'skip' }
@@ -232,7 +231,6 @@ function Get-ComponentAction([string]$Id, [string]$Label) {
     } elseif ($UpdateInstalled) {
         $available = Get-AvailableVersion $Id
         if ($state.State -in @('INCOMPLETE', 'INVALID', 'DRIFTED')) { $action = 'repair' }
-        elseif ($Id -eq 'afyx-context' -and $state.State -eq 'HEALTHY') { $action = 'update' }
         elseif ($state.State -eq 'HEALTHY' -and $available -and (Compare-AfyxVersion $state.Version $available) -lt 0) { $action = 'update' }
         else { $action = 'skip' }
     } elseif ($WhatIfPreference -or $env:CI -or -not $terminal.Interactive) { $action = 'skip' }

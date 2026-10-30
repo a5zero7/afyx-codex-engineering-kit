@@ -172,7 +172,6 @@ component_action() {
     elif [[ "$AFYX_REPAIR" == BLOCKED ]]; then printf '%s drift is %s with actual ownership %s; automatic takeover is forbidden.\n' "$label" "$AFYX_DRIFT" "$AFYX_ACTUAL_OWNERSHIP" >&2; return 2
     elif [[ "$AFYX_REPAIR" == INSTALL ]]; then action=install
     elif [[ "$AFYX_REPAIR" == REPAIR ]]; then action=repair
-    elif [[ "$id" == afyx-context && "$state" == HEALTHY ]]; then action=update
     elif [[ "$state" == HEALTHY && -n "$available" && -n "$installed" ]] && version_lt "$installed" "$available"; then action=update
     else action=skip; fi
   elif "$force"; then
@@ -182,7 +181,6 @@ component_action() {
     else action=update; fi
   elif "$update_installed"; then
     if [[ "$state" == INCOMPLETE || "$state" == INVALID || "$state" == DRIFTED ]]; then action=repair
-    elif [[ "$id" == afyx-context && "$state" == HEALTHY ]]; then action=update
     elif [[ "$state" == HEALTHY && -n "$available" && -n "$installed" ]] && version_lt "$installed" "$available"; then action=update
     else action=skip; fi
   elif ! "$interactive" || "$dry_run"; then action=skip
