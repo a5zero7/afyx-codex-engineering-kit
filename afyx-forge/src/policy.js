@@ -21,12 +21,12 @@ export const EXECUTION_MODES = Object.freeze({
  * @param {object} [environment={}]
  * @param {boolean} [environment.hasGraph=false]
  * @param {boolean} [environment.hasContext=false]
- * @param {boolean} [environment.contextOptIn=false]
+ * @param {boolean} [environment.contextOptIn=true] - Explicit false disables the installed Context Engine
  * @returns {object} Adaptive policy object
  */
 export function deriveAdaptivePolicy(classification, environment = {}) {
   const { primaryCategory, riskLevel, frameworks = [], referencedFiles = [] } = classification;
-  const { hasGraph = false, hasContext = false, contextOptIn = false } = environment;
+  const { hasGraph = false, hasContext = false, contextOptIn = true } = environment;
 
   // 1. Determine Execution Mode
   let executionMode = EXECUTION_MODES.DIRECT_MINIMAL;
@@ -64,11 +64,11 @@ export function deriveAdaptivePolicy(classification, environment = {}) {
   }
 
   // 3. Context Engine Cooperation
-  // Principle: Context Engine is DEFAULT OFF, opt-in explicit only.
-  let contextEngine = 'BYPASS_DEFAULT_OFF';
-  if (contextOptIn) {
-    contextEngine = hasContext ? 'ACTIVE' : 'NOT_AVAILABLE';
-  }
+  // Available by default when installed and healthy. This is a planning status,
+  // not evidence that a Context operation was executed for this task.
+  let contextEngine = 'NOT_AVAILABLE';
+  if (contextOptIn === false) contextEngine = 'BYPASS_USER_DISABLED';
+  else if (hasContext) contextEngine = 'ACTIVE';
 
   // 4. Expert Cooperation
   let expertEngagement = 'NONE';
