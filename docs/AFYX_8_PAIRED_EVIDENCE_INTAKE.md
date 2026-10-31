@@ -24,6 +24,7 @@ Keep manifest.json, off.ndjson and on.ndjson OUTSIDE Git and agent-accessible wo
 - runs = exactly two entries, OFF then ON, each with distinct runId, eventsFile (relative local NDJSON), eventsSha256, quality, coverage
 - quality = correctness/tests/security, each PASS, FAIL or NOT_RUN, and evaluatorReceiptSha256 (64 hex or null when all three are NOT_RUN). The receipt digest is *declared*, not an independently authenticated signature.
 - coverage = booleans toolEvents/humanEvents/reworkEvents/providerUsage. TRUE only when the entire category is recorded; completeness remains a claim requiring independent verification.
+- timing = {capture, liveReceiptSha256}. Use capture REPLAY_OR_UNVERIFIED and null receipt for offline replay, incomplete listener, or source-unknown records. LIVE_MONITORED requires an external SHA-256 receipt from the real agent host proving both boundaries; the intake verifies only the receipt's format, **not** its authenticity. A trusted evaluator must independently validate that receipt. Only LIVE_MONITORED is eligible for a wallMs comparison.
 
 The checker enforces 4 MiB / 20,000 event limits, SHA-256 hashes, no symlinks or path traversal, unique event IDs, one initial start and one final end, monotonic timezone-aware timestamps, and valid actor identities.
 
@@ -34,7 +35,7 @@ Each event row must have id, runId, at (ISO-8601 with timezone), and kind. Suppo
 | tool_call | actor = agent | One tool invocation |
 | human_intervention | actor = human | One *human* action, not an agent retry/policy denial |
 | rework | actor = agent or human | One confirmed rework event |
-| provider_usage | source = provider_report; nonnegative inputTokens, cachedInputTokens, outputTokens | Provider-reported counters, not billing attestation |
+| provider_usage | source = provider_report; usageSemantics = per_turn_delta; nonnegative inputTokens, cachedInputTokens, outputTokens | Provider-reported per-turn *increments* only; cumulative session snapshots must not be summed |
 
 Start/end timestamps define observed wall duration. Missing/partial category coverage outputs **null** and NOT_AVAILABLE; never silently infer zero. Delta = ON minus OFF; percentage only when OFF is positive. A quality/security/test FAIL blocks performance promotion regardless of costs. Actual owner-observed data is at most ELIGIBLE_FOR_INDEPENDENT_REVIEW; independentAcceptance remains NOT_VERIFIED even if both runs claim PASS. Synthetic fixtures always produce SYNTHETIC_ONLY.
 
@@ -61,7 +62,7 @@ Example, from a separate private evaluator environment rather than the developme
 
     node scripts/phase8-session-recorder.mjs --mode OFF --run-id trial-off-001 --root "D:\private-evaluator\phase8" --workspace-root "D:\private-agent-worktree" < "D:\private-evaluator\phase8\observed-off-events.jsonl" > "D:\private-evaluator\phase8\off-descriptor.json"
 
-Repeat independently with mode ON, a distinct run ID, isolated workspace and output on-descriptor.json. A provider/host integration may instead stream NDJSON rows to stdin in real time. Each *input* record MUST contain ONLY the supported typed fields shown above (no prompt, path, free-text output or credential). The recorder generates its own timestamp, sequence ID and run identity, then emits a hash-checked private off.ndjson/on.ndjson and a private run descriptor, with all coverage flags FALSE and all quality verdicts NOT_RUN. It never infers provider usage or human intervention completeness. Existing traces cannot be overwritten; invalid stream events fail closed and remove incomplete capture.
+Repeat independently with mode ON, a distinct run ID, isolated workspace and output on-descriptor.json. A provider/host integration may instead stream NDJSON rows to stdin in real time. Each *input* record MUST contain ONLY the supported typed fields shown above (no prompt, path, free-text output or credential). The recorder generates its own timestamp, sequence ID and run identity, then emits a hash-checked private off.ndjson/on.ndjson and a private run descriptor, with all coverage flags FALSE, all quality verdicts NOT_RUN and timing marked REPLAY_OR_UNVERIFIED. Only independently corroborated live-host receipts can change timing eligibility. It never infers provider usage or human intervention completeness. Existing traces cannot be overwritten; invalid stream events fail closed and remove incomplete capture.
 
 **Timing caveat:** capture start/end measure the recorder input-listener interval. When input is a previously saved NDJSON file, this is merely replay time, **not agent execution wall time**. Wall time may be reported as real engineering duration only if an auditor verifies the recorder was attached for the full live agent session. Do not attribute a replay-duration measurement to the original task. The script does not guarantee security isolation by itself; the evaluator must enforce actual OS-level read/write/credential boundaries and verify the worktree is disposable and separate. Use no private customer data without authorization.
 
