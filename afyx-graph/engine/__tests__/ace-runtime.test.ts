@@ -83,6 +83,11 @@ test('explicit OFF, protected output and tampered ACE artifact cannot intercept 
   const original = ('Repeated structural dependency summary for indexed project. ' + 'A'.repeat(85) + '\n').repeat(250);
   const result = { content: [{ type: 'text' as const, text: original }] };
   expect(await runtime.maybeOptimize('afyx_graph_explore', { projectPath: fixture.project }, result, null)).toBe(result);
+  const protectedResult = { content: [{ type: 'text' as const, text: 'SECURITY: preserve authoritative evidence.\\n' + original }] };
+  expect(await runtime.maybeOptimize('afyx_graph_inventory', { projectPath: fixture.project }, protectedResult, null)).toBe(protectedResult);
+  const graphError = { ...result, isError: true };
+  expect(await runtime.maybeOptimize('afyx_graph_inventory', { projectPath: fixture.project }, graphError, null)).toBe(graphError);
+  expect(fs.existsSync(fixture.state)).toBe(false);
   process.env.AFYX_CONTEXT_OPT_IN = '0';
   expect(runtime.recoveryAvailable()).toBe(false);
   expect(await runtime.maybeOptimize('afyx_graph_inventory', { projectPath: fixture.project }, result, null)).toBe(result);
