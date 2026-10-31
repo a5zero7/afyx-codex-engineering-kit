@@ -40,6 +40,7 @@ $graphInstaller = Join-Path $packageRoot 'scripts\install-afyx-graph.ps1'
 $graphMetadataPath = Join-Path $packageRoot 'afyx-graph\afyx-graph.json'
 $contextInstaller = Join-Path $packageRoot 'scripts\install-afyx-context.ps1'
 $contextMetadataPath = Join-Path $packageRoot 'afyx-context\afyx-context.json'
+$contextCompanionSource = Join-Path $packageRoot 'skills\afyx-context'
 $forgeInstaller = Join-Path $packageRoot 'scripts\install-afyx-forge.ps1'
 $forgeMetadataPath = Join-Path $packageRoot 'afyx-forge\afyx-forge.json'
 $graphRuntimeRoot = if ($env:AFYX_GRAPH_RUNTIME_ROOT) { $env:AFYX_GRAPH_RUNTIME_ROOT } else { Join-Path $env:USERPROFILE '.afyx\graph' }
@@ -660,6 +661,32 @@ else {
     if (-not $?) { throw 'Afyx Context installation failed.' }
     $summary['Afyx Context Engine'] = $contextAction
     if (-not $WhatIfPreference) { $changesApplied = $true }
+}
+
+# Provider integration of the selected ACE runtime is a separate, Afyx-owned
+# skill companion. It does not change Graph MCP responses or external provider
+# toggles. Native Context CLI remains independently usable without this skill.
+$contextCompanionDesired = -not $SkipProviderConfiguration -and $env:AFYX_CONTEXT_OPT_IN -ne '0' -and (
+    $(if ($controlPlan) { 'afyx-context' -in $controlPlan.DesiredComponents }
+      else { $contextAction -ne 'skip' })
+)
+$contextReadyForCompanion = $contextAction -ne 'skip' -or $contextState -eq 'HEALTHY'
+if ($contextCompanionDesired -and $contextReadyForCompanion -and $Provider.Count) {
+    if (-not (Test-SkillManifest $contextCompanionSource)) { throw 'Bundled Afyx Context provider companion is invalid.' }
+    foreach ($root in @($providerSkillRoots | Select-Object -Unique)) {
+        $target = Join-Path $root 'afyx-context'
+        $ownership = Get-AfyxSkillOwnership -Target $target -Component 'afyx-context' -ExpectedOwner 'afyx'
+        if ($ownership -eq 'AFYX_OWNED_UNMODIFIED' -and
+            (Get-AfyxSkillVersion -Directory $target) -eq (Get-AfyxSkillVersion -Directory $contextCompanionSource)) {
+            $summary["Afyx Context Companion [$root]"] = 'skipped'
+            continue
+        }
+        if ($ownership -notin @('NOT_INSTALLED', 'AFYX_OWNED_UNMODIFIED')) {
+            throw "Refusing automatic Context companion replacement at $target because ownership is $ownership."
+        }
+        $summary["Afyx Context Companion [$root]"] = Install-ManagedSkillSafely 'afyx-context' 'Afyx Context Companion' $contextCompanionSource $target ($ownership -eq 'AFYX_OWNED_UNMODIFIED') $root
+        if (-not $WhatIfPreference) { $changesApplied = $true }
+    }
 }
 
 $forgeState = $states['Afyx Forge Core']
