@@ -33,6 +33,7 @@ function isSafeFile(file: string): boolean {
 
 function installedBridge(): string | null {
   if (process.env.AFYX_CONTEXT_OPT_IN === '0') return null;
+  if (process.env.AFYX_CONTEXT_RUNTIME_ROOT && !path.isAbsolute(process.env.AFYX_CONTEXT_RUNTIME_ROOT)) return null;
   const runtimeRoot = process.env.AFYX_CONTEXT_RUNTIME_ROOT
     ? path.resolve(process.env.AFYX_CONTEXT_RUNTIME_ROOT)
     : path.join(os.homedir(), '.afyx', 'context');
@@ -52,8 +53,42 @@ function installedBridge(): string | null {
         || metadata.ownership_class !== 'AFYX'
         || identity.source_revision !== metadata.source_revision
         || identity.product_version !== metadata.product_version) return null;
-    return bridge;
+    // The installed ACE manifest is the authoritative file inventory. Refuse
+    // to launch a modified worker or dependency (or an unverifiable artifact).
+    const manifest = path.join(runtimeRoot, 'integrity.sha256');
+    if (!isSafeFile(manifest) || typeof metadata.artifact_digest !== 'string') return null;
+    const manifestBytes = fs.readFileSync(manifest);
+    if (createHash('sha256').update(manifestBytes).digest('hex') !== metadata.artifact_digest) return null;
+    const records = manifestBytes.toString('utf8').trim().split('\n');
+    if (records.length === 0 || records.length > 128) return null;
+    let bridgeVerified = false;
+    for (const record of records) {
+      const match = /^([0-9a-f]{64})  current\/([A-Za-z0-9._/-]+)$/.exec(record.trim());
+      if (!match || !match[2] || match[2].split('/').includes('..')) return null;
+      const target = path.join(current, ...match[2].split('/'));
+      if (!isSafeFile(target)) return null;
+      if (createHash('sha256').update(fs.readFileSync(target)).digest('hex') !== match[1]) return null;
+      if (target === bridge) bridgeVerified = true;
+    }
+    return bridgeVerified ? bridge : null;
   } catch { return null; }
+}
+
+function outputLooksRepetitive(result: ToolResult, size: number): boolean {
+  // No ACE worker for a large but unique output: it would substitute a
+  // reference for essential context without demonstrating repeated-content
+  // savings. The explicit companion skill can handle those cases by choice.
+  const seen = new Set<string>();
+  let repeatedBytes = 0;
+  for (const block of result.content) {
+    for (const line of block.text.split('\n')) {
+      if (line.length < 64) continue;
+      const fingerprint = sha256(line);
+      if (seen.has(fingerprint)) repeatedBytes += Buffer.byteLength(line, 'utf8');
+      else seen.add(fingerprint);
+    }
+  }
+  return repeatedBytes >= size * 0.15;
 }
 
 function stateDirectory(): string | null {
@@ -170,6 +205,7 @@ export class McpAceRuntime {
     const size = result.content.reduce((n, item) => n + Buffer.byteLength(item.text, 'utf8'), 0);
     if (size < MIN_OUTPUT_BYTES || size > MAX_OUTPUT_BYTES) return result;
     if (result.content.some((item) => PROTECTED_CONTENT.test(item.text))) return result;
+    if (!outputLooksRepetitive(result, size)) return result;
     const worker = installedBridge();
     const root = canonicalProject(args.projectPath ?? projectHint);
     if (!worker || !root) return result;
