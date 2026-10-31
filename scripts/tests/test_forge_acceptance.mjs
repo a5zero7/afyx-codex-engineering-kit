@@ -28,7 +28,7 @@ assert.equal(plan1.status, 'PLANNED');
 assert.equal(plan1.classification.primaryCategory, TASK_CATEGORIES.NEGATIVE_SIMPLE);
 assert.equal(plan1.adaptivePolicy.executionMode, EXECUTION_MODES.DIRECT_MINIMAL);
 assert.equal(plan1.adaptivePolicy.graphRouting, 'BYPASS');
-assert.equal(plan1.adaptivePolicy.contextEngine, 'BYPASS_DEFAULT_OFF');
+assert.equal(plan1.adaptivePolicy.contextEngine, 'ACTIVE');
 assert.ok(plan1.guidance.toolRecommendations.avoided.some((t) => t.includes('Afyx Graph indexing')));
 console.log('✔ Simple code fix correctly routed to DIRECT_MINIMAL with Graph BYPASS.');
 
@@ -66,7 +66,7 @@ const plan4 = createForgePlan({
 assert.equal(plan4.status, 'PLANNED');
 assert.equal(plan4.adaptivePolicy.graphRouting, 'NOT_AVAILABLE');
 assert.ok(plan4.adaptivePolicy.graphRoutingReason.includes('falling back to direct-source reading'));
-assert.equal(plan4.adaptivePolicy.contextEngine, 'BYPASS_DEFAULT_OFF');
+assert.equal(plan4.adaptivePolicy.contextEngine, 'BYPASS_USER_DISABLED');
 console.log('✔ Absent Graph gracefully degraded to direct-source fallback without throwing errors.');
 
 // 5. Unauthorized Action and Unsafe Execution Refusal
