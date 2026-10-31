@@ -71,7 +71,7 @@ if ($wizardMode) {
     try {
         Write-AfyxSection -Title 'Welcome & Environment' -Terminal $terminal
         Write-AfyxStatus -Status INFO -Name 'Forge' -Detail 'evaluation-only; not a selectable production component' -Terminal $terminal
-        Write-AfyxStatus -Status INFO -Name 'Afyx Context' -Detail 'optional; Graph integration remains default-OFF' -Terminal $terminal
+        Write-AfyxStatus -Status INFO -Name 'Afyx Context' -Detail 'optional to install; enabled by default when healthy; optimized use remains task-driven' -Terminal $terminal
         $presetOptions = @(
             [pscustomobject]@{ Id = 'recommended'; Label = 'Recommended'; Detail = 'Core skills + Engineering Expert'; Enabled = $true },
             [pscustomobject]@{ Id = 'minimal'; Label = 'Minimal'; Detail = 'Core engineering skills'; Enabled = $true },
@@ -83,7 +83,7 @@ if ($wizardMode) {
             $componentOptions = @()
             foreach ($component in @(Get-AfyxComponentContract)) {
                 $detail = "$($component.type); $($component.tier)"
-                if ([string]$component.id -eq 'afyx-context') { $detail += '; optional, integration default-OFF' }
+                if ([string]$component.id -eq 'afyx-context') { $detail += '; enabled when installed, used on demand' }
                 elseif ([string]$component.id -eq 'codex-usage-tracking') { $detail += '; Codex/Windows only' }
                 $componentOptions += [pscustomobject]@{ Id = [string]$component.id; Label = [string]$component.name; Detail = $detail; Enabled = $true }
             }
@@ -99,7 +99,9 @@ if ($wizardMode) {
             [pscustomobject]@{ Id = 'claude'; Label = 'Claude Code'; Detail = $(if ($claudeDetected) { 'host detected' } else { 'unavailable: install Claude Code CLI' }); Enabled = $claudeDetected },
             [pscustomobject]@{ Id = 'skip'; Label = 'Skip provider configuration'; Detail = 'skills/runtimes only; no MCP registration'; Enabled = $true }
         )
-        $providerChoice = @(Read-AfyxMultiChoice -Prompt 'Select provider integrations' -Options $providerOptions -DefaultId @($(if ($codexDetected) { 'codex' } else { 'skip' })) -Terminal $terminal)
+        $detectedProviderDefaults = @($providerOptions | Where-Object { $_.Enabled -and $_.Id -ne 'skip' } | ForEach-Object { $_.Id })
+        if (-not $detectedProviderDefaults.Count) { $detectedProviderDefaults = @('skip') }
+        $providerChoice = @(Read-AfyxMultiChoice -Prompt 'Select provider integrations' -Options $providerOptions -DefaultId $detectedProviderDefaults -Terminal $terminal)
         if ('skip' -in $providerChoice) {
             if ($providerChoice.Count -ne 1) { throw 'Skip provider configuration cannot be combined with a provider.' }
             $Provider = @()
@@ -129,8 +131,8 @@ if (-not $Provider.Count) {
         if ($antigravityCommandDetected) { $detected += 'antigravity' }
         if ($claudeCommandDetected) { $detected += 'claude' }
         Write-Host "Provider hosts detected: $(if ($detected.Count) { $detected -join ', ' } else { 'none' })"
-        do { $choice = (Read-Host 'Provider selection: [A] All detected / [R] Recommended Codex / [C] Custom / [S] Skip [R]').Trim() } until ($choice -match '(?i)^(|a|all|r|recommended|c|custom|s|skip)$')
-        if ($choice -match '(?i)^(a|all)$') { $Provider = $detected }
+        do { $choice = (Read-Host 'Provider selection: [A] All detected / [R] Recommended Codex / [C] Custom / [S] Skip [A]').Trim() } until ($choice -match '(?i)^(|a|all|r|recommended|c|custom|s|skip)$')
+        if ($choice -match '(?i)^(|a|all)$') { if ($detected.Count) { $Provider = $detected } else { $SkipProviderConfiguration = $true } }
         elseif ($choice -match '(?i)^(c|custom)$') { $Provider = @((Read-Host 'Provider ids (comma-separated)').Split(',') | ForEach-Object { $_.Trim() } | Where-Object { $_ }) }
         elseif ($choice -match '(?i)^(s|skip)$') { $SkipProviderConfiguration = $true }
         else { $Provider = @('codex') }
@@ -640,7 +642,7 @@ $contextState = $states['Afyx Context Engine']
 $contextAction = if ($controlPlan) { [string]$actionDecisions['afyx-context'] } else { Resolve-ComponentAction 'afyx-context' 'Afyx Context Engine' }
 if ($contextAction -eq 'skip') { $summary['Afyx Context Engine'] = 'skipped' }
 else {
-    Write-AfyxStatus -Status PLANNED -Name 'Afyx Context Engine' -Detail "$contextAction in progress; Graph integration remains default-OFF" -Terminal $terminal
+    Write-AfyxStatus -Status PLANNED -Name 'Afyx Context Engine' -Detail "$contextAction in progress; task-based enablement available; Graph consumer registration still requires integration support" -Terminal $terminal
     $contextArguments = @{ RuntimeRoot = $ContextRuntimeRoot }
     if ($contextAction -eq 'update') { $contextArguments.Update = $true }
     elseif ($contextAction -eq 'repair') { $contextArguments.Repair = $true }
