@@ -21,7 +21,8 @@ param(
     [string]$ClaudeHome = $(if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $env:USERPROFILE '.claude' }),
     [string]$ClaudeConfigDir = $(if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { '' }),
     [switch]$SkipProviderConfiguration,
-    [string]$ContextRuntimeRoot = $(if ($env:AFYX_CONTEXT_RUNTIME_ROOT) { $env:AFYX_CONTEXT_RUNTIME_ROOT } else { Join-Path $env:USERPROFILE '.afyx\context' })
+    [string]$ContextRuntimeRoot = $(if ($env:AFYX_CONTEXT_RUNTIME_ROOT) { $env:AFYX_CONTEXT_RUNTIME_ROOT } else { Join-Path $env:USERPROFILE '.afyx\context' }),
+    [string]$ForgeRuntimeRoot = $(if ($env:AFYX_FORGE_RUNTIME_ROOT) { $env:AFYX_FORGE_RUNTIME_ROOT } else { Join-Path $env:USERPROFILE '.afyx\forge' })
 )
 
 Set-StrictMode -Version Latest
@@ -39,6 +40,8 @@ $graphInstaller = Join-Path $packageRoot 'scripts\install-afyx-graph.ps1'
 $graphMetadataPath = Join-Path $packageRoot 'afyx-graph\afyx-graph.json'
 $contextInstaller = Join-Path $packageRoot 'scripts\install-afyx-context.ps1'
 $contextMetadataPath = Join-Path $packageRoot 'afyx-context\afyx-context.json'
+$forgeInstaller = Join-Path $packageRoot 'scripts\install-afyx-forge.ps1'
+$forgeMetadataPath = Join-Path $packageRoot 'afyx-forge\afyx-forge.json'
 $graphRuntimeRoot = if ($env:AFYX_GRAPH_RUNTIME_ROOT) { $env:AFYX_GRAPH_RUNTIME_ROOT } else { Join-Path $env:USERPROFILE '.afyx\graph' }
 $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' }
 
@@ -155,7 +158,7 @@ $additionalSkillRoots = @($providerSkillRoots |
 $efficientTarget = Join-Path $SkillsRoot 'efficient-coding'
 $odooTarget = Join-Path $SkillsRoot 'odoo-engineering'
 $expertTarget = Join-Path $SkillsRoot 'afyx-engineering-expert'
-$componentContext = New-AfyxComponentContext -SkillsRoot $SkillsRoot -GraphRoot $graphRuntimeRoot -ContextRoot $ContextRuntimeRoot -CodexHome $codexHome
+$componentContext = New-AfyxComponentContext -SkillsRoot $SkillsRoot -GraphRoot $graphRuntimeRoot -ContextRoot $ContextRuntimeRoot -ForgeRoot $ForgeRuntimeRoot -CodexHome $codexHome
 $componentStates = @{}
 foreach ($componentState in (Get-AfyxComponentStates -Context $componentContext)) { $componentStates[$componentState.Id] = $componentState }
 foreach ($component in (Get-AfyxComponentContract | Where-Object { $_.type -eq 'skill' })) {
@@ -184,7 +187,7 @@ foreach ($specification in $ComponentAction) {
     Assert-ActiveComponentId $Matches[1]
     $componentActions[$Matches[1]] = $Matches[2]
 }
-$knownSelectable = @('efficient-coding', 'odoo-engineering', 'afyx-engineering-expert', 'afyx-graph', 'afyx-context', 'codex-usage-tracking')
+$knownSelectable = @('efficient-coding', 'odoo-engineering', 'afyx-engineering-expert', 'afyx-graph', 'afyx-context', 'afyx-forge', 'codex-usage-tracking')
 foreach ($id in $componentActions.Keys) { if ($id -notin $knownSelectable) { throw "Unknown selectable component: $id" } }
 if ($Preset -and $Preset -notin @('minimal', 'recommended', 'full', 'custom')) { throw "Unknown preset: $Preset" }
 if (-not $Preset -and $CustomComponent.Count) { throw '-CustomComponent requires -Preset custom.' }
@@ -201,6 +204,7 @@ function Get-AvailableVersion([string]$Id) {
         'afyx-engineering-expert' { return Get-AfyxSkillVersion -Directory $bundledEngineeringExpert }
         'afyx-graph' { return (Get-Content -Raw -LiteralPath $graphMetadataPath | ConvertFrom-Json).product_version }
         'afyx-context' { return (Get-Content -Raw -LiteralPath $contextMetadataPath | ConvertFrom-Json).product_version }
+        'afyx-forge' { return (Get-Content -Raw -LiteralPath $forgeMetadataPath | ConvertFrom-Json).product_version }
         default { return '' }
     }
 }
@@ -346,6 +350,7 @@ $componentLabels = [ordered]@{
     'afyx-engineering-expert' = 'Afyx Engineering Expert'
     'afyx-graph' = 'Afyx Graph'
     'afyx-context' = 'Afyx Context Engine'
+    'afyx-forge' = 'Afyx Forge Core'
     'codex-usage-tracking' = 'Usage Tracking'
 }
 $actionDecisions = [ordered]@{}
@@ -364,11 +369,12 @@ $states = [ordered]@{
     'Afyx Engineering Expert' = $componentStates['afyx-engineering-expert'].State
     'Afyx Graph' = $componentStates['afyx-graph'].State
     'Afyx Context Engine' = $componentStates['afyx-context'].State
+    'Afyx Forge Core' = $componentStates['afyx-forge'].State
     'Usage Tracking' = $componentStates['codex-usage-tracking'].State
 }
 Write-AfyxSection -Title 'Component Inventory' -Terminal $terminal
 foreach ($entry in $states.GetEnumerator()) {
-    $id = switch ($entry.Key) { 'Efficient Coding' { 'efficient-coding' } 'Odoo Engineering' { 'odoo-engineering' } 'Afyx Engineering Expert' { 'afyx-engineering-expert' } 'Afyx Graph' { 'afyx-graph' } 'Afyx Context Engine' { 'afyx-context' } default { 'codex-usage-tracking' } }
+    $id = switch ($entry.Key) { 'Efficient Coding' { 'efficient-coding' } 'Odoo Engineering' { 'odoo-engineering' } 'Afyx Engineering Expert' { 'afyx-engineering-expert' } 'Afyx Graph' { 'afyx-graph' } 'Afyx Context Engine' { 'afyx-context' } 'Afyx Forge Core' { 'afyx-forge' } default { 'codex-usage-tracking' } }
     $installed = $componentStates[$id].Version
     $available = Get-AvailableVersion $id
     $status = if ($entry.Value -eq 'HEALTHY' -and $installed -and $available -and (Compare-AfyxVersion $installed $available) -lt 0) { 'UPDATE AVAILABLE' }
@@ -493,6 +499,11 @@ if ($ValidateOnly) {
         AfyxContextState = $states['Afyx Context Engine']
         AfyxContextVersion = (Get-Content -Raw -LiteralPath $contextMetadataPath | ConvertFrom-Json).product_version
         AfyxContextRuntimeRoot = $ContextRuntimeRoot
+        BundledAfyxForgeSource = Test-Path -LiteralPath (Join-Path $packageRoot 'afyx-forge\afyx-forge.json')
+        InstalledAfyxForge = $states['Afyx Forge Core'] -eq 'HEALTHY'
+        AfyxForgeState = $states['Afyx Forge Core']
+        AfyxForgeVersion = (Get-Content -Raw -LiteralPath $forgeMetadataPath | ConvertFrom-Json).product_version
+        AfyxForgeRuntimeRoot = $ForgeRuntimeRoot
         InstalledUsageTracker = $states['Usage Tracking'] -eq 'HEALTHY'
         UsageTrackerState = $states['Usage Tracking']
         CodexCliDetected = $codexCliDetected
@@ -636,6 +647,20 @@ else {
     & $contextInstaller -Confirm:$false -WhatIf:$WhatIfPreference @contextArguments
     if (-not $?) { throw 'Afyx Context installation failed.' }
     $summary['Afyx Context Engine'] = $contextAction
+    if (-not $WhatIfPreference) { $changesApplied = $true }
+}
+
+$forgeState = $states['Afyx Forge Core']
+$forgeAction = if ($controlPlan) { [string]$actionDecisions['afyx-forge'] } else { Resolve-ComponentAction 'afyx-forge' 'Afyx Forge Core' }
+if ($forgeAction -eq 'skip') { $summary['Afyx Forge Core'] = 'skipped' }
+else {
+    Write-AfyxStatus -Status PLANNED -Name 'Afyx Forge Core' -Detail "$forgeAction in progress; Guidance Alpha mode active" -Terminal $terminal
+    $forgeArguments = @{ RuntimeRoot = $ForgeRuntimeRoot }
+    if ($forgeAction -eq 'update') { $forgeArguments.Update = $true }
+    elseif ($forgeAction -eq 'repair') { $forgeArguments.Repair = $true }
+    & $forgeInstaller -Confirm:$false -WhatIf:$WhatIfPreference @forgeArguments
+    if (-not $?) { throw 'Afyx Forge Core installation failed.' }
+    $summary['Afyx Forge Core'] = $forgeAction
     if (-not $WhatIfPreference) { $changesApplied = $true }
 }
 

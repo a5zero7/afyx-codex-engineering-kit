@@ -16,8 +16,14 @@ $artifactTool = Join-Path $PSScriptRoot 'afyx-context-artifact.mjs'
 $recoveryRoot = "$RuntimeRoot.afyx-old"
 
 function Resolve-Full([string]$Path) { return [System.IO.Path]::GetFullPath($Path) }
+function Test-IsFullyQualified([string]$Path) {
+    if (-not [System.IO.Path]::IsPathRooted($Path)) { return $false }
+    $root = [System.IO.Path]::GetPathRoot($Path)
+    if (-not $root -or $root -eq '\' -or $root -eq '/') { return $false }
+    return $true
+}
 function Assert-SafeRoot {
-    if (-not [System.IO.Path]::IsPathFullyQualified($RuntimeRoot)) { throw 'Afyx Context RuntimeRoot must be absolute.' }
+    if (-not (Test-IsFullyQualified $RuntimeRoot)) { throw 'Afyx Context RuntimeRoot must be absolute.' }
     if (($RuntimeRoot -split '[\\/]') -contains '..') { throw 'Afyx Context RuntimeRoot must not contain traversal segments.' }
     $resolved = Resolve-Full $RuntimeRoot
     $root = [System.IO.Path]::GetPathRoot($resolved)

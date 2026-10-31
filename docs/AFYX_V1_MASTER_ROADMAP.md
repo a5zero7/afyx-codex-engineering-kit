@@ -3501,3 +3501,17 @@ this correction. AFYX-283 remains `ACCEPTANCE_PENDING`: the next acceptance step
 is an authorized isolated Architecture rerun proving at most three observed
 Expert references, followed by the already-required independent D.6 substantive
 `KEEP`, `REVISE`, or `REJECT` verdict. Formal A1/B1 remains blocked by D.6.
+
+## 2026-10-31 — TASK F-P01 Afyx Forge Core v0.1 Fast Track Delivery
+
+Status: **FORGE CORE ALPHA RUNTIME DELIVERED; FORMAL CAMPAIGN REMAINS EVALUATION_GATED (0/36 NOT_RUN)**.
+
+Afyx Forge has been productized into a standalone native runtime (`afyx-forge` CLI/API v0.1.0) delivering proportional adaptive engineering policies and actionable structured guidance (investigation priorities, tool recommendations, validation scopes, explicit completion criteria) for real day-to-day software engineering tasks across 6 observable task strata.
+
+Key architectural boundaries:
+- **Assistive Guidance Mode:** Operates strictly within deterministic analysis and guidance generation. No uncontrolled model execution or autonomous destructive file mutation.
+- **Adaptive Tool Routing:** Graph exploration is recommended ONLY when cross-module changes or inheritance structures materially benefit from it; fallback to direct-source is guaranteed. Context Engine remains default-OFF (opt-in only).
+- **Safety Boundary & Bounded Execution:** Requests containing force-push, review bypass, secret extraction, or arbitrary destructive operations are fail-closed with status `REFUSED_UNSAFE`.
+- **Governance Gate Preservation:** The formal Forge B0–B5 comparative evaluation campaign (36 cells) and A8 architectural promotion gate remain strictly `EVALUATION_GATED` (0/36 NOT_RUN). Forge Core Alpha does NOT weaken or prematurely declare A8 as accepted.
+- **Installer Integration:** Integrated into `install.ps1` as an explicitly selectable runtime component under `-Preset custom -CustomComponent @('afyx-forge')` with transactional swap, health validation, update, and clean uninstall capabilities.
+
