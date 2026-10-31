@@ -89,6 +89,14 @@ if ($Uninstall) {
     exit 0
 }
 
+if ($currentState -eq 'DRIFTED') {
+    throw "Refusing to replace or modify unowned directory at $($RuntimeRoot): Afyx Forge ownership could not be verified."
+}
+
+if ($currentState -eq 'NOT INSTALLED' -and ($Update -or $Repair)) {
+    throw "Update or repair requires an existing Afyx Forge runtime at $RuntimeRoot."
+}
+
 if ($currentState -eq 'HEALTHY' -and -not $Update -and -not $Repair) {
     Write-Host "Afyx Forge: already installed and HEALTHY at $RuntimeRoot. Use -Update or -Repair to reinstall."
     exit 0

@@ -29,7 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Check Bash syntax
-        run: bash -n install.sh update.sh uninstall.sh verify.sh scripts/install-afyx-graph.sh scripts/afyx-doctor.sh scripts/afyx-project.sh scripts/lib/afyx-components.sh scripts/lib/afyx-skill-lifecycle.sh
+        run: bash -n install.sh update.sh uninstall.sh verify.sh scripts/install-afyx-graph.sh scripts/install-afyx-forge.sh scripts/afyx-doctor.sh scripts/afyx-project.sh scripts/lib/afyx-components.sh scripts/lib/afyx-skill-lifecycle.sh
       - name: Validate Afyx Graph identity and metadata
         run: python scripts/validate-afyx-graph.py
       - name: Validate the component contract
@@ -48,6 +48,10 @@ jobs:
         run: python evals/harness/routing.py
       - name: Deterministic tests (component contract, project detector, doctor, routing guard)
         run: python -m unittest discover -s scripts/tests -p 'test_*.py' -v
+      - name: Afyx Forge Core unit and acceptance tests
+        run: |
+          node --test afyx-forge/test/
+          node scripts/tests/test_forge_acceptance.mjs
       - name: Validate installer assets
         run: ./install.sh --validate-only
       - name: Verify repository remains clean
@@ -109,6 +113,11 @@ jobs:
         run: ./tools/codex-usage/tests/run-tests.ps1
       - name: Forge frozen input newline portability
         run: python -m unittest scripts.tests.test_forge_portability -v
+      - name: Afyx Forge Core unit and acceptance tests
+        shell: pwsh
+        run: |
+          node --test afyx-forge/test/
+          node scripts/tests/test_forge_acceptance.mjs
       - name: Codex native host and MCP lifecycle regressions
         run: python -m unittest scripts.tests.test_codex_host_resolution scripts.tests.test_mcp_integration -v
       - name: Component contract, project detector and doctor tests (PowerShell and Git Bash)
@@ -123,7 +132,8 @@ jobs:
             @('scripts/tests/test_engineering_assurance.py'),
             @('scripts/tests/test_artifact_identity.py'),
             @('scripts/tests/test_project_detect.py'),
-            @('scripts/tests/test_doctor.py')
+            @('scripts/tests/test_doctor.py'),
+            @('scripts/tests/test_forge_lifecycle_regressions.py')
           )
           $failed = $false
           foreach ($arguments in $commands) {
@@ -147,7 +157,7 @@ jobs:
       - name: Bash 3.2 syntax and portability (system /bin/bash)
         run: |
           /bin/bash --version | head -n 1
-          for f in install.sh update.sh uninstall.sh verify.sh scripts/install-afyx-graph.sh scripts/afyx-doctor.sh scripts/afyx-project.sh scripts/lib/afyx-components.sh scripts/lib/afyx-skill-lifecycle.sh; do
+          for f in install.sh update.sh uninstall.sh verify.sh scripts/install-afyx-graph.sh scripts/install-afyx-forge.sh scripts/afyx-doctor.sh scripts/afyx-project.sh scripts/lib/afyx-components.sh scripts/lib/afyx-skill-lifecycle.sh; do
             /bin/bash -n "$f"
           done
       - name: Installer ValidateOnly (system /bin/bash)
@@ -164,6 +174,10 @@ jobs:
           ! grep -q '^\[FAIL\] \(Efficient Coding\|Odoo Engineering\)' verify.out
           ! grep -q '^\[FAIL\] Prompt Master' verify.out
           rm -f verify.out
+      - name: Afyx Forge Core unit and acceptance tests
+        run: |
+          node --test afyx-forge/test/
+          node scripts/tests/test_forge_acceptance.mjs
       - name: Component contract and project detector (system /bin/bash)
         run: |
           export PATH="/bin:$PATH"
@@ -180,6 +194,7 @@ jobs:
           python3 scripts/tests/test_engineering_assurance.py
           python3 scripts/tests/test_artifact_identity.py
           python3 scripts/tests/test_project_detect.py
+          python3 scripts/tests/test_forge_lifecycle_regressions.py
       - name: Verify repository remains clean
         run: |
           if [[ -n "$(git status --porcelain)" ]]; then

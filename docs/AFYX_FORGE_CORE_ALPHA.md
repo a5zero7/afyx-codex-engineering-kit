@@ -79,18 +79,39 @@ afyx-forge plan --task-file ./task.md --format markdown --output ./plan.md
 
 ---
 
-## 5. Instalasi & Siklus Hidup (Installer Integration)
+## 5. Instalasi & Siklus Hidup Lintas-Platform (Platform Support Matrix)
 
-Afyx Forge Core terintegrasi secara modular ke dalam installer kit:
+### 5.1. Dukungan Windows Unified Kit (Alpha)
+Pada sistem Windows, Afyx Forge Core terintegrasi penuh ke dalam siklus hidup terpadu Afyx Code Engineering Kit:
+- **Instalasi Terpadu:**
+  ```powershell
+  .\install.ps1 -Preset custom -CustomComponent @('efficient-coding', 'afyx-forge')
+  ```
+- **Verifikasi Kesiapan Terpadu:**
+  ```powershell
+  .\verify.ps1 -ForgeRuntimeRoot <path>
+  ```
+- **Pembaruan & Perbaikan Terpadu:**
+  ```powershell
+  .\update.ps1 -ForgeRuntimeRoot <path>
+  ```
+- **Pencopotan Terarah:**
+  ```powershell
+  .\uninstall.ps1 -RemoveAfyxForge
+  ```
+- **Installer Mandiri Windows:**
+  ```powershell
+  .\scripts\install-afyx-forge.ps1 [-RuntimeRoot <dir>] [-Update] [-Repair] [-Uninstall] [-ValidateOnly]
+  ```
 
-### 5.1. Instalasi Custom via Windows PowerShell
-```powershell
-.\install.ps1 -Preset custom -CustomComponent @('afyx-forge')
-```
+### 5.2. Dukungan Unix / Linux / macOS (Standalone Support)
+Pada sistem Unix/Linux/macOS, Afyx Forge Core didukung secara penuh melalui **Standalone Native Installer**:
+- **Instalasi & Verifikasi Standalone:**
+  ```bash
+  ./scripts/install-afyx-forge.sh [--runtime-root <path>] [--update] [--repair] [--uninstall] [--validate-only]
+  ```
+- **Catatan Integrasi Kit Unix (Tracked Follow-up):**
+  Skrip kit-level Unix (`./install.sh`, `./update.sh`, `./uninstall.sh`) saat ini mempertahankan cakupan komponen stabil (skills, Afyx Graph, Afyx Context Engine). Perluasan seleksi Forge Core ke dalam orkestrasi `install.sh` Unix dicatat sebagai item follow-up terencana pada roadmap pasca-Alpha, menjaga kontrak platform kit tetap stabil tanpa memaksakan perubahan orkestrasi Unix di luar cakupan Alpha.
 
-### 5.2. Skrip Instalasi Standalone
-- Windows: `.\scripts\install-afyx-forge.ps1 [-RuntimeRoot <dir>] [-Update] [-Repair] [-Uninstall] [-ValidateOnly]`
-- Unix/Linux/macOS: `./scripts/install-afyx-forge.sh [--update] [--repair] [--uninstall] [--validate-only]`
-
-Setiap instalasi menerapkan mekanisme *atomic swap directory* dengan pencadangan (*recovery root*) dan verifikasi kesehatan pasca-instalasi.
+Setiap metode instalasi menerapkan validasi canonical path ownership, penolakan foreign/unowned directory, *atomic swap directory* dengan pencadangan (*recovery root*), serta verifikasi kesehatan pasca-instalasi yang fail-closed.
 
