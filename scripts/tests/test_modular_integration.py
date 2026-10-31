@@ -367,8 +367,8 @@ console.log(JSON.stringify(plan));
         self.assertIn("afyx-graph", suppressed)
         self.assertEqual(suppressed["afyx-graph"], "EXACT_SOURCE_SUFFICIENT")
 
-    def test_context_engine_preserves_default_off_policy(self) -> None:
-        """Context Engine remains inactive unless explicitly opted-in by the user."""
+    def test_context_engine_default_on_routes_only_when_needed(self) -> None:
+        """Healthy Context is available by default, selected for large tasks, and can be disabled."""
         source = f"""
 import {{ resolveModularCapabilityPlan }} from {json.dumps(MODULAR_MODULE.as_uri())};
 
@@ -377,23 +377,32 @@ const installed = {{
   'afyx-context': {{ installed: true, healthy: true }},
 }};
 
-// Case 1: Default task without opt-in
+// Case 1: Tiny task, context available but not selected
 const planDefault = resolveModularCapabilityPlan(
-  {{ taskType: 'generic-coding', optInContextEngine: false }},
+  {{ taskType: 'generic-coding' }},
   installed
 );
 
-// Case 2: Explicit opt-in
-const planOptIn = resolveModularCapabilityPlan(
-  {{ taskType: 'generic-coding', optInContextEngine: true }},
+// Case 2: Large workload auto-selects Context without opt-in
+const planLarge = resolveModularCapabilityPlan(
+  {{ taskType: 'large-context' }},
   installed
 );
 
-console.log(JSON.stringify({{ planDefault, planOptIn }}));
+// Case 3: Explicit disable remains authoritative
+const planDisabled = resolveModularCapabilityPlan(
+  {{ taskType: 'large-context', optInContextEngine: false }},
+  installed
+);
+
+console.log(JSON.stringify({{ planDefault, planLarge, planDisabled }}));
 """
         res = run_node(source)
         self.assertNotIn("afyx-context", res["planDefault"]["selectedComponents"])
-        self.assertIn("afyx-context", res["planOptIn"]["selectedComponents"])
+        self.assertEqual(res["planDefault"]["componentStates"]["afyx-context"], "AVAILABLE")
+        self.assertIn("afyx-context", res["planLarge"]["selectedComponents"])
+        self.assertNotIn("afyx-context", res["planDisabled"]["selectedComponents"])
+        self.assertEqual(res["planDisabled"]["reasons"]["afyx-context"], "Context Engine explicitly disabled by task or user preference.")
 
     def test_forge_production_activation_remains_unavailable_pending_a8(self) -> None:
         """Verifies Afyx Forge cannot be activated in production prior to formal A8 gate approval."""

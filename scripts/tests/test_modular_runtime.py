@@ -7,7 +7,7 @@ Covers:
    - S2: Odoo ORM / security issue (framework domain authority)
    - S3: Cross-module impact analysis (relational graph evidence & safe degradation)
    - S4: Architecture review (cross-disciplinary engineering expert)
-   - S5: Large context workload (Context Engine default-OFF preserved, explicit opt-in only)
+   - S5: Large context workload (Context Engine selected by default if installed; explicit disable respected)
    - S6: DevOps implementation (technical config retains efficient coding discipline)
    - S7: Documentation-only request (non-coding suppression)
    - S8: Provider capability unavailable (graceful degradation across providers)
@@ -99,7 +99,7 @@ console.log(JSON.stringify(res));
         suppressed_reasons = {item["component"]: item["reason"] for item in res["suppressedRedundancies"]}
         self.assertEqual(suppressed_reasons.get("afyx-engineering-expert"), "SIMPLE_FIX_DISCIPLINE")
         self.assertEqual(suppressed_reasons.get("afyx-graph"), "EXACT_SOURCE_SUFFICIENT")
-        self.assertEqual(suppressed_reasons.get("afyx-context"), "DEFAULT_OFF_POLICY")
+        self.assertEqual(suppressed_reasons.get("afyx-context"), "CONTEXT_NOT_NEEDED")
 
     # -------------------------------------------------------------------------
     # Scenario 2: Odoo ORM / Security Issue (Framework Domain Authority)
@@ -198,10 +198,10 @@ console.log(JSON.stringify(res));
         self.assertEqual(res["domainAuthorities"]["cross-disciplinary-expertise"], "afyx-engineering-expert")
 
     # -------------------------------------------------------------------------
-    # Scenario 5: Large Context Workload (Default-OFF Preserved, Opt-In Only)
+    # Scenario 5: Large Context Workload (Default-ON, On-Demand)
     # -------------------------------------------------------------------------
-    def test_scenario_5_large_context_default_off(self) -> None:
-        """Verifies afyx-context is NOT activated by default, even on large context tasks."""
+    def test_scenario_5_large_context_default_on(self) -> None:
+        """Verifies that installed healthy Context is selected when the task needs optimization."""
         source = f"""
 import {{ resolveModularRuntimeActivation }} from {json.dumps(RUNTIME_MODULE.as_uri())};
 const res = resolveModularRuntimeActivation({{
@@ -215,12 +215,11 @@ const res = resolveModularRuntimeActivation({{
 console.log(JSON.stringify(res));
 """
         res = run_node(source)
-        self.assertNotIn("afyx-context", res["plannedComponents"])
-        suppressed = next(s for s in res["suppressedRedundancies"] if s["component"] == "afyx-context")
-        self.assertEqual(suppressed["reason"], "DEFAULT_OFF_POLICY")
+        self.assertIn("afyx-context", res["plannedComponents"])
+        self.assertEqual(res["domainAuthorities"]["bounded-context-optimization"], "afyx-context")
 
     def test_scenario_5_large_context_opt_in_activation(self) -> None:
-        """Verifies afyx-context activates only with explicit optInContextEngine flag."""
+        """Verifies explicit opt-in remains supported alongside default-on routing."""
         source = f"""
 import {{ resolveModularRuntimeActivation }} from {json.dumps(RUNTIME_MODULE.as_uri())};
 const res = resolveModularRuntimeActivation({{

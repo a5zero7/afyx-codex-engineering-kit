@@ -125,6 +125,21 @@ if [[ -e "$graph_root" ]]; then
   else printf 'Afyx Graph: kept\n'; fi
 fi
 if "$remove_afyx_context"; then
+  # Separate provider companion is removed only under the explicit Context
+  # uninstall operation and only after existing Afyx ownership is verified.
+  for context_skill_root in "$skills_root" ${additional_skill_roots[@]+"${additional_skill_roots[@]}"}; do
+    context_skill_target="$context_skill_root/afyx-context"
+    if "$dry_run"; then
+      afyx_classify_skill "$context_skill_target" afyx-context afyx
+      case "$AFYX_OWNERSHIP_STATE" in
+        NOT_INSTALLED) ;;
+        AFYX_OWNED_UNMODIFIED) printf '+ ownership-verified ACE companion remove %q\n' "$context_skill_target" ;;
+        *) printf 'Refusing to remove ACE companion %s because ownership is %s.\n' "$context_skill_target" "$AFYX_OWNERSHIP_STATE" >&2; exit 1 ;;
+      esac
+    else
+      (skills_root="$context_skill_root"; afyx_remove_skill afyx-context "$context_skill_target" afyx)
+    fi
+  done
   if "$dry_run"; then "$root/scripts/install-afyx-context.sh" --runtime-root "$context_root" --validate-only
   else "$root/scripts/install-afyx-context.sh" --runtime-root "$context_root" --uninstall; fi
 elif [[ -e "$context_root" ]]; then printf 'Afyx Context Engine: kept\n'; fi

@@ -37,7 +37,7 @@ afyx-forge plan --task-file ./task.md --format markdown --output ./plan.md
 
 1. **Proportional Execution:** Select between `DIRECT_MINIMAL`, `FOCUSED_INVESTIGATION`, `STRUCTURAL_GRAPH_AWARE`, `DOMAIN_SPECIALIST`, and `SECURITY_DEFENSE_IN_DEPTH`.
 2. **Graph-Aware Routing:** Use Afyx Graph only when cross-file relationships, inheritance, or impact analysis materially justify it. Fall back gracefully to direct-source tools when Graph is absent.
-3. **Context Engine Default OFF:** Preserve Context Engine default-OFF status; require explicit user opt-in (`AFYX_CONTEXT_OPT_IN=1`).
+3. **Context Engine Default Enabled:** A healthy installed Context Engine is available without an opt-in variable; use it only for substantial or repeated context, honor explicit `AFYX_CONTEXT_OPT_IN=0`, and never claim Graph MCP interception without runtime evidence.
 4. **Bounded Execution:** Forge operates in assistive guidance mode. Autonomous destructive operations, unapproved git push/commit, and secret leaks are strictly refused.
 5. **Governance Integrity:** The formal A8 benchmark campaign remains `EVALUATION_GATED`. Forge Core Alpha provides guidance for day-to-day engineering without executing unapproved benchmark models.
 

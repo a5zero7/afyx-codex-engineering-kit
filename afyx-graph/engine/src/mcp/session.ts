@@ -21,6 +21,7 @@ import { AfyxGraphPackageVersion } from './version';
 import { resolveServerRoot } from '../directory';
 import { AfyxSessionContext } from './session-context';
 import { MCP_SERVER_NAME } from '../product';
+import { McpAceRuntime, ACE_RECOVERY_TOOL, ACE_RECOVERY_DEFINITION } from './ace-runtime';
 
 /**
  * MCP Server Info — kept on the session because some clients log it. The
@@ -89,6 +90,7 @@ export class MCPSession {
   private explicitProjectPath: string | null;
   /** Per-client runtime state. A reconnect receives a fresh context. */
   private readonly context = new AfyxSessionContext();
+  private readonly ace = new McpAceRuntime();
 
   constructor(
     private transport: JsonRpcTransport,
@@ -236,11 +238,23 @@ export class MCPSession {
     // teach the agent to abandon afyx-graph. `getTools()` returns the default
     // surface even before a project is open.
     this.transport.sendResult(request.id, {
-      tools: this.engine.getToolHandler().getTools(),
+      tools: [
+        ...this.engine.getToolHandler().getTools(),
+        ...(this.ace.recoveryAvailable() ? [ACE_RECOVERY_DEFINITION] : []),
+      ],
     });
   }
 
   private async handleToolsCall(request: JsonRpcRequest): Promise<void> {
+    // Recovery is an optional provider-visible surface, not a Graph query or
+    // shared ToolHandler route. It never invokes ACE when explicitly disabled.
+    const params = request.params as { name?: unknown; arguments?: unknown } | undefined;
+    if (params?.name === ACE_RECOVERY_TOOL) {
+      const args = params.arguments as { reference?: unknown; projectPath?: unknown } | undefined;
+      const result = await this.ace.recover(args?.reference, args?.projectPath);
+      this.transport.sendResult(request.id, result);
+      return;
+    }
     const parsed = parseToolCallParams(request.params);
     if (!parsed.ok) {
       this.transport.sendError(request.id, ErrorCodes.InvalidParams, parsed.message);
@@ -259,7 +273,10 @@ export class MCPSession {
       (name, args) => handler.executeRuntime(name, args),
     );
     if (process.env.AFYX_GRAPH_MCP_DEBUG) process.stderr.write(`[mcp-debug] toolsCall ${toolName} id=${String(request.id)} done\n`);
-    this.transport.sendResult(request.id, result);
+    const publicResult = await this.ace.maybeOptimize(
+      toolName, toolArgs, result, this.engine.getProjectPath() ?? this.explicitProjectPath,
+    );
+    this.transport.sendResult(request.id, publicResult);
   }
 
   /**
