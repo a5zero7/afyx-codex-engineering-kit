@@ -156,7 +156,13 @@ export function evaluateManifest(manifest, file) {
 export function loadManifest(file) {
   const absolute = path.resolve(file), stat = fs.lstatSync(absolute);
   check(stat.isFile() && !stat.isSymbolicLink(), 'manifest must be a regular file');
-  return evaluateManifest(JSON.parse(readFile(absolute).toString('utf8')), absolute);
+  let input;
+  try { input = JSON.parse(readFile(absolute).toString('utf8')); }
+  catch (error) {
+    if (error instanceof SyntaxError) throw Error('manifest JSON invalid');
+    throw error;
+  }
+  return evaluateManifest(input, absolute);
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   if (process.argv.length !== 4 || process.argv[2] !== '--input') {
@@ -168,7 +174,12 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
       process.stdout.write(JSON.stringify(report,null,2) + '\n');
       if (['HARD_GATE_FAILED','QUALITY_EVIDENCE_INCOMPLETE'].includes(report.verdict)) process.exitCode = 1;
     } catch (error) {
-      process.stderr.write('Phase 8 evidence rejected: ' + error.message + '\n');
+      // Filesystem and parser errors may embed private paths or excerpts.
+      // Print only sanitized reasons for errors whose payload is not controlled here.
+      const reason = error && typeof error.code === 'string'
+        ? 'local evidence file unavailable or inaccessible'
+        : error.message;
+      process.stderr.write('Phase 8 evidence rejected: ' + reason + '\n');
       process.exitCode = 2;
     }
   }
