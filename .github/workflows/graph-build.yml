@@ -50,6 +50,9 @@ jobs:
       - name: Unit tests
         working-directory: afyx-graph/engine
         run: npm test
+      - name: Focused Graph-ACE MCP runtime regression
+        working-directory: afyx-graph/engine
+        run: npx vitest run __tests__/ace-runtime.test.ts
       - name: Semantic baseline
         working-directory: afyx-graph/engine
         run: npm run test:semantic
@@ -92,6 +95,9 @@ jobs:
       - name: Clean build (no stale dist artifacts)
         working-directory: afyx-graph/engine
         run: npm run build:clean
+      - name: Focused Graph-ACE MCP runtime regression
+        working-directory: afyx-graph/engine
+        run: npx vitest run __tests__/ace-runtime.test.ts
       - name: Semantic baseline
         working-directory: afyx-graph/engine
         run: npm run test:semantic
@@ -127,6 +133,9 @@ jobs:
       - name: Clean build (no stale dist artifacts)
         working-directory: afyx-graph/engine
         run: npm run build:clean
+      - name: Focused Graph-ACE MCP runtime regression
+        working-directory: afyx-graph/engine
+        run: npx vitest run __tests__/ace-runtime.test.ts
       - name: Semantic baseline
         working-directory: afyx-graph/engine
         run: npm run test:semantic
