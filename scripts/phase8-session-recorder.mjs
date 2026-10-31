@@ -75,13 +75,15 @@ function safeEvent(input) {
     return {kind:'rework',actor:input.actor};
   }
   if (input.kind === 'provider_usage') {
-    exactKeys(input, ['kind','source','inputTokens','cachedInputTokens','outputTokens']);
+    exactKeys(input, ['kind','source','usageSemantics','inputTokens','cachedInputTokens','outputTokens']);
     requireCapture(input.source === 'provider_report', 'provider counter provenance missing');
+    requireCapture(input.usageSemantics === 'per_turn_delta',
+      'provider counters must be independently verified per-turn deltas, not cumulative snapshots');
     for (const k of ['inputTokens','cachedInputTokens','outputTokens']) {
       requireCapture(Number.isSafeInteger(input[k]) && input[k] >= 0, 'invalid provider counter');
     }
     requireCapture(input.cachedInputTokens <= input.inputTokens, 'cached input exceeds total input');
-    return {kind:'provider_usage',source:'provider_report',inputTokens:input.inputTokens,
+    return {kind:'provider_usage',source:'provider_report',usageSemantics:'per_turn_delta',inputTokens:input.inputTokens,
       cachedInputTokens:input.cachedInputTokens,outputTokens:input.outputTokens};
   }
   throw new CaptureError('unrecognized event kind');
@@ -121,7 +123,8 @@ export async function recordEvents({mode, runId, root, workspaceRoot, input}) {
     return {
       contract:'afyx.phase8.local-capture/v1',
       run:{mode,runId,eventsFile:filename,eventsSha256:hash.digest('hex'),
-        quality:{...QUALITY},coverage:{...COVERAGE}},
+        quality:{...QUALITY},coverage:{...COVERAGE},
+        timing:{capture:'REPLAY_OR_UNVERIFIED',liveReceiptSha256:null}},
       capturedEvents:events,
       declaredCoverage:'ALL_UNVERIFIED',
       advisory:'Private descriptor only. Confirm complete event-category coverage and independent evaluator quality evidence before paired intake.',
