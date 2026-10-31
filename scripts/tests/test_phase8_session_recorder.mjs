@@ -39,7 +39,8 @@ test('real typed stream materializes a hash-checked private run descriptor',t=>{
   assert.deepEqual(rows.map(x=>x.id),['evt-0','evt-1','evt-2','evt-3']);
   assert.ok(rows.every(x=>x.runId==='fixture-off'));
   assert.equal(rows[2].inputTokens,117);
-  assert.ok(!p.stdout.includes('117'));
+  assert.ok(!p.stdout.includes('"inputTokens"'));
+  assert.ok(!p.stdout.includes('"tool_call"'));
 });
 test('recorded OFF/ON streams are accepted by paired verifier without declaring phantom coverage',t=>{
   const root=setup(t);
