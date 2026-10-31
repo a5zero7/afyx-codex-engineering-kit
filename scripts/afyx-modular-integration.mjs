@@ -88,7 +88,7 @@ export const PRODUCT_INVENTORY = Object.freeze({
     ownershipClass: 'AFYX',
     maturity: 'SOURCE_READY',
     productionReady: false,
-    activationMode: 'DEFAULT_OFF', // Explicit opt-in only
+    activationMode: 'ON_DEMAND_DEFAULT_ENABLED', // Installed and healthy; selected only for relevant tasks
   }),
   'afyx-engineering-expert': Object.freeze({
     id: 'afyx-engineering-expert',
@@ -178,7 +178,7 @@ const NON_CODING_TASK_TYPES = new Set([
  * @param {Object} [task.project] - project facts e.g. { isOdoo: boolean, language: string }
  * @param {boolean} [task.explicitOdooEvidence] - justified explicit Odoo evidence even if repo is undetected
  * @param {boolean} [task.needsRelationalEvidence] - whether relational/impact analysis is required
- * @param {boolean} [task.optInContextEngine] - explicit opt-in for context engine
+ * @param {boolean} [task.optInContextEngine] - true forces eligible selection; false explicitly disables Context
  * @param {Object} [installedComponents] - map of { [componentId]: { installed: boolean, healthy: boolean } }
  * @param {Object} [userPreferences] - user overrides e.g. { forceDirectSource: boolean, disableContext: boolean }
  * @returns {Object} Deterministic capability plan
@@ -205,7 +205,8 @@ export function resolveModularCapabilityPlan(task = {}, installedComponents = {}
 
   const isNonCoding = NON_CODING_TASK_TYPES.has(task.taskType);
   const needsRelational = Boolean(task.needsRelationalEvidence);
-  const optInContext = Boolean(task.optInContextEngine) && !userPreferences.disableContext;
+  const contextEnabled = task.optInContextEngine !== false && !userPreferences.disableContext;
+  const contextNeeded = task.optInContextEngine === true || task.taskType === 'large-context' || task.needsContextOptimization === true;
   const forceDirectSource = Boolean(userPreferences.forceDirectSource);
 
   for (const [id, meta] of Object.entries(PRODUCT_INVENTORY)) {
@@ -290,13 +291,16 @@ export function resolveModularCapabilityPlan(task = {}, installedComponents = {}
         break;
 
       case 'afyx-context':
-        if (optInContext) {
+        if (contextEnabled && contextNeeded) {
           plan.componentStates[id] = 'SELECTED';
           plan.selectedComponents.push(id);
-          plan.reasons[id] = 'Explicitly activated by user opt-in for bounded context optimization.';
+          plan.reasons[id] = 'Installed Context Engine is enabled and the task warrants bounded optimization.';
+        } else if (!contextEnabled) {
+          plan.reasons[id] = 'Context Engine explicitly disabled by task or user preference.';
+          plan.suppressedRedundancies.push({ component: id, reason: 'USER_CONTEXT_DISABLED' });
         } else {
-          plan.reasons[id] = 'Default-OFF policy preserved; context engine requires explicit opt-in.';
-          plan.suppressedRedundancies.push({ component: id, reason: 'DEFAULT_OFF_POLICY' });
+          plan.reasons[id] = 'Context Engine available by default; no optimization needed for this task.';
+          plan.suppressedRedundancies.push({ component: id, reason: 'CONTEXT_NOT_NEEDED' });
         }
         break;
 
