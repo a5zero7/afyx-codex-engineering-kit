@@ -270,6 +270,27 @@ class UnifiedInstallerIntegrationTests(unittest.TestCase):
         self.assertIn("[BLOCKED] Codex host", verified.stdout)
         self.assertIn("[BLOCKED] Core readiness", verified.stdout)
 
+    def test_explicit_context_off_preserves_unmodified_provider_state(self) -> None:
+        # Runtime may be installed, but a deliberate Context OFF must never
+        # materialize a newly enabled provider skill.
+        self.environment["AFYX_CONTEXT_OPT_IN"] = "0"
+        installed = self.invoke("install.ps1", self.common(providers="@('codex')") + " -Confirm:$false")
+        self.assertIn("Afyx Context Engine", installed.stdout)
+        self.assertTrue((self.context / "metadata.json").is_file())
+        self.assertFalse((self.skills / "afyx-context").exists())
+
+    def test_foreign_context_companion_blocks_before_mutation(self) -> None:
+        foreign = self.skills / "afyx-context"
+        foreign.mkdir(parents=True)
+        sentinel = foreign / "SKILL.md"
+        sentinel.write_text("foreign user skill\\n", encoding="utf-8")
+        result = self.invoke("install.ps1", self.common(providers="@('codex')") + " -Confirm:$false", expected=1)
+        self.assertIn("Provider companion preflight blocked before mutation", result.stdout + result.stderr)
+        self.assertEqual(sentinel.read_text(encoding="utf-8"), "foreign user skill\\n")
+        self.assertFalse((self.skills / "efficient-coding").exists())
+        self.assertFalse((self.context / "metadata.json").exists())
+        self.assertFalse((self.codex_home / "config.toml").exists())
+
     def test_wizard_contract_uses_three_provider_multiselect(self) -> None:
         source = (ROOT / "install.ps1").read_text(encoding="utf-8")
         self.assertIn("Id = 'claude'; Label = 'Claude Code'", source)
