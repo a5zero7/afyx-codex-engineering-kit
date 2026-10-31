@@ -130,6 +130,7 @@ jobs:
             @('scripts/tests/test_control_plane.py'),
             @('scripts/tests/test_provider_integration.py'),
             @('scripts/tests/test_engineering_assurance.py'),
+            @('scripts/tests/test_alpha_acceptance_preflight.py'),
             @('scripts/tests/test_artifact_identity.py'),
             @('scripts/tests/test_project_detect.py'),
             @('scripts/tests/test_doctor.py'),
@@ -192,6 +193,7 @@ jobs:
           python3 scripts/tests/test_control_plane.py
           python3 scripts/tests/test_provider_integration.py
           python3 scripts/tests/test_engineering_assurance.py
+          python3 scripts/tests/test_alpha_acceptance_preflight.py
           python3 scripts/tests/test_artifact_identity.py
           python3 scripts/tests/test_project_detect.py
           python3 scripts/tests/test_forge_lifecycle_regressions.py
