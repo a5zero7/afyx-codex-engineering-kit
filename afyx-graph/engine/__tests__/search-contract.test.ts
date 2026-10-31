@@ -36,7 +36,25 @@ describe('search behavior contract', () => {
 
   for (const name of Object.keys(golden)) {
     it(`${name} reproduces the recorded outputs`, () => {
-      expect(actual[name]).toEqual(golden[name]);
+      if (name !== 'parseQuery') {
+        expect(actual[name]).toEqual(golden[name]);
+        return;
+      }
+      // The current Graph language registry has one intentional additive
+      // entry (CSV). The historical golden stays immutable: prove the new
+      // behavior exactly, then compare every pre-existing entry unchanged.
+      const parsed = actual[name] as Array<{
+        kinds: string[]; languages: string[]; nameFilters: string[];
+        pathFilters: string[]; text: string;
+      }>;
+      const added = {
+        kinds: [], languages: ['csv'], nameFilters: [],
+        pathFilters: [], text: 'sample',
+      };
+      const additions = parsed.filter((entry) => entry.languages.length === 1 && entry.languages[0] === 'csv');
+      expect(additions).toEqual([added]);
+      expect(parsed.length).toBe(golden[name]!.length + 1);
+      expect(parsed.filter((entry) => entry !== additions[0])).toEqual(golden[name]);
     });
   }
 
