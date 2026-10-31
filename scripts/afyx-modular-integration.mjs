@@ -1,0 +1,283 @@
+/**
+ * Afyx Modular Integration & Capability Routing Foundation (v1)
+ *
+ * Governing Principle:
+ * "Standalone by Design, Integrated by Contract, Activated by Need."
+ *
+ * Every Afyx-owned component operates independently and exposes compatible
+ * integration contracts when multiple components are installed.
+ *
+ * Integration is available, but execution is selective:
+ * - Prevents duplicate domain responsibilities
+ * - Prevents redundant context loading
+ * - Prevents unnecessary tool invocation
+ * - Prevents unjustified token consumption
+ */
+
+export const AFYX_MODULAR_INTEGRATION_CONTRACT = 'AfyxModularIntegration/v1';
+
+export const GOVERNING_PRINCIPLE = 'Standalone by Design, Integrated by Contract, Activated by Need.';
+
+/**
+ * The 8 explicit lifecycle states of capability discovery, selection, and execution.
+ */
+export const CAPABILITY_LIFECYCLE_STATES = Object.freeze([
+  'INSTALLED',   // File / binary present on host system
+  'AVAILABLE',   // Installed, compatible, and verified healthy
+  'ELIGIBLE',    // Relevant to current task intent and project scope
+  'SELECTED',    // Chosen by routing policy for the task execution plan
+  'ACTIVATED',   // Initialized and session context prepared
+  'EXECUTED',    // Invoked during actual task processing
+  'DEGRADED',    // Operating with reduced scope due to missing optional component
+  'UNAVAILABLE', // Absent, unsupported, disabled, or pending gate acceptance
+]);
+
+/**
+ * 10 Canonical Modular Integration Principles
+ */
+export const INTEGRATION_PRINCIPLES = Object.freeze([
+  'Every installed component remains independently usable.',
+  'Compatible installed components are discoverable and available for cooperation.',
+  'Installation does not imply automatic activation.',
+  'Activation is based on task intent, available evidence, supported capabilities, and declared user preferences.',
+  'A component owns its domain and must not duplicate another component\'s authoritative responsibility.',
+  'Optional component absence must result in safe degradation rather than failure of unrelated components.',
+  'Expensive context loading, indexing, tool execution, and additional validation require justified demand.',
+  'Existing user-authorized behavior and manual overrides take precedence over automatic optimization.',
+  'Unsupported capabilities and missing evidence must be reported explicitly.',
+  'Security, correctness, and authorization requirements always take priority over efficiency.',
+]);
+
+/**
+ * Canonical Afyx Product Inventory & Domain Authority Matrix
+ */
+export const PRODUCT_INVENTORY = Object.freeze({
+  'afyx-graph': Object.freeze({
+    id: 'afyx-graph',
+    canonicalName: 'Afyx Graph',
+    type: 'runtime',
+    primaryCapability: 'repository-graph-evidence',
+    domainAuthority: 'Authoritative supported repository structure, relationships, and impact evidence.',
+    cooperatingComponents: Object.freeze(['afyx-context', 'odoo-engineering', 'efficient-coding']),
+    ownershipClass: 'AFYX',
+    productionReady: true,
+    activationMode: 'ON_DEMAND',
+  }),
+  'afyx-context': Object.freeze({
+    id: 'afyx-context',
+    canonicalName: 'Afyx Context Engine',
+    type: 'runtime',
+    primaryCapability: 'bounded-context-optimization',
+    domainAuthority: 'Bounded context optimization, exact recovery, and fallback.',
+    cooperatingComponents: Object.freeze(['afyx-graph', 'efficient-coding']),
+    ownershipClass: 'AFYX',
+    productionReady: true,
+    activationMode: 'DEFAULT_OFF', // Explicit opt-in only
+  }),
+  'afyx-engineering-expert': Object.freeze({
+    id: 'afyx-engineering-expert',
+    canonicalName: 'Afyx Engineering Expert',
+    type: 'skill',
+    primaryCapability: 'cross-disciplinary-expertise',
+    domainAuthority: 'Cross-disciplinary expertise selection and workflow routing.',
+    cooperatingComponents: Object.freeze(['odoo-engineering', 'afyx-graph']),
+    ownershipClass: 'AFYX',
+    productionReady: true,
+    activationMode: 'ON_DEMAND',
+  }),
+  'odoo-engineering': Object.freeze({
+    id: 'odoo-engineering',
+    canonicalName: 'Afyx Odoo Engineering',
+    type: 'skill',
+    primaryCapability: 'odoo-framework-authority',
+    domainAuthority: 'Odoo-specific technical and framework authority.',
+    cooperatingComponents: Object.freeze(['afyx-graph', 'afyx-engineering-expert']),
+    ownershipClass: 'AFYX',
+    productionReady: true,
+    activationMode: 'DOMAIN_SPECIFIC', // Only for Odoo repositories/tasks
+  }),
+  'efficient-coding': Object.freeze({
+    id: 'efficient-coding',
+    canonicalName: 'Afyx Efficient Coding',
+    type: 'skill',
+    primaryCapability: 'focused-coding-discipline',
+    domainAuthority: 'Focused coding discipline and proportional implementation guidance.',
+    cooperatingComponents: Object.freeze(['afyx-graph', 'afyx-context']),
+    ownershipClass: 'AFYX',
+    productionReady: true,
+    activationMode: 'ALWAYS_AVAILABLE',
+  }),
+  'codex-usage-tracking': Object.freeze({
+    id: 'codex-usage-tracking',
+    canonicalName: 'Afyx Codex Usage Tracking',
+    type: 'toolset',
+    primaryCapability: 'codex-usage-telemetry',
+    domainAuthority: 'Optional Codex-specific usage telemetry.',
+    cooperatingComponents: Object.freeze([]),
+    ownershipClass: 'AFYX',
+    productionReady: true,
+    activationMode: 'OPTIONAL',
+  }),
+  'afyx-forge': Object.freeze({
+    id: 'afyx-forge',
+    canonicalName: 'Afyx Forge',
+    type: 'runtime',
+    primaryCapability: 'adaptive-engineering-policy',
+    domainAuthority: 'Adaptive engineering execution policy, context/tool/validation allocation.',
+    cooperatingComponents: Object.freeze(['efficient-coding', 'afyx-engineering-expert', 'afyx-graph', 'afyx-context']),
+    ownershipClass: 'AFYX',
+    productionReady: false,
+    activationMode: 'GATED_EVALUATION',
+    gateStatus: 'UNAVAILABLE_PENDING_A8',
+  }),
+});
+
+/**
+ * Resolves an explicit, deterministic capability integration plan for an engineering task.
+ *
+ * @param {Object} task
+ * @param {string} task.taskType - e.g. 'simple-fix', 'odoo-issue', 'architecture', 'large-context', 'non-odoo'
+ * @param {string} [task.intent] - descriptive intent
+ * @param {Object} [task.project] - project facts e.g. { isOdoo: boolean, language: string }
+ * @param {boolean} [task.needsRelationalEvidence] - whether relational/impact analysis is required
+ * @param {boolean} [task.optInContextEngine] - explicit opt-in for context engine
+ * @param {Object} [installedComponents] - map of { [componentId]: { installed: boolean, healthy: boolean } }
+ * @param {Object} [userPreferences] - user overrides e.g. { forceDirectSource: boolean, disableContext: boolean }
+ * @returns {Object} Deterministic capability plan
+ */
+export function resolveModularCapabilityPlan(task = {}, installedComponents = {}, userPreferences = {}) {
+  const plan = {
+    contract: AFYX_MODULAR_INTEGRATION_CONTRACT,
+    governingPrinciple: GOVERNING_PRINCIPLE,
+    taskType: task.taskType || 'generic',
+    selectedComponents: [],
+    componentStates: {},
+    suppressedRedundancies: [],
+    degradations: [],
+    reasons: {},
+  };
+
+  const isOdoo = Boolean(task.project?.isOdoo);
+  const needsRelational = Boolean(task.needsRelationalEvidence);
+  const optInContext = Boolean(task.optInContextEngine) && !userPreferences.disableContext;
+  const forceDirectSource = Boolean(userPreferences.forceDirectSource);
+
+  for (const [id, meta] of Object.entries(PRODUCT_INVENTORY)) {
+    const installInfo = installedComponents[id] || { installed: false, healthy: false };
+    const isInstalled = Boolean(installInfo.installed);
+    const isHealthy = Boolean(installInfo.healthy);
+
+    // 1. Forge is strictly blocked pending formal A8 gate
+    if (id === 'afyx-forge') {
+      plan.componentStates[id] = 'UNAVAILABLE';
+      plan.reasons[id] = 'Production activation unavailable pending formal A8 acceptance.';
+      continue;
+    }
+
+    // 2. Base installation/health check
+    if (!isInstalled) {
+      plan.componentStates[id] = 'UNAVAILABLE';
+      plan.reasons[id] = 'Not installed on host.';
+      continue;
+    }
+
+    if (!isHealthy) {
+      plan.componentStates[id] = 'DEGRADED';
+      plan.reasons[id] = 'Installed but reported unhealthy; safe degradation to direct source.';
+      plan.degradations.push({ component: id, fallback: 'DIRECT_SOURCE', reason: 'UNHEALTHY' });
+      continue;
+    }
+
+    // Component is AVAILABLE
+    let state = 'AVAILABLE';
+
+    // 3. Domain eligibility and selection
+    switch (id) {
+      case 'efficient-coding':
+        // Core coding discipline: eligible for coding/debugging tasks
+        state = 'ELIGIBLE';
+        plan.componentStates[id] = 'SELECTED';
+        plan.selectedComponents.push(id);
+        plan.reasons[id] = 'Primary authority for proportional implementation and quality-first discipline.';
+        break;
+
+      case 'odoo-engineering':
+        if (isOdoo && (task.taskType === 'odoo-issue' || task.taskType === 'odoo-feature' || task.taskType === 'odoo-review' || task.taskType === 'impact-analysis')) {
+          plan.componentStates[id] = 'SELECTED';
+          plan.selectedComponents.push(id);
+          plan.reasons[id] = 'Primary domain authority for Odoo models, ORM, views, and version release rules.';
+        } else if (!isOdoo) {
+          plan.componentStates[id] = 'UNAVAILABLE';
+          plan.reasons[id] = 'Repository is non-Odoo; Odoo Engineering suppressed to prevent context clutter.';
+          plan.suppressedRedundancies.push({ component: id, reason: 'NON_ODOO_WORKSPACE' });
+        } else {
+          plan.componentStates[id] = 'AVAILABLE';
+          plan.reasons[id] = 'Available on Odoo host, but not needed for generic task.';
+        }
+        break;
+
+      case 'afyx-engineering-expert':
+        if (task.taskType === 'architecture' || task.taskType === 'multi-disciplinary' || task.taskType === 'system-design') {
+          plan.componentStates[id] = 'SELECTED';
+          plan.selectedComponents.push(id);
+          plan.reasons[id] = 'Primary authority for multi-disciplinary architecture and workflow orchestration.';
+        } else if (task.taskType === 'simple-fix') {
+          plan.componentStates[id] = 'AVAILABLE';
+          plan.reasons[id] = 'Simple fix task; expert orchestration suppressed to prevent token waste and deep persona overhead.';
+          plan.suppressedRedundancies.push({ component: id, reason: 'SIMPLE_FIX_DISCIPLINE' });
+        } else {
+          plan.componentStates[id] = 'AVAILABLE';
+          plan.reasons[id] = 'Available on host, activated on demand for ambiguous or system-level tasks.';
+        }
+        break;
+
+      case 'afyx-graph':
+        if (forceDirectSource) {
+          plan.componentStates[id] = 'AVAILABLE';
+          plan.reasons[id] = 'User explicitly requested direct source; Graph invocation bypassed.';
+        } else if (needsRelational || task.taskType === 'impact-analysis' || task.taskType === 'cross-asset') {
+          plan.componentStates[id] = 'SELECTED';
+          plan.selectedComponents.push(id);
+          plan.reasons[id] = 'Authoritative provider of relational repository evidence and cross-asset dependencies.';
+        } else {
+          plan.componentStates[id] = 'AVAILABLE';
+          plan.reasons[id] = 'Direct source sufficient for task; Graph index invocation suppressed to save resources.';
+          plan.suppressedRedundancies.push({ component: id, reason: 'EXACT_SOURCE_SUFFICIENT' });
+        }
+        break;
+
+      case 'afyx-context':
+        if (optInContext) {
+          plan.componentStates[id] = 'SELECTED';
+          plan.selectedComponents.push(id);
+          plan.reasons[id] = 'Explicitly activated by user opt-in for bounded context optimization.';
+        } else {
+          plan.componentStates[id] = 'AVAILABLE';
+          plan.reasons[id] = 'Default-OFF policy preserved; context engine requires explicit opt-in.';
+          plan.suppressedRedundancies.push({ component: id, reason: 'DEFAULT_OFF_POLICY' });
+        }
+        break;
+
+      case 'codex-usage-tracking':
+        plan.componentStates[id] = 'AVAILABLE';
+        plan.reasons[id] = 'Passive telemetry utility; available without task-level intervention.';
+        break;
+
+      default:
+        plan.componentStates[id] = state;
+        break;
+    }
+  }
+
+  // Handle safe degradation when Graph is required but absent
+  if ((needsRelational || task.taskType === 'impact-analysis') && !plan.selectedComponents.includes('afyx-graph')) {
+    plan.degradations.push({
+      component: 'afyx-graph',
+      fallback: 'DIRECT_SOURCE',
+      reason: 'Relational evidence needed but Afyx Graph is absent/unhealthy; fallback to ripgrep/direct source.',
+    });
+  }
+
+  return Object.freeze(plan);
+}
+

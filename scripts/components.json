@@ -7,6 +7,9 @@
   "provider_negotiation_contract": "ProviderCapabilityNegotiation/v1",
   "engineering_task_contract": "AfyxEngineeringTask/v1",
   "engineering_result_contract": "AfyxEngineeringResult/v1",
+  "modular_integration_contract": "AfyxModularIntegration/v1",
+  "governing_principle": "Standalone by Design, Integrated by Contract, Activated by Need.",
+  "capability_lifecycle_states": "INSTALLED;AVAILABLE;ELIGIBLE;SELECTED;ACTIVATED;EXECUTED;DEGRADED;UNAVAILABLE",
   "default_provider": "codex",
   "supported_presets": "minimal;recommended;full;custom",
   "providers": [
@@ -61,6 +64,8 @@
     {
       "id": "efficient-coding",
       "name": "Efficient Coding",
+      "display_name": "Afyx Efficient Coding",
+      "primary_capability": "focused-coding-discipline",
       "type": "skill",
       "tier": "core",
       "ownership": "afyx",
@@ -80,6 +85,8 @@
     {
       "id": "odoo-engineering",
       "name": "Odoo Engineering",
+      "display_name": "Afyx Odoo Engineering",
+      "primary_capability": "odoo-framework-authority",
       "type": "skill",
       "tier": "core",
       "ownership": "afyx",
@@ -99,6 +106,8 @@
     {
       "id": "afyx-engineering-expert",
       "name": "Afyx Engineering Expert",
+      "display_name": "Afyx Engineering Expert",
+      "primary_capability": "cross-disciplinary-expertise",
       "type": "skill",
       "tier": "optional",
       "ownership": "afyx",
@@ -114,6 +123,8 @@
     {
       "id": "afyx-graph",
       "name": "Afyx Graph",
+      "display_name": "Afyx Graph",
+      "primary_capability": "repository-graph-evidence",
       "type": "runtime",
       "tier": "optional",
       "ownership": "afyx",
@@ -134,6 +145,8 @@
     {
       "id": "afyx-context",
       "name": "Afyx Context Engine",
+      "display_name": "Afyx Context Engine",
+      "primary_capability": "bounded-context-optimization",
       "type": "runtime",
       "tier": "optional",
       "ownership": "afyx",
@@ -156,6 +169,8 @@
     {
       "id": "codex-usage-tracking",
       "name": "Usage Tracking",
+      "display_name": "Afyx Codex Usage Tracking",
+      "primary_capability": "codex-usage-telemetry",
       "type": "toolset",
       "tier": "optional",
       "ownership": "afyx",

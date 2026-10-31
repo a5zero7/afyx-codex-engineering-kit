@@ -13,7 +13,15 @@ const COMPLETENESS_STATES = new Set(['COMPLETE', 'PARTIAL', 'UNKNOWN']);
 const RESULT_STATES = new Set(['SUCCEEDED', 'FAILED', 'BLOCKED', 'UNSUPPORTED', 'NOT_RUN']);
 const SEVERITIES = new Set(['INFO', 'WARNING', 'ERROR']);
 const VERIFICATION_LEVELS = new Set(['DECLARED', 'RUNTIME']);
-const INTEGRATION_COMPONENTS = new Set(['afyx-graph', 'afyx-context']);
+const INTEGRATION_COMPONENTS = new Set([
+  'afyx-graph',
+  'afyx-context',
+  'afyx-engineering-expert',
+  'odoo-engineering',
+  'efficient-coding',
+  'codex-usage-tracking',
+  'afyx-forge',
+]);
 const KNOWN_CAPABILITIES = Object.freeze([
   'configuration', 'hooks', 'instructions', 'lifecycle', 'mcp', 'provider-routing', 'skills',
   'scope:cli-global', 'scope:global', 'scope:ide-global', 'scope:workspace',
