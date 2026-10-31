@@ -267,6 +267,22 @@ switch ($context.State) {
     }
     default { Write-Result 'WARN' 'Afyx Context Engine' "$($context.State): $($context.Detail) (optional)" }
 }
+
+$forge = $componentStates['afyx-forge']
+switch ($forge.State) {
+    'NOT INSTALLED' { Write-Result 'INFO' 'Afyx Forge Core' 'not installed (optional; selectable via custom preset)' }
+    'HEALTHY' {
+        $forgeCli = Join-Path $forge.Path 'bin\afyx-forge.cmd'
+        try {
+            $reported = (& $forgeCli --version 2>$null) -join ' '
+            if ($LASTEXITCODE -ne 0 -or $reported -notmatch [regex]::Escape([string]$forge.Version)) { throw 'version mismatch' }
+            $doctorOut = (& $forgeCli doctor 2>$null) -join ' '
+            if ($LASTEXITCODE -ne 0) { throw 'doctor command failed' }
+            Write-Result 'OK' 'Afyx Forge Core' "$reported; executable verification passed; A8 gate remains EVALUATION_GATED"
+        } catch { Write-Result 'FAIL' 'Afyx Forge Core' "metadata is healthy but executable verification failed: $($_.Exception.Message)"; $coreFailure = $true }
+    }
+    default { Write-Result 'WARN' 'Afyx Forge Core' "$($forge.State): $($forge.Detail) (optional)" }
+}
 if ($codexRequired) {
     if (Test-Path -LiteralPath $configPath -PathType Leaf) { Write-Result 'OK' 'Codex config' 'read-only check completed' }
     else { Write-Result 'WARN' 'Codex config' 'not found; optional MCP entries unavailable' }
