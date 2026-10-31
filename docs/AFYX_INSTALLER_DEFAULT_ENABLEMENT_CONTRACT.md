@@ -21,6 +21,10 @@ The installed and healthy Context Engine is available by default to Afyx Forge's
 
 **Not yet delivered:** automatic activation of the actual Graph-to-ACE consumer in every installed provider runtime. The independent `createGraphAceConsumer` adapter currently needs explicit integration options/state identity, and installed ACE artifact metadata still records `integration_default=OFF`. Do **not** flip artifact/consumer metadata merely to make the label say ON; first implement the supported runtime owner wiring, secure state initialization, explicit-disable precedence, restart/readback, fallback, and regression tests. That is required for full default-ON acceptance.
 
+## Provider companion integration (implemented in draft PR #139)
+
+On Windows, a selected, installed ACE runtime now receives an Afyx-owned on-demand `skills/afyx-context` companion in every selected provider skill root. A selected Forge Core runtime similarly receives the existing `skills/afyx-forge` Alpha guidance companion. On Linux/macOS, the ACE companion is installed in supported Codex/Antigravity skill roots; Forge host parity is not yet available in the Bash installer. The companion is not a new product, does not add an MCP server, and does not claim automatic Graph output interception. The installer checks Afyx ownership and preserves foreign or modified destinations. An explicit `AFYX_CONTEXT_OPT_IN=0` suppresses automatic ACE companion installation. Explicit uninstall removes only verifiably owned companions. Regression coverage includes three-provider Windows fixtures, Bash syntax and native Graph–ACE consumer fallback tests; live user-session activation remains to be proven.
+
 ## Provider selection and integration
 
 - Windows PowerShell wizard preselects all *detected and supported* Codex, Antigravity, and Claude Code CLI hosts. Unavailable hosts remain visible but not selectable.
@@ -45,6 +49,6 @@ The installed and healthy Context Engine is available by default to Afyx Forge's
 
 ## Evidence and remaining work
 
-The initial change covers planning defaults, interactive host default selection, and matching regression expectations. Full acceptance additionally requires: provider-host integration tests, real Windows installation and restart/readback, verified Graph-to-ACE consumer wiring, parity and limitations on Linux/macOS, preservation of explicit user-level disabled settings, and proof of recovery/fallback. Until those checks pass, report **PARTIAL / NOT_RUN**, never `FULLY_INTEGRATED` or `RELEASE_READY`.
+The draft implementation covers planning defaults, interactive host default selection, IDE-only detection diagnostics, owned on-demand ACE/Forge provider skills on supported hosts, and regression expectations. Full acceptance additionally requires: provider-host integration tests, real Windows installation and restart/readback, verified Graph-to-ACE consumer wiring, parity and limitations on Linux/macOS, preservation of explicit user-level disabled settings, and proof of recovery/fallback. Until those checks pass, report **PARTIAL / NOT_RUN**, never `FULLY_INTEGRATED` or `RELEASE_READY`.
 
 This contract complements the existing Afyx component registry and ProviderAdapter/v1; it must not introduce a second installer or orchestrator.
