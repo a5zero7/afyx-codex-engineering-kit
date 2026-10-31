@@ -135,6 +135,10 @@ if ($RemoveAfyxContext) {
 } elseif (Test-Path -LiteralPath $ContextRuntimeRoot) { Write-Host 'Afyx Context Engine: kept' }
 
 if ($RemoveAfyxForge) {
+    foreach ($root in @($providerSkillRoots | Select-Object -Unique)) {
+        $target = Join-Path $root 'afyx-forge'
+        Remove-AfyxSkillSafely -SkillsRoot $root -Component 'afyx-forge' -Target $target -ExpectedOwner 'afyx' -Confirm:$false -WhatIf:$WhatIfPreference
+    }
     & (Join-Path $PSScriptRoot 'scripts\install-afyx-forge.ps1') -RuntimeRoot $ForgeRuntimeRoot -Uninstall -Confirm:$false -WhatIf:$WhatIfPreference
     if (-not $?) { throw 'Afyx Forge removal failed.' }
 } elseif (Test-Path -LiteralPath $ForgeRuntimeRoot) { Write-Host 'Afyx Forge Core: kept' }
