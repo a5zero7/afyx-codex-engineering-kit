@@ -7,6 +7,7 @@ Covers:
 3. Modular Integration & 8 Capability Lifecycle States
 4. Representative Task Routing & Redundancy Suppression
 5. Safety, Degradation, and User Override Priority
+6. Focused Review Corrections (K01.P3): Non-coding tasks, status semantics, explicit Odoo evidence, Graph fallback
 """
 
 from __future__ import annotations
@@ -42,7 +43,7 @@ class ModularIntegrationFoundationTests(unittest.TestCase):
         self.registry_data = json.loads(REGISTRY.read_text(encoding="utf-8"))
 
     # -------------------------------------------------------------------------
-    # 1. Product Identity & Branding Tests
+    # 1. Product Identity, Branding & Maturity Tests
     # -------------------------------------------------------------------------
 
     def test_canonical_product_display_names_are_consistent(self) -> None:
@@ -70,6 +71,22 @@ console.log(JSON.stringify(PRODUCT_INVENTORY));
                 expected_name,
                 f"Mismatch canonical name for {comp_id}",
             )
+
+    def test_product_maturity_classifications_are_explicit(self) -> None:
+        """Verifies explicit product maturity labels separate SOURCE_READY, STANDALONE_ACCEPTED, etc."""
+        source = f"""
+import {{ PRODUCT_MATURITY_LEVELS, PRODUCT_INVENTORY }} from {json.dumps(MODULAR_MODULE.as_uri())};
+console.log(JSON.stringify({{ levels: PRODUCT_MATURITY_LEVELS, inventory: PRODUCT_INVENTORY }}));
+"""
+        res = run_node(source)
+        levels = set(res["levels"])
+        self.assertEqual(
+            levels,
+            {"SOURCE_READY", "STANDALONE_ACCEPTED", "INTEGRATION_ACCEPTED", "RELEASE_READY"},
+        )
+        self.assertEqual(res["inventory"]["afyx-forge"]["maturity"], "SOURCE_READY")
+        self.assertEqual(res["inventory"]["codex-usage-tracking"]["maturity"], "STANDALONE_ACCEPTED")
+        self.assertEqual(res["inventory"]["afyx-graph"]["maturity"], "INTEGRATION_ACCEPTED")
 
     def test_registry_metadata_exposes_canonical_display_names_and_retains_stable_ids(self) -> None:
         """Verifies scripts/components.json preserves stable IDs while exposing canonical display names."""
@@ -171,30 +188,125 @@ console.log(JSON.stringify(CAPABILITY_LIFECYCLE_STATES));
         ]
         self.assertEqual(states, expected)
 
-    def test_safe_degradation_when_optional_component_is_absent(self) -> None:
-        """Verifies safe degradation to DIRECT_SOURCE when an optional helper like Graph is missing."""
+    def test_capability_state_semantics_preserve_available_when_irrelevant(self) -> None:
+        """Installed/healthy components remain AVAILABLE when not selected, never falsely UNAVAILABLE."""
         source = f"""
 import {{ resolveModularCapabilityPlan }} from {json.dumps(MODULAR_MODULE.as_uri())};
 
-// Task requires relational evidence, but Graph is not installed
+// Both installed and healthy
+const installed = {{
+  'efficient-coding': {{ installed: true, healthy: true }},
+  'odoo-engineering': {{ installed: true, healthy: true }},
+  'afyx-graph': {{ installed: true, healthy: true }},
+}};
+
+// Task is non-Odoo generic coding
 const plan = resolveModularCapabilityPlan(
-  {{ taskType: 'impact-analysis', needsRelationalEvidence: true, project: {{ isOdoo: true }} }},
-  {{ 'odoo-engineering': {{ installed: true, healthy: true }} }}
+  {{ taskType: 'generic-coding', intent: 'Update React state hook', project: {{ isOdoo: false }} }},
+  installed
+);
+
+console.log(JSON.stringify(plan));
+"""
+        plan = run_node(source)
+        # Efficient Coding is selected
+        self.assertEqual(plan["componentStates"]["efficient-coding"], "SELECTED")
+        # Odoo Engineering is installed and healthy, but not relevant: must be AVAILABLE, not UNAVAILABLE!
+        self.assertEqual(plan["componentStates"]["odoo-engineering"], "AVAILABLE")
+        self.assertNotIn("odoo-engineering", plan["selectedComponents"])
+
+    def test_non_coding_task_suppresses_efficient_coding_selection(self) -> None:
+        """Non-coding tasks (e.g. documentation, general-inquiry) do NOT select Efficient Coding."""
+        source = f"""
+import {{ resolveModularCapabilityPlan }} from {json.dumps(MODULAR_MODULE.as_uri())};
+
+const installed = {{
+  'efficient-coding': {{ installed: true, healthy: true }},
+  'afyx-engineering-expert': {{ installed: true, healthy: true }},
+}};
+
+const planDoc = resolveModularCapabilityPlan(
+  {{ taskType: 'documentation', intent: 'Draft release notes for v1.0' }},
+  installed
+);
+
+const planInquiry = resolveModularCapabilityPlan(
+  {{ taskType: 'general-inquiry', intent: 'What is the licensing policy?' }},
+  installed
+);
+
+console.log(JSON.stringify({{ planDoc, planInquiry }}));
+"""
+        res = run_node(source)
+        # In both non-coding cases, efficient-coding is NOT selected
+        self.assertNotIn("efficient-coding", res["planDoc"]["selectedComponents"])
+        self.assertEqual(res["planDoc"]["componentStates"]["efficient-coding"], "AVAILABLE")
+        self.assertNotIn("efficient-coding", res["planInquiry"]["selectedComponents"])
+        self.assertEqual(res["planInquiry"]["componentStates"]["efficient-coding"], "AVAILABLE")
+
+    def test_explicit_odoo_task_supported_without_repository_detection(self) -> None:
+        """Explicit Odoo tasks are recognized and select Odoo Engineering even if auto-detection is false."""
+        source = f"""
+import {{ resolveModularCapabilityPlan }} from {json.dumps(MODULAR_MODULE.as_uri())};
+
+const installed = {{
+  'odoo-engineering': {{ installed: true, healthy: true }},
+  'efficient-coding': {{ installed: true, healthy: true }},
+}};
+
+// Repository detection is false or absent, but task is explicitly Odoo
+const plan = resolveModularCapabilityPlan(
+  {{ taskType: 'odoo-issue', intent: 'Fix sale.order compute field in custom addon', project: {{ isOdoo: false }} }},
+  installed
 );
 
 console.log(JSON.stringify(plan));
 """
         plan = run_node(source)
         self.assertIn("odoo-engineering", plan["selectedComponents"])
-        self.assertNotIn("afyx-graph", plan["selectedComponents"])
+        self.assertEqual(plan["componentStates"]["odoo-engineering"], "SELECTED")
 
-        # Check degradation record
-        degradations = [d for d in plan["degradations"] if d["component"] == "afyx-graph"]
-        self.assertTrue(len(degradations) > 0, "Missing safe degradation entry for afyx-graph")
-        self.assertEqual(degradations[0]["fallback"], "DIRECT_SOURCE")
+    def test_graph_fallback_distinguishes_absent_unhealthy_and_user_bypass(self) -> None:
+        """Verifies Graph fallback clearly reports COMPONENT_ABSENT, COMPONENT_UNHEALTHY, and BYPASSED_BY_USER."""
+        source = f"""
+import {{ resolveModularCapabilityPlan }} from {json.dumps(MODULAR_MODULE.as_uri())};
+
+// Case 1: Graph Absent
+const planAbsent = resolveModularCapabilityPlan(
+  {{ taskType: 'impact-analysis', needsRelationalEvidence: true }},
+  {{ 'odoo-engineering': {{ installed: true, healthy: true }} }}
+);
+
+// Case 2: Graph Unhealthy
+const planUnhealthy = resolveModularCapabilityPlan(
+  {{ taskType: 'impact-analysis', needsRelationalEvidence: true }},
+  {{ 'afyx-graph': {{ installed: true, healthy: false }} }}
+);
+
+// Case 3: Graph Installed & Healthy, but Bypassed by User
+const planBypassed = resolveModularCapabilityPlan(
+  {{ taskType: 'impact-analysis', needsRelationalEvidence: true }},
+  {{ 'afyx-graph': {{ installed: true, healthy: true }} }},
+  {{ forceDirectSource: true }}
+);
+
+console.log(JSON.stringify({{ planAbsent, planUnhealthy, planBypassed }}));
+"""
+        res = run_node(source)
+        degAbsent = res["planAbsent"]["degradations"][0]
+        self.assertEqual(degAbsent["reason"], "COMPONENT_ABSENT")
+        self.assertEqual(degAbsent["fallback"], "DIRECT_SOURCE")
+
+        degUnhealthy = res["planUnhealthy"]["degradations"][0]
+        self.assertEqual(degUnhealthy["reason"], "COMPONENT_UNHEALTHY")
+        self.assertEqual(degUnhealthy["fallback"], "DIRECT_SOURCE")
+
+        degBypassed = res["planBypassed"]["degradations"][0]
+        self.assertEqual(degBypassed["reason"], "BYPASSED_BY_USER")
+        self.assertEqual(degBypassed["fallback"], "DIRECT_SOURCE")
 
     # -------------------------------------------------------------------------
-    # 4. Representative Routing & Anti-Redundancy Tests
+    # 4. Anti-Redundancy & Opt-In Tests
     # -------------------------------------------------------------------------
 
     def test_simple_fix_suppresses_deep_orchestration_and_graph_overhead(self) -> None:
@@ -227,29 +339,6 @@ console.log(JSON.stringify(plan));
         self.assertEqual(suppressed["afyx-engineering-expert"], "SIMPLE_FIX_DISCIPLINE")
         self.assertIn("afyx-graph", suppressed)
         self.assertEqual(suppressed["afyx-graph"], "EXACT_SOURCE_SUFFICIENT")
-
-    def test_non_odoo_project_suppresses_odoo_engineering_activation(self) -> None:
-        """In a non-Odoo repository, Odoo Engineering is deterministically suppressed."""
-        source = f"""
-import {{ resolveModularCapabilityPlan }} from {json.dumps(MODULAR_MODULE.as_uri())};
-
-const plan = resolveModularCapabilityPlan(
-  {{ taskType: 'generic-coding', intent: 'Add REST endpoint in FastAPI', project: {{ isOdoo: false }} }},
-  {{
-    'efficient-coding': {{ installed: true, healthy: true }},
-    'odoo-engineering': {{ installed: true, healthy: true }},
-  }}
-);
-
-console.log(JSON.stringify(plan));
-"""
-        plan = run_node(source)
-        self.assertNotIn("odoo-engineering", plan["selectedComponents"])
-        self.assertEqual(plan["componentStates"]["odoo-engineering"], "UNAVAILABLE")
-
-        suppressed = {s["component"]: s["reason"] for s in plan["suppressedRedundancies"]}
-        self.assertIn("odoo-engineering", suppressed)
-        self.assertEqual(suppressed["odoo-engineering"], "NON_ODOO_WORKSPACE")
 
     def test_context_engine_preserves_default_off_policy(self) -> None:
         """Context Engine remains inactive unless explicitly opted-in by the user."""
@@ -299,26 +388,6 @@ console.log(JSON.stringify({{
         self.assertFalse(res["forgeMeta"]["productionReady"])
         self.assertEqual(res["forgeMeta"]["gateStatus"], "UNAVAILABLE_PENDING_A8")
 
-    def test_user_override_takes_precedence_over_automatic_routing(self) -> None:
-        """User explicit preference (e.g. forceDirectSource) overrides Graph selection."""
-        source = f"""
-import {{ resolveModularCapabilityPlan }} from {json.dumps(MODULAR_MODULE.as_uri())};
-
-const plan = resolveModularCapabilityPlan(
-  {{ taskType: 'impact-analysis', needsRelationalEvidence: true }},
-  {{
-    'efficient-coding': {{ installed: true, healthy: true }},
-    'afyx-graph': {{ installed: true, healthy: true }}
-  }},
-  {{ forceDirectSource: true }} // Explicit user override
-);
-
-console.log(JSON.stringify(plan));
-"""
-        plan = run_node(source)
-        self.assertNotIn("afyx-graph", plan["selectedComponents"])
-        self.assertIn("User explicitly requested direct source", plan["reasons"]["afyx-graph"])
-
     # -------------------------------------------------------------------------
     # 5. Architecture Documentation Consistency
     # -------------------------------------------------------------------------
@@ -338,8 +407,9 @@ console.log(JSON.stringify(plan));
         self.assertIn("Afyx Codex Usage Tracking", content)
         self.assertIn("Afyx Forge", content)
         self.assertIn("UNAVAILABLE_PENDING_A8", content)
+        self.assertIn("STANDALONE_ACCEPTED", content)
+        self.assertIn("INTEGRATION_ACCEPTED", content)
 
 
 if __name__ == "__main__":
     unittest.main()
-

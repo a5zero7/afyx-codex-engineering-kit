@@ -12,11 +12,25 @@
  * - Prevents redundant context loading
  * - Prevents unnecessary tool invocation
  * - Prevents unjustified token consumption
+ *
+ * Boundary Note:
+ * This module defines deterministic capability planning. Live runtime tool
+ * invocation and execution monitoring remain separate host integration boundaries.
  */
 
 export const AFYX_MODULAR_INTEGRATION_CONTRACT = 'AfyxModularIntegration/v1';
 
 export const GOVERNING_PRINCIPLE = 'Standalone by Design, Integrated by Contract, Activated by Need.';
+
+/**
+ * Explicit product maturity classifications.
+ */
+export const PRODUCT_MATURITY_LEVELS = Object.freeze([
+  'SOURCE_READY',          // Code verified in source; formal acceptance pending
+  'STANDALONE_ACCEPTED',   // Independently accepted in standalone runtime
+  'INTEGRATION_ACCEPTED',  // Verified in multi-component integrated suite
+  'RELEASE_READY',         // Promoted for public release distribution
+]);
 
 /**
  * The 8 explicit lifecycle states of capability discovery, selection, and execution.
@@ -60,6 +74,7 @@ export const PRODUCT_INVENTORY = Object.freeze({
     domainAuthority: 'Authoritative supported repository structure, relationships, and impact evidence.',
     cooperatingComponents: Object.freeze(['afyx-context', 'odoo-engineering', 'efficient-coding']),
     ownershipClass: 'AFYX',
+    maturity: 'INTEGRATION_ACCEPTED',
     productionReady: true,
     activationMode: 'ON_DEMAND',
   }),
@@ -71,6 +86,7 @@ export const PRODUCT_INVENTORY = Object.freeze({
     domainAuthority: 'Bounded context optimization, exact recovery, and fallback.',
     cooperatingComponents: Object.freeze(['afyx-graph', 'efficient-coding']),
     ownershipClass: 'AFYX',
+    maturity: 'INTEGRATION_ACCEPTED',
     productionReady: true,
     activationMode: 'DEFAULT_OFF', // Explicit opt-in only
   }),
@@ -82,6 +98,7 @@ export const PRODUCT_INVENTORY = Object.freeze({
     domainAuthority: 'Cross-disciplinary expertise selection and workflow routing.',
     cooperatingComponents: Object.freeze(['odoo-engineering', 'afyx-graph']),
     ownershipClass: 'AFYX',
+    maturity: 'INTEGRATION_ACCEPTED',
     productionReady: true,
     activationMode: 'ON_DEMAND',
   }),
@@ -93,6 +110,7 @@ export const PRODUCT_INVENTORY = Object.freeze({
     domainAuthority: 'Odoo-specific technical and framework authority.',
     cooperatingComponents: Object.freeze(['afyx-graph', 'afyx-engineering-expert']),
     ownershipClass: 'AFYX',
+    maturity: 'INTEGRATION_ACCEPTED',
     productionReady: true,
     activationMode: 'DOMAIN_SPECIFIC', // Only for Odoo repositories/tasks
   }),
@@ -104,6 +122,7 @@ export const PRODUCT_INVENTORY = Object.freeze({
     domainAuthority: 'Focused coding discipline and proportional implementation guidance.',
     cooperatingComponents: Object.freeze(['afyx-graph', 'afyx-context']),
     ownershipClass: 'AFYX',
+    maturity: 'INTEGRATION_ACCEPTED',
     productionReady: true,
     activationMode: 'ALWAYS_AVAILABLE',
   }),
@@ -115,6 +134,7 @@ export const PRODUCT_INVENTORY = Object.freeze({
     domainAuthority: 'Optional Codex-specific usage telemetry.',
     cooperatingComponents: Object.freeze([]),
     ownershipClass: 'AFYX',
+    maturity: 'STANDALONE_ACCEPTED',
     productionReady: true,
     activationMode: 'OPTIONAL',
   }),
@@ -126,19 +146,30 @@ export const PRODUCT_INVENTORY = Object.freeze({
     domainAuthority: 'Adaptive engineering execution policy, context/tool/validation allocation.',
     cooperatingComponents: Object.freeze(['efficient-coding', 'afyx-engineering-expert', 'afyx-graph', 'afyx-context']),
     ownershipClass: 'AFYX',
+    maturity: 'SOURCE_READY',
     productionReady: false,
     activationMode: 'GATED_EVALUATION',
     gateStatus: 'UNAVAILABLE_PENDING_A8',
   }),
 });
 
+const NON_CODING_TASK_TYPES = new Set([
+  'documentation',
+  'document-review',
+  'general-inquiry',
+  'conversation',
+  'prompt-writing',
+  'plain-question',
+]);
+
 /**
  * Resolves an explicit, deterministic capability integration plan for an engineering task.
  *
  * @param {Object} task
- * @param {string} task.taskType - e.g. 'simple-fix', 'odoo-issue', 'architecture', 'large-context', 'non-odoo'
+ * @param {string} task.taskType - e.g. 'simple-fix', 'odoo-issue', 'architecture', 'large-context', 'documentation'
  * @param {string} [task.intent] - descriptive intent
  * @param {Object} [task.project] - project facts e.g. { isOdoo: boolean, language: string }
+ * @param {boolean} [task.explicitOdooEvidence] - justified explicit Odoo evidence even if repo is undetected
  * @param {boolean} [task.needsRelationalEvidence] - whether relational/impact analysis is required
  * @param {boolean} [task.optInContextEngine] - explicit opt-in for context engine
  * @param {Object} [installedComponents] - map of { [componentId]: { installed: boolean, healthy: boolean } }
@@ -157,7 +188,15 @@ export function resolveModularCapabilityPlan(task = {}, installedComponents = {}
     reasons: {},
   };
 
-  const isOdoo = Boolean(task.project?.isOdoo);
+  const isOdooDetected = Boolean(task.project?.isOdoo);
+  const isExplicitOdooTask = Boolean(
+    task.explicitOdooEvidence ||
+    task.taskType?.startsWith('odoo-') ||
+    (typeof task.intent === 'string' && /\bodoo\b/i.test(task.intent))
+  );
+  const isOdooRelevant = isOdooDetected || isExplicitOdooTask;
+
+  const isNonCoding = NON_CODING_TASK_TYPES.has(task.taskType);
   const needsRelational = Boolean(task.needsRelationalEvidence);
   const optInContext = Boolean(task.optInContextEngine) && !userPreferences.disableContext;
   const forceDirectSource = Boolean(userPreferences.forceDirectSource);
@@ -174,45 +213,46 @@ export function resolveModularCapabilityPlan(task = {}, installedComponents = {}
       continue;
     }
 
-    // 2. Base installation/health check
+    // 2. Base installation check
     if (!isInstalled) {
       plan.componentStates[id] = 'UNAVAILABLE';
       plan.reasons[id] = 'Not installed on host.';
       continue;
     }
 
+    // 3. Health check: installed but unhealthy degrades
     if (!isHealthy) {
       plan.componentStates[id] = 'DEGRADED';
       plan.reasons[id] = 'Installed but reported unhealthy; safe degradation to direct source.';
-      plan.degradations.push({ component: id, fallback: 'DIRECT_SOURCE', reason: 'UNHEALTHY' });
+      plan.degradations.push({ component: id, fallback: 'DIRECT_SOURCE', reason: 'COMPONENT_UNHEALTHY' });
       continue;
     }
 
-    // Component is AVAILABLE
-    let state = 'AVAILABLE';
+    // 4. Component is physically INSTALLED and AVAILABLE on host.
+    // If not selected, it remains AVAILABLE (never marked UNAVAILABLE when merely irrelevant).
+    plan.componentStates[id] = 'AVAILABLE';
 
-    // 3. Domain eligibility and selection
+    // 5. Domain eligibility and selection
     switch (id) {
       case 'efficient-coding':
-        // Core coding discipline: eligible for coding/debugging tasks
-        state = 'ELIGIBLE';
-        plan.componentStates[id] = 'SELECTED';
-        plan.selectedComponents.push(id);
-        plan.reasons[id] = 'Primary authority for proportional implementation and quality-first discipline.';
+        if (isNonCoding) {
+          plan.reasons[id] = 'Task is non-coding; implementation discipline suppressed to avoid redundant guidance.';
+          plan.suppressedRedundancies.push({ component: id, reason: 'NON_CODING_TASK' });
+        } else {
+          plan.componentStates[id] = 'SELECTED';
+          plan.selectedComponents.push(id);
+          plan.reasons[id] = 'Primary authority for proportional implementation and quality-first discipline.';
+        }
         break;
 
       case 'odoo-engineering':
-        if (isOdoo && (task.taskType === 'odoo-issue' || task.taskType === 'odoo-feature' || task.taskType === 'odoo-review' || task.taskType === 'impact-analysis')) {
+        if (isOdooRelevant) {
           plan.componentStates[id] = 'SELECTED';
           plan.selectedComponents.push(id);
           plan.reasons[id] = 'Primary domain authority for Odoo models, ORM, views, and version release rules.';
-        } else if (!isOdoo) {
-          plan.componentStates[id] = 'UNAVAILABLE';
-          plan.reasons[id] = 'Repository is non-Odoo; Odoo Engineering suppressed to prevent context clutter.';
-          plan.suppressedRedundancies.push({ component: id, reason: 'NON_ODOO_WORKSPACE' });
         } else {
-          plan.componentStates[id] = 'AVAILABLE';
-          plan.reasons[id] = 'Available on Odoo host, but not needed for generic task.';
+          plan.reasons[id] = 'Repository/task is non-Odoo; Odoo Engineering remains available but unselected.';
+          plan.suppressedRedundancies.push({ component: id, reason: 'NON_ODOO_WORKSPACE' });
         }
         break;
 
@@ -222,25 +262,21 @@ export function resolveModularCapabilityPlan(task = {}, installedComponents = {}
           plan.selectedComponents.push(id);
           plan.reasons[id] = 'Primary authority for multi-disciplinary architecture and workflow orchestration.';
         } else if (task.taskType === 'simple-fix') {
-          plan.componentStates[id] = 'AVAILABLE';
           plan.reasons[id] = 'Simple fix task; expert orchestration suppressed to prevent token waste and deep persona overhead.';
           plan.suppressedRedundancies.push({ component: id, reason: 'SIMPLE_FIX_DISCIPLINE' });
         } else {
-          plan.componentStates[id] = 'AVAILABLE';
-          plan.reasons[id] = 'Available on host, activated on demand for ambiguous or system-level tasks.';
+          plan.reasons[id] = 'Available on host; activated on demand for ambiguous or system-level tasks.';
         }
         break;
 
       case 'afyx-graph':
         if (forceDirectSource) {
-          plan.componentStates[id] = 'AVAILABLE';
           plan.reasons[id] = 'User explicitly requested direct source; Graph invocation bypassed.';
         } else if (needsRelational || task.taskType === 'impact-analysis' || task.taskType === 'cross-asset') {
           plan.componentStates[id] = 'SELECTED';
           plan.selectedComponents.push(id);
           plan.reasons[id] = 'Authoritative provider of relational repository evidence and cross-asset dependencies.';
         } else {
-          plan.componentStates[id] = 'AVAILABLE';
           plan.reasons[id] = 'Direct source sufficient for task; Graph index invocation suppressed to save resources.';
           plan.suppressedRedundancies.push({ component: id, reason: 'EXACT_SOURCE_SUFFICIENT' });
         }
@@ -252,32 +288,38 @@ export function resolveModularCapabilityPlan(task = {}, installedComponents = {}
           plan.selectedComponents.push(id);
           plan.reasons[id] = 'Explicitly activated by user opt-in for bounded context optimization.';
         } else {
-          plan.componentStates[id] = 'AVAILABLE';
           plan.reasons[id] = 'Default-OFF policy preserved; context engine requires explicit opt-in.';
           plan.suppressedRedundancies.push({ component: id, reason: 'DEFAULT_OFF_POLICY' });
         }
         break;
 
       case 'codex-usage-tracking':
-        plan.componentStates[id] = 'AVAILABLE';
         plan.reasons[id] = 'Passive telemetry utility; available without task-level intervention.';
         break;
 
       default:
-        plan.componentStates[id] = state;
         break;
     }
   }
 
-  // Handle safe degradation when Graph is required but absent
-  if ((needsRelational || task.taskType === 'impact-analysis') && !plan.selectedComponents.includes('afyx-graph')) {
-    plan.degradations.push({
-      component: 'afyx-graph',
-      fallback: 'DIRECT_SOURCE',
-      reason: 'Relational evidence needed but Afyx Graph is absent/unhealthy; fallback to ripgrep/direct source.',
-    });
+  // 6. Handle safe degradation for Graph when relational evidence is required but Graph is not selected
+  if (needsRelational || task.taskType === 'impact-analysis') {
+    if (forceDirectSource) {
+      plan.degradations.push({
+        component: 'afyx-graph',
+        fallback: 'DIRECT_SOURCE',
+        reason: 'BYPASSED_BY_USER',
+      });
+    } else if (!plan.selectedComponents.includes('afyx-graph')) {
+      const graphInfo = installedComponents['afyx-graph'] || { installed: false, healthy: false };
+      const reasonCode = !graphInfo.installed ? 'COMPONENT_ABSENT' : (!graphInfo.healthy ? 'COMPONENT_UNHEALTHY' : 'UNSUPPORTED_CAPABILITY');
+      plan.degradations.push({
+        component: 'afyx-graph',
+        fallback: 'DIRECT_SOURCE',
+        reason: reasonCode,
+      });
+    }
   }
 
   return Object.freeze(plan);
 }
-
