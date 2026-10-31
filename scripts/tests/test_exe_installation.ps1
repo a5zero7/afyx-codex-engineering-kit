@@ -37,11 +37,53 @@ try {
     New-Item -ItemType Directory -Path $claude -Force | Out-Null
     New-Item -ItemType Directory -Path $fakeBin -Force | Out-Null
 
-    # Ensure native Codex CLI launcher is detectable in headless test runners
-    if (-not (Get-Command codex.cmd, codex.exe -ErrorAction SilentlyContinue)) {
-        Set-Content -LiteralPath (Join-Path $fakeBin 'codex.cmd') -Value "@echo codex-test`r`n" -Encoding utf8
-        $env:PATH = "$fakeBin;$env:PATH"
+    # Provide hermetic Codex CLI mock for isolated test runs
+    $fakeCodexJs = Join-Path $fakeBin 'fake-codex.js'
+    $fakeCodexJsContent = @'
+const fs = require('fs');
+const path = require('path');
+const home = process.env.CODEX_HOME || process.cwd();
+const state = path.join(home, 'fixture-state.json');
+const args = process.argv.slice(2);
+if (args.length === 0 || args[0] === '--version') {
+  console.log('codex-cli 0.1.0-mock');
+  process.exit(0);
+}
+const scope = args[0];
+const action = args[1];
+const name = args[2];
+if (scope === 'mcp') {
+  if (action === 'get') {
+    if (!fs.existsSync(state)) {
+      console.error('MCP server afyx_graph not found');
+      process.exit(1);
     }
+    const content = fs.readFileSync(state, 'utf8');
+    if (!content || !content.trim()) {
+      console.error('MCP server afyx_graph not found');
+      process.exit(1);
+    }
+    console.log(content);
+    process.exit(0);
+  } else if (action === 'add') {
+    const sep = args.indexOf('--');
+    const cmd = args.slice(sep + 1);
+    fs.mkdirSync(home, { recursive: true });
+    fs.writeFileSync(state, JSON.stringify({ transport: { type: 'stdio', command: cmd[0], args: cmd.slice(1) } }));
+    process.exit(0);
+  } else if (action === 'remove') {
+    if (fs.existsSync(state)) {
+      fs.rmSync(state, { force: true });
+    }
+    process.exit(0);
+  }
+}
+process.exit(0);
+'@
+    Set-Content -LiteralPath $fakeCodexJs -Value $fakeCodexJsContent -Encoding utf8
+    $fakeCodexCmdContent = "@echo off`r`nnode `"%~dp0fake-codex.js`" %*`r`n"
+    Set-Content -LiteralPath (Join-Path $fakeBin 'codex.cmd') -Value $fakeCodexCmdContent -Encoding utf8
+    $env:PATH = "$fakeBin;$env:PATH"
 
     $tomlContent = @"
 model = "gpt-5-preview"
