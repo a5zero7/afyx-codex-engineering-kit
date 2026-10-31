@@ -131,7 +131,7 @@ jobs:
             @('scripts/tests/test_skill_legacy_adoption.py'),
             @('scripts/tests/test_control_plane.py'),
             @('scripts/tests/test_provider_integration.py'),
-            @('scripts/tests/test_unified_installer.py'),
+            @('-m', 'unittest', 'scripts.tests.test_unified_installer', '-v'),
             @('scripts/tests/test_context_lifecycle.py'),
             @('scripts/tests/test_context_companion_contract.py'),
             @('scripts/tests/test_engineering_assurance.py'),
