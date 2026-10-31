@@ -6,6 +6,7 @@ param(
     [switch]$RemoveUsageTracker,
     [switch]$RemoveAfyxGraph,
     [switch]$RemoveAfyxContext,
+    [switch]$RemoveAfyxForge,
     [switch]$RemoveProviderConfiguration,
     [string[]]$Provider = @('codex'),
     [ValidateSet('global', 'workspace')][string]$ProviderScope = 'global',
@@ -13,7 +14,8 @@ param(
     [string]$GeminiHome = $(if ($env:AFYX_GEMINI_HOME) { $env:AFYX_GEMINI_HOME } else { Join-Path $env:USERPROFILE '.gemini' }),
     [string]$ClaudeHome = $(if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $env:USERPROFILE '.claude' }),
     [string]$ClaudeConfigDir = $(if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { '' }),
-    [string]$ContextRuntimeRoot = $(if ($env:AFYX_CONTEXT_RUNTIME_ROOT) { $env:AFYX_CONTEXT_RUNTIME_ROOT } else { Join-Path $env:USERPROFILE '.afyx\context' })
+    [string]$ContextRuntimeRoot = $(if ($env:AFYX_CONTEXT_RUNTIME_ROOT) { $env:AFYX_CONTEXT_RUNTIME_ROOT } else { Join-Path $env:USERPROFILE '.afyx\context' }),
+    [string]$ForgeRuntimeRoot = $(if ($env:AFYX_FORGE_RUNTIME_ROOT) { $env:AFYX_FORGE_RUNTIME_ROOT } else { Join-Path $env:USERPROFILE '.afyx\forge' })
 )
 
 Set-StrictMode -Version Latest
@@ -125,5 +127,10 @@ if ($RemoveAfyxContext) {
     & (Join-Path $PSScriptRoot 'scripts\install-afyx-context.ps1') -RuntimeRoot $ContextRuntimeRoot -Uninstall -Confirm:$false -WhatIf:$WhatIfPreference
     if (-not $?) { throw 'Afyx Context removal failed.' }
 } elseif (Test-Path -LiteralPath $ContextRuntimeRoot) { Write-Host 'Afyx Context Engine: kept' }
+
+if ($RemoveAfyxForge) {
+    & (Join-Path $PSScriptRoot 'scripts\install-afyx-forge.ps1') -RuntimeRoot $ForgeRuntimeRoot -Uninstall -Confirm:$false -WhatIf:$WhatIfPreference
+    if (-not $?) { throw 'Afyx Forge removal failed.' }
+} elseif (Test-Path -LiteralPath $ForgeRuntimeRoot) { Write-Host 'Afyx Forge Core: kept' }
 
 Write-Host 'ACE user state, project indexes, external software, and unrelated Codex configuration were not changed.'

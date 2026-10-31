@@ -22,6 +22,7 @@ SELECTABLE = [
     "afyx-engineering-expert",
     "afyx-graph",
     "afyx-context",
+    "afyx-forge",
     "codex-usage-tracking",
 ]
 
@@ -50,7 +51,7 @@ def write(path: Path, text: str, executable: bool = False) -> None:
 
 
 class LifecycleContractTests(unittest.TestCase):
-    def test_six_selectable_components_and_prerequisite_classes(self) -> None:
+    def test_selectable_components_and_prerequisite_classes(self) -> None:
         contract = json.loads((ROOT / "scripts/components.json").read_text(encoding="utf-8"))
         actual = [item["id"] for item in contract["components"]]
         self.assertEqual(actual, SELECTABLE)

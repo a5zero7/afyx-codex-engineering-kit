@@ -72,6 +72,7 @@ function New-AfyxComponentContext {
         [string]$SkillsRoot,
         [string]$GraphRoot,
         [string]$ContextRoot,
+        [string]$ForgeRoot,
         [string]$CodexHome,
         [string]$Platform
     )
@@ -79,14 +80,16 @@ function New-AfyxComponentContext {
     if (-not $SkillsRoot) { $SkillsRoot = Join-Path (Join-Path $userHome '.agents') 'skills' }
     if (-not $GraphRoot) { $GraphRoot = if ($env:AFYX_GRAPH_RUNTIME_ROOT) { $env:AFYX_GRAPH_RUNTIME_ROOT } else { Join-Path (Join-Path $userHome '.afyx') 'graph' } }
     if (-not $ContextRoot) { $ContextRoot = if ($env:AFYX_CONTEXT_RUNTIME_ROOT) { $env:AFYX_CONTEXT_RUNTIME_ROOT } else { Join-Path (Join-Path $userHome '.afyx') 'context' } }
+    if (-not $ForgeRoot) { $ForgeRoot = if ($env:AFYX_FORGE_RUNTIME_ROOT) { $env:AFYX_FORGE_RUNTIME_ROOT } else { Join-Path (Join-Path $userHome '.afyx') 'forge' } }
     if (-not $CodexHome) { $CodexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $userHome '.codex' } }
     if (-not $Platform) { $Platform = Get-AfyxPlatform }
     [pscustomobject]@{
-        SkillsRoot = $SkillsRoot
-        GraphRoot  = $GraphRoot
+        SkillsRoot  = $SkillsRoot
+        GraphRoot   = $GraphRoot
         ContextRoot = $ContextRoot
-        CodexHome  = $CodexHome
-        Platform   = $Platform
+        ForgeRoot   = $ForgeRoot
+        CodexHome   = $CodexHome
+        Platform    = $Platform
     }
 }
 
@@ -227,11 +230,12 @@ function Get-AfyxComponentRoot {
     [CmdletBinding()]
     param([Parameter(Mandatory)]$Component, [Parameter(Mandatory)]$Context)
     $root = switch (Get-AfyxField $Component 'install_root') {
-        'skills_root'     { $Context.SkillsRoot }
-        'afyx_graph_root' { $Context.GraphRoot }
+        'skills_root'       { $Context.SkillsRoot }
+        'afyx_graph_root'   { $Context.GraphRoot }
         'afyx_context_root' { $Context.ContextRoot }
-        'codex_tools'     { Join-Path $Context.CodexHome 'tools' }
-        default           { '' }
+        'afyx_forge_root'   { $Context.ForgeRoot }
+        'codex_tools'       { Join-Path $Context.CodexHome 'tools' }
+        default             { '' }
     }
     if (-not $root) { return '' }
     $relative = Get-AfyxField $Component 'install_path'

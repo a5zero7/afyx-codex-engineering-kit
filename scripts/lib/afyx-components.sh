@@ -12,6 +12,7 @@ AFYX_COMPONENTS_JSON="${AFYX_COMPONENTS_JSON:-$(cd -- "$(dirname -- "${BASH_SOUR
 skills_root="${skills_root:-${CODEX_SKILLS_ROOT:-$HOME/.agents/skills}}"
 graph_root="${graph_root:-${AFYX_GRAPH_RUNTIME_ROOT:-$HOME/.afyx/graph}}"
 context_root="${context_root:-${AFYX_CONTEXT_RUNTIME_ROOT:-$HOME/.afyx/context}}"
+forge_root="${forge_root:-${AFYX_FORGE_RUNTIME_ROOT:-$HOME/.afyx/forge}}"
 codex_home="${codex_home:-${CODEX_HOME:-$HOME/.codex}}"
 
 # One "id" per line, in contract order. The contract is one "key": "value" per line.
@@ -127,6 +128,7 @@ afyx_component_root() {
     skills_root) root="$skills_root" ;;
     afyx_graph_root) root="$graph_root" ;;
     afyx_context_root) root="$context_root" ;;
+    afyx_forge_root) root="$forge_root" ;;
     codex_tools) root="$codex_home/tools" ;;
     *) root="" ;;
   esac

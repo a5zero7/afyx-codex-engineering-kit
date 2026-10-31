@@ -9,7 +9,8 @@ param(
     [string]$GeminiHome = $(if ($env:AFYX_GEMINI_HOME) { $env:AFYX_GEMINI_HOME } else { Join-Path $env:USERPROFILE '.gemini' }),
     [string]$ClaudeHome = $(if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $env:USERPROFILE '.claude' }),
     [string]$ClaudeConfigDir = $(if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { '' }),
-    [string]$ContextRuntimeRoot = $(if ($env:AFYX_CONTEXT_RUNTIME_ROOT) { $env:AFYX_CONTEXT_RUNTIME_ROOT } else { Join-Path $env:USERPROFILE '.afyx\context' })
+    [string]$ContextRuntimeRoot = $(if ($env:AFYX_CONTEXT_RUNTIME_ROOT) { $env:AFYX_CONTEXT_RUNTIME_ROOT } else { Join-Path $env:USERPROFILE '.afyx\context' }),
+    [string]$ForgeRuntimeRoot = $(if ($env:AFYX_FORGE_RUNTIME_ROOT) { $env:AFYX_FORGE_RUNTIME_ROOT } else { Join-Path $env:USERPROFILE '.afyx\forge' })
 )
 
 Set-StrictMode -Version Latest
@@ -53,7 +54,7 @@ $primarySkillsPath = [System.IO.Path]::GetFullPath($SkillsRoot)
 $additionalSkillRoots = @($providerSkillRoots |
     Where-Object { [System.IO.Path]::GetFullPath($_) -ne $primarySkillsPath } |
     Select-Object -Unique)
-$componentContext = New-AfyxComponentContext -SkillsRoot $SkillsRoot -GraphRoot $graphRoot -ContextRoot $ContextRuntimeRoot -CodexHome $codexHome
+$componentContext = New-AfyxComponentContext -SkillsRoot $SkillsRoot -GraphRoot $graphRoot -ContextRoot $ContextRuntimeRoot -ForgeRoot $ForgeRuntimeRoot -CodexHome $codexHome
 $componentStates = @{}
 foreach ($componentState in (Get-AfyxComponentStates -Context $componentContext)) { $componentStates[$componentState.Id] = $componentState }
 if ($Preset) {

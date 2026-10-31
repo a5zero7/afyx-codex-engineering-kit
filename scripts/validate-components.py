@@ -21,9 +21,9 @@ OWNERSHIP = {"afyx", "upstream", "external"}
 OWNERSHIP_CLASSES = {"AFYX", "EXTERNAL", "USER"}
 PRESETS = {"minimal", "recommended", "full", "custom"}
 PLATFORMS = {"all", "windows"}
-INSTALL_ROOTS = {"skills_root", "afyx_graph_root", "afyx_context_root", "codex_tools", ""}
+INSTALL_ROOTS = {"skills_root", "afyx_graph_root", "afyx_context_root", "afyx_forge_root", "codex_tools", ""}
 REQUIRED_KEYS = {"id", "name", "type", "tier", "ownership", "ownership_class", "presets", "platforms", "install_root", "install_path"}
-EXPECTED_IDS = ["efficient-coding", "odoo-engineering", "afyx-engineering-expert", "afyx-graph", "afyx-context", "codex-usage-tracking"]
+EXPECTED_IDS = ["efficient-coding", "odoo-engineering", "afyx-engineering-expert", "afyx-graph", "afyx-context", "afyx-forge", "codex-usage-tracking"]
 LINE_RE = re.compile(r'^\s*"[a-z_]+":\s*"[^"\\]*",?\s*$')
 
 
