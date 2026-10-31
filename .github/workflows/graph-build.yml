@@ -16,7 +16,7 @@ on:
       - 'scripts/audit-legacy-identity.py'
       - '.github/workflows/graph-build.yml'
   pull_request:
-    branches: [main, alpha]
+    branches: [main, dev, alpha]
     paths:
       - 'afyx-graph/**'
       - 'scripts/install-afyx-graph.*'
