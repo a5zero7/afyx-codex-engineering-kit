@@ -53,7 +53,10 @@ try {
     # Skills directory
     $stagedSkills = Join-Path $stagingDir 'skills'
     New-Item -ItemType Directory -Path $stagedSkills -Force | Out-Null
-    foreach ($sk in @('efficient-coding', 'odoo-engineering', 'afyx-engineering-expert', 'afyx-forge')) {
+    # Include optional provider companions from the candidate source tree.
+    # Context is introduced on a separate PR; staging must pick it up when
+    # that source is integrated, without changing today's standalone default.
+    foreach ($sk in @('efficient-coding', 'odoo-engineering', 'afyx-engineering-expert', 'afyx-forge', 'afyx-context')) {
         $skSrc = Join-Path $repoRoot "skills\$sk"
         if (Test-Path -LiteralPath $skSrc) {
             Copy-Item -LiteralPath $skSrc -Destination $stagedSkills -Recurse -Force
