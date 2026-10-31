@@ -38,7 +38,11 @@ use a **default-enabled, invoke-only-when-needed** policy. This does not yet tur
 on the native Graph-to-ACE consumer automatically for each provider: that is a
 separate runtime integration acceptance item. See
 [Default Enablement & Provider Discovery Contract](AFYX_INSTALLER_DEFAULT_ENABLEMENT_CONTRACT.md)
-for the current implementation boundary and required validation.
+for the current implementation boundary and required validation. When the
+selected ACE or Forge runtime is installed through the Windows Kit wizard,
+its owned on-demand companion skill is registered under the chosen provider
+skill roots; explicit component uninstall removes owned companions. IDE-only
+host detection never bypasses CLI requirements for supported MCP registration.
 
 ## Provider-aware onboarding
 
@@ -109,9 +113,12 @@ The Midnight Circuit interface uses Up/Down to move, Space to toggle custom
 components, Enter to continue, and Esc to cancel before mutation. It guides the
 operator through environment detection, preset/components, provider and scope,
 the authoritative desired-state plan, explicit confirmation, real lifecycle
-work, and a final receipt. Forge is shown only as evaluation information and is
-not selectable. Afyx Context remains optional and Graph integration remains
-default OFF.
+work, and a final receipt. Forge Core remains an optional Alpha guidance
+component; formal A8 acceptance is still gated. Afyx Context remains optional
+to install. Healthy selected Context and Forge runtimes receive on-demand
+provider skill companions on the supported host surfaces. Context route
+planning is default-enabled, but automatic Graph MCP interception is not yet
+verified and remains separately gated.
 
 The installer never changes the terminal background. On capable terminals it
 uses the Afyx Electric Cyan, Soft Violet, Emerald, Amber, and Soft Coral palette.
