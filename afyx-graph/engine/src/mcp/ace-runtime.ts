@@ -217,6 +217,7 @@ export class McpAceRuntime {
       toolName, graphResult: result,
     });
     if (response?.status !== 'optimized' || !response.result || !Array.isArray(response.result.content)
+        || typeof response.savedChars !== 'number'
         || !Number.isSafeInteger(response.savedChars) || response.savedChars <= 0
         || response.result.isError) return result;
     // Retain an actionable recovery route in the public MCP output.
