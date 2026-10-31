@@ -71,3 +71,57 @@ test('invalid references, unavailable roots and unsafe state overlap do not retu
     fs.rmSync(lab, { force: true, recursive: true });
   }
 });
+
+
+test('real installer artifact contains a verified runnable Graph MCP bridge and exact recovery', () => {
+  const lab = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-packaged-ace-mcp-')));
+  try {
+    const source = fileURLToPath(new URL('../', import.meta.url));
+    const artifactTool = fileURLToPath(new URL('../../scripts/afyx-context-artifact.mjs', import.meta.url));
+    const current = path.join(lab, 'installed', 'current');
+    const metadataFile = path.join(lab, 'installed', 'metadata.json');
+    const manifestFile = path.join(lab, 'installed', 'integrity.sha256');
+    const build = spawnSync(process.execPath, [
+      artifactTool, 'prepare', '--source', source,
+      '--target', current, '--metadata', metadataFile,
+      '--manifest', manifestFile, '--revision', 'a'.repeat(40),
+    ], { encoding: 'utf8', timeout: 10_000 });
+    assert.equal(build.status, 0, build.stderr);
+    const manifest = fs.readFileSync(manifestFile, 'utf8');
+    const metadata = JSON.parse(fs.readFileSync(metadataFile, 'utf8'));
+    assert.equal(metadata.artifact_digest, hash(manifest));
+    const packagedBridge = path.join(current, 'dist', 'graph-mcp-bridge.js');
+    assert.ok(manifest.includes('  current/dist/graph-mcp-bridge.js'));
+    assert.equal(
+      hash(fs.readFileSync(packagedBridge)),
+      manifest.split('\n').find((line) => line.endsWith('  current/dist/graph-mcp-bridge.js')).slice(0, 64),
+    );
+
+    const projectRoot = path.join(lab, 'indexed-project');
+    fs.mkdirSync(projectRoot);
+    const stateDir = path.join(lab, 'private-state');
+    const identity = {
+      projectRoot, stateDir, sourceIdentity: 'graph-mcp-project:' + hash(projectRoot),
+    };
+    const invokeInstalled = (payload) => {
+      const run = spawnSync(process.execPath, [packagedBridge], {
+        input: JSON.stringify(payload), encoding: 'utf8', timeout: 10_000, maxBuffer: 3_000_000,
+      });
+      assert.equal(run.status, 0, run.stderr);
+      return JSON.parse(run.stdout);
+    };
+    const original = ('Indexed project dependency summary - repeat data with a safe trace. ' + 'Q'.repeat(100) + '\n').repeat(240);
+    const reduced = invokeInstalled({
+      ...identity, operation: 'reduce', toolName: 'afyx_graph_inventory',
+      graphResult: { content: [{ type: 'text', text: original }] },
+    });
+    assert.equal(reduced.status, 'optimized');
+    const reference = reduced.result.content[0].text.match(/ace:v1:[0-9a-f]{16}:[0-9a-f]{16}:[0-9a-f]{64}/)?.[0];
+    assert.ok(reference);
+    const recovered = invokeInstalled({ ...identity, operation: 'recover', reference });
+    assert.equal(recovered.status, 'recovered');
+    assert.equal(recovered.content, original);
+  } finally {
+    fs.rmSync(lab, { recursive: true, force: true });
+  }
+});
