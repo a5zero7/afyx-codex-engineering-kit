@@ -33,6 +33,13 @@ On Linux/macOS, Windows-only Usage Tracking is `NOT_APPLICABLE`, not a failed
 installation. ACE (`afyx-context`) is absent from all implicit presets.
 Components outside the desired plan are preserved, not removed.
 
+For selected and healthy ACE installations, Forge planning and modular routing now
+use a **default-enabled, invoke-only-when-needed** policy. This does not yet turn
+on the native Graph-to-ACE consumer automatically for each provider: that is a
+separate runtime integration acceptance item. See
+[Default Enablement & Provider Discovery Contract](AFYX_INSTALLER_DEFAULT_ENABLEMENT_CONTRACT.md)
+for the current implementation boundary and required validation.
+
 ## Provider-aware onboarding
 
 Codex remains the default provider. Provider adapters are not Kit components, and
