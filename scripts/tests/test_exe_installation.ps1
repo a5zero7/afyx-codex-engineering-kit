@@ -97,6 +97,38 @@ my_custom_env = "production"
     $env:AFYX_GRAPH_RUNTIME_ROOT = $graph
     $env:CODEX_HOME = $codex
 
+    # Packaging regression: all present, supported provider companions must
+    # survive the EXE's embedded-archive staging. This check automatically
+    # begins covering Afyx Context when PR #139 source is integrated, without
+    # assuming a companion was already shipped on the older dev baseline.
+    $extractedPayload = Join-Path $disposable 'embedded-payload-check'
+    & $exePath --extract $extractedPayload
+    if ($LASTEXITCODE -ne 0) { throw "Embedded payload extraction failed with exit code $LASTEXITCODE" }
+    foreach ($skill in @('efficient-coding', 'odoo-engineering', 'afyx-engineering-expert', 'afyx-forge', 'afyx-context')) {
+        $sourceSkill = Join-Path $repoRoot "skills\\$skill\\SKILL.md"
+        if (-not (Test-Path -LiteralPath $sourceSkill -PathType Leaf)) { continue }
+        $shippedSkill = Join-Path $extractedPayload "skills\\$skill\\SKILL.md"
+        if (-not (Test-Path -LiteralPath $shippedSkill -PathType Leaf)) {
+            throw "Installer payload omitted the available provider skill: $skill"
+        }
+        $sourceDigest = (Get-FileHash -LiteralPath $sourceSkill -Algorithm SHA256).Hash
+        $shippedDigest = (Get-FileHash -LiteralPath $shippedSkill -Algorithm SHA256).Hash
+        if ($sourceDigest -ne $shippedDigest) {
+            throw "Installer payload skill differs from the candidate source: $skill"
+        }
+    }
+    $sourceBridge = Join-Path $repoRoot 'afyx-context\\src\\graph-mcp-bridge.js'
+    if (Test-Path -LiteralPath $sourceBridge -PathType Leaf) {
+        $shippedBridge = Join-Path $extractedPayload 'afyx-context\\src\\graph-mcp-bridge.js'
+        if (-not (Test-Path -LiteralPath $shippedBridge -PathType Leaf)) {
+            throw 'Installer payload omitted the available native Graph-ACE MCP worker.'
+        }
+        if ((Get-FileHash -LiteralPath $sourceBridge -Algorithm SHA256).Hash -ne
+            (Get-FileHash -LiteralPath $shippedBridge -Algorithm SHA256).Hash) {
+            throw 'Installer payload Graph-ACE MCP worker hash differs from candidate source.'
+        }
+    }
+
     # Phase 1: Component Discovery / Pre-flight
     Write-Host "`n[1/5] Testing Component Discovery via AfyxSetup.exe -ValidateOnly..." -ForegroundColor Yellow
     & $exePath -ValidateOnly -SkillsRoot $skills -ContextRuntimeRoot $context -ForgeRuntimeRoot $forge -GeminiHome $gemini -ClaudeHome $claude -Provider codex
