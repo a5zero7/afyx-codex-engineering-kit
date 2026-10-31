@@ -1,4 +1,6 @@
-# Verification test for AfyxSetup.exe direct execution
+# Focused Clean-Windows Installation Smoke Test for TASK U-A03
+# Tests discovery, 7-component installation, verification, idempotence, safe uninstall, and foreign config preservation via AfyxSetup.exe
+
 [CmdletBinding()]
 param()
 
@@ -9,20 +11,28 @@ $scriptRoot = $PSScriptRoot
 $repoRoot = (Resolve-Path (Join-Path $scriptRoot '..\..')).Path
 $exePath = Join-Path $repoRoot 'dist\AfyxSetup.exe'
 
-Write-Host "=== Testing AfyxSetup.exe Direct 7-Component Installation ===" -ForegroundColor Cyan
-Write-Host "Executable: $exePath"
+Write-Host "==================================================================" -ForegroundColor Cyan
+Write-Host " TASK U-A03: Clean-Windows Smoke Test via Final AfyxSetup.exe" -ForegroundColor Cyan
+Write-Host " Executable: $exePath" -ForegroundColor Cyan
+Write-Host " Size: $((Get-Item -LiteralPath $exePath).Length) bytes" -ForegroundColor Cyan
+Write-Host " SHA-256: $((Get-FileHash -LiteralPath $exePath -Algorithm SHA256).Hash)" -ForegroundColor Cyan
+Write-Host "==================================================================" -ForegroundColor Cyan
 
-$disposable = "D:\Project\workspace\test-exe-disposable-$([Guid]::NewGuid().ToString('N').Substring(0, 8))"
+$disposable = "D:\Project\workspace\test-smoke-u03-$([Guid]::NewGuid().ToString('N').Substring(0, 8))"
 $skills = Join-Path $disposable 'skills'
 $context = Join-Path $disposable 'context'
 $forge = Join-Path $disposable 'forge'
 $codex = Join-Path $disposable 'codex'
 $graph = Join-Path $disposable 'graph'
+$gemini = Join-Path $disposable 'gemini'
+$claude = Join-Path $disposable 'claude'
 
 try {
+    # 0. Setup disposable test root & foreign config
     New-Item -ItemType Directory -Path $codex -Force | Out-Null
-    
-    # Write valid TOML without shell escaping issues
+    New-Item -ItemType Directory -Path $gemini -Force | Out-Null
+    New-Item -ItemType Directory -Path $claude -Force | Out-Null
+
     $tomlContent = @"
 model = "gpt-5-preview"
 
@@ -35,42 +45,73 @@ my_custom_env = "production"
     $env:AFYX_GRAPH_RUNTIME_ROOT = $graph
     $env:CODEX_HOME = $codex
 
-    Write-Host "Running AfyxSetup.exe..."
-    $allSeven = "efficient-coding,odoo-engineering,afyx-engineering-expert,afyx-graph,afyx-context,afyx-forge,codex-usage-tracking"
-    
-    & $exePath -Preset custom -CustomComponent $allSeven -SkillsRoot $skills -ContextRuntimeRoot $context -ForgeRuntimeRoot $forge -Offline -Provider codex -SkipGraphPathUpdate
-    
-    $exitCode = $LASTEXITCODE
-    Write-Host "AfyxSetup.exe Exit Code: $exitCode"
-    if ($exitCode -ne 0) { throw "AfyxSetup.exe failed with exit code $exitCode" }
+    # Phase 1: Component Discovery / Pre-flight
+    Write-Host "`n[1/5] Testing Component Discovery via AfyxSetup.exe -ValidateOnly..." -ForegroundColor Yellow
+    & $exePath -ValidateOnly -SkillsRoot $skills -ContextRuntimeRoot $context -ForgeRuntimeRoot $forge -GeminiHome $gemini -ClaudeHome $claude -Provider codex
+    if ($LASTEXITCODE -ne 0) { throw "Discovery failed with exit code $LASTEXITCODE" }
+    Write-Host "-> Component discovery PASSED." -ForegroundColor Green
 
-    # Verify CLIs and files
+    # Phase 2: Complete Seven-Component Installation
+    Write-Host "`n[2/5] Testing 7-Component Clean Installation..." -ForegroundColor Yellow
+    $allSeven = "efficient-coding,odoo-engineering,afyx-engineering-expert,afyx-graph,afyx-context,afyx-forge,codex-usage-tracking"
+    & $exePath -Preset custom -CustomComponent $allSeven -SkillsRoot $skills -ContextRuntimeRoot $context -ForgeRuntimeRoot $forge -GeminiHome $gemini -ClaudeHome $claude -Offline -Provider codex -SkipGraphPathUpdate
+    if ($LASTEXITCODE -ne 0) { throw "Installation failed with exit code $LASTEXITCODE" }
+
+    # Verify physical file existence
     $forgeCmd = Join-Path $forge 'bin\afyx-forge.cmd'
     $contextCmd = Join-Path $context 'current\bin\afyx-context.cmd'
     $graphCmd = Join-Path $graph 'bin\afyx-graph.cmd'
     $usageMod = Join-Path $codex 'tools\CodexUsage.psm1'
+    $skill1 = Join-Path $skills 'efficient-coding\SKILL.md'
+    $skill2 = Join-Path $skills 'odoo-engineering\SKILL.md'
+    $skill3 = Join-Path $skills 'afyx-engineering-expert\SKILL.md'
 
-    if (-not (Test-Path -LiteralPath $forgeCmd)) { throw "Forge CLI not found: $forgeCmd" }
-    if (-not (Test-Path -LiteralPath $contextCmd)) { throw "Context CLI not found: $contextCmd" }
-    if (-not (Test-Path -LiteralPath $graphCmd)) { throw "Graph CLI not found: $graphCmd" }
-    if (-not (Test-Path -LiteralPath $usageMod)) { throw "Usage tracker not found: $usageMod" }
+    foreach ($f in @($forgeCmd, $contextCmd, $graphCmd, $usageMod, $skill1, $skill2, $skill3)) {
+        if (-not (Test-Path -LiteralPath $f)) { throw "Expected installed artifact missing: $f" }
+    }
+    Write-Host "-> All 7 components verified physically present on disk." -ForegroundColor Green
 
+    # Verify standalone CLI behaviors & boundaries
     $forgeVer = (& $forgeCmd --version 2>&1) -join ' '
+    $forgeDoc = (& $forgeCmd doctor 2>&1) -join ' '
+    if ($forgeDoc -notmatch 'EVALUATION_GATED') { throw "A8 gate violated in doctor: $forgeDoc" }
     $contextVer = (& $contextCmd --version 2>&1) -join ' '
     $graphVer = (& $graphCmd --version 2>&1) -join ' '
+    Write-Host "-> CLIs verified: Forge ($forgeVer), Context ($contextVer), Graph ($graphVer)." -ForegroundColor Green
 
-    Write-Host "Forge CLI: $forgeVer" -ForegroundColor Green
-    Write-Host "Context CLI: $contextVer" -ForegroundColor Green
-    Write-Host "Graph CLI: $graphVer" -ForegroundColor Green
+    # Phase 3: Post-Installation Verification
+    Write-Host "`n[3/5] Testing Verification via AfyxSetup.exe --verify..." -ForegroundColor Yellow
+    & $exePath --verify -SkillsRoot $skills -ContextRuntimeRoot $context -ForgeRuntimeRoot $forge -GeminiHome $gemini -ClaudeHome $claude -Provider codex
+    if ($LASTEXITCODE -ne 0) { throw "Verification failed with exit code $LASTEXITCODE" }
+    Write-Host "-> Verification PASSED: Core readiness ready." -ForegroundColor Green
 
-    # Verify foreign configuration preserved
+    # Phase 4: Idempotence Re-run
+    Write-Host "`n[4/5] Testing Idempotence Re-run..." -ForegroundColor Yellow
+    & $exePath -Preset custom -CustomComponent $allSeven -SkillsRoot $skills -ContextRuntimeRoot $context -ForgeRuntimeRoot $forge -GeminiHome $gemini -ClaudeHome $claude -Offline -Provider codex -SkipGraphPathUpdate
+    if ($LASTEXITCODE -ne 0) { throw "Idempotence re-run failed with exit code $LASTEXITCODE" }
+    Write-Host "-> Idempotence PASSED: Healthy components preserved." -ForegroundColor Green
+
+    # Phase 5: Safe Uninstallation & Foreign Config Preservation
+    Write-Host "`n[5/5] Testing Safe Uninstall & Foreign Configuration Preservation..." -ForegroundColor Yellow
+    & $exePath --uninstall -SkillsRoot $skills -ContextRuntimeRoot $context -ForgeRuntimeRoot $forge -GeminiHome $gemini -ClaudeHome $claude -Provider codex -RemoveAfyxGraph -RemoveAfyxContext -RemoveAfyxForge -RemoveUsageTracker -RemoveProviderConfiguration
+    if ($LASTEXITCODE -ne 0) { throw "Uninstall failed with exit code $LASTEXITCODE" }
+
+    # Confirm uninstalled
+    if (Test-Path -LiteralPath $forgeCmd) { throw "Forge was not uninstalled!" }
+    if (Test-Path -LiteralPath $contextCmd) { throw "Context was not uninstalled!" }
+    if (Test-Path -LiteralPath $graphCmd) { throw "Graph was not uninstalled!" }
+    if (Test-Path -LiteralPath $usageMod) { throw "Usage tracker was not uninstalled!" }
+
+    # Confirm foreign configuration intact
     $codexConfig = Get-Content -Raw -LiteralPath (Join-Path $codex 'config.toml')
     if ($codexConfig -notmatch 'keep_this_setting = true') {
-        throw "Foreign configuration was overwritten!"
+        throw "Foreign configuration was overwritten or removed!"
     }
-    Write-Host "Foreign config preserved: OK" -ForegroundColor Green
+    Write-Host "-> Safe uninstall PASSED: Runtimes cleanly removed, foreign config preserved." -ForegroundColor Green
 
-    Write-Host "`n=== AfyxSetup.exe 7-COMPONENT INSTALLATION TEST PASSED! ===" -ForegroundColor Green
+    Write-Host "`n==================================================================" -ForegroundColor Green
+    Write-Host " ALL 5 SMOKE TEST PHASES PASSED VIA AfyxSetup.exe!" -ForegroundColor Green
+    Write-Host "==================================================================" -ForegroundColor Green
     return $true
 }
 finally {
@@ -80,4 +121,3 @@ finally {
     Remove-Item Env:AFYX_GRAPH_RUNTIME_ROOT -ErrorAction SilentlyContinue
     Remove-Item Env:CODEX_HOME -ErrorAction SilentlyContinue
 }
-

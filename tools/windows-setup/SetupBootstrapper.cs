@@ -119,6 +119,12 @@ namespace Afyx.WindowsSetup
 
                 using (var archive = new ZipArchive(payloadStream, ZipArchiveMode.Read, false))
                 {
+                    string fullStagingDir = Path.GetFullPath(stagingDir);
+                    if (!fullStagingDir.EndsWith(Path.DirectorySeparatorChar.ToString()))
+                    {
+                        fullStagingDir += Path.DirectorySeparatorChar;
+                    }
+
                     foreach (var entry in archive.Entries)
                     {
                         if (string.IsNullOrEmpty(entry.Name) && (entry.FullName.EndsWith("/") || entry.FullName.EndsWith("\\")))
@@ -126,6 +132,11 @@ namespace Afyx.WindowsSetup
                             continue;
                         }
                         string destPath = Path.Combine(stagingDir, entry.FullName.Replace('/', Path.DirectorySeparatorChar));
+                        string fullDestPath = Path.GetFullPath(destPath);
+                        if (!fullDestPath.StartsWith(fullStagingDir, StringComparison.OrdinalIgnoreCase))
+                        {
+                            throw new InvalidOperationException("Security violation: Zip path traversal detected in entry '" + entry.FullName + "'");
+                        }
                         string destDir = Path.GetDirectoryName(destPath);
                         if (!Directory.Exists(destDir))
                         {

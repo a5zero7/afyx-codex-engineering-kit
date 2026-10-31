@@ -140,7 +140,7 @@ try {
     $exeLengthMB = [math]::Round(((Get-Item -LiteralPath $outputExe).Length / 1MB), 2)
     Write-Host "-> Executable created: $outputExe ($exeLengthMB MB)" -ForegroundColor Green
 
-    Write-Host "[4/4] Calculating SHA-256 Checksums..." -ForegroundColor Yellow
+    Write-Host "[4/4] Calculating SHA-256 Checksums & Generating Build Manifest..." -ForegroundColor Yellow
     $hash = (Get-FileHash -LiteralPath $outputExe -Algorithm SHA256).Hash.ToLowerInvariant()
     $checksumFile = Join-Path $OutputDir 'AfyxSetup.exe.sha256'
     Set-Content -LiteralPath $checksumFile -Value "$hash  AfyxSetup.exe`n" -Encoding utf8
@@ -153,16 +153,56 @@ $zipHash  afyx-kit-payload.zip
 "@
     Set-Content -LiteralPath $sumsFile -Value $sumsContent -Encoding utf8
 
+    $manifestFile = Join-Path $OutputDir 'build-manifest.json'
+    $buildManifest = [ordered]@{
+        product_name         = "Afyx Code Engineering Kit"
+        distribution_channel = "technical-alpha"
+        package_name         = "AfyxSetup.exe"
+        package_version      = "0.1.0-alpha.1"
+        target_platform      = "win32-x64"
+        source_revision      = $currentRevision
+        build_timestamp      = (Get-Date).ToString('o')
+        executable_size_bytes = (Get-Item -LiteralPath $outputExe).Length
+        executable_sha256    = $hash
+        payload_size_bytes   = (Get-Item -LiteralPath $payloadZip).Length
+        payload_sha256       = $zipHash
+        components           = @(
+            @{ id = "efficient-coding"; name = "Afyx Efficient Coding"; type = "skill"; version = "1.2.1"; tier = "core" },
+            @{ id = "odoo-engineering"; name = "Afyx Odoo Engineering"; type = "skill"; version = "1.2.0"; tier = "core" },
+            @{ id = "afyx-engineering-expert"; name = "Afyx Engineering Expert"; type = "skill"; version = "0.1.1"; tier = "optional" },
+            @{ id = "afyx-graph"; name = "Afyx Graph"; type = "runtime"; version = "1.0.0"; tier = "optional"; activation = "on-demand" },
+            @{ id = "afyx-context"; name = "Afyx Context Engine"; type = "runtime"; version = "0.1.0"; tier = "optional"; integration_default = "OFF" },
+            @{ id = "afyx-forge"; name = "Afyx Forge Core"; type = "runtime"; version = "0.1.0"; tier = "optional"; mode = "assistive-guidance-only"; a8_gate = "EVALUATION_GATED" },
+            @{ id = "codex-usage-tracking"; name = "Afyx Codex Usage Tracking"; type = "toolset"; version = "1.0.0"; tier = "optional"; platform = "windows" }
+        )
+        governance_boundaries = @{
+            forge_autonomous_execution = "FORBIDDEN"
+            forge_a8_gate              = "EVALUATION_GATED (0/36 NOT_RUN)"
+            context_graph_integration  = "DEFAULT_OFF"
+            graph_v29_wip              = "EXCLUDED"
+            code_signing               = "UNSIGNED_ALPHA_CANDIDATE"
+        }
+        runtime_prerequisites = @(
+            "Windows 10 / Windows 11 (x64)",
+            "PowerShell 7.0+ (pwsh) or Windows PowerShell 5.1",
+            "Node.js >= 22.5.0 (for Graph, Context, and Forge runtimes)",
+            "Git for Windows (for version control operations)"
+        )
+    }
+    Set-Content -LiteralPath $manifestFile -Value ($buildManifest | ConvertTo-Json -Depth 10) -Encoding utf8
+
     Write-Host "`n=== BUILD COMPLETE ===" -ForegroundColor Green
     Write-Host "Installer Executable: $outputExe ($exeLengthMB MB)"
     Write-Host "SHA-256: $hash"
     Write-Host "Checksum file: $checksumFile"
+    Write-Host "Build manifest: $manifestFile"
 
     return [pscustomobject]@{
         Executable = $outputExe
         SizeMB = $exeLengthMB
         SHA256 = $hash
         PayloadZip = $payloadZip
+        Manifest = $manifestFile
     }
 }
 finally {
