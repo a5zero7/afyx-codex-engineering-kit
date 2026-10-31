@@ -74,8 +74,8 @@ export const PRODUCT_INVENTORY = Object.freeze({
     domainAuthority: 'Authoritative supported repository structure, relationships, and impact evidence.',
     cooperatingComponents: Object.freeze(['afyx-context', 'odoo-engineering', 'efficient-coding']),
     ownershipClass: 'AFYX',
-    maturity: 'INTEGRATION_ACCEPTED',
-    productionReady: true,
+    maturity: 'SOURCE_READY',
+    productionReady: false,
     activationMode: 'ON_DEMAND',
   }),
   'afyx-context': Object.freeze({
@@ -86,8 +86,8 @@ export const PRODUCT_INVENTORY = Object.freeze({
     domainAuthority: 'Bounded context optimization, exact recovery, and fallback.',
     cooperatingComponents: Object.freeze(['afyx-graph', 'efficient-coding']),
     ownershipClass: 'AFYX',
-    maturity: 'INTEGRATION_ACCEPTED',
-    productionReady: true,
+    maturity: 'SOURCE_READY',
+    productionReady: false,
     activationMode: 'DEFAULT_OFF', // Explicit opt-in only
   }),
   'afyx-engineering-expert': Object.freeze({
@@ -98,8 +98,8 @@ export const PRODUCT_INVENTORY = Object.freeze({
     domainAuthority: 'Cross-disciplinary expertise selection and workflow routing.',
     cooperatingComponents: Object.freeze(['odoo-engineering', 'afyx-graph']),
     ownershipClass: 'AFYX',
-    maturity: 'INTEGRATION_ACCEPTED',
-    productionReady: true,
+    maturity: 'SOURCE_READY',
+    productionReady: false,
     activationMode: 'ON_DEMAND',
   }),
   'odoo-engineering': Object.freeze({
@@ -110,8 +110,8 @@ export const PRODUCT_INVENTORY = Object.freeze({
     domainAuthority: 'Odoo-specific technical and framework authority.',
     cooperatingComponents: Object.freeze(['afyx-graph', 'afyx-engineering-expert']),
     ownershipClass: 'AFYX',
-    maturity: 'INTEGRATION_ACCEPTED',
-    productionReady: true,
+    maturity: 'SOURCE_READY',
+    productionReady: false,
     activationMode: 'DOMAIN_SPECIFIC', // Only for Odoo repositories/tasks
   }),
   'efficient-coding': Object.freeze({
@@ -122,8 +122,8 @@ export const PRODUCT_INVENTORY = Object.freeze({
     domainAuthority: 'Focused coding discipline and proportional implementation guidance.',
     cooperatingComponents: Object.freeze(['afyx-graph', 'afyx-context']),
     ownershipClass: 'AFYX',
-    maturity: 'INTEGRATION_ACCEPTED',
-    productionReady: true,
+    maturity: 'SOURCE_READY',
+    productionReady: false,
     activationMode: 'ALWAYS_AVAILABLE',
   }),
   'codex-usage-tracking': Object.freeze({
@@ -135,7 +135,7 @@ export const PRODUCT_INVENTORY = Object.freeze({
     cooperatingComponents: Object.freeze([]),
     ownershipClass: 'AFYX',
     maturity: 'STANDALONE_ACCEPTED',
-    productionReady: true,
+    productionReady: false,
     activationMode: 'OPTIONAL',
   }),
   'afyx-forge': Object.freeze({
@@ -153,6 +153,13 @@ export const PRODUCT_INVENTORY = Object.freeze({
   }),
 });
 
+/**
+ * Pure non-coding task types where implementation engineering discipline (efficient-coding)
+ * is deterministically suppressed to prevent redundant guidance. Technical configuration
+ * and automation tasks (such as 'devops-config', CI/CD workflows, Dockerfiles, and provisioning)
+ * are classified as implementation tasks and retain efficient-coding selection for quality-first
+ * scoped changes and validation.
+ */
 const NON_CODING_TASK_TYPES = new Set([
   'documentation',
   'document-review',

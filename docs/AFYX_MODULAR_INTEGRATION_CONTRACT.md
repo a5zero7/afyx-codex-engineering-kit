@@ -29,21 +29,22 @@ Fondasi arsitektur Afyx Code Engineering Kit mengadopsi tiga pilar utama:
 
 Seluruh komponen milik Afyx memiliki identitas produk kanonikal resmi, sembari mempertahankan identitas stabil (*stable component IDs*) demi kompatibilitas ke belakang:
 
-| Existing Component ID | Canonical Product Name | Tipe Komponen | Tier Default | Kepemilikan | Kematangan (*Maturity*) | Status Produksi |
+| Existing Component ID | Canonical Product Name | Tipe Komponen | Tier Default | Kepemilikan | Kematangan (*Maturity*) | Status Verifikasi Roadmap |
 |---|---|---|---|---|---|---|
-| `afyx-graph` | **Afyx Graph** | Runtime (Node.js/MCP/CLI) | Optional / Full | AFYX | `INTEGRATION_ACCEPTED` | Siap Produksi (v29) |
-| `afyx-context` | **Afyx Context Engine** | Runtime (Node.js/CLI) | Optional | AFYX | `INTEGRATION_ACCEPTED` | Siap Produksi (v0.1.0, Default-OFF) |
-| `afyx-engineering-expert` | **Afyx Engineering Expert** | Skill (Prompt / Workflow) | Optional / Recommended | AFYX | `INTEGRATION_ACCEPTED` | Siap Produksi (v0.1.1) |
-| `odoo-engineering` | **Afyx Odoo Engineering** | Skill (Prompt / References) | Core / Minimal | AFYX | `INTEGRATION_ACCEPTED` | Siap Produksi (v1.2.0) |
-| `efficient-coding` | **Afyx Efficient Coding** | Skill (Prompt / References) | Core / Minimal | AFYX | `INTEGRATION_ACCEPTED` | Siap Produksi (v1.2.1) |
-| `codex-usage-tracking` | **Afyx Codex Usage Tracking** | Toolset (PowerShell/VS Code) | Optional (Windows) | AFYX | `STANDALONE_ACCEPTED` | Siap Produksi |
+| `afyx-graph` | **Afyx Graph** | Runtime (Node.js/MCP/CLI) | Optional / Full | AFYX | `SOURCE_READY` | Finalisasi v1 Aktif (Penerimaan Integrasi Diperluas & T12 Pending) |
+| `afyx-context` | **Afyx Context Engine** | Runtime (Node.js/CLI) | Optional | AFYX | `SOURCE_READY` | Finalisasi v1 Aktif (Default-OFF, Penerimaan Integrasi Diperluas Pending) |
+| `afyx-engineering-expert` | **Afyx Engineering Expert** | Skill (Prompt / Workflow) | Optional / Recommended | AFYX | `SOURCE_READY` | Finalisasi v1 Aktif (D.6 Review & T12 Pending) |
+| `odoo-engineering` | **Afyx Odoo Engineering** | Skill (Prompt / References) | Core / Minimal | AFYX | `SOURCE_READY` | Finalisasi v1 Aktif (Penerimaan Routing Terpasang & T12 Pending) |
+| `efficient-coding` | **Afyx Efficient Coding** | Skill (Prompt / References) | Core / Minimal | AFYX | `SOURCE_READY` | Finalisasi v1 Aktif (Disiplin Implementasi Inti) |
+| `codex-usage-tracking` | **Afyx Codex Usage Tracking** | Toolset (PowerShell/VS Code) | Optional (Windows) | AFYX | `STANDALONE_ACCEPTED` | Diterima Mandiri (Windows Toolset) |
 | `afyx-forge` | **Afyx Forge** | Runtime & Benchmarking | Evaluation | AFYX | `SOURCE_READY` | **Evaluasi (`UNAVAILABLE_PENDING_A8`)** |
 
-### Definisi Tingkat Kematangan Produk (*Product Maturity Levels*):
-1. **`SOURCE_READY`:** Kode sumber dan spesifikasi telah diverifikasi secara statis; penerimaan runtime/gerbang formal belum disahkan (contoh: *Afyx Forge*).
-2. **`STANDALONE_ACCEPTED`:** Komponen telah diuji dan diterima berfungsi secara independen dalam lingkungan inang (contoh: *Afyx Codex Usage Tracking*).
-3. **`INTEGRATION_ACCEPTED`:** Komponen telah diuji dan diterima bekerja sama dalam rangkaian integrasi multi-komponen terpadu (contoh: *Graph, Context Engine, Engineering Expert, Odoo Engineering, Efficient Coding*).
-4. **`RELEASE_READY`:** Komponen dipromosikan untuk rilis distribusi publik umum.
+### Definisi Tingkat Kematangan Produk (*Product Maturity Vocabulary*):
+Sesuai kontrak otoritatif pada `docs/AFYX_V1_MASTER_ROADMAP.md`, keempat status berikut memiliki batasan tegas dan tidak dapat saling menggantikan:
+1. **`SOURCE_READY`:** Implementasi telah ada pada kode sumber kanonikal dan pengujian terfokus terkait telah lulus.
+2. **`STANDALONE_ACCEPTED`:** Eksekusi independen komponen, penanganan kegagalan, pemulihan, kepemilikan, dan kontrak pengemasan lolos pada platform yang didukung.
+3. **`INTEGRATION_ACCEPTED`:** Kontrak lintas komponen berversi dan penurunan kemampuan yang anggun (*graceful degradation*) lolos tanpa menjadikan komponen opsional wajib. Penerimaan terpadu dicapai setelah rangkaian integrasi penuh v1 terverifikasi.
+4. **`RELEASE_READY`:** Seluruh gerbang v1 yang diperluas, penerimaan produk terpasang, asal-usul artefak (*provenance*), exit Fase 10, dan pemeriksaan Fase 11 lolos. Tidak ada komponen yang dapat mengklaim `RELEASE_READY` hanya dari bukti sumber atau sintetis semata. Tidak ada pernyataan kesiapan produksi prematur (*unsupported production readiness*).
 
 ### Aturan Batas Identitas & Kompatibilitas:
 - **Stable IDs:** Nilai `id` seperti `efficient-coding`, `odoo-engineering`, `afyx-graph`, dll., tidak berubah dan tetap menjadi jangkar registri, installer, path instalasi, dan provider manifests.
@@ -97,9 +98,13 @@ Setiap komponen Afyx memiliki domain otoritas primer yang **tidak boleh saling t
 
 ## 5. Spesifikasi Perilaku Perutean & Penanganan Kasus Batas
 
-### 5.1. Kasus Tugas Non-Coding (*Non-Coding Tasks*)
-- **Intensi:** Penulisan dokumentasi, tanya-jawab umum, percakapan bebas, review dokumen teks.
-- **Perilaku Selektif:** `efficient-coding` **TIDAK DIPILIH** (Status tetap `AVAILABLE`, Alasan: Tugas non-coding tidak memerlukan disiplin implementasi kode). Redundansi ditekan secara deterministik.
+### 5.1. Kasus Tugas Non-Coding & Klasifikasi Tugas DevOps
+- **Tugas Murni Non-Coding (`documentation`, `document-review`, `general-inquiry`, `conversation`, `prompt-writing`, `plain-question`):**
+  - **Intensi:** Penulisan dokumentasi, tanya-jawab umum, percakapan bebas, review dokumen teks tanpa modifikasi kode/otomasi.
+  - **Perilaku Selektif:** `efficient-coding` **TIDAK DIPILIH** (Status tetap `AVAILABLE`, Alasan: Tugas non-coding tidak memerlukan disiplin implementasi kode). Redundansi ditekan secara deterministik (`NON_CODING_TASK`).
+- **Tugas Konfigurasi DevOps & Otomasi Teknis (`devops-config`, CI/CD workflows, Dockerfiles, Infrastructure-as-Code):**
+  - **Klasifikasi Otoritatif:** Tugas DevOps diklasifikasikan sebagai **tugas implementasi rekayasa teknis (*technical implementation task*)**, BUKAN tugas non-coding.
+  - **Perilaku Selektif:** `efficient-coding` **DIPILIH (`SELECTED`)** sebagai otoritas disiplin rekayasa kualitas pertama guna memastikan perubahan alur kerja, skrip lingkungan, atau kontainer dilakukan secara proporsional (*scoped change*) dan melewati langkah verifikasi/validasi ketat.
 
 ### 5.2. Kasus Perbaikan Bug Sederhana (*Simple Code Fix*)
 - **Intensi:** Koreksi sintaks, perbaikan bug terlokalisasi, refaktor fungsi kecil.

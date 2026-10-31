@@ -73,7 +73,7 @@ console.log(JSON.stringify(PRODUCT_INVENTORY));
             )
 
     def test_product_maturity_classifications_are_explicit(self) -> None:
-        """Verifies explicit product maturity labels separate SOURCE_READY, STANDALONE_ACCEPTED, etc."""
+        """Verifies explicit product maturity labels separate SOURCE_READY, STANDALONE_ACCEPTED, etc. per AFYX_V1_MASTER_ROADMAP.md."""
         source = f"""
 import {{ PRODUCT_MATURITY_LEVELS, PRODUCT_INVENTORY }} from {json.dumps(MODULAR_MODULE.as_uri())};
 console.log(JSON.stringify({{ levels: PRODUCT_MATURITY_LEVELS, inventory: PRODUCT_INVENTORY }}));
@@ -84,9 +84,18 @@ console.log(JSON.stringify({{ levels: PRODUCT_MATURITY_LEVELS, inventory: PRODUC
             levels,
             {"SOURCE_READY", "STANDALONE_ACCEPTED", "INTEGRATION_ACCEPTED", "RELEASE_READY"},
         )
+        # Authoritative roadmap baselines
         self.assertEqual(res["inventory"]["afyx-forge"]["maturity"], "SOURCE_READY")
         self.assertEqual(res["inventory"]["codex-usage-tracking"]["maturity"], "STANDALONE_ACCEPTED")
-        self.assertEqual(res["inventory"]["afyx-graph"]["maturity"], "INTEGRATION_ACCEPTED")
+        self.assertEqual(res["inventory"]["afyx-graph"]["maturity"], "SOURCE_READY")
+        self.assertEqual(res["inventory"]["afyx-context"]["maturity"], "SOURCE_READY")
+        self.assertEqual(res["inventory"]["afyx-engineering-expert"]["maturity"], "SOURCE_READY")
+        self.assertEqual(res["inventory"]["odoo-engineering"]["maturity"], "SOURCE_READY")
+        self.assertEqual(res["inventory"]["efficient-coding"]["maturity"], "SOURCE_READY")
+
+        # Confirm no component asserts unsupported production readiness
+        for comp_id, meta in res["inventory"].items():
+            self.assertFalse(meta.get("productionReady", False), f"{comp_id} prematurely asserted productionReady")
 
     def test_registry_metadata_exposes_canonical_display_names_and_retains_stable_ids(self) -> None:
         """Verifies scripts/components.json preserves stable IDs while exposing canonical display names."""
@@ -243,6 +252,24 @@ console.log(JSON.stringify({{ planDoc, planInquiry }}));
         self.assertEqual(res["planDoc"]["componentStates"]["efficient-coding"], "AVAILABLE")
         self.assertNotIn("efficient-coding", res["planInquiry"]["selectedComponents"])
         self.assertEqual(res["planInquiry"]["componentStates"]["efficient-coding"], "AVAILABLE")
+
+    def test_devops_config_is_classified_as_implementation_task_and_selects_efficient_coding(self) -> None:
+        """Verifies devops-config is treated as a technical implementation task that retains efficient-coding selection."""
+        source = f"""
+import {{ resolveModularCapabilityPlan }} from {json.dumps(MODULAR_MODULE.as_uri())};
+
+const plan = resolveModularCapabilityPlan(
+  {{ taskType: 'devops-config', intent: 'Configure GitHub Actions CI workflow and Dockerfile' }},
+  {{ 'efficient-coding': {{ installed: true, healthy: true }} }}
+);
+
+console.log(JSON.stringify(plan));
+"""
+        plan = run_node(source)
+        # devops-config is an implementation task: efficient-coding MUST be selected for quality-first change discipline
+        self.assertIn("efficient-coding", plan["selectedComponents"])
+        self.assertEqual(plan["componentStates"]["efficient-coding"], "SELECTED")
+        self.assertEqual(len(plan["suppressedRedundancies"]), 0)
 
     def test_explicit_odoo_task_supported_without_repository_detection(self) -> None:
         """Explicit Odoo tasks are recognized and select Odoo Engineering even if auto-detection is false."""
