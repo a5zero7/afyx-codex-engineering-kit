@@ -162,6 +162,11 @@ class UnifiedInstallerIntegrationTests(unittest.TestCase):
         installed = self.invoke("install.ps1", arguments)
         self.assertIn("Provider transaction: CONFIGURED_RESTART_REQUIRED", installed.stdout)
         self.assert_skill_roots()
+        # Selected ACE runtime also installs an owned on-demand companion skill
+        # to each selected provider without replacing Graph MCP responses.
+        for root in (self.skills, self.gemini_home / "config" / "skills", self.gemini_home / "antigravity-cli" / "skills", self.claude_home / "skills"):
+            self.assertTrue((root / "afyx-context" / "SKILL.md").is_file())
+            self.assertTrue((root / "afyx-context" / ".afyx-install.json").is_file())
         self.assertTrue((self.codex_home / "config.toml").is_file())
         self.assertTrue((self.gemini_home / "config" / "mcp_config.json").is_file())
         self.assertTrue((self.claude_config / ".claude.json").is_file())
@@ -205,6 +210,8 @@ class UnifiedInstallerIntegrationTests(unittest.TestCase):
         )
         self.assertIn("Provider removal: READY", removed.stdout)
         self.assertFalse(self.context.exists())
+        for root in (self.skills, self.gemini_home / "config" / "skills", self.gemini_home / "antigravity-cli" / "skills", self.claude_home / "skills"):
+            self.assertFalse((root / "afyx-context").exists())
         self.assertTrue(self.graph.exists(), "shared Graph runtime must be preserved unless explicitly removed")
         for root in (self.skills, self.gemini_home / "config" / "skills", self.gemini_home / "antigravity-cli" / "skills", self.claude_home / "skills"):
             for component in SKILLS:
@@ -262,6 +269,27 @@ class UnifiedInstallerIntegrationTests(unittest.TestCase):
         verified = self.invoke("verify.ps1", args, expected=1)
         self.assertIn("[BLOCKED] Codex host", verified.stdout)
         self.assertIn("[BLOCKED] Core readiness", verified.stdout)
+
+    def test_explicit_context_off_preserves_unmodified_provider_state(self) -> None:
+        # Runtime may be installed, but a deliberate Context OFF must never
+        # materialize a newly enabled provider skill.
+        self.environment["AFYX_CONTEXT_OPT_IN"] = "0"
+        installed = self.invoke("install.ps1", self.common(providers="@('codex')") + " -Confirm:$false")
+        self.assertIn("Afyx Context Engine", installed.stdout)
+        self.assertTrue((self.context / "metadata.json").is_file())
+        self.assertFalse((self.skills / "afyx-context").exists())
+
+    def test_foreign_context_companion_blocks_before_mutation(self) -> None:
+        foreign = self.skills / "afyx-context"
+        foreign.mkdir(parents=True)
+        sentinel = foreign / "SKILL.md"
+        sentinel.write_text("foreign user skill\\n", encoding="utf-8")
+        result = self.invoke("install.ps1", self.common(providers="@('codex')") + " -Confirm:$false", expected=1)
+        self.assertIn("Provider companion preflight blocked before mutation", result.stdout + result.stderr)
+        self.assertEqual(sentinel.read_text(encoding="utf-8"), "foreign user skill\\n")
+        self.assertFalse((self.skills / "efficient-coding").exists())
+        self.assertFalse((self.context / "metadata.json").exists())
+        self.assertFalse((self.codex_home / "config.toml").exists())
 
     def test_wizard_contract_uses_three_provider_multiselect(self) -> None:
         source = (ROOT / "install.ps1").read_text(encoding="utf-8")

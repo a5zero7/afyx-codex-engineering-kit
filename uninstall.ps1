@@ -124,11 +124,21 @@ if (Test-Path -LiteralPath $graphRoot) {
 }
 
 if ($RemoveAfyxContext) {
+    # Remove only ownership-verified ACE companions for selected providers.
+    # A foreign or user-modified skill is never adopted or deleted implicitly.
+    foreach ($root in @($providerSkillRoots | Select-Object -Unique)) {
+        $target = Join-Path $root 'afyx-context'
+        Remove-AfyxSkillSafely -SkillsRoot $root -Component 'afyx-context' -Target $target -ExpectedOwner 'afyx' -Confirm:$false -WhatIf:$WhatIfPreference
+    }
     & (Join-Path $PSScriptRoot 'scripts\install-afyx-context.ps1') -RuntimeRoot $ContextRuntimeRoot -Uninstall -Confirm:$false -WhatIf:$WhatIfPreference
     if (-not $?) { throw 'Afyx Context removal failed.' }
 } elseif (Test-Path -LiteralPath $ContextRuntimeRoot) { Write-Host 'Afyx Context Engine: kept' }
 
 if ($RemoveAfyxForge) {
+    foreach ($root in @($providerSkillRoots | Select-Object -Unique)) {
+        $target = Join-Path $root 'afyx-forge'
+        Remove-AfyxSkillSafely -SkillsRoot $root -Component 'afyx-forge' -Target $target -ExpectedOwner 'afyx' -Confirm:$false -WhatIf:$WhatIfPreference
+    }
     & (Join-Path $PSScriptRoot 'scripts\install-afyx-forge.ps1') -RuntimeRoot $ForgeRuntimeRoot -Uninstall -Confirm:$false -WhatIf:$WhatIfPreference
     if (-not $?) { throw 'Afyx Forge removal failed.' }
 } elseif (Test-Path -LiteralPath $ForgeRuntimeRoot) { Write-Host 'Afyx Forge Core: kept' }

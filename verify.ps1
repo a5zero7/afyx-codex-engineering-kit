@@ -133,6 +133,29 @@ foreach ($additionalRoot in $additionalSkillRoots) {
         elseif ($desired) { Write-Result 'FAIL' "Provider skill/$($component.id)" "$additionalRoot; $ownership"; $coreFailure = $true }
     }
 }
+# Inspect effective on-disk provider companion ownership instead of inferring
+# integration from runtime metadata or a planned routing status.
+if ($controlPlan -and $Provider.Count) {
+    foreach ($id in @('afyx-context', 'afyx-forge')) {
+        if ($id -notin $controlPlan.DesiredComponents) { continue }
+        if ($id -eq 'afyx-context' -and $env:AFYX_CONTEXT_OPT_IN -eq '0') {
+            Write-Result 'INFO' 'Afyx Context Companion' 'explicitly disabled; no automatic re-enable'
+            continue
+        }
+        $state = $componentStates[$id]
+        if ($state.State -ne 'HEALTHY') { continue } # Reported by the normal desired-state check.
+        foreach ($root in @($providerSkillRoots | Select-Object -Unique)) {
+            $target = Join-Path $root $id
+            $ownerState = Get-AfyxSkillOwnership -Target $target -Component $id -ExpectedOwner 'afyx'
+            if ($ownerState -eq 'AFYX_OWNED_UNMODIFIED') {
+                Write-Result 'OK' "Provider companion/$id" "$root; ownership verified; invocation remains on demand"
+            } else {
+                Write-Result 'FAIL' "Provider companion/$id" "$root; ownership=$ownerState; expected an Afyx-owned skill for the selected runtime"
+                $coreFailure = $true
+            }
+        }
+    }
+}
 $git = Get-Command git -ErrorAction SilentlyContinue
 $node = Get-Command node -ErrorAction SilentlyContinue
 $npm = Get-Command npm -ErrorAction SilentlyContinue

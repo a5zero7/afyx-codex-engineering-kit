@@ -40,8 +40,10 @@ $graphInstaller = Join-Path $packageRoot 'scripts\install-afyx-graph.ps1'
 $graphMetadataPath = Join-Path $packageRoot 'afyx-graph\afyx-graph.json'
 $contextInstaller = Join-Path $packageRoot 'scripts\install-afyx-context.ps1'
 $contextMetadataPath = Join-Path $packageRoot 'afyx-context\afyx-context.json'
+$contextCompanionSource = Join-Path $packageRoot 'skills\afyx-context'
 $forgeInstaller = Join-Path $packageRoot 'scripts\install-afyx-forge.ps1'
 $forgeMetadataPath = Join-Path $packageRoot 'afyx-forge\afyx-forge.json'
+$forgeCompanionSource = Join-Path $packageRoot 'skills\afyx-forge'
 $graphRuntimeRoot = if ($env:AFYX_GRAPH_RUNTIME_ROOT) { $env:AFYX_GRAPH_RUNTIME_ROOT } else { Join-Path $env:USERPROFILE '.afyx\graph' }
 $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' }
 
@@ -61,6 +63,16 @@ $agyCommandDetected = Get-Command agy -ErrorAction SilentlyContinue
 $antigravityCommandDetected = if ($agyCommandDetected) { $agyCommandDetected } else { Get-Command antigravity -ErrorAction SilentlyContinue }
 $claudeCommandDetected = Get-Command claude -ErrorAction SilentlyContinue
 $vscodeExtensionDetected = [bool](Get-ChildItem -Path (Join-Path $env:USERPROFILE '.vscode\extensions\openai.chatgpt-*') -Directory -ErrorAction SilentlyContinue | Select-Object -First 1)
+# Read-only IDE discovery: distinguish an installed IDE from a usable provider CLI.
+# IDE-only installs are displayed but never silently offered unsupported MCP mutation.
+$claudeVsCodeDetected = [bool](Get-ChildItem -Path (Join-Path $env:USERPROFILE '.vscode\extensions\anthropic.claude-code-*') -Directory -ErrorAction SilentlyContinue | Select-Object -First 1)
+$antigravityIdeCandidates = @(
+    $(if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'Programs\Antigravity\Antigravity.exe' }),
+    $(if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'Programs\Google Antigravity\Antigravity.exe' }),
+    $(if ($env:ProgramFiles) { Join-Path $env:ProgramFiles 'Google\Antigravity\Antigravity.exe' })
+) | Where-Object { $_ }
+$antigravityIdePath = @($antigravityIdeCandidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1)
+$antigravityIdeDetected = $antigravityIdePath.Count -gt 0
 $explicitSelection = @(
     @('Preset', 'CustomComponent', 'ComponentAction', 'Provider', 'Force', 'UpdateInstalled', 'InstallUsageTracker', 'SkipUsageTracker', 'SkipProviderConfiguration', 'Confirm') |
         Where-Object { $PSBoundParameters.ContainsKey($_) }
@@ -70,8 +82,8 @@ $wizardMode = $terminal.Interactive -and -not $ValidateOnly -and -not $WhatIfPre
 if ($wizardMode) {
     try {
         Write-AfyxSection -Title 'Welcome & Environment' -Terminal $terminal
-        Write-AfyxStatus -Status INFO -Name 'Forge' -Detail 'evaluation-only; not a selectable production component' -Terminal $terminal
-        Write-AfyxStatus -Status INFO -Name 'Afyx Context' -Detail 'optional; Graph integration remains default-OFF' -Terminal $terminal
+        Write-AfyxStatus -Status INFO -Name 'Forge' -Detail 'optional Alpha guidance component; formal A8 remains evaluation gated' -Terminal $terminal
+        Write-AfyxStatus -Status INFO -Name 'Afyx Context' -Detail 'optional to install; enabled by default when healthy; optimized use remains task-driven' -Terminal $terminal
         $presetOptions = @(
             [pscustomobject]@{ Id = 'recommended'; Label = 'Recommended'; Detail = 'Core skills + Engineering Expert'; Enabled = $true },
             [pscustomobject]@{ Id = 'minimal'; Label = 'Minimal'; Detail = 'Core engineering skills'; Enabled = $true },
@@ -83,7 +95,7 @@ if ($wizardMode) {
             $componentOptions = @()
             foreach ($component in @(Get-AfyxComponentContract)) {
                 $detail = "$($component.type); $($component.tier)"
-                if ([string]$component.id -eq 'afyx-context') { $detail += '; optional, integration default-OFF' }
+                if ([string]$component.id -eq 'afyx-context') { $detail += '; enabled when installed, used on demand' }
                 elseif ([string]$component.id -eq 'codex-usage-tracking') { $detail += '; Codex/Windows only' }
                 $componentOptions += [pscustomobject]@{ Id = [string]$component.id; Label = [string]$component.name; Detail = $detail; Enabled = $true }
             }
@@ -95,11 +107,13 @@ if ($wizardMode) {
         $claudeDetected = [bool]$claudeCommandDetected
         $providerOptions = @(
             [pscustomobject]@{ Id = 'codex'; Label = 'Codex'; Detail = $(if ($codexDetected) { 'native CLI detected' } elseif ($vscodeExtensionDetected) { 'extension detected; native Codex CLI is still required for MCP configuration' } else { $codexHost.Detail }); Enabled = $codexDetected },
-            [pscustomobject]@{ Id = 'antigravity'; Label = 'Antigravity'; Detail = $(if ($antigravityDetected) { 'host detected' } else { 'unavailable: install agy/antigravity' }); Enabled = $antigravityDetected },
-            [pscustomobject]@{ Id = 'claude'; Label = 'Claude Code'; Detail = $(if ($claudeDetected) { 'host detected' } else { 'unavailable: install Claude Code CLI' }); Enabled = $claudeDetected },
+            [pscustomobject]@{ Id = 'antigravity'; Label = 'Antigravity'; Detail = $(if ($antigravityDetected) { 'CLI detected; MCP adapter supported' } elseif ($antigravityIdeDetected) { 'IDE detected; compatible CLI not found, MCP integration unavailable' } else { 'not detected: agy/antigravity CLI or recognized IDE path' }); Enabled = $antigravityDetected },
+            [pscustomobject]@{ Id = 'claude'; Label = 'Claude Code'; Detail = $(if ($claudeDetected) { 'CLI detected; MCP adapter supported' } elseif ($claudeVsCodeDetected) { 'VS Code extension detected; native Claude CLI required for MCP configuration' } else { 'not detected: install Claude Code CLI' }); Enabled = $claudeDetected },
             [pscustomobject]@{ Id = 'skip'; Label = 'Skip provider configuration'; Detail = 'skills/runtimes only; no MCP registration'; Enabled = $true }
         )
-        $providerChoice = @(Read-AfyxMultiChoice -Prompt 'Select provider integrations' -Options $providerOptions -DefaultId @($(if ($codexDetected) { 'codex' } else { 'skip' })) -Terminal $terminal)
+        $detectedProviderDefaults = @($providerOptions | Where-Object { $_.Enabled -and $_.Id -ne 'skip' } | ForEach-Object { $_.Id })
+        if (-not $detectedProviderDefaults.Count) { $detectedProviderDefaults = @('skip') }
+        $providerChoice = @(Read-AfyxMultiChoice -Prompt 'Select provider integrations' -Options $providerOptions -DefaultId $detectedProviderDefaults -Terminal $terminal)
         if ('skip' -in $providerChoice) {
             if ($providerChoice.Count -ne 1) { throw 'Skip provider configuration cannot be combined with a provider.' }
             $Provider = @()
@@ -129,8 +143,8 @@ if (-not $Provider.Count) {
         if ($antigravityCommandDetected) { $detected += 'antigravity' }
         if ($claudeCommandDetected) { $detected += 'claude' }
         Write-Host "Provider hosts detected: $(if ($detected.Count) { $detected -join ', ' } else { 'none' })"
-        do { $choice = (Read-Host 'Provider selection: [A] All detected / [R] Recommended Codex / [C] Custom / [S] Skip [R]').Trim() } until ($choice -match '(?i)^(|a|all|r|recommended|c|custom|s|skip)$')
-        if ($choice -match '(?i)^(a|all)$') { $Provider = $detected }
+        do { $choice = (Read-Host 'Provider selection: [A] All detected / [R] Recommended Codex / [C] Custom / [S] Skip [A]').Trim() } until ($choice -match '(?i)^(|a|all|r|recommended|c|custom|s|skip)$')
+        if ($choice -match '(?i)^(|a|all)$') { if ($detected.Count) { $Provider = $detected } else { $SkipProviderConfiguration = $true } }
         elseif ($choice -match '(?i)^(c|custom)$') { $Provider = @((Read-Host 'Provider ids (comma-separated)').Split(',') | ForEach-Object { $_.Trim() } | Where-Object { $_ }) }
         elseif ($choice -match '(?i)^(s|skip)$') { $SkipProviderConfiguration = $true }
         else { $Provider = @('codex') }
@@ -410,8 +424,8 @@ $codexStatus = if ($codexCliDetected) { 'HEALTHY' } elseif ($codexRequired) { 'B
 $codexLabel = if ($codexRequired) { 'Codex host [REQUIRED]' } else { 'Codex host' }
 $codexDetail = if ($codexCliDetected) { "native CLI detected ($($codexHost.Command))" } elseif ($codexRequired) { "$($codexHost.Detail) A VS Code extension does not provide native MCP configuration." } elseif ($vscodeExtensionDetected) { 'VS Code extension detected; native CLI not selected' } else { 'not detected; required only when selected' }
 Write-AfyxStatus -Status $codexStatus -Name $codexLabel -Detail $codexDetail -Terminal $terminal
-Write-AfyxStatus -Status $(if ($antigravityCommandDetected) { 'HEALTHY' } else { 'SKIPPED' }) -Name 'Antigravity host' -Detail $(if ($antigravityCommandDetected) { "detected ($(& $antigravityCommandDetected.Source --version 2>$null))" } else { 'not detected; required only when selected' }) -Terminal $terminal
-Write-AfyxStatus -Status $(if ($claudeCommandDetected) { 'HEALTHY' } else { 'SKIPPED' }) -Name 'Claude Code host' -Detail $(if ($claudeCommandDetected) { 'detected' } else { 'not detected; required only when selected' }) -Terminal $terminal
+Write-AfyxStatus -Status $(if ($antigravityCommandDetected) { 'HEALTHY' } else { 'SKIPPED' }) -Name 'Antigravity host' -Detail $(if ($antigravityCommandDetected) { 'compatible CLI detected' } elseif ($antigravityIdeDetected) { 'IDE detected; compatible CLI required for automatic MCP registration' } else { 'not detected; required only when selected' }) -Terminal $terminal
+Write-AfyxStatus -Status $(if ($claudeCommandDetected) { 'HEALTHY' } else { 'SKIPPED' }) -Name 'Claude Code host' -Detail $(if ($claudeCommandDetected) { 'compatible CLI detected' } elseif ($claudeVsCodeDetected) { 'VS Code extension detected; compatible CLI required for MCP registration' } else { 'not detected; required only when selected' }) -Terminal $terminal
 Write-AfyxStatus -Status $(if ($nodeVersion) { 'HEALTHY' } else { 'BLOCKED' }) -Name 'Node.js >=22.5.0 [COMPONENT_REQUIRED:Graph/Context]' -Detail $(if ($nodeVersion) { $nodeVersion } else { 'missing; install from https://nodejs.org/ before selecting Graph or Context' }) -Terminal $terminal
 Write-AfyxStatus -Status $(if ($npmVersion) { 'HEALTHY' } else { 'SKIPPED' }) -Name 'npm [BUILD_ONLY:Afyx Graph]' -Detail $(if ($npmVersion) { $npmVersion } else { 'missing; needed only for automatic local fallback' }) -Terminal $terminal
 Write-AfyxStatus -Status HEALTHY -Name 'Archive/checksum [COMPONENT_REQUIRED:Afyx Graph]' -Detail 'Expand-Archive + Get-FileHash available' -Terminal $terminal
@@ -562,6 +576,28 @@ $skillDefinitions = @(
     @{ Id = 'odoo-engineering'; Name = 'Odoo Engineering'; Source = $bundledOdooEngineering; Target = $odooTarget },
     @{ Id = 'afyx-engineering-expert'; Name = 'Afyx Engineering Expert'; Source = $bundledEngineeringExpert; Target = $expertTarget }
 )
+# Prevalidate selected runtime companions before skill, runtime, or MCP mutation.
+# A foreign or modified provider skill must block the plan, not cause a partial
+# install followed by an ownership conflict late in the transaction.
+if (-not $SkipProviderConfiguration -and $Provider.Count) {
+    $requestedCompanions = @()
+    foreach ($id in @('afyx-context', 'afyx-forge')) {
+        $selected = if ($controlPlan) { $id -in $controlPlan.DesiredComponents }
+            else { $componentActions.ContainsKey($id) -and $componentActions[$id] -ne 'skip' }
+        if ($selected -and ($id -ne 'afyx-context' -or $env:AFYX_CONTEXT_OPT_IN -ne '0')) {
+            $requestedCompanions += $id
+        }
+    }
+    foreach ($id in $requestedCompanions) {
+        foreach ($root in @($providerSkillRoots | Select-Object -Unique)) {
+            $candidate = Join-Path $root $id
+            $ownership = Get-AfyxSkillOwnership -Target $candidate -Component $id -ExpectedOwner 'afyx'
+            if ($ownership -notin @('NOT_INSTALLED', 'AFYX_OWNED_UNMODIFIED')) {
+                throw "Provider companion preflight blocked before mutation: $candidate ($ownership)."
+            }
+        }
+    }
+}
 foreach ($component in $skillDefinitions) {
     $skillActions[$component.Id] = if ($controlPlan) { [string]$actionDecisions[$component.Id] } else { Resolve-ComponentAction $component.Id $component.Name }
 }
@@ -640,7 +676,7 @@ $contextState = $states['Afyx Context Engine']
 $contextAction = if ($controlPlan) { [string]$actionDecisions['afyx-context'] } else { Resolve-ComponentAction 'afyx-context' 'Afyx Context Engine' }
 if ($contextAction -eq 'skip') { $summary['Afyx Context Engine'] = 'skipped' }
 else {
-    Write-AfyxStatus -Status PLANNED -Name 'Afyx Context Engine' -Detail "$contextAction in progress; Graph integration remains default-OFF" -Terminal $terminal
+    Write-AfyxStatus -Status PLANNED -Name 'Afyx Context Engine' -Detail "$contextAction in progress; task-based enablement available; Graph consumer registration still requires integration support" -Terminal $terminal
     $contextArguments = @{ RuntimeRoot = $ContextRuntimeRoot }
     if ($contextAction -eq 'update') { $contextArguments.Update = $true }
     elseif ($contextAction -eq 'repair') { $contextArguments.Repair = $true }
@@ -648,6 +684,32 @@ else {
     if (-not $?) { throw 'Afyx Context installation failed.' }
     $summary['Afyx Context Engine'] = $contextAction
     if (-not $WhatIfPreference) { $changesApplied = $true }
+}
+
+# Provider integration of the selected ACE runtime is a separate, Afyx-owned
+# skill companion. It does not change Graph MCP responses or external provider
+# toggles. Native Context CLI remains independently usable without this skill.
+$contextCompanionDesired = -not $SkipProviderConfiguration -and $env:AFYX_CONTEXT_OPT_IN -ne '0' -and (
+    $(if ($controlPlan) { 'afyx-context' -in $controlPlan.DesiredComponents }
+      else { $contextAction -ne 'skip' })
+)
+$contextReadyForCompanion = $contextAction -ne 'skip' -or $contextState -eq 'HEALTHY'
+if ($contextCompanionDesired -and $contextReadyForCompanion -and $Provider.Count) {
+    if (-not (Test-SkillManifest $contextCompanionSource)) { throw 'Bundled Afyx Context provider companion is invalid.' }
+    foreach ($root in @($providerSkillRoots | Select-Object -Unique)) {
+        $target = Join-Path $root 'afyx-context'
+        $ownership = Get-AfyxSkillOwnership -Target $target -Component 'afyx-context' -ExpectedOwner 'afyx'
+        if ($ownership -eq 'AFYX_OWNED_UNMODIFIED' -and
+            (Get-AfyxSkillVersion -Directory $target) -eq (Get-AfyxSkillVersion -Directory $contextCompanionSource)) {
+            $summary["Afyx Context Companion [$root]"] = 'skipped'
+            continue
+        }
+        if ($ownership -notin @('NOT_INSTALLED', 'AFYX_OWNED_UNMODIFIED')) {
+            throw "Refusing automatic Context companion replacement at $target because ownership is $ownership."
+        }
+        $summary["Afyx Context Companion [$root]"] = Install-ManagedSkillSafely 'afyx-context' 'Afyx Context Companion' $contextCompanionSource $target ($ownership -eq 'AFYX_OWNED_UNMODIFIED') $root
+        if (-not $WhatIfPreference) { $changesApplied = $true }
+    }
 }
 
 $forgeState = $states['Afyx Forge Core']
@@ -662,6 +724,30 @@ else {
     if (-not $?) { throw 'Afyx Forge Core installation failed.' }
     $summary['Afyx Forge Core'] = $forgeAction
     if (-not $WhatIfPreference) { $changesApplied = $true }
+}
+# The selected Forge Core contributes a skill surface, not autonomous runtime
+# execution. Formal A8 acceptance remains gated.
+$forgeCompanionDesired = -not $SkipProviderConfiguration -and (
+    $(if ($controlPlan) { 'afyx-forge' -in $controlPlan.DesiredComponents }
+      else { $forgeAction -ne 'skip' })
+)
+$forgeReadyForCompanion = $forgeAction -ne 'skip' -or $states['Afyx Forge Core'] -eq 'HEALTHY'
+if ($forgeCompanionDesired -and $forgeReadyForCompanion -and $Provider.Count) {
+    if (-not (Test-SkillManifest $forgeCompanionSource)) { throw 'Bundled Afyx Forge provider companion is invalid.' }
+    foreach ($root in @($providerSkillRoots | Select-Object -Unique)) {
+        $target = Join-Path $root 'afyx-forge'
+        $ownership = Get-AfyxSkillOwnership -Target $target -Component 'afyx-forge' -ExpectedOwner 'afyx'
+        if ($ownership -eq 'AFYX_OWNED_UNMODIFIED' -and
+            (Get-AfyxSkillVersion -Directory $target) -eq (Get-AfyxSkillVersion -Directory $forgeCompanionSource)) {
+            $summary["Afyx Forge Companion [$root]"] = 'skipped'
+            continue
+        }
+        if ($ownership -notin @('NOT_INSTALLED', 'AFYX_OWNED_UNMODIFIED')) {
+            throw "Refusing automatic Forge companion replacement at $target because ownership is $ownership."
+        }
+        $summary["Afyx Forge Companion [$root]"] = Install-ManagedSkillSafely 'afyx-forge' 'Afyx Forge Companion' $forgeCompanionSource $target ($ownership -eq 'AFYX_OWNED_UNMODIFIED') $root
+        if (-not $WhatIfPreference) { $changesApplied = $true }
+    }
 }
 
 $usageAction = if ($controlPlan) { [string]$actionDecisions['codex-usage-tracking'] } else { Resolve-ComponentAction 'codex-usage-tracking' 'Usage Tracking' }
