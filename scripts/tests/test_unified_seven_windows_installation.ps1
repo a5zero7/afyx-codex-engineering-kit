@@ -14,7 +14,8 @@ $packageRoot = $repoRoot
 
 Write-Host "=== TASK U-A02: Testing 7-Component Unified Windows Installation ===" -ForegroundColor Cyan
 
-$disposableBase = "D:\Project\workspace\disposable-u02-$([Guid]::NewGuid().ToString('N').Substring(0, 8))"
+$tempRoot = [System.IO.Path]::GetTempPath()
+$disposableBase = Join-Path $tempRoot ("disposable-u02-" + [Guid]::NewGuid().ToString('N').Substring(0, 8))
 $skillsRoot = Join-Path $disposableBase 'agents\skills'
 $graphRoot = Join-Path $disposableBase '.afyx\graph'
 $contextRoot = Join-Path $disposableBase '.afyx\context'
@@ -22,13 +23,21 @@ $forgeRoot = Join-Path $disposableBase '.afyx\forge'
 $codexHome = Join-Path $disposableBase '.codex'
 $geminiHome = Join-Path $disposableBase '.gemini'
 $claudeHome = Join-Path $disposableBase '.claude'
+$fakeBin = Join-Path $disposableBase 'fake-bin'
 
+$originalPath = $env:PATH
 try {
     # 0. Setup disposable environment & simulate foreign configurations
     New-Item -ItemType Directory -Path $skillsRoot -Force | Out-Null
     New-Item -ItemType Directory -Path $codexHome -Force | Out-Null
     New-Item -ItemType Directory -Path $geminiHome -Force | Out-Null
     New-Item -ItemType Directory -Path $claudeHome -Force | Out-Null
+    New-Item -ItemType Directory -Path $fakeBin -Force | Out-Null
+
+    if (-not (Get-Command codex.cmd, codex.exe -ErrorAction SilentlyContinue)) {
+        Set-Content -LiteralPath (Join-Path $fakeBin 'codex.cmd') -Value "@echo codex-test`r`n" -Encoding utf8
+        $env:PATH = "$fakeBin;$env:PATH"
+    }
 
     $foreignConfig = @"
 model = "gpt-5-preview"
@@ -222,6 +231,9 @@ my_custom_env = "production"
     return $true
 }
 finally {
+    if ($originalPath) {
+        $env:PATH = $originalPath
+    }
     if (Test-Path -LiteralPath $disposableBase) {
         Remove-Item -Path $disposableBase -Recurse -Force -ErrorAction SilentlyContinue
     }

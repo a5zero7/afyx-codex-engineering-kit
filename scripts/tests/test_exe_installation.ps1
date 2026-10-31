@@ -18,7 +18,8 @@ Write-Host " Size: $((Get-Item -LiteralPath $exePath).Length) bytes" -Foreground
 Write-Host " SHA-256: $((Get-FileHash -LiteralPath $exePath -Algorithm SHA256).Hash)" -ForegroundColor Cyan
 Write-Host "==================================================================" -ForegroundColor Cyan
 
-$disposable = "D:\Project\workspace\test-smoke-u03-$([Guid]::NewGuid().ToString('N').Substring(0, 8))"
+$tempRoot = [System.IO.Path]::GetTempPath()
+$disposable = Join-Path $tempRoot ("test-smoke-u03-" + [Guid]::NewGuid().ToString('N').Substring(0, 8))
 $skills = Join-Path $disposable 'skills'
 $context = Join-Path $disposable 'context'
 $forge = Join-Path $disposable 'forge'
@@ -26,12 +27,21 @@ $codex = Join-Path $disposable 'codex'
 $graph = Join-Path $disposable 'graph'
 $gemini = Join-Path $disposable 'gemini'
 $claude = Join-Path $disposable 'claude'
+$fakeBin = Join-Path $disposable 'fake-bin'
 
+$originalPath = $env:PATH
 try {
     # 0. Setup disposable test root & foreign config
     New-Item -ItemType Directory -Path $codex -Force | Out-Null
     New-Item -ItemType Directory -Path $gemini -Force | Out-Null
     New-Item -ItemType Directory -Path $claude -Force | Out-Null
+    New-Item -ItemType Directory -Path $fakeBin -Force | Out-Null
+
+    # Ensure native Codex CLI launcher is detectable in headless test runners
+    if (-not (Get-Command codex.cmd, codex.exe -ErrorAction SilentlyContinue)) {
+        Set-Content -LiteralPath (Join-Path $fakeBin 'codex.cmd') -Value "@echo codex-test`r`n" -Encoding utf8
+        $env:PATH = "$fakeBin;$env:PATH"
+    }
 
     $tomlContent = @"
 model = "gpt-5-preview"
@@ -115,6 +125,9 @@ my_custom_env = "production"
     return $true
 }
 finally {
+    if ($originalPath) {
+        $env:PATH = $originalPath
+    }
     if (Test-Path -LiteralPath $disposable) {
         Remove-Item -LiteralPath $disposable -Recurse -Force -ErrorAction SilentlyContinue
     }

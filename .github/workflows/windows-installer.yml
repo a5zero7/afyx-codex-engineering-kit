@@ -153,3 +153,4 @@ jobs:
             dist/AfyxSetup.exe.sha256
           if-no-files-found: error
           retention-days: 14
+
