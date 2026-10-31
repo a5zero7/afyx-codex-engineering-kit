@@ -72,7 +72,7 @@ test('rejects free-text or raw customer data and removes incomplete evidence',t=
   assert.equal(fs.existsSync(path.join(root,'on.ndjson')),false);
 });
 test('invalid input JSON does not leak the malformed text',t=>{
-  const root=setup(t),p=run(root,'OFF',['{"kind":"'+ 'CUSTOMER-SECRET' + '"');
+  const root=setup(t),p=run(root,'OFF',['{"kind":"CUSTOMER-SECRET']);
   assert.equal(p.status,2);
   assert.match(p.stderr,/invalid telemetry JSON/);
   assert.ok(!p.stderr.includes('CUSTOMER-SECRET'));
