@@ -113,3 +113,13 @@ test('paired control identity cannot be absent or duplicated', t => {
   f.manifest.runs[1].mode='OFF';f.save();
   assert.throws(() => loadManifest(f.file),/ordered OFF and ON/);
 });
+
+test('malformed private manifest contents must not leak into CLI error output', t => {
+  const f=setup(t), secret='PRIVATE-DO-NOT-ECHO';
+  fs.writeFileSync(f.file,'{"customerSecret":"'+secret+'" INVALID}');
+  const cli=fileURLToPath(new URL('../phase8-paired-evidence.mjs',import.meta.url));
+  const p=spawnSync(process.execPath,[cli,'--input',f.file],{encoding:'utf8'});
+  assert.equal(p.status,2);
+  assert.ok(!(p.stderr+p.stdout).includes(secret));
+  assert.ok(p.stderr.includes('manifest JSON invalid'));
+});
