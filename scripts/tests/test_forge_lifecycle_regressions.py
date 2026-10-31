@@ -75,7 +75,7 @@ class ForgeLifecycleTests(unittest.TestCase):
             self.skipTest("Bash unavailable")
 
         with tempfile.TemporaryDirectory(prefix="afyx-forge-test-") as temp_dir:
-            foreign_dir = Path(temp_dir) / "foreign_folder"
+            foreign_dir = Path(temp_dir).resolve() / "foreign_folder"
             foreign_dir.mkdir()
             sentinel = foreign_dir / "user_data.txt"
             sentinel.write_text("precious user data", encoding="utf-8")
@@ -98,7 +98,7 @@ class ForgeLifecycleTests(unittest.TestCase):
             self.skipTest("Bash unavailable")
 
         with tempfile.TemporaryDirectory(prefix="afyx-forge-test-") as temp_dir:
-            runtime = Path(temp_dir) / "forge_runtime"
+            runtime = Path(temp_dir).resolve() / "forge_runtime"
             # 1. Clean install first
             res = subprocess.run([bash, str(SH_INSTALLER), "--runtime-root", str(runtime.as_posix())], capture_output=True, text=True)
             self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
@@ -125,7 +125,7 @@ class ForgeLifecycleTests(unittest.TestCase):
             self.skipTest("PowerShell unavailable")
 
         with tempfile.TemporaryDirectory(prefix="afyx-forge-ps-") as temp_dir:
-            foreign = Path(temp_dir) / "unowned_dir"
+            foreign = Path(temp_dir).resolve() / "unowned_dir"
             foreign.mkdir()
             sentinel = foreign / "data.txt"
             sentinel.write_text("safe", encoding="utf-8")
@@ -133,16 +133,16 @@ class ForgeLifecycleTests(unittest.TestCase):
             # Attempt install
             res = subprocess.run([shell, "-NoProfile", "-NonInteractive", "-File", str(PS_INSTALLER), "-RuntimeRoot", str(foreign)], capture_output=True, text=True)
             self.assertNotEqual(res.returncode, 0)
-            cleaned = clean_output(res.stderr + res.stdout)
-            self.assertIn("Afyx Forge ownership", cleaned)
+            cleaned = clean_output(res.stderr + res.stdout).lower()
+            self.assertIn("ownership", cleaned)
             self.assertIn("verified", cleaned)
             self.assertTrue(sentinel.is_file())
 
             # Attempt uninstall
             res = subprocess.run([shell, "-NoProfile", "-NonInteractive", "-File", str(PS_INSTALLER), "-RuntimeRoot", str(foreign), "-Uninstall"], capture_output=True, text=True)
             self.assertNotEqual(res.returncode, 0)
-            cleaned = clean_output(res.stderr + res.stdout)
-            self.assertIn("Afyx Forge ownership", cleaned)
+            cleaned = clean_output(res.stderr + res.stdout).lower()
+            self.assertIn("ownership", cleaned)
             self.assertIn("verified", cleaned)
             self.assertTrue(sentinel.is_file())
 

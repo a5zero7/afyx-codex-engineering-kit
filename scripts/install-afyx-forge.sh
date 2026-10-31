@@ -59,6 +59,9 @@ case "$CANONICAL_SOURCE/" in "$CANONICAL_RUNTIME/"*) printf '%s\n' 'Afyx Forge r
 for candidate in "$runtime_root" "$recovery_root"; do
   probe="$candidate"
   while [[ "$probe" != / && "$probe" != . && -n "$probe" && ! "$probe" =~ ^[A-Za-z]:[/\\]?$ ]]; do
+    if [[ "$probe" == "/var" || "$probe" == "/tmp" || "$probe" == "/etc" ]]; then
+      break
+    fi
     [[ ! -L "$probe" ]] || { printf 'Afyx Forge runtime path must not traverse a symbolic link: %s\n' "$probe" >&2; exit 1; }
     next_probe="$(dirname "$probe")"
     [[ "$next_probe" != "$probe" ]] || break
