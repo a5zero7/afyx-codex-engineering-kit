@@ -12,7 +12,7 @@
  * 1. Deterministic capability planning (resolveModularCapabilityPlan)
  * 2. Capability eligibility and single domain authority
  * 3. Runtime readiness and authorization checks
- * 4. Provider-mediated activation (Codex, Antigravity, Claude Code)
+ * 4. Provider-mediated capability preparation and surface mapping
  * 5. Bounded, sanitized runtime observability and execution prep
  */
 
@@ -31,6 +31,10 @@ import {
 } from './afyx-tool-family-routing.mjs';
 
 export const AFYX_MODULAR_RUNTIME_CONTRACT = 'AfyxModularRuntimeActivation/v1';
+
+// Load accepted providers directly from the authoritative component registry
+const REGISTRY = JSON.parse(readFileSync(new URL('./components.json', import.meta.url), 'utf8'));
+export const ACCEPTED_PROVIDERS = Object.freeze(REGISTRY.providers.map((p) => p.provider));
 
 /**
  * Domain authorities map: exactly one primary authority per capability domain.
@@ -123,7 +127,7 @@ export const PROVIDER_CAPABILITY_SUPPORT = Object.freeze({
 });
 
 /**
- * Resolves modular runtime activation, enforcing host authorizations,
+ * Resolves modular runtime capability preparation, enforcing host authorizations,
  * provider mediation, and non-redundant capability execution.
  *
  * @param {Object} options
@@ -155,9 +159,19 @@ export function resolveModularRuntimeActivation(options = {}) {
   const diagnostics = [];
   const degradations = [...deterministicPlan.degradations];
   const suppressedRedundancies = [...deterministicPlan.suppressedRedundancies];
-  const activatedCapabilities = [];
+  const preparedCapabilities = [];
   const domainAuthorities = {};
   let runtimeStatus = 'READY';
+
+  // Unknown Provider Check: Fail closed immediately
+  if (targetProvider !== null && !ACCEPTED_PROVIDERS.includes(targetProvider)) {
+    runtimeStatus = 'BLOCKED';
+    diagnostics.push({
+      code: 'UNKNOWN_PROVIDER_REFUSED',
+      severity: 'ERROR',
+      message: `Target provider '${targetProvider}' is unknown. Supported providers: ${ACCEPTED_PROVIDERS.join(', ')}. Failed closed without mutation or execution.`,
+    });
+  }
 
   // Forge production gating enforcement (A8)
   const isForgeRequested = task.taskType === 'forge-evaluation' ||
@@ -188,14 +202,16 @@ export function resolveModularRuntimeActivation(options = {}) {
     runtimeStatus = 'BLOCKED';
   }
 
-  // Automatic background indexing safeguard:
-  // Do not automatically trigger background reindexing or daemonic builds.
+  // Automatic background indexing & freshness safeguard:
+  // Missing evidence is treated as UNKNOWN, never implicitly ready.
+  // Never automatically trigger background reindexing or daemonic builds.
   if (deterministicPlan.selectedComponents.includes('afyx-graph')) {
     const graphInstalled = installedComponents['afyx-graph'];
-    const indexFresh = graphInstalled?.indexFresh !== false;
-    const indexReady = graphInstalled?.indexReady !== false;
+    const isFresh = graphInstalled?.indexFresh === true;
+    const isReady = graphInstalled?.indexReady === true;
+    const isFreshnessUnknown = graphInstalled?.indexFresh === undefined || graphInstalled?.indexReady === undefined;
 
-    if (!indexReady || !indexFresh) {
+    if (!isReady || !isFresh || isFreshnessUnknown) {
       if (hostAuthorizations.allowAutomaticIndexing) {
         // Only if caller explicitly authorized indexing
         diagnostics.push({
@@ -204,83 +220,86 @@ export function resolveModularRuntimeActivation(options = {}) {
           message: 'Caller explicitly authorized repository indexing.',
         });
       } else {
-        // Safe degradation to direct source
+        const reasonCode = isFreshnessUnknown ? 'INDEX_FRESHNESS_UNKNOWN' : 'INDEX_NOT_READY_OR_STALE';
         degradations.push({
           component: 'afyx-graph',
           fallback: 'DIRECT_SOURCE',
-          reason: 'INDEX_NOT_READY_OR_STALE',
+          reason: reasonCode,
         });
         diagnostics.push({
-          code: 'AUTOMATIC_INDEXING_REFUSED',
+          code: isFreshnessUnknown ? 'GRAPH_FRESHNESS_UNKNOWN' : 'AUTOMATIC_INDEXING_REFUSED',
           severity: 'WARNING',
-          message: 'Graph repository index not ready or stale; automatic background reindexing refused. Falling back to direct source.',
+          message: isFreshnessUnknown
+            ? 'Graph repository index readiness/freshness evidence is missing or unverified; treated as UNKNOWN. Automatic background indexing refused; falling back to direct source.'
+            : 'Graph repository index not ready or stale; automatic background reindexing refused. Falling back to direct source.',
         });
       }
     }
   }
 
-  // 3. Layer 4: Provider-mediated capability activation & surface mapping
+  // 3. Layer 4: Provider-mediated capability preparation & surface mapping
   const providerMeta = targetProvider ? PROVIDER_CAPABILITY_SUPPORT[targetProvider] : null;
 
-  if (targetProvider && !providerMeta) {
-    diagnostics.push({
-      code: 'UNKNOWN_PROVIDER',
-      severity: 'WARNING',
-      message: `Target provider '${targetProvider}' is not a recognized provider profile; treating as generic.`,
-    });
-  }
+  // Only prepare capabilities if provider is valid
+  if (runtimeStatus !== 'BLOCKED') {
+    for (const componentId of deterministicPlan.selectedComponents) {
+      // If component degraded (e.g. Graph due to stale/unknown index), do not prepare for invocation
+      const isDegraded = degradations.some((d) => d.component === componentId);
+      if (isDegraded) continue;
 
-  for (const componentId of deterministicPlan.selectedComponents) {
-    // If graph degraded due to stale index, do not activate
-    const isDegraded = degradations.some((d) => d.component === componentId);
-    if (isDegraded) continue;
+      const compInfo = PRODUCT_INVENTORY[componentId];
+      if (!compInfo) continue;
 
-    const compInfo = PRODUCT_INVENTORY[componentId];
-    if (!compInfo) continue;
+      const primaryCap = compInfo.primaryCapability;
+      const authority = DOMAIN_AUTHORITY_MATRIX[primaryCap];
 
-    const primaryCap = compInfo.primaryCapability;
-    const authority = DOMAIN_AUTHORITY_MATRIX[primaryCap];
-
-    if (authority) {
-      domainAuthorities[primaryCap] = authority.primaryOwner;
-    }
-
-    // Check provider capability support
-    if (providerMeta) {
-      const isSupported = providerMeta.supportedCapabilities.includes(primaryCap);
-      if (!isSupported) {
-        degradations.push({
-          component: componentId,
-          fallback: 'UNSUPPORTED_ON_PROVIDER',
-          reason: `Component ${componentId} capability ${primaryCap} is not supported on provider ${targetProvider}.`,
-        });
-        diagnostics.push({
-          code: 'CAPABILITY_UNSUPPORTED_ON_PROVIDER',
-          severity: 'WARNING',
-          message: `Provider '${targetProvider}' does not support '${primaryCap}'. Graceful degradation applied.`,
-        });
-        continue;
+      if (authority) {
+        domainAuthorities[primaryCap] = authority.primaryOwner;
       }
 
-      const surfaceMapping = providerMeta.surfaces[componentId];
-      activatedCapabilities.push({
-        componentId,
-        capability: primaryCap,
-        provider: targetProvider,
-        surface: surfaceMapping?.surface || 'generic',
-        surfaceDetails: surfaceMapping || {},
-        ownership: compInfo.ownershipClass,
-      });
-    } else {
-      // Provider-neutral activation
-      activatedCapabilities.push({
-        componentId,
-        capability: primaryCap,
-        provider: 'neutral',
-        surface: compInfo.type === 'runtime' ? 'mcp' : 'skills',
-        surfaceDetails: { type: compInfo.type },
-        ownership: compInfo.ownershipClass,
-      });
+      // Check provider capability support
+      if (providerMeta) {
+        const isSupported = providerMeta.supportedCapabilities.includes(primaryCap);
+        if (!isSupported) {
+          degradations.push({
+            component: componentId,
+            fallback: 'UNSUPPORTED_ON_PROVIDER',
+            reason: `Component ${componentId} capability ${primaryCap} is not supported on provider ${targetProvider}.`,
+          });
+          diagnostics.push({
+            code: 'CAPABILITY_UNSUPPORTED_ON_PROVIDER',
+            severity: 'WARNING',
+            message: `Provider '${targetProvider}' does not support '${primaryCap}'. Graceful degradation applied.`,
+          });
+          continue;
+        }
+
+        const surfaceMapping = providerMeta.surfaces[componentId];
+        preparedCapabilities.push({
+          componentId,
+          capability: primaryCap,
+          provider: targetProvider,
+          surface: surfaceMapping?.surface || 'generic',
+          surfaceDetails: surfaceMapping || {},
+          ownership: compInfo.ownershipClass,
+          lifecycleState: 'PREPARED', // Explicit lifecycle: prepared for session, not claimed live executed
+          executionStatus: 'NOT_RUN',
+          observationSource: hostAuthorizations.trustedInspection ? 'HOST_INSPECTED' : 'CALLER_DECLARED',
+        });
+      } else {
+        // Provider-neutral preparation
+        preparedCapabilities.push({
+          componentId,
+          capability: primaryCap,
+          provider: 'neutral',
+          surface: compInfo.type === 'runtime' ? 'mcp' : 'skills',
+          surfaceDetails: { type: compInfo.type },
+          ownership: compInfo.ownershipClass,
+          lifecycleState: 'PREPARED',
+          executionStatus: 'NOT_RUN',
+          observationSource: hostAuthorizations.trustedInspection ? 'HOST_INSPECTED' : 'CALLER_DECLARED',
+        });
+      }
     }
   }
 
@@ -314,10 +333,13 @@ export function resolveModularRuntimeActivation(options = {}) {
     taskId,
     provider: targetProvider || 'neutral',
     plannedCapabilitiesCount: deterministicPlan.selectedComponents.length,
-    activatedCapabilitiesCount: activatedCapabilities.length,
+    preparedCapabilitiesCount: preparedCapabilities.length,
+    activatedCapabilitiesCount: preparedCapabilities.length, // Retained for compatibility
     suppressedInvocationsCount: suppressedRedundancies.length,
     degradationsCount: degradations.length,
     claimVerification: 'No speculative token savings claimed without measured provider counters.',
+    liveExecutionEvidence: false,
+    actualTokenSavingsClaimed: false,
   };
 
   return Object.freeze({
@@ -325,9 +347,12 @@ export function resolveModularRuntimeActivation(options = {}) {
     taskId,
     provider: targetProvider,
     status: runtimeStatus,
+    executionStatus: 'NOT_RUN', // Distinguishes prepared activation plan from actual model invocation
+    actualExecutionClaimed: false,
     governingPrinciple: deterministicPlan.governingPrinciple,
     plannedComponents: deterministicPlan.selectedComponents,
-    activatedCapabilities: Object.freeze(activatedCapabilities),
+    preparedCapabilities: Object.freeze(preparedCapabilities),
+    activatedCapabilities: Object.freeze(preparedCapabilities), // Backward-compatible alias with explicit PREPARED state
     domainAuthorities: Object.freeze(domainAuthorities),
     componentStates: deterministicPlan.componentStates,
     suppressedRedundancies: Object.freeze(suppressedRedundancies),

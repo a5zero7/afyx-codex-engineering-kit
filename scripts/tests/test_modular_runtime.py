@@ -449,6 +449,79 @@ console.log(JSON.stringify(res));
         )
 
     # -------------------------------------------------------------------------
+    # Additional Negative & Verification Tests (K02 Review Corrections)
+    # -------------------------------------------------------------------------
+    def test_unknown_provider_fails_closed_blocked(self) -> None:
+        """Verifies unknown provider fails closed with BLOCKED status and explicit diagnostic."""
+        source = f"""
+import {{ resolveModularRuntimeActivation }} from {json.dumps(RUNTIME_MODULE.as_uri())};
+const res = resolveModularRuntimeActivation({{
+  task: {{ id: 'task-unk-prov', taskType: 'simple-fix' }},
+  provider: 'unknown-vendor-ai',
+  installedComponents: {{
+    'efficient-coding': {{ installed: true, healthy: true }},
+  }},
+}});
+console.log(JSON.stringify(res));
+"""
+        res = run_node(source)
+        self.assertEqual(res["status"], "BLOCKED")
+        self.assertEqual(len(res["preparedCapabilities"]), 0)
+        diag = next(d for d in res["diagnostics"] if d["code"] == "UNKNOWN_PROVIDER_REFUSED")
+        self.assertEqual(diag["severity"], "ERROR")
+
+    def test_graph_missing_freshness_evidence_treated_as_unknown(self) -> None:
+        """Verifies missing Graph freshness/readiness evidence is treated as UNKNOWN, not implicitly ready."""
+        source = f"""
+import {{ resolveModularRuntimeActivation }} from {json.dumps(RUNTIME_MODULE.as_uri())};
+const res = resolveModularRuntimeActivation({{
+  task: {{ id: 'task-graph-unk', taskType: 'impact-analysis', needsRelationalEvidence: true }},
+  provider: 'codex',
+  installedComponents: {{
+    'afyx-graph': {{ installed: true, healthy: true }}, // indexReady and indexFresh are omitted (undefined)
+  }},
+}});
+console.log(JSON.stringify(res));
+"""
+        res = run_node(source)
+        self.assertEqual(res["status"], "DEGRADED")
+        deg = next(d for d in res["degradations"] if d["component"] == "afyx-graph")
+        self.assertEqual(deg["fallback"], "DIRECT_SOURCE")
+        self.assertEqual(deg["reason"], "INDEX_FRESHNESS_UNKNOWN")
+        diag = next(d for d in res["diagnostics"] if d["code"] == "GRAPH_FRESHNESS_UNKNOWN")
+        self.assertEqual(diag["severity"], "WARNING")
+
+    def test_lifecycle_state_is_prepared_and_execution_is_not_run(self) -> None:
+        """Verifies activation semantics: capabilities are PREPARED with executionStatus NOT_RUN."""
+        source = f"""
+import {{ resolveModularRuntimeActivation }} from {json.dumps(RUNTIME_MODULE.as_uri())};
+const res = resolveModularRuntimeActivation({{
+  task: {{ id: 'task-sem', taskType: 'simple-fix' }},
+  provider: 'codex',
+  installedComponents: {{
+    'efficient-coding': {{ installed: true, healthy: true }},
+  }},
+}});
+console.log(JSON.stringify(res));
+"""
+        res = run_node(source)
+        self.assertEqual(res["executionStatus"], "NOT_RUN")
+        self.assertFalse(res["actualExecutionClaimed"])
+        self.assertEqual(len(res["preparedCapabilities"]), 1)
+        cap = res["preparedCapabilities"][0]
+        self.assertEqual(cap["lifecycleState"], "PREPARED")
+        self.assertEqual(cap["executionStatus"], "NOT_RUN")
+
+    def test_accepted_providers_imported_from_component_registry(self) -> None:
+        """Verifies ACCEPTED_PROVIDERS matches the authoritative components.json registry."""
+        source = f"""
+import {{ ACCEPTED_PROVIDERS }} from {json.dumps(RUNTIME_MODULE.as_uri())};
+console.log(JSON.stringify(ACCEPTED_PROVIDERS));
+"""
+        providers = run_node(source)
+        self.assertEqual(providers, ["codex", "antigravity", "claude"])
+
+    # -------------------------------------------------------------------------
     # CLI Runner Tests
     # -------------------------------------------------------------------------
     def test_cli_runner_success(self) -> None:
