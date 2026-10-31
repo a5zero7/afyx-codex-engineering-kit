@@ -43,6 +43,7 @@ $contextMetadataPath = Join-Path $packageRoot 'afyx-context\afyx-context.json'
 $contextCompanionSource = Join-Path $packageRoot 'skills\afyx-context'
 $forgeInstaller = Join-Path $packageRoot 'scripts\install-afyx-forge.ps1'
 $forgeMetadataPath = Join-Path $packageRoot 'afyx-forge\afyx-forge.json'
+$forgeCompanionSource = Join-Path $packageRoot 'skills\afyx-forge'
 $graphRuntimeRoot = if ($env:AFYX_GRAPH_RUNTIME_ROOT) { $env:AFYX_GRAPH_RUNTIME_ROOT } else { Join-Path $env:USERPROFILE '.afyx\graph' }
 $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' }
 
@@ -81,7 +82,7 @@ $wizardMode = $terminal.Interactive -and -not $ValidateOnly -and -not $WhatIfPre
 if ($wizardMode) {
     try {
         Write-AfyxSection -Title 'Welcome & Environment' -Terminal $terminal
-        Write-AfyxStatus -Status INFO -Name 'Forge' -Detail 'evaluation-only; not a selectable production component' -Terminal $terminal
+        Write-AfyxStatus -Status INFO -Name 'Forge' -Detail 'optional Alpha guidance component; formal A8 remains evaluation gated' -Terminal $terminal
         Write-AfyxStatus -Status INFO -Name 'Afyx Context' -Detail 'optional to install; enabled by default when healthy; optimized use remains task-driven' -Terminal $terminal
         $presetOptions = @(
             [pscustomobject]@{ Id = 'recommended'; Label = 'Recommended'; Detail = 'Core skills + Engineering Expert'; Enabled = $true },
@@ -701,6 +702,30 @@ else {
     if (-not $?) { throw 'Afyx Forge Core installation failed.' }
     $summary['Afyx Forge Core'] = $forgeAction
     if (-not $WhatIfPreference) { $changesApplied = $true }
+}
+# The selected Forge Core contributes a skill surface, not autonomous runtime
+# execution. Formal A8 acceptance remains gated.
+$forgeCompanionDesired = -not $SkipProviderConfiguration -and (
+    $(if ($controlPlan) { 'afyx-forge' -in $controlPlan.DesiredComponents }
+      else { $forgeAction -ne 'skip' })
+)
+$forgeReadyForCompanion = $forgeAction -ne 'skip' -or $states['Afyx Forge Core'] -eq 'HEALTHY'
+if ($forgeCompanionDesired -and $forgeReadyForCompanion -and $Provider.Count) {
+    if (-not (Test-SkillManifest $forgeCompanionSource)) { throw 'Bundled Afyx Forge provider companion is invalid.' }
+    foreach ($root in @($providerSkillRoots | Select-Object -Unique)) {
+        $target = Join-Path $root 'afyx-forge'
+        $ownership = Get-AfyxSkillOwnership -Target $target -Component 'afyx-forge' -ExpectedOwner 'afyx'
+        if ($ownership -eq 'AFYX_OWNED_UNMODIFIED' -and
+            (Get-AfyxSkillVersion -Directory $target) -eq (Get-AfyxSkillVersion -Directory $forgeCompanionSource)) {
+            $summary["Afyx Forge Companion [$root]"] = 'skipped'
+            continue
+        }
+        if ($ownership -notin @('NOT_INSTALLED', 'AFYX_OWNED_UNMODIFIED')) {
+            throw "Refusing automatic Forge companion replacement at $target because ownership is $ownership."
+        }
+        $summary["Afyx Forge Companion [$root]"] = Install-ManagedSkillSafely 'afyx-forge' 'Afyx Forge Companion' $forgeCompanionSource $target ($ownership -eq 'AFYX_OWNED_UNMODIFIED') $root
+        if (-not $WhatIfPreference) { $changesApplied = $true }
+    }
 }
 
 $usageAction = if ($controlPlan) { [string]$actionDecisions['codex-usage-tracking'] } else { Resolve-ComponentAction 'codex-usage-tracking' 'Usage Tracking' }
