@@ -455,5 +455,37 @@ if [[ "$context_action" != skip ]]; then
   context_result="$context_action"
 fi
 
+# Provider companion: visible on installed supported skill surfaces and invoked
+# only when Context optimization is useful. This does not intercept Graph MCP.
+context_companion_desired=false
+if [[ "$skip_provider_configuration" == false && "${AFYX_CONTEXT_OPT_IN:-}" != 0 ]]; then
+  if [[ -n "$preset" ]]; then
+    afyx_component_desired afyx-context "$preset" "$custom_component_list" "$provider_list" && context_companion_desired=true
+  elif [[ "$context_action" != skip ]]; then context_companion_desired=true; fi
+fi
+if "$context_companion_desired" && { [[ "$context_action" != skip ]] || [[ "$afyx_context_state" == HEALTHY ]]; }; then
+  context_skill_source="$PACKAGE_ROOT/skills/afyx-context"
+  valid_manifest "$context_skill_source" || { printf 'Invalid Afyx Context provider companion.\n' >&2; exit 1; }
+  for context_skill_root in "$skills_root" ${additional_skill_roots[@]+"${additional_skill_roots[@]}"}; do
+    context_skill_target="$context_skill_root/afyx-context"
+    afyx_classify_skill "$context_skill_target" afyx-context afyx
+    case "$AFYX_OWNERSHIP_STATE" in
+      NOT_INSTALLED) context_skill_replace=false ;;
+      AFYX_OWNED_UNMODIFIED)
+        if [[ "$(afyx_skill_version "$context_skill_target")" == "$(afyx_skill_version "$context_skill_source")" ]]; then
+          printf 'Afyx Context Companion [%s]: skipped\n' "$context_skill_root"
+          continue
+        fi
+        context_skill_replace=true
+        ;;
+      *) printf 'Refusing automatic ACE companion replacement at %s because ownership is %s.\n' "$context_skill_target" "$AFYX_OWNERSHIP_STATE" >&2; exit 1 ;;
+    esac
+    # safe_skill_install uses skills_root for its ownership boundary; override
+    # it only in the subshell for the currently selected provider root.
+    context_skill_result="$(skills_root="$context_skill_root"; safe_skill_install afyx-context 'Afyx Context Companion' "$context_skill_source" "$context_skill_target" "$context_skill_replace")"
+    printf 'Afyx Context Companion [%s]: %s\n' "$context_skill_root" "$context_skill_result"
+  done
+fi
+
 printf '\nInstallation Summary\n[%s] Efficient Coding\n[%s] Odoo Engineering\n[%s] Afyx Engineering Expert\n[%s] Afyx Graph\n[%s] Afyx Context Engine\n[SKIPPED] Usage Tracking (Windows-only)\n' "$efficient_result" "$odoo_result" "$expert_result" "$graph_result" "$context_result"
 "$dry_run" && printf 'Dry-run completed; no files or configuration were changed.\n' || printf 'Start a new Codex session to load installed components.\n'
