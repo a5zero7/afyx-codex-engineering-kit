@@ -42,9 +42,14 @@ function integer(value, name) {
   return value;
 }
 function capture(run, root) {
-  required(run, ['mode', 'runId', 'eventsFile', 'eventsSha256', 'quality', 'coverage'], 'run');
+  required(run, ['mode', 'runId', 'eventsFile', 'eventsSha256', 'quality', 'coverage', 'timing'], 'run');
   check(typeof run.runId === 'string' && /^[A-Za-z0-9_.-]{1,100}$/.test(run.runId), 'invalid runId');
   check(SHA.test(run.eventsSha256), 'invalid trace digest');
+  required(run.timing, ['capture','liveReceiptSha256'], 'timing');
+  check(['LIVE_MONITORED','REPLAY_OR_UNVERIFIED'].includes(run.timing.capture), 'invalid timing capture');
+  check(run.timing.capture === 'LIVE_MONITORED'
+    ? SHA.test(run.timing.liveReceiptSha256)
+    : run.timing.liveReceiptSha256 === null, 'live timing requires external receipt digest; replay must not claim one');
   required(run.coverage, coverageKeys, 'coverage');
   coverageKeys.forEach(k => check(typeof run.coverage[k] === 'boolean', 'coverage flag must be boolean: ' + k));
   required(run.quality, ['correctness', 'tests', 'security', 'evaluatorReceiptSha256'], 'quality');
@@ -80,6 +85,7 @@ function capture(run, root) {
       check(['agent','human'].includes(e.actor), 'invalid rework actor'); rework++;
     } else if (e.kind === 'provider_usage') {
       check(e.source === 'provider_report', 'provider usage provenance missing');
+      check(e.usageSemantics === 'per_turn_delta', 'cumulative usage snapshots cannot be summed as per-turn deltas');
       input += integer(e.inputTokens, 'inputTokens');
       cached += integer(e.cachedInputTokens, 'cachedInputTokens');
       output += integer(e.outputTokens, 'outputTokens'); usageEvents++;
@@ -96,8 +102,9 @@ function capture(run, root) {
     traceSha256: run.eventsSha256,
     quality: run.quality,
     declaredCoverage: run.coverage,
+    timing: run.timing,
     observations: {
-      wallMs: end - start,
+      wallMs: run.timing.capture === 'LIVE_MONITORED' ? end - start : null,
       toolCalls: observed('toolEvents', calls),
       humanInterventions: observed('humanEvents', humans),
       reworkEvents: observed('reworkEvents', rework),
@@ -149,6 +156,8 @@ export function evaluateManifest(manifest, file) {
     provenance:'Local structured trace hashes verified; evaluator receipts and capture completeness are declared, not independently authenticated.',
     warnings:[
       'Valid intake does not prove engineering correctness, provider billing, or installed Alpha acceptance.',
+      'Timing receipts and per-turn token semantics are asserted by the source host; independent reviewer must verify provenance.',
+      ...(off.observations.wallMs === null || on.observations.wallMs === null ? ['wallMs: NOT_AVAILABLE; replay/receipt times are not agent execution duration'] : []),
       ...coverageKeys.filter(k => !off.declaredCoverage[k] || !on.declaredCoverage[k]).map(k => k + ': NOT_AVAILABLE for complete paired comparison'),
     ],
   };
