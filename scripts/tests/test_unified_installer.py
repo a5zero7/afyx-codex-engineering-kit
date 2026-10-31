@@ -162,6 +162,11 @@ class UnifiedInstallerIntegrationTests(unittest.TestCase):
         installed = self.invoke("install.ps1", arguments)
         self.assertIn("Provider transaction: CONFIGURED_RESTART_REQUIRED", installed.stdout)
         self.assert_skill_roots()
+        # Selected ACE runtime also installs an owned on-demand companion skill
+        # to each selected provider without replacing Graph MCP responses.
+        for root in (self.skills, self.gemini_home / "config" / "skills", self.gemini_home / "antigravity-cli" / "skills", self.claude_home / "skills"):
+            self.assertTrue((root / "afyx-context" / "SKILL.md").is_file())
+            self.assertTrue((root / "afyx-context" / ".afyx-install.json").is_file())
         self.assertTrue((self.codex_home / "config.toml").is_file())
         self.assertTrue((self.gemini_home / "config" / "mcp_config.json").is_file())
         self.assertTrue((self.claude_config / ".claude.json").is_file())
@@ -205,6 +210,8 @@ class UnifiedInstallerIntegrationTests(unittest.TestCase):
         )
         self.assertIn("Provider removal: READY", removed.stdout)
         self.assertFalse(self.context.exists())
+        for root in (self.skills, self.gemini_home / "config" / "skills", self.gemini_home / "antigravity-cli" / "skills", self.claude_home / "skills"):
+            self.assertFalse((root / "afyx-context").exists())
         self.assertTrue(self.graph.exists(), "shared Graph runtime must be preserved unless explicitly removed")
         for root in (self.skills, self.gemini_home / "config" / "skills", self.gemini_home / "antigravity-cli" / "skills", self.claude_home / "skills"):
             for component in SKILLS:
