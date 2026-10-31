@@ -22,7 +22,7 @@ function run(root, mode, events, extra=[]) {
   });
 }
 const TOOL={kind:'tool_call',actor:'agent'};
-const USAGE={kind:'provider_usage',source:'provider_report',inputTokens:117,cachedInputTokens:17,outputTokens:23};
+const USAGE={kind:'provider_usage',source:'provider_report',usageSemantics:'per_turn_delta',inputTokens:117,cachedInputTokens:17,outputTokens:23};
 test('real typed stream materializes a hash-checked private run descriptor',t=>{
   const dir=setup(t);
   const p=run(dir,'OFF',[TOOL,USAGE]);
@@ -32,6 +32,7 @@ test('real typed stream materializes a hash-checked private run descriptor',t=>{
   assert.equal(d.declaredCoverage,'ALL_UNVERIFIED');
   assert.deepEqual(d.run.coverage,{toolEvents:false,humanEvents:false,reworkEvents:false,providerUsage:false});
   assert.equal(d.run.quality.correctness,'NOT_RUN');
+  assert.deepEqual(d.run.timing,{capture:'REPLAY_OR_UNVERIFIED',liveReceiptSha256:null});
   const bytes=fs.readFileSync(path.join(dir,'off.ndjson'));
   assert.equal(d.run.eventsSha256,sha(bytes));
   const rows=bytes.toString('utf8').trim().split('\n').map(JSON.parse);
@@ -56,6 +57,7 @@ test('recorded OFF/ON streams are accepted by paired verifier without declaring 
   assert.equal(report.verdict,'SYNTHETIC_ONLY');
   assert.equal(report.comparativeMetrics.toolCalls.off,null);
   assert.equal(report.comparativeMetrics.inputTokens.on,null);
+  assert.equal(report.comparativeMetrics.wallMs.on,null);
   assert.equal(report.independentAcceptance,'NOT_VERIFIED');
   manifest.runs.forEach(x=>{x.coverage.toolEvents=true;});
   fs.writeFileSync(file,JSON.stringify(manifest));
@@ -87,6 +89,7 @@ test('human intervention requires explicit human actor; agent retries are not hu
 test('rejects invalid provider usage counters and source',t=>{
   const root=setup(t);
   assert.equal(run(root,'OFF',[{...USAGE,source:'estimated'}]).status,2);
+  assert.equal(run(root,'OFF',[{...USAGE,usageSemantics:'cumulative_snapshot'}]).status,2);
   assert.equal(run(root,'OFF',[{...USAGE,cachedInputTokens:118}]).status,2);
   assert.equal(run(root,'OFF',[{...USAGE,inputTokens:-1}]).status,2);
   assert.equal(fs.existsSync(path.join(root,'off.ndjson')),false);
