@@ -50,7 +50,7 @@ jobs:
         run: python -m unittest discover -s scripts/tests -p 'test_*.py' -v
       - name: Afyx Forge Core unit and acceptance tests
         run: |
-          node --test afyx-forge/test/
+          node --test afyx-forge/test/*.test.js
           node scripts/tests/test_forge_acceptance.mjs
       - name: Validate installer assets
         run: ./install.sh --validate-only
@@ -116,7 +116,7 @@ jobs:
       - name: Afyx Forge Core unit and acceptance tests
         shell: pwsh
         run: |
-          node --test afyx-forge/test/
+          node --test (Get-ChildItem afyx-forge/test/*.test.js)
           node scripts/tests/test_forge_acceptance.mjs
       - name: Codex native host and MCP lifecycle regressions
         run: python -m unittest scripts.tests.test_codex_host_resolution scripts.tests.test_mcp_integration -v
@@ -176,7 +176,7 @@ jobs:
           rm -f verify.out
       - name: Afyx Forge Core unit and acceptance tests
         run: |
-          node --test afyx-forge/test/
+          node --test afyx-forge/test/*.test.js
           node scripts/tests/test_forge_acceptance.mjs
       - name: Component contract and project detector (system /bin/bash)
         run: |

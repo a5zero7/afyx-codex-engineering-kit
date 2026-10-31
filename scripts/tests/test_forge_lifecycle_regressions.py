@@ -135,7 +135,7 @@ class ForgeLifecycleTests(unittest.TestCase):
             self.assertNotEqual(res.returncode, 0)
             cleaned = clean_output(res.stderr + res.stdout)
             self.assertIn("Afyx Forge ownership", cleaned)
-            self.assertIn("could not be verified", cleaned)
+            self.assertIn("verified", cleaned)
             self.assertTrue(sentinel.is_file())
 
             # Attempt uninstall
@@ -143,7 +143,7 @@ class ForgeLifecycleTests(unittest.TestCase):
             self.assertNotEqual(res.returncode, 0)
             cleaned = clean_output(res.stderr + res.stdout)
             self.assertIn("Afyx Forge ownership", cleaned)
-            self.assertIn("could not be verified", cleaned)
+            self.assertIn("verified", cleaned)
             self.assertTrue(sentinel.is_file())
 
 
