@@ -8,6 +8,8 @@ on:
     paths:
       - 'scripts/phase8-paired-evidence.mjs'
       - 'scripts/tests/test_phase8_paired_evidence.mjs'
+      - 'scripts/phase8-session-recorder.mjs'
+      - 'scripts/tests/test_phase8_session_recorder.mjs'
       - 'docs/AFYX_8_PAIRED_EVIDENCE_INTAKE.md'
       - '.github/workflows/phase8-paired-intake.yml'
   push:
@@ -15,6 +17,8 @@ on:
     paths:
       - 'scripts/phase8-paired-evidence.mjs'
       - 'scripts/tests/test_phase8_paired_evidence.mjs'
+      - 'scripts/phase8-session-recorder.mjs'
+      - 'scripts/tests/test_phase8_session_recorder.mjs'
       - 'docs/AFYX_8_PAIRED_EVIDENCE_INTAKE.md'
       - '.github/workflows/phase8-paired-intake.yml'
 
@@ -36,6 +40,8 @@ jobs:
           node-version: 24
       - name: Verify paired intake, synthetic isolation and negative controls
         run: node --test scripts/tests/test_phase8_paired_evidence.mjs
+      - name: Verify local-only session recorder and strict evidence integration
+        run: node --test scripts/tests/test_phase8_session_recorder.mjs
       - name: Assert no generated files in repository
         shell: bash
         run: |
