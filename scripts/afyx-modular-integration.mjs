@@ -330,3 +330,12 @@ export function resolveModularCapabilityPlan(task = {}, installedComponents = {}
 
   return Object.freeze(plan);
 }
+
+export {
+  AFYX_MODULAR_RUNTIME_CONTRACT,
+  ACCEPTED_PROVIDERS,
+  DOMAIN_AUTHORITY_MATRIX,
+  PROVIDER_CAPABILITY_SUPPORT,
+  resolveModularRuntimeActivation,
+} from './afyx-modular-runtime.mjs';
+

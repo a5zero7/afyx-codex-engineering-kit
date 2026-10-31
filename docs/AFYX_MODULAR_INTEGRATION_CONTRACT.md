@@ -162,3 +162,50 @@ Ketika analisis relasional dibutuhkan namun Graph tidak beroperasi normal, siste
 | **P8** | *User Override Priority* | Instruksi eksplisit dan konfigurasi pengguna mengesampingkan optimasi otomatis. |
 | **P9** | *Explicit Reporting* | Bukti hilang atau ketidakmampuan dilaporkan secara transparan. |
 | **P10**| *Safety Over Efficiency* | Batas izin, keamanan, dan kebenaran selalu mengalahkan token efficiency. |
+
+---
+
+## 8. Jembatan Integrasi Runtime Modular & Aktivasi Kapabilitas Cerdas (K02)
+
+**Contract Version:** `AfyxModularRuntimeActivation/v1`  
+**Modul Implementasi:** `scripts/afyx-modular-runtime.mjs`
+
+### 8.1. Arsitektur 5 Lapisan Integrasi Runtime
+1. **Lapisan 1: Deterministic Capability Planning:**  
+   Mengevaluasi intent tugas, bukti workspace, dan preferensi pengguna via `resolveModularCapabilityPlan()` tanpa I/O host (`SELECTED`).
+2. **Lapisan 2: Capability Eligibility & Domain Authority:**  
+   Menegakkan kepemilikan domain otoritatif tunggal (*single authoritative ownership*) per domain untuk mencegah tumpang tindih (*anti-overlap*).
+3. **Lapisan 3: Runtime Readiness & Authorization Checks:**  
+   Memeriksa izin host inang, kesiapan indeks tanpa background rebuild otomatis, dan menegakkan larangan bypass CLI jika MCP dinonaktifkan (`CLI_BYPASS_REFUSED`). Ketiadaan bukti kesegaran/kesiapan Graph diperlakukan sebagai `UNKNOWN` (`INDEX_FRESHNESS_UNKNOWN`) dan terdegradasi aman ke `DIRECT_SOURCE`. Provider tidak dikenal ditolak secara *fail-closed* (`UNKNOWN_PROVIDER_REFUSED`).
+4. **Lapisan 4: Provider-Mediated Capability Preparation:**  
+   Menyesuaikan komponen terpilih dengan batas native provider dari registri otoritatif `components.json`. Status kapabilitas pada tahap ini adalah `PREPARED` (bukan klaim `ACTIVATED` atau `EXECUTED` tanpa bukti pemanggilan sesi langsung). Status eksekusi aktual dilaporkan sebagai `NOT_RUN`:
+   - **Codex:** Surface MCP (`afyx_graph`), CLI (`afyx-context`), telemetry (`codex-usage-tracking`), dan instruksi/skills.
+   - **Antigravity:** Surface MCP (`afyx_graph`), IDE skills directory (`skills/`), dan instruksi. Menolak kapabilitas Codex-spesifik (`UNSUPPORTED_ON_PROVIDER`).
+   - **Claude Code:** Surface MCP desktop config (`afyx_graph`), skills, dan instruksi (`CLAUDE.md`).
+5. **Lapisan 5: Bounded Runtime Telemetry & Execution Preparation:**  
+   Menyusun struktur telemetri terikat dan manifest eksekusi tanpa mengekspos prompt sensitif dan **tanpa klaim penghematan token spekulatif** tanpa penghitung terukur dari provider.
+
+### 8.2. Matriks Pemetaan Surface Provider
+
+| Komponen Terpilih | Codex Surface | Antigravity Surface | Claude Code Surface |
+|---|---|---|---|
+| `afyx-graph` | MCP (`afyx_graph`) | MCP (`afyx_graph`) | MCP (`afyx_graph`) |
+| `afyx-context` | CLI wrapper | Instructions / Skills | Instructions (`CLAUDE.md`) |
+| `afyx-engineering-expert` | Instructions / Skills | Skills (`afyx-engineering-expert`) | Skills (`afyx-engineering-expert`) |
+| `odoo-engineering` | Instructions / Skills | Skills (`odoo-engineering`) | Skills (`odoo-engineering`) |
+| `efficient-coding` | Instructions / Skills | Skills (`efficient-coding`) | Skills (`efficient-coding`) |
+| `codex-usage-tracking` | Telemetry / CLI | *Unsupported (Graceful Degradation)* | *Unsupported (Graceful Degradation)* |
+| `afyx-forge` | *Blocked (`FORGE_GATED_PENDING_A8`)* | *Blocked (`FORGE_GATED_PENDING_A8`)* | *Blocked (`FORGE_GATED_PENDING_A8`)* |
+
+### 8.3. Penegakan Safeguards Host & Freshness
+- **Penolakan Bypass CLI Diam-diam (`CLI_BYPASS_REFUSED`):**  
+  Jika antarmuka MCP dinonaktifkan pada host inang, agen dilarang secara diam-diam memanggil binary CLI atau wrapper eksternal tanpa izin independen eksplisit dari pengguna. Pelanggaran langsung menghasilkan status `BLOCKED`.
+- **Penolakan Reindexing Otomatis & Freshness Unknown (`AUTOMATIC_INDEXING_REFUSED` / `GRAPH_FRESHNESS_UNKNOWN`):**  
+  Ketiadaan bukti kesiapan atau kesegaran indeks Graph diperlakukan sebagai `UNKNOWN` (bukan diasumsikan ready). Sistem mendegradasi eksekusi secara aman ke `DIRECT_SOURCE`, alih-alih meluncurkan proses latar belakang (*daemonic build*) tanpa izin caller.
+- **Penolakan Provider Tidak Dikenal (`UNKNOWN_PROVIDER_REFUSED`):**  
+  Permintaan eksekusi dengan nama provider di luar registri yang diterima (`codex`, `antigravity`, `claude`) langsung ditolak dengan status `BLOCKED` tanpa mutasi.
+- **Pembedaan Daur Hidup & Ketiadaan Klaim Eksekusi Prematur:**  
+  Pemetaan statis ke permukaan provider diklasifikasikan sebagai `lifecycleState: 'PREPARED'` dengan `executionStatus: 'NOT_RUN'`, mencegah klaim keliru bahwa alat/skill telah dieksekusi sebelum pemanggilan model yang sesungguhnya.
+- **Kunci Produksi Forge (`FORGE_GATED_PENDING_A8`):**  
+  Setiap permintaan eksekusi atau aktivasi langsung terhadap *Afyx Forge* sebelum evaluasi formal Gate A8 diblokir secara mutlak (`status: BLOCKED`).
+
