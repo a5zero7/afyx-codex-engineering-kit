@@ -61,6 +61,16 @@ $agyCommandDetected = Get-Command agy -ErrorAction SilentlyContinue
 $antigravityCommandDetected = if ($agyCommandDetected) { $agyCommandDetected } else { Get-Command antigravity -ErrorAction SilentlyContinue }
 $claudeCommandDetected = Get-Command claude -ErrorAction SilentlyContinue
 $vscodeExtensionDetected = [bool](Get-ChildItem -Path (Join-Path $env:USERPROFILE '.vscode\extensions\openai.chatgpt-*') -Directory -ErrorAction SilentlyContinue | Select-Object -First 1)
+# Read-only IDE discovery: distinguish an installed IDE from a usable provider CLI.
+# IDE-only installs are displayed but never silently offered unsupported MCP mutation.
+$claudeVsCodeDetected = [bool](Get-ChildItem -Path (Join-Path $env:USERPROFILE '.vscode\extensions\anthropic.claude-code-*') -Directory -ErrorAction SilentlyContinue | Select-Object -First 1)
+$antigravityIdeCandidates = @(
+    $(if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'Programs\Antigravity\Antigravity.exe' }),
+    $(if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'Programs\Google Antigravity\Antigravity.exe' }),
+    $(if ($env:ProgramFiles) { Join-Path $env:ProgramFiles 'Google\Antigravity\Antigravity.exe' })
+) | Where-Object { $_ }
+$antigravityIdePath = @($antigravityIdeCandidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1)
+$antigravityIdeDetected = $antigravityIdePath.Count -gt 0
 $explicitSelection = @(
     @('Preset', 'CustomComponent', 'ComponentAction', 'Provider', 'Force', 'UpdateInstalled', 'InstallUsageTracker', 'SkipUsageTracker', 'SkipProviderConfiguration', 'Confirm') |
         Where-Object { $PSBoundParameters.ContainsKey($_) }
@@ -95,8 +105,8 @@ if ($wizardMode) {
         $claudeDetected = [bool]$claudeCommandDetected
         $providerOptions = @(
             [pscustomobject]@{ Id = 'codex'; Label = 'Codex'; Detail = $(if ($codexDetected) { 'native CLI detected' } elseif ($vscodeExtensionDetected) { 'extension detected; native Codex CLI is still required for MCP configuration' } else { $codexHost.Detail }); Enabled = $codexDetected },
-            [pscustomobject]@{ Id = 'antigravity'; Label = 'Antigravity'; Detail = $(if ($antigravityDetected) { 'host detected' } else { 'unavailable: install agy/antigravity' }); Enabled = $antigravityDetected },
-            [pscustomobject]@{ Id = 'claude'; Label = 'Claude Code'; Detail = $(if ($claudeDetected) { 'host detected' } else { 'unavailable: install Claude Code CLI' }); Enabled = $claudeDetected },
+            [pscustomobject]@{ Id = 'antigravity'; Label = 'Antigravity'; Detail = $(if ($antigravityDetected) { 'CLI detected; MCP adapter supported' } elseif ($antigravityIdeDetected) { 'IDE detected; compatible CLI not found, MCP integration unavailable' } else { 'not detected: agy/antigravity CLI or recognized IDE path' }); Enabled = $antigravityDetected },
+            [pscustomobject]@{ Id = 'claude'; Label = 'Claude Code'; Detail = $(if ($claudeDetected) { 'CLI detected; MCP adapter supported' } elseif ($claudeVsCodeDetected) { 'VS Code extension detected; native Claude CLI required for MCP configuration' } else { 'not detected: install Claude Code CLI' }); Enabled = $claudeDetected },
             [pscustomobject]@{ Id = 'skip'; Label = 'Skip provider configuration'; Detail = 'skills/runtimes only; no MCP registration'; Enabled = $true }
         )
         $detectedProviderDefaults = @($providerOptions | Where-Object { $_.Enabled -and $_.Id -ne 'skip' } | ForEach-Object { $_.Id })
@@ -412,8 +422,8 @@ $codexStatus = if ($codexCliDetected) { 'HEALTHY' } elseif ($codexRequired) { 'B
 $codexLabel = if ($codexRequired) { 'Codex host [REQUIRED]' } else { 'Codex host' }
 $codexDetail = if ($codexCliDetected) { "native CLI detected ($($codexHost.Command))" } elseif ($codexRequired) { "$($codexHost.Detail) A VS Code extension does not provide native MCP configuration." } elseif ($vscodeExtensionDetected) { 'VS Code extension detected; native CLI not selected' } else { 'not detected; required only when selected' }
 Write-AfyxStatus -Status $codexStatus -Name $codexLabel -Detail $codexDetail -Terminal $terminal
-Write-AfyxStatus -Status $(if ($antigravityCommandDetected) { 'HEALTHY' } else { 'SKIPPED' }) -Name 'Antigravity host' -Detail $(if ($antigravityCommandDetected) { "detected ($(& $antigravityCommandDetected.Source --version 2>$null))" } else { 'not detected; required only when selected' }) -Terminal $terminal
-Write-AfyxStatus -Status $(if ($claudeCommandDetected) { 'HEALTHY' } else { 'SKIPPED' }) -Name 'Claude Code host' -Detail $(if ($claudeCommandDetected) { 'detected' } else { 'not detected; required only when selected' }) -Terminal $terminal
+Write-AfyxStatus -Status $(if ($antigravityCommandDetected) { 'HEALTHY' } else { 'SKIPPED' }) -Name 'Antigravity host' -Detail $(if ($antigravityCommandDetected) { 'compatible CLI detected' } elseif ($antigravityIdeDetected) { 'IDE detected; compatible CLI required for automatic MCP registration' } else { 'not detected; required only when selected' }) -Terminal $terminal
+Write-AfyxStatus -Status $(if ($claudeCommandDetected) { 'HEALTHY' } else { 'SKIPPED' }) -Name 'Claude Code host' -Detail $(if ($claudeCommandDetected) { 'compatible CLI detected' } elseif ($claudeVsCodeDetected) { 'VS Code extension detected; compatible CLI required for MCP registration' } else { 'not detected; required only when selected' }) -Terminal $terminal
 Write-AfyxStatus -Status $(if ($nodeVersion) { 'HEALTHY' } else { 'BLOCKED' }) -Name 'Node.js >=22.5.0 [COMPONENT_REQUIRED:Graph/Context]' -Detail $(if ($nodeVersion) { $nodeVersion } else { 'missing; install from https://nodejs.org/ before selecting Graph or Context' }) -Terminal $terminal
 Write-AfyxStatus -Status $(if ($npmVersion) { 'HEALTHY' } else { 'SKIPPED' }) -Name 'npm [BUILD_ONLY:Afyx Graph]' -Detail $(if ($npmVersion) { $npmVersion } else { 'missing; needed only for automatic local fallback' }) -Terminal $terminal
 Write-AfyxStatus -Status HEALTHY -Name 'Archive/checksum [COMPONENT_REQUIRED:Afyx Graph]' -Detail 'Expand-Archive + Get-FileHash available' -Terminal $terminal
