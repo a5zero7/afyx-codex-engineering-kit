@@ -24,7 +24,9 @@ afterEach(() => {
 const digest = (value: Buffer | string) => createHash('sha256').update(value).digest('hex');
 
 function fakeInstalledAce(): { project: string; runtime: string; bridge: string; state: string } {
-  const lab = fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-native-mcp-'));
+  // Use the canonical temp path: on macOS /var is a symlink to /private/var,
+  // and the production bridge intentionally refuses symlinked state ancestors.
+  const lab = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-native-mcp-')));
   folders.push(lab);
   const project = path.join(lab, 'project');
   fs.mkdirSync(path.join(project, '.afyx-graph'), { recursive: true });
