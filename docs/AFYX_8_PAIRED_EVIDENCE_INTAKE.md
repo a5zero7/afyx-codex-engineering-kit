@@ -51,3 +51,20 @@ Exit 0 means valid schema, NOT acceptance (inspect verdict). Exit 1 means qualit
 Local developer-only regression: node --test scripts/tests/test_phase8_paired_evidence.mjs
 
 GitHub CI executes **synthetic and negative contract tests only**, on Windows/Linux/macOS, without real provider calls or real-workload metrics. AFYX-8, AFYX-68 and AFYX-69 remain In Progress pending authorized paired tasks, raw event corroboration and independent review. Forge A5–A8, Expert D.6, and installed Alpha gates stay independent.
+
+
+## Local session capture (non-executing host bridge)
+
+A typed **recorder** is now provided at scripts/phase8-session-recorder.mjs. The tool has no model/provider credentials, launches no agent and runs no supplied shell commands. It consumes ONLY small structured telemetry rows from a human-authorized execution host on stdin. Host instrumentation must be started before task execution, finish after task completion, and identify events from the *actual* observed session; this recorder cannot independently prove the host emitted every event or certify correctness.
+
+Example, from a separate private evaluator environment rather than the development worktree (the log source shown here is illustrative only):
+
+    node scripts/phase8-session-recorder.mjs --mode OFF --run-id trial-off-001 --root "D:\private-evaluator\phase8" --workspace-root "D:\private-agent-worktree" < "D:\private-evaluator\phase8\observed-off-events.jsonl" > "D:\private-evaluator\phase8\off-descriptor.json"
+
+Repeat independently with mode ON, a distinct run ID, isolated workspace and output on-descriptor.json. A provider/host integration may instead stream NDJSON rows to stdin in real time. Each *input* record MUST contain ONLY the supported typed fields shown above (no prompt, path, free-text output or credential). The recorder generates its own timestamp, sequence ID and run identity, then emits a hash-checked private off.ndjson/on.ndjson and a private run descriptor, with all coverage flags FALSE and all quality verdicts NOT_RUN. It never infers provider usage or human intervention completeness. Existing traces cannot be overwritten; invalid stream events fail closed and remove incomplete capture.
+
+**Timing caveat:** capture start/end measure the recorder input-listener interval. When input is a previously saved NDJSON file, this is merely replay time, **not agent execution wall time**. Wall time may be reported as real engineering duration only if an auditor verifies the recorder was attached for the full live agent session. Do not attribute a replay-duration measurement to the original task. The script does not guarantee security isolation by itself; the evaluator must enforce actual OS-level read/write/credential boundaries and verify the worktree is disposable and separate. Use no private customer data without authorization.
+
+To construct the OFF/ON manifest, copy the two private descriptor run objects, attach the pre-frozen task/source/rubric/environment identity and independently verified quality receipts. Set each coverage boolean true **only** if the full corresponding host-generated event stream was observed and confirmed. Then invoke the paired-evidence checker. Neither the capture script nor the checker may promote a result to accepted on its own.
+
+Developer-only regression: node --test scripts/tests/test_phase8_session_recorder.mjs. CI exercises synthetic local streams and negative confidentiality/security paths on three OS; it does NOT operate an agent or measure a real comparative workload.
