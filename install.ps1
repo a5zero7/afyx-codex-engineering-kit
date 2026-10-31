@@ -576,6 +576,28 @@ $skillDefinitions = @(
     @{ Id = 'odoo-engineering'; Name = 'Odoo Engineering'; Source = $bundledOdooEngineering; Target = $odooTarget },
     @{ Id = 'afyx-engineering-expert'; Name = 'Afyx Engineering Expert'; Source = $bundledEngineeringExpert; Target = $expertTarget }
 )
+# Prevalidate selected runtime companions before skill, runtime, or MCP mutation.
+# A foreign or modified provider skill must block the plan, not cause a partial
+# install followed by an ownership conflict late in the transaction.
+if (-not $SkipProviderConfiguration -and $Provider.Count) {
+    $requestedCompanions = @()
+    foreach ($id in @('afyx-context', 'afyx-forge')) {
+        $selected = if ($controlPlan) { $id -in $controlPlan.DesiredComponents }
+            else { $componentActions.ContainsKey($id) -and $componentActions[$id] -ne 'skip' }
+        if ($selected -and ($id -ne 'afyx-context' -or $env:AFYX_CONTEXT_OPT_IN -ne '0')) {
+            $requestedCompanions += $id
+        }
+    }
+    foreach ($id in $requestedCompanions) {
+        foreach ($root in @($providerSkillRoots | Select-Object -Unique)) {
+            $candidate = Join-Path $root $id
+            $ownership = Get-AfyxSkillOwnership -Target $candidate -Component $id -ExpectedOwner 'afyx'
+            if ($ownership -notin @('NOT_INSTALLED', 'AFYX_OWNED_UNMODIFIED')) {
+                throw "Provider companion preflight blocked before mutation: $candidate ($ownership)."
+            }
+        }
+    }
+}
 foreach ($component in $skillDefinitions) {
     $skillActions[$component.Id] = if ($controlPlan) { [string]$actionDecisions[$component.Id] } else { Resolve-ComponentAction $component.Id $component.Name }
 }
