@@ -45,7 +45,7 @@ Import-Module (Join-Path $PSScriptRoot 'scripts\lib\AfyxSkillLifecycle.psm1') -F
 $providerIds = @(Get-AfyxProviderRegistry | ForEach-Object { [string]$_.provider })
 $unknownProviders = @($Provider | Where-Object { $_ -notin $providerIds })
 if ($unknownProviders.Count) { throw "Unknown provider(s): $($unknownProviders -join ', ')" }
-$componentContext = New-AfyxComponentContext -SkillsRoot $SkillsRoot -ContextRoot $ContextRuntimeRoot
+$componentContext = New-AfyxComponentContext -SkillsRoot $SkillsRoot -ContextRoot $ContextRuntimeRoot -ForgeRoot $ForgeRuntimeRoot
 $contract = @(Get-AfyxComponentContract)
 if ($RemovePromptMaster) {
     throw "Component 'prompt-master' is retired from Afyx Kit and remains externally/user managed; no changes were made."

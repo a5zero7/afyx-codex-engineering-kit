@@ -125,6 +125,9 @@ function Get-AfyxDesiredComponentIds {
         [string]$Path = $script:ContractPath
     )
     $components = @(Get-AfyxComponentContract -Path $Path)
+    if ($CustomComponent.Count) {
+        $CustomComponent = @($CustomComponent | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    }
     $selectable = @($components | Where-Object { $_.type -ne 'detected-cli' } | ForEach-Object { [string]$_.id })
     if ($Preset -eq 'custom') {
         $unknown = @($CustomComponent | Where-Object { $_ -notin $selectable })

@@ -3,4 +3,5 @@ backups/
 *.bak
 .vs/
 .afyx-graph/
+dist/
 __pycache__/
