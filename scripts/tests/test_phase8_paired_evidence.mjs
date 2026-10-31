@@ -20,7 +20,7 @@ function setup(t, evidenceClass = 'owner_observed', usage = true) {
       {id:mode+'0',kind:'start',at:at(0),runId},
       {id:mode+'1',kind:'tool_call',actor:'agent',at:at(1),runId},
       ...(usage ? [{id:mode+'2',kind:'provider_usage',source:'provider_report',
-        inputTokens:100 + index*10,cachedInputTokens:20,outputTokens:30,at:at(2),runId}] : []),
+        usageSemantics:'per_turn_delta',inputTokens:100 + index*10,cachedInputTokens:20,outputTokens:30,at:at(2),runId}] : []),
       {id:mode+'3',kind:'end',at:at(4+index),runId},
     ];
     const bytes = events.map(v => JSON.stringify(v)).join('\n') + '\n';
@@ -28,7 +28,8 @@ function setup(t, evidenceClass = 'owner_observed', usage = true) {
     fs.writeFileSync(path.join(dir,eventsFile),bytes);
     return {mode,runId,eventsFile,eventsSha256:sha(bytes),
       quality:{correctness:'PASS',tests:'PASS',security:'PASS',evaluatorReceiptSha256:'b'.repeat(64)},
-      coverage:{toolEvents:true,humanEvents:false,reworkEvents:false,providerUsage:usage}};
+      coverage:{toolEvents:true,humanEvents:false,reworkEvents:false,providerUsage:usage},
+      timing:{capture:'LIVE_MONITORED',liveReceiptSha256:'f'.repeat(64)}};
   });
   const manifest = {contract:'afyx.phase8.paired-evidence/v1',evidenceClass,
     caseId:'synthetic-contract-case',taskSha256:fake,sourceRevision:'c'.repeat(40),
@@ -114,6 +115,29 @@ test('paired control identity cannot be absent or duplicated', t => {
   assert.throws(() => loadManifest(f.file),/ordered OFF and ON/);
 });
 
+test('unverified or replayed timing cannot claim agent wall duration', t => {
+  const f=setup(t);
+  f.manifest.runs.forEach(run => {run.timing={capture:'REPLAY_OR_UNVERIFIED',liveReceiptSha256:null};});
+  f.save();
+  const report=loadManifest(f.file);
+  assert.equal(report.comparativeMetrics.wallMs.off,null);
+  assert.equal(report.comparativeMetrics.wallMs.on,null);
+  assert.equal(report.comparativeMetrics.wallMs.status,'NOT_AVAILABLE');
+  f.manifest.runs[1].timing={capture:'LIVE_MONITORED',liveReceiptSha256:null};
+  f.save();
+  assert.throws(() => loadManifest(f.file), /live timing requires external receipt digest/);
+});
+test('cumulative provider counters are rejected instead of double counted', t => {
+  const f=setup(t);
+  const filename=path.join(f.dir,'off.ndjson');
+  const events=fs.readFileSync(filename,'utf8').trim().split('\n').map(JSON.parse);
+  events[2].usageSemantics='cumulative_snapshot';
+  const raw=events.map(e=>JSON.stringify(e)).join('\n')+'\n';
+  fs.writeFileSync(filename,raw);
+  f.manifest.runs[0].eventsSha256=sha(raw);
+  f.save();
+  assert.throws(() => loadManifest(f.file), /cumulative usage snapshots/);
+});
 test('malformed private manifest contents must not leak into CLI error output', t => {
   const f=setup(t), secret='PRIVATE-DO-NOT-ECHO';
   fs.writeFileSync(f.file,'{"customerSecret":"'+secret+'" INVALID}');
