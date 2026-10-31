@@ -22,6 +22,23 @@ def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def fake_windows_codex_environment(home: Path, lab: Path) -> dict[str, str]:
+    """Isolate Context lifecycle tests from a real Codex CLI/user profile."""
+    fake_bin = lab / "bin"
+    fake_bin.mkdir(exist_ok=True)
+    (fake_bin / "codex.cmd").write_text(
+        '@echo off\r\nif /I "%~1"=="--version" (echo codex 1.0.0 & exit /b 0)\r\nexit /b 1\r\n',
+        encoding="utf-8",
+    )
+    return {
+        **os.environ,
+        "USERPROFILE": str(home),
+        "CODEX_HOME": str(home / ".codex"),
+        "CI": "1",
+        "PATH": str(fake_bin) + os.pathsep + os.environ.get("PATH", ""),
+    }
+
+
 class ContextLifecycleContractTests(unittest.TestCase):
     def test_contract_is_explicit_only_and_defaults_are_unchanged(self) -> None:
         contract = json.loads((ROOT / "scripts" / "components.json").read_text(encoding="utf-8"))
@@ -68,7 +85,7 @@ class ContextLifecycleContractTests(unittest.TestCase):
             sentinel.write_text("user-owned", encoding="utf-8")
             home = lab / "home"
             (home / ".vscode" / "extensions" / "openai.chatgpt-test").mkdir(parents=True)
-            environment = {**os.environ, "USERPROFILE": str(home), "CODEX_HOME": str(home / ".codex"), "CI": "1"}
+            environment = fake_windows_codex_environment(home, lab)
             base = [shell, "-NoProfile", "-NonInteractive", "-File", str(PS_INSTALLER), "-RuntimeRoot", str(runtime)]
 
             control_install = [shell, "-NoProfile", "-NonInteractive", "-File", str(ROOT / "install.ps1"),
@@ -197,7 +214,7 @@ class ContextLifecycleContractTests(unittest.TestCase):
             runtime = lab / "runtime"
             home = lab / "home"
             (home / ".codex").mkdir(parents=True)
-            environment = {**os.environ, "USERPROFILE": str(home), "CODEX_HOME": str(home / ".codex"), "CI": "1"}
+            environment = fake_windows_codex_environment(home, lab)
 
             # 1. Install fresh instance
             control_install = [shell, "-NoProfile", "-NonInteractive", "-File", str(ROOT / "install.ps1"),
