@@ -117,6 +117,57 @@ export function tryAcquireWriterLock(
   return attemptAcquire(pidPath, info);
 }
 
+/**
+ * Claim the existing project writer authority for a destructive full rebuild.
+ *
+ * Unlike the long-lived MCP acquisition path, rebuild never treats a malformed
+ * or unreadable record as stale and never treats a same-PID record as
+ * re-entrant.  A valid record whose process is demonstrably dead may be
+ * compare-and-deleted; every ambiguous/live owner remains taken.  The atomic
+ * lockfile primitive closes the check-then-delete race before SQLite files are
+ * touched.
+ */
+export function tryAcquireFullReindexWriterLock(projectRoot: string): WriterAcquireResult {
+  const pidPath = getWriterPidPath(projectRoot);
+  const info: WriterLockInfo = { pid: process.pid, mode: 'reindex', startedAt: Date.now() };
+  const first = attemptAcquire(pidPath, info);
+  if (first.kind === 'acquired') return first;
+
+  // An undecodable, inaccessible, invalid, or live record is inconclusive.
+  // Full rebuild is destructive, so it must not recover ownership on a guess.
+  if (!first.existing || first.existing.pid <= 0 || isProcessAlive(first.existing.pid)) return first;
+
+  clearIfStillStale(pidPath, first.existing.pid);
+  return attemptAcquire(pidPath, info);
+}
+
+function sameWriterLock(left: WriterLockInfo | null, right: WriterLockInfo): boolean {
+  return !!left && left.pid === right.pid && left.mode === right.mode && left.startedAt === right.startedAt;
+}
+
+/** Release one exact claim, never a successor or another same-process role. */
+export function releaseWriterLockClaim(projectRoot: string, claim: WriterLockInfo): void {
+  const pidPath = getWriterPidPath(projectRoot);
+  try {
+    const current = decodeWriterLockInfo(fs.readFileSync(pidPath, 'utf8'));
+    if (sameWriterLock(current, claim)) fs.unlinkSync(pidPath);
+  } catch { /* best-effort; a missing claim is already released */ }
+}
+
+/** Hold full-reindex ownership from before recreate/delete until the action settles. */
+export async function withFullReindexWriterLock<T>(
+  projectRoot: string,
+  action: () => Promise<T>,
+): Promise<T> {
+  const claim = tryAcquireFullReindexWriterLock(projectRoot);
+  if (claim.kind === 'taken') throw new Error(writerLockHeldMessage(claim.existing, claim.pidPath));
+  try {
+    return await action();
+  } finally {
+    releaseWriterLockClaim(projectRoot, claim.info);
+  }
+}
+
 /** Release if we still own the lock (pid match). */
 export function releaseWriterLock(projectRoot: string): void {
   const pidPath = getWriterPidPath(projectRoot);
@@ -151,9 +202,9 @@ export function writerLockHeldMessage(
     : 'another process';
   return (
     'Afyx Graph writer lock held by ' + who + '. ' +
-    'Only one live MCP writer may serve a project (auto-sync / index). ' +
+    'Only one live Graph writer or full rebuild may own a project (auto-sync / index). ' +
     'Stop the other server (afyx-graph daemon stop if a shared daemon, or end the other MCP session), ' +
     'or unset AFYX_GRAPH_NO_DAEMON so additional clients proxy to the shared daemon. ' +
-    'If this is stale, delete ' + pidPath
+    'If this is believed stale, verify the recorded PID is no longer alive before removing ' + pidPath
   );
 }

@@ -693,6 +693,7 @@ program
       }
 
       const { default: AfyxGraph, getDatabasePath } = await loadAfyxGraph();
+      const { withFullReindexWriterLock } = await import('../mcp/writer-lock');
       // `index` is a FULL re-index — identical to a fresh `init`. RECREATE the
       // database from scratch (discard .afyx-graph/afyx-graph.db + its WAL) rather
       // than opening the old graph and DELETE-ing every row. The clear-then-index
@@ -702,59 +703,64 @@ program
       // enough to trip the liveness watchdog before scanning even began (#1067).
       // recreate() hands back a fresh, empty instance — no clear() needed. For
       // fast incremental updates use `sync`.
-      const cg = await AfyxGraph.recreate(projectPath);
+      await withFullReindexWriterLock(projectPath, async () => {
+        // Ownership is atomic and held before recreate unlinks SQLite. Keep it
+        // through the complete rebuild so no daemon/direct writer can enter
+        // between database replacement and index completion.
+        const cg = await AfyxGraph.recreate(projectPath);
 
-      // Supervise the indexer: self-terminate if orphaned (parent shim killed)
-      // or if the main thread wedges — neither was guarded on this path (#999).
-      // The DB + WAL paths let the liveness watchdog tell a slow store on
-      // degraded storage from a true wedge (#1231).
-      const dbPath = getDatabasePath(projectPath);
-      const supervision = installCommandSupervision('index', { progressPaths: [dbPath, `${dbPath}-wal`] });
-      try {
-        if (options.quiet) {
-          // Quiet mode: no UI, just run against the freshly-recreated graph.
-          const result = await cg.indexAll();
-          if (!result.success) process.exit(1);
-          cg.destroy();
-          return;
-        }
+        // Supervise the indexer: self-terminate if orphaned (parent shim killed)
+        // or if the main thread wedges — neither was guarded on this path (#999).
+        // The DB + WAL paths let the liveness watchdog tell a slow store on
+        // degraded storage from a true wedge (#1231).
+        const dbPath = getDatabasePath(projectPath);
+        const supervision = installCommandSupervision('index', { progressPaths: [dbPath, `${dbPath}-wal`] });
+        try {
+          if (options.quiet) {
+            // Quiet mode: no UI, just run against the freshly-recreated graph.
+            const result = await cg.indexAll();
+            if (!result.success) process.exitCode = 1;
+            return;
+          }
 
-        const clack = afyxTerminal;
-        clack.intro('Indexing project');
+          const clack = afyxTerminal;
+          clack.intro('Indexing project');
 
         // A closure so a re-index (after opting gitignored child repos in, #1156)
         // renders identically. Supervision already wraps the whole command.
-        const renderIndex = async (): Promise<IndexResult> => {
-          if (options.verbose) {
-            return await cg.indexAll({ onProgress: createVerboseProgress(), verbose: true });
-          }
-          process.stdout.write(`${colors.dim}${getGlyphs().rail}${colors.reset}\n`);
-          const progress = createShimmerProgress();
-          const r = await cg.indexAll({ onProgress: progress.onProgress });
-          await progress.stop();
-          return r;
-        };
+          const renderIndex = async (): Promise<IndexResult> => {
+            if (options.verbose) {
+              return await cg.indexAll({ onProgress: createVerboseProgress(), verbose: true });
+            }
+            process.stdout.write(`${colors.dim}${getGlyphs().rail}${colors.reset}\n`);
+            const progress = createShimmerProgress();
+            const r = await cg.indexAll({ onProgress: progress.onProgress });
+            await progress.stop();
+            return r;
+          };
 
-        const result = await renderIndex();
+          const result = await renderIndex();
 
-        printIndexResult(clack, result, projectPath);
+          printIndexResult(clack, result, projectPath);
 
         // Empty graph at a git super-repo → likely `.gitignore`d child repos;
         // name them and offer to opt in instead of a silent 0-node result (#1156).
-        let finalResult = result;
-        if (result.nodesCreated === 0) {
-          finalResult = (await offerIndexIgnoredRepos(clack, projectPath, renderIndex, { interactive: true })) ?? result;
-        }
+          let finalResult = result;
+          if (result.nodesCreated === 0) {
+            finalResult = (await offerIndexIgnoredRepos(clack, projectPath, renderIndex, { interactive: true })) ?? result;
+          }
 
-        if (!finalResult.success) {
-          process.exit(1);
-        }
+          if (!finalResult.success) {
+            process.exitCode = 1;
+            return;
+          }
 
-        clack.outro('Done');
-        cg.destroy();
-      } finally {
-        supervision.stop();
-      }
+          clack.outro('Done');
+        } finally {
+          supervision.stop();
+          cg.destroy();
+        }
+      });
     } catch (err) {
       error(`Failed to index: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(1);
