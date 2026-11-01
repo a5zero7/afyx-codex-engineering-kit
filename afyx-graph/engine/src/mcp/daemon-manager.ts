@@ -8,8 +8,8 @@
  * the whole selection/stop loop runs against a fake `select` in tests — no
  * TTY, no clack, no real daemon processes.
  */
-import * as path from 'path';
 import type { DaemonRecord, StopResult } from './daemon-registry';
+import { daemonProjectComparisonKey } from './daemon-paths';
 
 /** Picker option values that aren't real project roots, so a real root can never collide with them. */
 export const STOP_ALL = '__stop_all__';
@@ -36,8 +36,13 @@ export function formatUptime(ms: number): string {
 }
 
 /** Ranks a daemon for the picker's ordering: the cwd's own daemon first, then newest-started first. */
+function sameDaemonProject(left: string, right: string): boolean {
+  try { return daemonProjectComparisonKey(left) === daemonProjectComparisonKey(right); }
+  catch { return false; }
+}
+
 function pickerRank(daemon: DaemonRecord, cwd: string | null): [boolean, number] {
-  const isCurrentProject = cwd !== null && path.resolve(daemon.root) === cwd;
+  const isCurrentProject = cwd !== null && sameDaemonProject(daemon.root, cwd);
   return [isCurrentProject, daemon.startedAt];
 }
 
@@ -47,7 +52,7 @@ function pickerRank(daemon: DaemonRecord, cwd: string | null): [boolean, number]
  * "Stop all" (only past a single daemon) and "Cancel".
  */
 export function buildPickItems(daemons: DaemonRecord[], cwdRoot: string | null, now: number): PickItem[] {
-  const cwd = cwdRoot !== null ? path.resolve(cwdRoot) : null;
+  const cwd = cwdRoot;
 
   const ordered = [...daemons].sort((a, b) => {
     const [aCurrent, aStartedAt] = pickerRank(a, cwd);
@@ -57,7 +62,7 @@ export function buildPickItems(daemons: DaemonRecord[], cwdRoot: string | null, 
   });
 
   const daemonItems: PickItem[] = ordered.map((daemon) => {
-    const isCurrentProject = cwd !== null && path.resolve(daemon.root) === cwd;
+    const isCurrentProject = cwd !== null && sameDaemonProject(daemon.root, cwd);
     const label = isCurrentProject ? `${daemon.root}  (current project)` : daemon.root;
     const uptime = formatUptime(now - daemon.startedAt);
     return { value: daemon.root, label, hint: `pid ${daemon.pid} · up ${uptime} · Running` };

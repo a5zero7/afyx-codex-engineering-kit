@@ -43,6 +43,17 @@ describe('buildPickItems', () => {
     expect(items[0].label).toContain('(current project)');
     expect(items.slice(1, 3).map((i) => i.value)).toEqual(['/p/new', '/p/old']); // rest newest-first
   });
+
+  it.runIf(process.platform === 'win32')('recognizes a Windows current-project drive-case alias', () => {
+    const root = process.cwd();
+    const lowerDrive = root.replace(/^([A-Z]):/, (_, drive: string) => `${drive.toLowerCase()}:`);
+    const upperDrive = root.replace(/^([a-z]):/, (_, drive: string) => `${drive.toUpperCase()}:`);
+    const daemon = rec(lowerDrive, 9, 1);
+    const items = buildPickItems([fresh, daemon], upperDrive, 3000);
+
+    expect(items[0].value).toBe(lowerDrive);
+    expect(items[0].label).toContain('(current project)');
+  });
 });
 
 describe('runDaemonPicker', () => {

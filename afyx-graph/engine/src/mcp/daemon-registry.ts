@@ -29,6 +29,8 @@ import { getAfyxGraphDir, getBoundExternalStateDir, usesExternalStateDir } from 
 import {
   getDaemonPidPath,
   getDaemonSocketCandidates,
+  canonicalDaemonProjectRoot,
+  daemonProjectComparisonKey,
   decodeLockInfo,
   canProbeDaemonIdentity,
   probeDaemonIdentity,
@@ -63,8 +65,40 @@ export function getRegistryDir(projectRoot?: string): string {
 }
 
 function recordPath(root: string): string {
-  const hash = crypto.createHash('sha256').update(path.resolve(root)).digest('hex').slice(0, 16);
+  const hash = crypto.createHash('sha256').update(daemonProjectComparisonKey(root)).digest('hex').slice(0, 16);
   return path.join(getRegistryDir(root), `${hash}.json`);
+}
+
+function sameProject(left: string, right: string): boolean {
+  try { return daemonProjectComparisonKey(left) === daemonProjectComparisonKey(right); }
+  catch { return false; }
+}
+
+function recordIdentity(rec: DaemonRecord): string | null {
+  try {
+    return [
+      daemonProjectComparisonKey(rec.root),
+      rec.pid,
+      rec.version,
+      rec.socketPath,
+      rec.startedAt,
+    ].join('\0');
+  } catch {
+    return null;
+  }
+}
+
+/** Collapse only duplicate discovery aliases for the exact same daemon identity. */
+function deduplicateDaemonRecords(records: DaemonRecord[]): DaemonRecord[] {
+  const seen = new Set<string>();
+  const unique: DaemonRecord[] = [];
+  for (const rec of records) {
+    const identity = recordIdentity(rec);
+    if (identity && seen.has(identity)) continue;
+    if (identity) seen.add(identity);
+    unique.push(rec);
+  }
+  return unique;
 }
 
 /**
@@ -129,7 +163,7 @@ export function listDaemons(opts: { prune?: boolean } = {}): DaemonRecord[] {
       try { fs.unlinkSync(full); } catch { /* ignore */ }
     }
   }
-  return live.sort((a, b) => b.startedAt - a.startedAt);
+  return deduplicateDaemonRecords(live.sort((a, b) => b.startedAt - a.startedAt));
 }
 
 /**
@@ -142,12 +176,16 @@ export function listDaemonCandidates(opts: { prune?: boolean; roots?: string[] }
   for (const root of opts.roots ?? []) {
     try {
       const info = decodeLockInfo(fs.readFileSync(getDaemonPidPath(root), 'utf8'));
-      if (info && isProcessAlive(info.pid) && !candidates.some((rec) => path.resolve(rec.root) === path.resolve(root))) {
-        candidates.push({ root, ...info });
+      if (info && isProcessAlive(info.pid)) {
+        const candidate: DaemonRecord = { root: canonicalDaemonProjectRoot(root), ...info };
+        const identity = recordIdentity(candidate);
+        if (!candidates.some((rec) => identity !== null && recordIdentity(rec) === identity)) {
+          candidates.push(candidate);
+        }
       }
     } catch { /* no authoritative lock at this root */ }
   }
-  return candidates.sort((a, b) => b.startedAt - a.startedAt);
+  return deduplicateDaemonRecords(candidates.sort((a, b) => b.startedAt - a.startedAt));
 }
 
 /**
@@ -170,7 +208,7 @@ export async function listVerifiedDaemons(opts: { prune?: boolean; roots?: strin
     // A live process plus a temporary pipe/probe failure is inconclusive.
     // Preserve discovery so a later management attempt can retry safely.
   }
-  return verified;
+  return deduplicateDaemonRecords(verified);
 }
 
 /** Remove every socket-candidate file for `root`. POSIX only — a Windows named pipe disappears with its process on its own. */
@@ -295,7 +333,7 @@ function resolveDaemonIdentity(root: string): ResolvedDaemonIdentity {
   let pid = identity?.pid ?? null;
 
   if (pid == null) {
-    const rec = listDaemons({ prune: false }).find((r) => path.resolve(r.root) === path.resolve(root));
+    const rec = listDaemons({ prune: false }).find((r) => sameProject(r.root, root));
     pid = rec?.pid ?? null;
     if (rec) identity = rec;
   }

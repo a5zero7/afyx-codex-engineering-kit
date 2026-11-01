@@ -15,7 +15,13 @@ import {
   stopDaemonAt,
   type DaemonRecord,
 } from '../src/mcp/daemon-registry';
-import { encodeLockInfo, getDaemonPidPath } from '../src/mcp/daemon-paths';
+import {
+  canonicalDaemonProjectRoot,
+  daemonProjectComparisonKey,
+  encodeLockInfo,
+  getDaemonPidPath,
+  getDaemonSocketPath,
+} from '../src/mcp/daemon-paths';
 import { releaseWriterLock, tryAcquireWriterLock } from '../src/mcp/writer-lock';
 
 /** A pid that's guaranteed dead: spawn a trivial process, let it exit, reap it. */
@@ -256,5 +262,127 @@ describe('daemon-registry', () => {
     } finally {
       releaseWriterLock(root);
     }
+  });
+});
+
+describe.skipIf(process.platform !== 'win32')('Windows daemon registry project identity', () => {
+  let tmpHome: string;
+  let prevHome: string | undefined;
+  let prevUserProfile: string | undefined;
+
+  beforeEach(() => {
+    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-reg-win-home-'));
+    prevHome = process.env.HOME;
+    prevUserProfile = process.env.USERPROFILE;
+    process.env.HOME = tmpHome;
+    process.env.USERPROFILE = tmpHome;
+  });
+
+  afterEach(() => {
+    if (prevHome === undefined) delete process.env.HOME; else process.env.HOME = prevHome;
+    if (prevUserProfile === undefined) delete process.env.USERPROFILE; else process.env.USERPROFILE = prevUserProfile;
+    try { fs.rmSync(tmpHome, { recursive: true, force: true }); } catch { /* ignore */ }
+  });
+
+  function roots(): { root: string; alias: string } {
+    const root = fs.mkdtempSync(path.join(tmpHome, 'CaseProject-'));
+    const alias = root.replace(/^([A-Z]):/, (_, drive: string) => `${drive.toLowerCase()}:`);
+    expect(alias).not.toBe(root);
+    return { root, alias };
+  }
+
+  it('maps drive-case aliases to one registry identity for register, list, and deregister', () => {
+    const { root, alias } = roots();
+    expect(canonicalDaemonProjectRoot(alias)).toBe(canonicalDaemonProjectRoot(root));
+    expect(daemonProjectComparisonKey(alias)).toBe(daemonProjectComparisonKey(root));
+
+    const record = rec(root, process.pid, 101);
+    registerDaemon(record);
+    registerDaemon({ ...record, root: alias });
+
+    expect(fs.readdirSync(getRegistryDir()).filter((name) => name.endsWith('.json'))).toHaveLength(1);
+    expect(listDaemons()).toHaveLength(1);
+    deregisterDaemon(alias);
+    expect(listDaemons()).toEqual([]);
+  });
+
+  it('collapses duplicate legacy files only after their complete daemon identity agrees', async () => {
+    const { root, alias } = roots();
+    const socketPath = getDaemonSocketPath(root);
+    const record = { root, pid: process.pid, version: '1.5.0', socketPath, startedAt: 202 };
+    const server = net.createServer((socket) => {
+      socket.end(JSON.stringify({
+        protocol: 1,
+        pid: record.pid,
+        afyxGraph: record.version,
+        socketPath,
+      }) + '\n');
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(socketPath, resolve);
+    });
+    try {
+      fs.mkdirSync(getRegistryDir(), { recursive: true });
+      fs.writeFileSync(path.join(getRegistryDir(), 'legacy-upper.json'), JSON.stringify(record));
+      fs.writeFileSync(path.join(getRegistryDir(), 'legacy-lower.json'), JSON.stringify({ ...record, root: alias }));
+
+      expect(listDaemons({ prune: false })).toHaveLength(1);
+      const verified = await listVerifiedDaemons({ prune: false, roots: [alias] });
+      expect(verified).toHaveLength(1);
+      expect(verified[0]).toMatchObject({ pid: record.pid, startedAt: record.startedAt, socketPath });
+      // Legacy duplicates are discovery-only and are not broadly deleted.
+      expect(fs.readdirSync(getRegistryDir()).filter((name) => name.endsWith('.json'))).toHaveLength(2);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it('does not grant shutdown authority to a newer forged case-alias record', async () => {
+    const { root, alias } = roots();
+    const socketPath = getDaemonSocketPath(root);
+    const valid = { root, pid: process.pid, version: '1.5.0', socketPath, startedAt: 303 };
+    const forged = {
+      ...valid,
+      root: alias,
+      socketPath: `\\\\.\\pipe\\afyx-forged-${process.pid}-${Date.now()}`,
+      startedAt: 304,
+    };
+    const server = net.createServer((socket) => {
+      socket.end(JSON.stringify({
+        protocol: 1,
+        pid: valid.pid,
+        afyxGraph: valid.version,
+        socketPath,
+      }) + '\n');
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(socketPath, resolve);
+    });
+    try {
+      fs.mkdirSync(getRegistryDir(), { recursive: true });
+      fs.writeFileSync(path.join(getRegistryDir(), 'valid.json'), JSON.stringify(valid));
+      fs.writeFileSync(path.join(getRegistryDir(), 'forged.json'), JSON.stringify(forged));
+
+      expect(listDaemons({ prune: false })).toHaveLength(2);
+      expect(await listVerifiedDaemons({ prune: false })).toHaveLength(1);
+      expect(await stopDaemonAt(alias)).toMatchObject({ outcome: 'unverified', pid: process.pid });
+      expect(isProcessAlive(process.pid)).toBe(true);
+      expect(await listVerifiedDaemons({ prune: false })).toHaveLength(1);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it('keeps distinct real project identities separate', () => {
+    const first = roots().root;
+    const second = roots().root;
+    registerDaemon(rec(first, process.pid, 1));
+    registerDaemon(rec(second, process.pid, 2));
+    expect(listDaemons().map((record) => daemonProjectComparisonKey(record.root))).toEqual([
+      daemonProjectComparisonKey(second),
+      daemonProjectComparisonKey(first),
+    ]);
   });
 });

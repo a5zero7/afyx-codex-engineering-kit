@@ -46,8 +46,8 @@ import { getAfyxGraphDir, usesExternalStateDir } from '../directory';
 /** Soft ceiling for an in-project socket path before it's considered too long to risk. */
 const POSIX_SOCKET_PATH_LIMIT = 100;
 
-/** Short, stable, project-scoped identifier — the basis for both the tmpdir path and the Windows pipe name. */
-function projectHash(projectRoot: string): string {
+/** Canonical display/socket spelling while preserving the historical pipe hash contract. */
+export function canonicalDaemonProjectRoot(projectRoot: string): string {
   const resolvedRoot = path.resolve(projectRoot);
   let canonicalRoot = resolvedRoot;
   if (process.platform === 'win32') {
@@ -60,9 +60,29 @@ function projectHash(projectRoot: string): string {
   } else if (usesExternalStateDir()) {
     canonicalRoot = fs.realpathSync(resolvedRoot);
   }
-  const identity = usesExternalStateDir()
+  return path.normalize(canonicalRoot);
+}
+
+/** Stable socket identity; external state remains part of the project boundary. */
+function daemonSocketIdentity(projectRoot: string): string {
+  const canonicalRoot = canonicalDaemonProjectRoot(projectRoot);
+  return usesExternalStateDir()
     ? `${canonicalRoot}\0${getAfyxGraphDir(canonicalRoot)}`
     : canonicalRoot;
+}
+
+/**
+ * Comparison/registry identity. Windows paths are case-insensitive, but the
+ * socket identity above deliberately preserves its existing hash contract.
+ */
+export function daemonProjectComparisonKey(projectRoot: string): string {
+  const identity = daemonSocketIdentity(projectRoot);
+  return process.platform === 'win32' ? identity.toLowerCase() : identity;
+}
+
+/** Short, stable, project-scoped identifier — the basis for both the tmpdir path and the Windows pipe name. */
+function projectHash(projectRoot: string): string {
+  const identity = daemonSocketIdentity(projectRoot);
   return crypto.createHash('sha256').update(identity).digest('hex').slice(0, 16);
 }
 
