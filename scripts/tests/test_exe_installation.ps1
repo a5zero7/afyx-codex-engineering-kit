@@ -28,8 +28,12 @@ $graph = Join-Path $disposable 'graph'
 $gemini = Join-Path $disposable 'gemini'
 $claude = Join-Path $disposable 'claude'
 $fakeBin = Join-Path $disposable 'fake-bin'
+$backupRoot = Join-Path $disposable '.afyx\backups'
 
 $originalPath = $env:PATH
+$originalBackupRoot = $env:AFYX_BACKUP_ROOT
+$hadBackupRoot = Test-Path Env:AFYX_BACKUP_ROOT
+$env:AFYX_BACKUP_ROOT = $backupRoot
 try {
     # 0. Setup disposable test root & foreign config
     New-Item -ItemType Directory -Path $codex -Force | Out-Null
@@ -207,4 +211,6 @@ finally {
     }
     Remove-Item Env:AFYX_GRAPH_RUNTIME_ROOT -ErrorAction SilentlyContinue
     Remove-Item Env:CODEX_HOME -ErrorAction SilentlyContinue
+    if ($hadBackupRoot) { $env:AFYX_BACKUP_ROOT = $originalBackupRoot }
+    else { Remove-Item Env:AFYX_BACKUP_ROOT -ErrorAction SilentlyContinue }
 }

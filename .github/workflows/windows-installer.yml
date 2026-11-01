@@ -127,13 +127,13 @@ jobs:
           if (-not (Test-Path -LiteralPath 'dist/SHA256SUMS')) {
             throw "dist/SHA256SUMS was not generated"
           }
-          
+
           Write-Host "Generated build artifacts in dist/:" -ForegroundColor Green
           Get-ChildItem -Path dist | Format-Table Name, Length, LastWriteTime
-          
+
           Write-Host "Build Manifest:" -ForegroundColor Green
           Get-Content -Path dist/build-manifest.json
-          
+
           Write-Host "Checksums:" -ForegroundColor Green
           Get-Content -Path dist/SHA256SUMS
 
@@ -153,4 +153,3 @@ jobs:
             dist/AfyxSetup.exe.sha256
           if-no-files-found: error
           retention-days: 14
-

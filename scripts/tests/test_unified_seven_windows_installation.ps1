@@ -24,8 +24,12 @@ $codexHome = Join-Path $disposableBase '.codex'
 $geminiHome = Join-Path $disposableBase '.gemini'
 $claudeHome = Join-Path $disposableBase '.claude'
 $fakeBin = Join-Path $disposableBase 'fake-bin'
+$backupRoot = Join-Path $disposableBase '.afyx\backups'
 
 $originalPath = $env:PATH
+$originalBackupRoot = $env:AFYX_BACKUP_ROOT
+$hadBackupRoot = Test-Path Env:AFYX_BACKUP_ROOT
+$env:AFYX_BACKUP_ROOT = $backupRoot
 try {
     # 0. Setup disposable environment & simulate foreign configurations
     New-Item -ItemType Directory -Path $skillsRoot -Force | Out-Null
@@ -282,4 +286,6 @@ finally {
     }
     Remove-Item Env:AFYX_GRAPH_RUNTIME_ROOT -ErrorAction SilentlyContinue
     Remove-Item Env:CODEX_HOME -ErrorAction SilentlyContinue
+    if ($hadBackupRoot) { $env:AFYX_BACKUP_ROOT = $originalBackupRoot }
+    else { Remove-Item Env:AFYX_BACKUP_ROOT -ErrorAction SilentlyContinue }
 }
