@@ -1,8 +1,11 @@
 # AFYX Alpha Stabilization — Evidence-First Execution Preflight
 
-**Status:** PREPARATION IMPLEMENTED; REAL PILOT `NOT_RUN`; COMBINED ACCEPTANCE `BLOCKED`  
-**Authority:** [AFYX_V1_MASTER_ROADMAP.md](AFYX_V1_MASTER_ROADMAP.md), 2026-10-27 expanded v1 finalization contract.  
-**Starting source baseline:** `dev` at `b273b7b27ba33838075c86870e0b8a58fdbaca95` (observed from GitHub).  
+**Status:** PREPARATION IMPLEMENTED; REAL PILOT `NOT_RUN`; COMBINED ACCEPTANCE `BLOCKED`
+
+**Authority:** [AFYX_V1_MASTER_ROADMAP.md](AFYX_V1_MASTER_ROADMAP.md), 2026-10-27 expanded v1 finalization contract.
+
+**Starting source baseline:** `dev` at `b273b7b27ba33838075c86870e0b8a58fdbaca95` (observed from GitHub).
+
 **Dependency:** [PR #139](https://github.com/a5zero7/afyx-codex-engineering-kit/pull/139) is Draft. Its default-on provider companion work does **not** prove installed Graph–ACE MCP runtime activation; a separately validated native runtime owner, recovery, and explicit-OFF contract is still required.
 
 ## What this increment delivers

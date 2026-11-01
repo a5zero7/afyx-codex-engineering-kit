@@ -158,11 +158,11 @@ my_custom_env = "production"
     Write-Host "-> Foreign configuration in config.toml preserved." -ForegroundColor Green
 
     Write-Host "[2/6] Verifying Guardrails and Standalone Behavior..." -ForegroundColor Yellow
-    
+
     # Check Forge Core CLI
     $forgeVersionOut = (& $forgeCmd --version 2>&1) -join ' '
     if ($forgeVersionOut -notmatch '0\.1\.0') { throw "Unexpected forge version: $forgeVersionOut" }
-    
+
     $forgeDoctorOut = (& $forgeCmd doctor 2>&1) -join ' '
     if ($forgeDoctorOut -notmatch 'EVALUATION_GATED') {
         throw "Forge Core A8 gate violated! Expected EVALUATION_GATED, got: $forgeDoctorOut"
@@ -220,7 +220,7 @@ my_custom_env = "production"
     # Make Forge Core INCOMPLETE by removing a required executable
     $forgeBinPath = Join-Path $forgeRoot 'current\bin\afyx-forge.cmd'
     Remove-Item -LiteralPath $forgeBinPath -Force
-    
+
     # Repair via install.ps1 with -ComponentAction
     $repairArgs = @{
         ComponentAction = @('afyx-forge=repair')

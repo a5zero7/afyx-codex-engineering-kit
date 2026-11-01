@@ -43,7 +43,7 @@ try {
     $stagedScripts = Join-Path $stagingDir 'scripts'
     New-Item -ItemType Directory -Path $stagedScripts -Force | Out-Null
     Copy-Item -LiteralPath (Join-Path $repoRoot 'scripts\lib') -Destination $stagedScripts -Recurse -Force
-    
+
     Get-ChildItem -Path (Join-Path $repoRoot 'scripts') -File | Where-Object {
         $_.Name -notin @('build-windows-installer.ps1')
     } | ForEach-Object {
@@ -77,7 +77,7 @@ try {
     $stagedGraph = Join-Path $stagingDir 'afyx-graph'
     New-Item -ItemType Directory -Path $stagedGraph -Force | Out-Null
     Copy-Item -LiteralPath (Join-Path $repoRoot 'afyx-graph\afyx-graph.json') -Destination (Join-Path $stagedGraph 'afyx-graph.json') -Force
-    
+
     $distJsonSrc = Join-Path $repoRoot 'afyx-graph\engine\scripts\distribution-product.json'
     $distContractSrc = Join-Path $repoRoot 'afyx-graph\engine\scripts\distribution-contract.mjs'
     if (Test-Path -LiteralPath $distJsonSrc) {
@@ -112,7 +112,7 @@ try {
 
     Write-Host "[2/4] Compressing Clean 7-Component Staging into $payloadZip..." -ForegroundColor Yellow
     if (Test-Path -LiteralPath $payloadZip) { Remove-Item -LiteralPath $payloadZip -Force }
-    
+
     # Use .NET ZipArchive for deterministic, clean compression
     [System.IO.Compression.ZipFile]::CreateFromDirectory($stagingDir, $payloadZip, [System.IO.Compression.CompressionLevel]::Optimal, $false)
     $zipLengthMB = [math]::Round(((Get-Item -LiteralPath $payloadZip).Length / 1MB), 2)
@@ -139,7 +139,7 @@ try {
 
     & $cscPath $cscArgs
     if ($LASTEXITCODE -ne 0) { throw "csc.exe compilation failed with exit code $LASTEXITCODE" }
-    
+
     $exeLengthMB = [math]::Round(((Get-Item -LiteralPath $outputExe).Length / 1MB), 2)
     Write-Host "-> Executable created: $outputExe ($exeLengthMB MB)" -ForegroundColor Green
 
@@ -147,7 +147,7 @@ try {
     $hash = (Get-FileHash -LiteralPath $outputExe -Algorithm SHA256).Hash.ToLowerInvariant()
     $checksumFile = Join-Path $OutputDir 'AfyxSetup.exe.sha256'
     Set-Content -LiteralPath $checksumFile -Value "$hash  AfyxSetup.exe`n" -Encoding utf8
-    
+
     $sumsFile = Join-Path $OutputDir 'SHA256SUMS'
     $zipHash = (Get-FileHash -LiteralPath $payloadZip -Algorithm SHA256).Hash.ToLowerInvariant()
     $sumsContent = @"
