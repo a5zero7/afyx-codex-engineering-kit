@@ -234,8 +234,8 @@ describe('Shared MCP daemon (issue #411)', () => {
     }
     await new Promise((r) => setTimeout(r, 50));
     servers.length = 0;
-    fs.rmSync(tempDir, { recursive: true, force: true });
-    if (isolatedHome) fs.rmSync(isolatedHome, { recursive: true, force: true });
+    fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+    if (isolatedHome) fs.rmSync(isolatedHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
     isolatedHome = '';
   });
 

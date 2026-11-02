@@ -34,7 +34,7 @@ describe('git index currency across commits and restores (#1829)', () => {
     cg = AfyxGraph.initSync(root);
     expect((await cg.indexAll()).success).toBe(true);
   });
-  afterEach(() => { vi.restoreAllMocks(); cg?.close(); fs.rmSync(root, { recursive: true, force: true }); });
+  afterEach(() => { vi.restoreAllMocks(); cg?.close(); fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }); });
 
   it.each(['index', 'sync', 'scoped'] as const)('sees a restored indexed dirty edit after %s', async mode => {
     write('source.ts', 'dirtyVersion');
