@@ -74,7 +74,11 @@ describe('FileWatcher', () => {
     __setFsWatchForTests(null); // reset the injected fs.watch seam
     vi.restoreAllMocks();
     if (fs.existsSync(testDir)) {
-      fs.rmSync(testDir, { recursive: true, force: true });
+      // On Windows, FSWatcher.close() can return just before the underlying
+      // ReadDirectoryChangesW handle releases the directory. Use Node's
+      // bounded EPERM retry for TEMP-fixture cleanup; product behavior and
+      // assertions have already completed at this point.
+      fs.rmSync(testDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
     }
   });
 
