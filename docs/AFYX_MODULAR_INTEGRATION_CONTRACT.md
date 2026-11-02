@@ -5,6 +5,11 @@
 **Status:** `CANONICAL ARCHITECTURE CONTRACT`  
 **Scope:** Afyx Code Engineering Kit across Codex, Antigravity, and Claude Code provider surfaces.  
 
+> **Owner amendment 2026-11-02 — universal all-subset two-way integration**: [AfyxUniversalInterop/v1](AFYX_UNIVERSAL_COMPONENT_INTEROPERABILITY.md) is the forward-looking architecture contract for **any combination of the six primary Afyx components**. Any one component remains fully functional on its own; all relevant installed peers must be discoverable and eligible for **logical bidirectional** capability exchange. A low-overhead task-level mediator prevents overlapping authority, needless multi-tool calls and cycles. This is a **target contract**, not proof that universal runtime wiring has already shipped. Existing bounded pairs and source-only planners remain historical evidence; actual invocation requires installed-host acceptance. The seventh tool, Usage Tracking, stays optional/passive.
+
+> **Contract reconciliation:** In §4, the current fixed cooperating-component examples are **not an exhaustive allow-list**. In §5.5 and §8, legacy Context Engine *default-OFF selection* pertains to explicit skill/standalone policy; the newer verified Graph MCP bridge can be **default available and selectively invoked when healthy** while honoring authoritative `AFYX_CONTEXT_OPT_IN=0` and explicit user OFF. Neither policy authorizes implicit indexing, arbitrary context reduction or Forge production automation. Forge Core can be installed as assistive Alpha, but formal adaptive policy execution remains A8-gated.
+
+
 ---
 
 ## 1. Prinsip Utama: Standalone by Design, Integrated by Contract, Activated by Need
