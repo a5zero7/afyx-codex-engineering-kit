@@ -13,7 +13,10 @@
 export interface ClientPeerInfo {
   pid: number | null;
   hostPid: number | null;
+  sessionId?: string;
 }
+
+const SESSION_ID_RE = /^[A-Za-z0-9._:-]{1,128}$/;
 
 /**
  * Parse one client-hello line. Returns the peer pids if `line` is a well-formed
@@ -30,7 +33,14 @@ export function parseClientHelloLine(line: string): ClientPeerInfo | null {
   if (!parsed || typeof parsed !== 'object') return null;
   const o = parsed as Record<string, unknown>;
   if (o.afyx_graph_client !== 1 || typeof o.pid !== 'number') return null;
-  return { pid: o.pid, hostPid: typeof o.hostPid === 'number' ? o.hostPid : null };
+  const sessionId = typeof o.sessionId === 'string' && SESSION_ID_RE.test(o.sessionId)
+    ? o.sessionId
+    : null;
+  return {
+    pid: o.pid,
+    hostPid: typeof o.hostPid === 'number' ? o.hostPid : null,
+    ...(sessionId ? { sessionId } : {}),
+  };
 }
 
 /**

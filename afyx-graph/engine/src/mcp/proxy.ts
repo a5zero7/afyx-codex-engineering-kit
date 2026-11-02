@@ -20,7 +20,8 @@
 
 import * as fs from 'fs';
 import * as net from 'net';
-import { DaemonClientHello, DaemonHello, MAX_HELLO_LINE_BYTES } from './daemon';
+import { randomUUID } from 'crypto';
+import { DaemonClientHello, DaemonClientReady, DaemonHello, MAX_HELLO_LINE_BYTES } from './daemon';
 import { EARLY_PPID } from './early-ppid';
 import { HOST_PPID_ENV, installPpidWatchdog, parseHostPpid } from './ppid-watchdog';
 import { isProcessAlive } from './process-liveness';
@@ -34,6 +35,7 @@ import { AfyxSessionContext } from './session-context';
 import type { MCPEngine } from './engine';
 import { ErrorCodes } from './transport';
 import { parseToolCallParams } from './tool-registry';
+import { lifecycleTrace } from './lifecycle-trace';
 
 /**
  * Env var that opts INTO the "attached to shared daemon" log line, off by
@@ -105,8 +107,23 @@ export async function runProxy(
     return { outcome: 'fallback-needed', reason: 'version mismatch' };
   }
 
+  const sessionId = randomUUID();
+  const readyPromise = hello.protocol >= 2 ? readClientReadyLine(socket, sessionId) : null;
+  sendClientHello(socket, sessionId);
+  if (hello.protocol >= 2) {
+    const ready = await readyPromise!.catch((err) => new Error(String(err)));
+    if (ready instanceof Error) {
+      socket.destroy();
+      return { outcome: 'fallback-needed', reason: ready.message };
+    }
+    lifecycleTrace('client_registration_acknowledged', {
+      sessionId,
+      daemonPid: ready.daemonPid,
+      daemonStartedAt: ready.daemonStartedAt,
+      activeClients: ready.activeClients,
+    });
+  }
   logAttachedDaemon(socketPath, hello);
-  sendClientHello(socket);
   startPpidWatchdog(socket);
   await pipeUntilClose(socket);
   // The host disconnected, or the daemon went away. Piping IS this process's
@@ -156,8 +173,23 @@ export async function connectWithHello(
     return 'version-mismatch';
   }
 
+  const sessionId = randomUUID();
+  const readyPromise = hello.protocol >= 2 ? readClientReadyLine(socket, sessionId) : null;
+  sendClientHello(socket, sessionId);
+  if (hello.protocol >= 2) {
+    const ready = await readyPromise!.catch(() => null);
+    if (!ready) {
+      socket.destroy();
+      return null;
+    }
+    lifecycleTrace('client_registration_acknowledged', {
+      sessionId,
+      daemonPid: ready.daemonPid,
+      daemonStartedAt: ready.daemonStartedAt,
+      activeClients: ready.activeClients,
+    });
+  }
   logAttachedDaemon(socketPath, hello);
-  sendClientHello(socket);
   return socket;
 }
 
@@ -170,13 +202,19 @@ export async function connectWithHello(
  * plain socket-close lifecycle. `hostPid` mirrors the PPID watchdog's own
  * choice: the threaded host pid if one was set, else our own captured parent.
  */
-function sendClientHello(socket: net.Socket): void {
+function sendClientHello(socket: net.Socket, sessionId: string): void {
   const clientHello: DaemonClientHello = {
     afyx_graph_client: 1,
     pid: process.pid,
     hostPid: parseHostPpid(process.env[HOST_PPID_ENV]) ?? EARLY_PPID,
+    sessionId,
   };
   try { socket.write(JSON.stringify(clientHello) + '\n'); } catch { /* best-effort */ }
+  lifecycleTrace('client_hello_sent', {
+    sessionId,
+    proxyPid: process.pid,
+    hostPid: clientHello.hostPid,
+  });
 }
 
 type JsonRpc = Record<string, unknown>;
@@ -297,6 +335,10 @@ class LocalHandshakeSession {
   shutdown(): void {
     if (this.shuttingDown) return;
     this.shuttingDown = true;
+    lifecycleTrace('proxy_shutdown_requested', {
+      daemonReady: this.daemonStatus === 'ready',
+      hasDaemonSocket: this.daemonSocket !== null,
+    });
     try { this.daemonSocket?.destroy(); } catch { /* ignore */ }
     try { this.engine?.stop(); } catch { /* ignore */ }
     process.exit(0);
@@ -384,6 +426,7 @@ class LocalHandshakeSession {
   /** Fall back to in-process for the rest of the session (#662): the daemon going away must never end it. */
   private handleDaemonLost(): void {
     if (this.shuttingDown || this.daemonStatus !== 'ready') return; // host teardown, or already handled
+    lifecycleTrace('daemon_connection_lost', { inflightRequests: this.inflight.size });
     this.daemonStatus = 'failed';
     try { this.daemonSocket?.destroy(); } catch { /* ignore */ }
     this.daemonSocket = null;
@@ -565,6 +608,65 @@ function readHelloLine(socket: net.Socket): Promise<DaemonHello> {
     const timer = setTimeout(() => {
       detach();
       reject(new Error('timed out waiting for daemon hello'));
+    }, 3000);
+    timer.unref?.();
+    socket.on('data', onData);
+    socket.on('error', onSocketError);
+    socket.on('close', onSocketClose);
+  });
+}
+
+/**
+ * Wait for protocol-v2 proof that this exact proxy session is registered in
+ * the daemon's live-client set. The listener is installed before the reverse
+ * hello is written, so even a same-tick acknowledgement cannot be lost.
+ */
+function readClientReadyLine(socket: net.Socket, expectedSessionId: string): Promise<DaemonClientReady> {
+  return new Promise((resolve, reject) => {
+    let buffer = '';
+    const detach = () => {
+      socket.removeListener('data', onData);
+      socket.removeListener('error', onSocketError);
+      socket.removeListener('close', onSocketClose);
+      clearTimeout(timer);
+    };
+    const onData = (chunk: string | Buffer) => {
+      buffer += typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+      const newlineAt = buffer.indexOf('\n');
+      if (newlineAt === -1) {
+        if (buffer.length > MAX_HELLO_LINE_BYTES) {
+          detach();
+          reject(new Error('daemon client-ready line exceeded size limit'));
+        }
+        return;
+      }
+      const line = buffer.slice(0, newlineAt);
+      const tail = buffer.slice(newlineAt + 1);
+      detach();
+      if (tail.length > 0) socket.unshift(tail);
+      try {
+        const parsed = JSON.parse(line) as Partial<DaemonClientReady>;
+        if (
+          parsed.afyx_graph_client_ready !== 1 ||
+          parsed.sessionId !== expectedSessionId ||
+          typeof parsed.daemonPid !== 'number' ||
+          typeof parsed.daemonStartedAt !== 'number' ||
+          typeof parsed.activeClients !== 'number' ||
+          parsed.activeClients < 1
+        ) {
+          reject(new Error('daemon client-ready identity did not match the proxy session'));
+          return;
+        }
+        resolve(parsed as DaemonClientReady);
+      } catch (err) {
+        reject(new Error(`daemon client-ready not JSON: ${err instanceof Error ? err.message : String(err)}`));
+      }
+    };
+    const onSocketError = (err: Error) => { detach(); reject(err); };
+    const onSocketClose = () => { detach(); reject(new Error('daemon closed connection before client registration')); };
+    const timer = setTimeout(() => {
+      detach();
+      reject(new Error('timed out waiting for daemon client registration'));
     }, 3000);
     timer.unref?.();
     socket.on('data', onData);

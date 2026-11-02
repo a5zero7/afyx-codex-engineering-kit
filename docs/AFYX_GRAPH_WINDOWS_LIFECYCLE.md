@@ -26,3 +26,18 @@ PID, version, socket, and start identity all agree. Different or forged records
 remain untrusted and must still pass the existing pipe-hello verification.
 Path equivalence alone never authorizes shutdown, and discovery does not
 broadly delete legacy records.
+
+## Multi-client registration boundary
+
+Protocol-v2 proxies do not report a successful shared-daemon attachment until
+the daemon has added that exact session to its live-client set and returned a
+matching registration acknowledgement. The acknowledgement carries only a
+random session identity, daemon PID/start identity, and active-client count;
+it is never an authorization token. Protocol-v1 peers remain compatible and
+continue using socket-close lifecycle semantics.
+
+`AFYX_GRAPH_LIFECYCLE_TRACE=1` enables payload-free lifecycle diagnostics with
+monotonic timestamps. The trace records process/session identity, client-count
+transitions, idle-timer decisions, and shutdown reasons. It never records MCP
+messages, prompts, source content, credentials, project paths, or provider
+configuration.

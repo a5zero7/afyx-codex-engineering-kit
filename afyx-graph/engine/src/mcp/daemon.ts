@@ -66,6 +66,7 @@ import {
   resolveClientSweepMs,
 } from './activity-policy';
 import { parseClientHelloLine, peerIsDead, type ClientPeerInfo } from './client-registry';
+import { lifecycleTrace } from './lifecycle-trace';
 import { bindFirstUsableSocket } from './socket-bind';
 
 /**
@@ -124,7 +125,7 @@ export interface DaemonHello {
   afyxGraph: string; // this daemon's package version; must equal the proxy's own
   pid: number;       // informational — useful when eyeballing `ps` output
   socketPath: string; // echoed back purely so the proxy can log where it attached
-  protocol: 1;       // bump on any wire-shape change
+  protocol: 1 | 2;   // v2 adds a server-side client-registration acknowledgement
 }
 
 /**
@@ -141,6 +142,16 @@ export interface DaemonClientHello {
   afyx_graph_client: 1;
   pid: number;             // the proxy process itself
   hostPid: number | null;  // the MCP host, past any launcher shim, if known
+  sessionId: string;
+}
+
+/** Server-side proof that a proxy is counted as a live daemon client. */
+export interface DaemonClientReady {
+  afyx_graph_client_ready: 1;
+  sessionId: string;
+  daemonPid: number;
+  daemonStartedAt: number;
+  activeClients: number;
 }
 
 export interface DaemonStartResult {
@@ -244,6 +255,13 @@ export class Daemon {
     process.stderr.write(
       `[Afyx Graph daemon] Listening on ${this.socketPath} (pid ${process.pid}, v${AfyxGraphPackageVersion}). Idle timeout ${this.idleTimeoutMs}ms.\n`
     );
+    lifecycleTrace('daemon_started', {
+      daemonStartedAt: this.startedAt,
+      idleTimeoutMs: this.idleTimeoutMs,
+      maxIdleMs: this.maxIdleMs,
+    });
+    process.once('beforeExit', (code) => lifecycleTrace('daemon_before_exit', { code }));
+    process.once('exit', (code) => lifecycleTrace('daemon_process_exit', { code }));
 
     // No clients yet: arm the idle timer right away so a daemon nobody ever
     // connects to (spawned, then abandoned because its launcher died) can't
@@ -394,6 +412,7 @@ export class Daemon {
   async stop(reason: string = 'stop'): Promise<void> {
     if (this.stopping) return;
     this.stopping = true;
+    lifecycleTrace('daemon_shutdown_requested', { reason, activeClients: this.clients.size });
     this.activityTimers.stopAll();
     process.stderr.write(`[Afyx Graph daemon] Shutting down (${reason}; clients=${this.clients.size}).\n`);
 
@@ -434,10 +453,11 @@ export class Daemon {
       afyxGraph: AfyxGraphPackageVersion,
       pid: process.pid,
       socketPath: this.socketPath,
-      protocol: 1,
+      protocol: 2,
     };
     socket.write(JSON.stringify(hello) + '\n');
 
+    lifecycleTrace('connection_accepted', { daemonStartedAt: this.startedAt });
     void readConnectionPreface(socket).then((preface) => {
       if (preface.control) this.handleControlRequest(socket, preface.control);
       else this.acceptSession(socket, preface.peers);
@@ -454,7 +474,7 @@ export class Daemon {
       afyxGraph: AfyxGraphPackageVersion,
       pid: process.pid,
       socketPath: this.controlSocketPath ?? this.socketPath,
-      protocol: 1,
+      protocol: 2,
     };
     socket.write(JSON.stringify(hello) + '\n');
     void readConnectionPreface(socket).then((preface) => {
@@ -488,6 +508,14 @@ export class Daemon {
    * pids, which falls back to the plain socket-close lifecycle (#692).
    */
   private acceptSession(socket: net.Socket, peers: ClientPeerInfo): void {
+    if (socket.destroyed) {
+      lifecycleTrace('client_registration_aborted', {
+        sessionId: peers.sessionId ?? null,
+        proxyPid: peers.pid,
+        reason: 'socket-destroyed-before-registration',
+      });
+      return;
+    }
     const transport = new SocketTransport(socket);
     const session = new MCPSession(transport, this.engine, {
       explicitProjectPath: this.projectRoot,
@@ -496,6 +524,25 @@ export class Daemon {
     this.clients.add(session);
     this.clientPeers.set(session, peers);
     this.disarmIdleTimer();
+    // Legacy same-version proxies do not send sessionId and would forward an
+    // acknowledgement as an invalid MCP message. Only v2-aware proxies opt in.
+    if (peers.sessionId) {
+      const ready: DaemonClientReady = {
+        afyx_graph_client_ready: 1,
+        sessionId: peers.sessionId,
+        daemonPid: process.pid,
+        daemonStartedAt: this.startedAt,
+        activeClients: this.clients.size,
+      };
+      socket.write(JSON.stringify(ready) + '\n');
+    }
+    lifecycleTrace('client_registered', {
+      sessionId: peers.sessionId ?? null,
+      proxyPid: peers.pid,
+      hostPid: peers.hostPid,
+      activeClients: this.clients.size,
+      daemonStartedAt: this.startedAt,
+    });
     session.start();
     // A second 'data' listener, added after the transport's own, that reads
     // nothing — it exists purely to feed the inactivity backstop's clock.
@@ -506,12 +553,23 @@ export class Daemon {
 
   private dropClient(session: MCPSession): void {
     if (!this.clients.delete(session)) return;
+    const peers = this.clientPeers.get(session);
     this.clientPeers.delete(session);
+    lifecycleTrace('client_dropped', {
+      sessionId: peers?.sessionId ?? null,
+      proxyPid: peers?.pid ?? null,
+      activeClients: this.clients.size,
+    });
     if (this.clients.size === 0) this.armIdleTimer();
   }
 
   private armIdleTimer(): void {
+    lifecycleTrace('idle_timer_arm_requested', {
+      activeClients: this.clients.size,
+      idleTimeoutMs: this.idleTimeoutMs,
+    });
     this.activityTimers.armIdle(this.stopping, () => {
+      lifecycleTrace('idle_timer_fired', { activeClients: this.clients.size });
       // Last-second sanity check: a connection landing between the timer
       // firing and now (the only way this races is setImmediate ordering)
       // must not be exited out from under.
@@ -524,6 +582,7 @@ export class Daemon {
   }
 
   private disarmIdleTimer(): void {
+    lifecycleTrace('idle_timer_disarm_requested', { activeClients: this.clients.size });
     this.activityTimers.disarmIdle();
   }
 
@@ -606,6 +665,12 @@ export class Daemon {
       process.stderr.write(
         `[Afyx Graph daemon] Reaping client with dead peer (pid ${peers.pid}); clients=${this.clients.size - 1}.\n`
       );
+      lifecycleTrace('client_reaped', {
+        sessionId: peers.sessionId ?? null,
+        proxyPid: peers.pid,
+        hostPid: peers.hostPid,
+        activeClientsAfter: this.clients.size - 1,
+      });
       try { session.stop(); } catch { /* best-effort */ }
       this.dropClient(session);
     }
