@@ -116,3 +116,19 @@ Explicit request by user may override performance preference but cannot override
 **Non-goals:** all-component eager initialization; mandatory Forge/Graph/ACE; universal autonomous agent; blind prompt aggregation; 30 hard-coded cyclic imports; synthetic claims of performance superiority; new paid evaluation without approval; touching global provider config; adding external reference implementation code.
 
 **Source/CI truth:** this document records an owner-requested architecture target; it does not change the runtime or claim that current historical fixed-pair adapters meet this universal contract.
+
+---
+
+## 7. Provider-neutral task execution and host-specific acceptance
+
+**Owner execution policy (2026-11-02):** Afyx engineering **task prompts are provider-neutral by default** and should be executable by *any actually supported and capable agent host*, rather than being hard-coded to Codex or requiring the user to execute the same task on every provider. Current operator usage: **Codex and Antigravity**. Claude Code belongs to the planned/supported provider family where the necessary capability exists, **but no Claude live acceptance may be inferred from compatibility intent**.
+
+1. **Separate `compatibleWith` from `executeOn`:** a portable implementation prompt may say `Compatible: Codex / Antigravity / Claude Code (subject to actual capabilities)`. Execution defaults to **one selected available agent**, such as Codex **or** Antigravity, and is not automatically repeated on all hosts.
+2. **Specify provider only where the provider is the test subject:** MCP L3, provider extension/CLI permissions, sandbox behavior, configuration paths, restart, performance/comparative measurements, or other host-specific bugs must identify exactly which host(s), version, editor/CLI surface and isolation level are being examined. Cross-provider conformance requires separate runs *only for the targeted surfaces*.
+3. **Every actionable task prompt states**: (a) execution environment (`DEVELOPMENT_WORKTREE`, `ISOLATED_INSTALLED_PILOT`, or approved host), (b) compatible providers vs required execution provider(s), (c) number of executions, (d) deliverable/product code changes, (e) bounded relevant testing and evidence reuse, (f) safety and approval boundaries, and (g) Indonesian progress/final report. Task instructions may be English.
+4. **Capability negotiation beats marketing labels:** lack of MCP/CLI/skills permission or an unsupported provider version must be `NOT_SUPPORTED`/`NOT_VERIFIED` as applicable, not success. A prompt does not assume a Codex-only `CODEX_HOME` layout on Antigravity or Claude. Provider-specific bootstrap is an adapter concern, not duplicated in feature logic.
+5. **No validation of validation:** reuse exact-candidate source/CI/installed evidence that still covers the affected behavior. Run only changed/at-risk tests, do not require redundant second-agent reviews, and do not execute paid benchmark pairs without explicit approval. Real product implementation and precise correctness/performance evidence have priority over paperwork.
+
+### AFYX-307 owner-local implementation handoff (not an upstream acceptance claim)
+
+Owner reports source-only native selective router commit `567380988d6a32f9ab97f5ea020f963904896d19` on *unpublished local* branch `afyx/afyx-307-native-selective-capability-orchestrator`, based on the locally integrated contract commit `1a0e972c67c433395257357680f2ead3b3ede052`. Locally reported 115 focused/regression tests PASS, 63 component-presence masks x five task profiles deterministic, known-source 0 runtime calls and bounded 10k-route microbenchmark. **GitHub three-OS CI and actual provider adapter wiring at this commit have NOT_RUN/NOT_VERIFIED** because it is not pushed. This documentary note does **not** import or review that unpublished source or replace AFYX-308 real bridge work.
