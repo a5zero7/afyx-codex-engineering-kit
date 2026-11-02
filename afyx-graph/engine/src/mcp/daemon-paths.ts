@@ -219,7 +219,7 @@ const IDENTITY_PROBE_TIMEOUT_MS = 1_000;
 const IDENTITY_PROBE_MAX_HELLO_BYTES = 4096;
 
 function helloMatchesLockRecord(hello: Record<string, unknown>, info: DaemonLockInfo): boolean {
-  return hello.protocol === 1
+  return (hello.protocol === 1 || hello.protocol === 2)
     && hello.pid === info.pid
     && (info.version === 'unknown' || hello.afyxGraph === info.version);
 }
