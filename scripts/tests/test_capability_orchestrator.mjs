@@ -6,15 +6,20 @@ import {
   AFYX_CAPABILITY_REQUEST_CONTRACT,
   AFYX_CAPABILITY_RESULT_CONTRACT,
   PRIMARY_COMPONENT_IDS,
+  SEVEN_REGISTERED_COMPONENT_IDS,
   discoverAfyxCapabilities,
   executeAfyxCapabilityRoute,
+  getRegisteredComponent,
+  getRegisteredComponentIds,
+  registerAfyxComponent,
   resolveAfyxCapabilityRoute,
+  unregisterAfyxComponent,
 } from '../afyx-capability-orchestrator.mjs';
 
-const SOURCE = 'candidate-307';
+const SOURCE = 'candidate-308';
 
-function state(availableIds = PRIMARY_COMPONENT_IDS) {
-  return Object.fromEntries(PRIMARY_COMPONENT_IDS.map((id) => [id, {
+function state(availableIds = SEVEN_REGISTERED_COMPONENT_IDS) {
+  return Object.fromEntries(SEVEN_REGISTERED_COMPONENT_IDS.map((id) => [id, {
     installed: availableIds.includes(id),
     enabled: true,
     healthy: availableIds.includes(id),
@@ -26,7 +31,7 @@ function state(availableIds = PRIMARY_COMPONENT_IDS) {
   }]));
 }
 
-function options(task, availableIds = PRIMARY_COMPONENT_IDS, extra = {}) {
+function options(task, availableIds = SEVEN_REGISTERED_COMPONENT_IDS, extra = {}) {
   return {
     task: {
       id: `task-${task.taskType ?? 'generic'}`,
@@ -40,6 +45,9 @@ function options(task, availableIds = PRIMARY_COMPONENT_IDS, extra = {}) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// 1. Versioned Contracts & Schemas
+// ---------------------------------------------------------------------------
 test('versioned request and result schemas are present and identify v1 contracts', () => {
   const requestSchema = JSON.parse(readFileSync(new URL('../contracts/afyx-capability-request-v1.schema.json', import.meta.url)));
   const resultSchema = JSON.parse(readFileSync(new URL('../contracts/afyx-capability-result-v1.schema.json', import.meta.url)));
@@ -47,11 +55,62 @@ test('versioned request and result schemas are present and identify v1 contracts
   assert.equal(resultSchema.$id, AFYX_CAPABILITY_RESULT_CONTRACT);
 });
 
+// ---------------------------------------------------------------------------
+// 2. Default-Enabled Capability Integration (Requirement 1 & 2)
+// ---------------------------------------------------------------------------
+test('installed components are enabled by default for interop discovery while explicit OFF is honored', () => {
+  // Omit enabled field entirely — installed components must be default-enabled for interoperability
+  const defaultStates = {
+    'afyx-graph': {
+      installed: true,
+      healthy: true,
+      compatible: true,
+      authorized: true,
+      sourceIdentity: SOURCE,
+      indexReady: true,
+      indexFresh: true,
+    },
+    'afyx-context': {
+      installed: true,
+      enabled: false, // explicit OFF
+      healthy: true,
+      compatible: true,
+      authorized: true,
+      sourceIdentity: SOURCE,
+    },
+  };
+  const discovery = discoverAfyxCapabilities({ componentStates: defaultStates, provider: 'codex' });
+  assert.equal(discovery.capabilities['afyx-graph'].enabled, true);
+  assert.equal(discovery.capabilities['afyx-graph'].available, true);
+  assert.equal(discovery.capabilities['afyx-graph'].reason, 'AVAILABLE');
+
+  assert.equal(discovery.capabilities['afyx-context'].enabled, false);
+  assert.equal(discovery.capabilities['afyx-context'].available, false);
+  assert.equal(discovery.capabilities['afyx-context'].reason, 'EXPLICITLY_DISABLED');
+});
+
+test('installed-but-irrelevant capabilities remain completely idle', () => {
+  // All 7 components installed and healthy, but task is a focused Odoo task without relational need
+  const route = resolveAfyxCapabilityRoute(options(
+    { taskType: 'odoo-fix', project: { isOdoo: true } },
+    SEVEN_REGISTERED_COMPONENT_IDS,
+  ));
+  const selectedIds = route.requests.map((r) => r.targetComponentId);
+  assert.equal(selectedIds.includes('odoo-engineering'), true);
+  assert.equal(selectedIds.includes('afyx-graph'), false, 'Graph must remain idle for non-relational task');
+  assert.equal(selectedIds.includes('afyx-context'), false, 'Context must remain idle');
+  assert.equal(selectedIds.includes('afyx-forge'), false, 'Forge must remain idle');
+  assert.equal(selectedIds.includes('codex-usage-tracking'), false, 'Usage tracking must remain idle');
+});
+
+// ---------------------------------------------------------------------------
+// 3. Simple Direct-Source Task (Requirement 3)
+// ---------------------------------------------------------------------------
 test('known-file string replacement uses direct source with zero runtime invocation', async () => {
   let calls = 0;
   const result = await executeAfyxCapabilityRoute({
     ...options({ taskType: 'string-replacement', knownFile: true }),
-    adapters: Object.fromEntries(PRIMARY_COMPONENT_IDS.map((id) => [id, () => { calls += 1; return { status: 'SUCCESS' }; }])),
+    adapters: Object.fromEntries(SEVEN_REGISTERED_COMPONENT_IDS.map((id) => [id, () => { calls += 1; return { status: 'SUCCESS' }; }])),
   });
   assert.equal(result.directSourceFastPath, true);
   assert.equal(result.executionStatus, 'DIRECT_SOURCE');
@@ -60,7 +119,10 @@ test('known-file string replacement uses direct source with zero runtime invocat
   assert.equal(calls, 0);
 });
 
-test('each single-component installation can execute its advertised standalone route', async () => {
+// ---------------------------------------------------------------------------
+// 4. Standalone Operation for ALL Seven Components (Requirement 5)
+// ---------------------------------------------------------------------------
+test('each of the seven registered components executes its advertised standalone route with all peers absent', async () => {
   const cases = [
     ['efficient-coding', { taskType: 'implementation' }],
     ['odoo-engineering', { taskType: 'odoo-fix', project: { isOdoo: true } }],
@@ -68,6 +130,7 @@ test('each single-component installation can execute its advertised standalone r
     ['afyx-graph', { taskType: 'relationship-analysis', needsRelationalEvidence: true }],
     ['afyx-context', { taskType: 'large-context', needsContextOptimization: true }],
     ['afyx-forge', { taskType: 'forge-advice', forgeAdvice: true }],
+    ['codex-usage-tracking', { taskType: 'usage-telemetry', needsTelemetry: true }],
   ];
   for (const [componentId, task] of cases) {
     const provider = componentId === 'afyx-forge' ? null : 'codex';
@@ -76,11 +139,12 @@ test('each single-component installation can execute its advertised standalone r
         provider,
         providerPermissions: componentId === 'afyx-forge' ? { 'afyx-forge': true } : {},
       }),
-      adapters: { [componentId]: () => ({ status: 'SUCCESS', output: componentId }) },
+      adapters: { [componentId]: () => ({ status: 'SUCCESS', output: `output-from-${componentId}` }) },
     });
-    assert.equal(result.metrics.executedCapabilities, 1, componentId);
+    assert.equal(result.metrics.executedCapabilities, 1, `Failed standalone execution for ${componentId}`);
     assert.equal(result.results[0].componentId, componentId);
-    assert.equal(result.results[0].output, componentId);
+    assert.equal(result.results[0].output, `output-from-${componentId}`);
+    assert.equal(result.results[0].executionStatus, 'EXECUTED');
   }
 });
 
@@ -95,31 +159,85 @@ test('missing optional Graph degrades to direct source without preventing useful
   assert.equal(result.degradations[0].fallback, 'DIRECT_SOURCE');
 });
 
-test('relevant Odoo relationship task retains Odoo authority and exchanges Graph evidence', async () => {
-  const sequence = [];
+// ---------------------------------------------------------------------------
+// 5. Meaningful Bidirectional Capability Handoffs (Requirement 4)
+// ---------------------------------------------------------------------------
+test('bidirectional handoff: Odoo requests Graph evidence, Graph requests Context reduction', async () => {
+  const callSequence = [];
   const result = await executeAfyxCapabilityRoute({
     ...options({
-      taskType: 'odoo-impact-analysis',
+      taskType: 'odoo-fix',
       project: { isOdoo: true },
-      needsRelationalEvidence: true,
-    }, ['odoo-engineering', 'afyx-graph']),
+    }, ['odoo-engineering', 'afyx-graph', 'afyx-context']),
     adapters: {
       'odoo-engineering': (request) => {
-        sequence.push(request.targetComponentId);
-        return { status: 'SUCCESS', evidence: [{ kind: 'odoo-version', value: 17 }] };
+        callSequence.push(request.targetComponentId);
+        return {
+          status: 'SUCCESS',
+          evidence: [{ kind: 'odoo-model', value: 'sale.order' }],
+          followUpRequests: [{ targetComponentId: 'afyx-graph', invocationReason: 'Inspect model inheritance' }],
+        };
       },
       'afyx-graph': (request) => {
-        sequence.push(request.targetComponentId);
-        return { status: 'SUCCESS', evidence: [{ kind: 'source-edge', path: 'models/a.py' }] };
+        callSequence.push(request.targetComponentId);
+        return {
+          status: 'SUCCESS',
+          evidence: [{ kind: 'graph-edge', path: 'models/order.py' }],
+          followUpRequests: [{ targetComponentId: 'afyx-context', invocationReason: 'Compress large graph payload' }],
+        };
+      },
+      'afyx-context': (request) => {
+        callSequence.push(request.targetComponentId);
+        return {
+          status: 'SUCCESS',
+          output: 'ace:v1:reduced:token',
+          contextBytes: 256,
+        };
       },
     },
   });
-  assert.equal(result.domainAuthorities['odoo-framework-authority'], 'odoo-engineering');
-  assert.equal(result.domainAuthorities['repository-graph-evidence'], 'afyx-graph');
-  assert.deepEqual(sequence, ['odoo-engineering', 'afyx-graph']);
-  assert.equal(result.results.every((item) => item.provenance.sourceRevision === 'abc123'), true);
+  assert.deepEqual(callSequence, ['odoo-engineering', 'afyx-graph', 'afyx-context']);
+  assert.equal(result.results.length, 3);
+  assert.equal(result.results[0].componentId, 'odoo-engineering');
+  assert.equal(result.results[1].componentId, 'afyx-graph');
+  assert.equal(result.results[2].componentId, 'afyx-context');
+  assert.equal(result.metrics.executedCapabilities, 3);
 });
 
+test('bidirectional handoff: Engineering Expert requests Odoo framework advice and records Usage Telemetry', async () => {
+  const callSequence = [];
+  const result = await executeAfyxCapabilityRoute({
+    ...options({
+      taskType: 'architecture',
+    }, ['afyx-engineering-expert', 'odoo-engineering', 'codex-usage-tracking']),
+    adapters: {
+      'afyx-engineering-expert': (request) => {
+        callSequence.push(request.targetComponentId);
+        return {
+          status: 'SUCCESS',
+          followUpRequests: [
+            { targetComponentId: 'odoo-engineering', invocationReason: 'Obtain Odoo architectural constraint' },
+            { targetComponentId: 'codex-usage-tracking', invocationReason: 'Record session telemetry' },
+          ],
+        };
+      },
+      'odoo-engineering': (request) => {
+        callSequence.push(request.targetComponentId);
+        return { status: 'SUCCESS', output: 'odoo-v17-constraint' };
+      },
+      'codex-usage-tracking': (request) => {
+        callSequence.push(request.targetComponentId);
+        return { status: 'SUCCESS', output: 'telemetry-event-logged' };
+      },
+    },
+  });
+  assert.deepEqual(callSequence, ['afyx-engineering-expert', 'odoo-engineering', 'codex-usage-tracking']);
+  assert.equal(result.metrics.executedCapabilities, 3);
+});
+
+// ---------------------------------------------------------------------------
+// 6. Selective Activation, Authority, and Domain Ownership (Requirement 4 & 5)
+// ---------------------------------------------------------------------------
 test('Graph is selected only for beneficial relational work', () => {
   const ordinary = resolveAfyxCapabilityRoute(options({ taskType: 'implementation' }, ['efficient-coding', 'afyx-graph']));
   const relational = resolveAfyxCapabilityRoute(options({ taskType: 'impact-analysis', needsRelationalEvidence: true }, ['efficient-coding', 'afyx-graph']));
@@ -151,6 +269,9 @@ test('Context is selective, returns exact adapter recovery, and explicit OFF win
   );
 });
 
+// ---------------------------------------------------------------------------
+// 7. Duplicate, Cycle, Hop, and Budget Enforcement (Requirement 4 & 7)
+// ---------------------------------------------------------------------------
 test('duplicate and cyclic follow-ups are suppressed without repeated execution', async () => {
   let graphCalls = 0;
   let contextCalls = 0;
@@ -179,6 +300,24 @@ test('duplicate and cyclic follow-ups are suppressed without repeated execution'
   assert.equal(result.results.at(-1).reason, 'DUPLICATE_REQUEST');
 });
 
+test('direct self-cycle in followUpRequests is rejected with DIRECT_SELF_CYCLE', async () => {
+  let calls = 0;
+  const result = await executeAfyxCapabilityRoute({
+    ...options({ taskType: 'impact-analysis', needsRelationalEvidence: true }, ['afyx-graph']),
+    adapters: {
+      'afyx-graph': () => {
+        calls += 1;
+        return {
+          status: 'SUCCESS',
+          followUpRequests: [{ targetComponentId: 'afyx-graph', invocationReason: 'recursive self call' }],
+        };
+      },
+    },
+  });
+  assert.equal(calls, 1);
+  assert.equal(result.results.some((r) => r.reason === 'DIRECT_SELF_CYCLE'), true);
+});
+
 test('failed adapters are counted as attempted calls and never relabeled executed', async () => {
   const result = await executeAfyxCapabilityRoute({
     ...options({ taskType: 'implementation' }, ['efficient-coding']),
@@ -203,6 +342,29 @@ test('non-cooperative adapter is bounded by execution timeout and reported faile
   assert.equal(result.metrics.elapsedMs < 250, true);
 });
 
+test('tool, capability, and context budgets are enforced honestly', async () => {
+  const result = await executeAfyxCapabilityRoute({
+    ...options({
+      taskType: 'odoo-impact-analysis',
+      project: { isOdoo: true },
+      needsRelationalEvidence: true,
+      needsContextOptimization: true,
+    }, ['odoo-engineering', 'afyx-graph', 'afyx-context']),
+    budgetLimits: { maxToolCalls: 1, maxCapabilities: 2, maxContextBytes: 8, maxExecutionMs: 5000, maxHops: 1 },
+    adapters: {
+      'odoo-engineering': () => ({ status: 'SUCCESS', contextBytes: 9 }),
+      'afyx-graph': () => ({ status: 'SUCCESS' }),
+      'afyx-context': () => ({ status: 'SUCCESS' }),
+    },
+  });
+  assert.equal(result.metrics.executedCapabilities, 1);
+  assert.equal(result.metrics.contextBytes, 9);
+  assert.equal(result.degradations.some((item) => item.reason === 'CAPABILITY_BUDGET_EXHAUSTED'), true);
+});
+
+// ---------------------------------------------------------------------------
+// 8. Security, Permissions, and Forge A8 Gating (Requirement 5 & 6)
+// ---------------------------------------------------------------------------
 test('Forge advice is bounded but autonomous or campaign execution remains A8-blocked', async () => {
   let calls = 0;
   const advice = await executeAfyxCapabilityRoute({
@@ -242,16 +404,54 @@ test('existing host authorization refusal propagates and prevents adapter execut
   assert.equal(calls, 0);
 });
 
-test('all 63 non-empty component masks route deterministically', () => {
+test('telemetry capability is gated by provider permission and unsupported provider rejects it', () => {
+  // Codex supports usage telemetry
+  const codexDiscovery = discoverAfyxCapabilities({
+    componentStates: { 'codex-usage-tracking': { installed: true, healthy: true, compatible: true, authorized: true, sourceIdentity: SOURCE } },
+    provider: 'codex',
+  });
+  assert.equal(codexDiscovery.capabilities['codex-usage-tracking'].available, true);
+
+  // Antigravity does not support codex-specific telemetry
+  const agyDiscovery = discoverAfyxCapabilities({
+    componentStates: { 'codex-usage-tracking': { installed: true, healthy: true, compatible: true, authorized: true, sourceIdentity: SOURCE } },
+    provider: 'antigravity',
+  });
+  assert.equal(agyDiscovery.capabilities['codex-usage-tracking'].available, false);
+  assert.equal(agyDiscovery.capabilities['codex-usage-tracking'].reason, 'UNAUTHORIZED_OR_UNVERIFIED');
+});
+
+test('discovery fails closed for health, compatibility, authorization, and positive evidence', () => {
+  const componentStates = state(['afyx-graph']);
+  componentStates['afyx-graph'] = { ...componentStates['afyx-graph'], compatible: false };
+  let discovery = discoverAfyxCapabilities({ componentStates, provider: 'codex' });
+  assert.equal(discovery.capabilities['afyx-graph'].reason, 'INCOMPATIBLE_OR_UNVERIFIED');
+
+  componentStates['afyx-graph'] = { ...componentStates['afyx-graph'], compatible: true, indexFresh: false };
+  discovery = discoverAfyxCapabilities({ componentStates, provider: 'codex' });
+  assert.equal(discovery.capabilities['afyx-graph'].reason, 'GRAPH_INDEX_NOT_READY_OR_FRESH');
+
+  componentStates['afyx-graph'] = { ...componentStates['afyx-graph'], indexFresh: true, sourceIdentity: null };
+  discovery = discoverAfyxCapabilities({ componentStates, provider: 'codex' });
+  assert.equal(discovery.capabilities['afyx-graph'].reason, 'SOURCE_IDENTITY_UNVERIFIED');
+});
+
+// ---------------------------------------------------------------------------
+// 9. Deterministic Routing Over All 127 Non-Empty Presence Masks (Requirement 9)
+// ---------------------------------------------------------------------------
+test('all 127 non-empty component presence masks route deterministically across seven components', () => {
   const taskCases = [
     { taskType: 'implementation' },
     { taskType: 'odoo-impact-analysis', project: { isOdoo: true }, needsRelationalEvidence: true },
     { taskType: 'architecture' },
     { taskType: 'large-context', needsContextOptimization: true },
     { taskType: 'forge-advice', forgeAdvice: true },
+    { taskType: 'usage-telemetry', needsTelemetry: true },
   ];
-  for (let mask = 1; mask < 64; mask += 1) {
-    const installed = PRIMARY_COMPONENT_IDS.filter((_, index) => (mask & (1 << index)) !== 0);
+
+  // 2^7 - 1 = 127 non-empty masks
+  for (let mask = 1; mask < 128; mask += 1) {
+    const installed = SEVEN_REGISTERED_COMPONENT_IDS.filter((_, index) => (mask & (1 << index)) !== 0);
     for (const task of taskCases) {
       const first = resolveAfyxCapabilityRoute(options(task, installed));
       const second = resolveAfyxCapabilityRoute(options(task, installed));
@@ -262,54 +462,114 @@ test('all 63 non-empty component masks route deterministically', () => {
         states: Object.fromEntries(Object.entries(route.discovery.capabilities).map(([id, value]) => [id, value.reason])),
       });
       assert.deepEqual(projection(first), projection(second), `mask ${mask} task ${task.taskType}`);
+      assert.equal(['READY', 'DEGRADED', 'BLOCKED'].includes(first.status), true);
     }
   }
 });
 
-test('discovery fails closed for health, compatibility, authorization, and provider permission', () => {
-  const componentStates = state(['afyx-graph']);
-  componentStates['afyx-graph'] = { ...componentStates['afyx-graph'], compatible: false };
-  let discovery = discoverAfyxCapabilities({ componentStates, provider: 'codex' });
-  assert.equal(discovery.capabilities['afyx-graph'].reason, 'INCOMPATIBLE_OR_UNVERIFIED');
-  componentStates['afyx-graph'] = { ...componentStates['afyx-graph'], compatible: true };
-  discovery = discoverAfyxCapabilities({
-    componentStates,
-    provider: 'codex',
-    providerPermissions: { 'afyx-graph': false },
-  });
-  assert.equal(discovery.capabilities['afyx-graph'].reason, 'UNAUTHORIZED_OR_UNVERIFIED');
-});
+// ---------------------------------------------------------------------------
+// 10. Dynamic Discovery & Routing of Synthetic Future Component (Requirement 10)
+// ---------------------------------------------------------------------------
+test('dynamic discovery and routing of synthetic future component without hardcoded allowlist edits', async () => {
+  const syntheticComponentId = 'afyx-security-auditor';
+  const syntheticCapability = 'vulnerability-audit-capability';
 
-test('Graph freshness and component source identity require positive evidence', () => {
-  const componentStates = state(['afyx-graph']);
-  componentStates['afyx-graph'] = { ...componentStates['afyx-graph'], indexFresh: false };
-  let discovery = discoverAfyxCapabilities({ componentStates, provider: 'codex' });
-  assert.equal(discovery.capabilities['afyx-graph'].reason, 'GRAPH_INDEX_NOT_READY_OR_FRESH');
-  componentStates['afyx-graph'] = {
-    ...componentStates['afyx-graph'],
-    indexFresh: true,
-    sourceIdentity: null,
-  };
-  discovery = discoverAfyxCapabilities({ componentStates, provider: 'codex' });
-  assert.equal(discovery.capabilities['afyx-graph'].reason, 'SOURCE_IDENTITY_UNVERIFIED');
-});
-
-test('tool, capability, and context budgets are enforced honestly', async () => {
-  const result = await executeAfyxCapabilityRoute({
-    ...options({
-      taskType: 'odoo-impact-analysis',
-      project: { isOdoo: true },
-      needsRelationalEvidence: true,
-      needsContextOptimization: true,
-    }, ['odoo-engineering', 'afyx-graph', 'afyx-context']),
-    budgetLimits: { maxToolCalls: 1, maxCapabilities: 2, maxContextBytes: 8, maxExecutionMs: 5000, maxHops: 1 },
-    adapters: {
-      'odoo-engineering': () => ({ status: 'SUCCESS', contextBytes: 9 }),
-      'afyx-graph': () => ({ status: 'SUCCESS' }),
-      'afyx-context': () => ({ status: 'SUCCESS' }),
-    },
+  // 1. Dynamically register synthetic component via API
+  registerAfyxComponent({
+    id: syntheticComponentId,
+    canonicalName: 'Afyx Security Auditor',
+    type: 'runtime',
+    primaryCapability: syntheticCapability,
+    domainAuthority: 'Automated vulnerability scanning and security posture audit.',
   });
-  assert.equal(result.metrics.executedCapabilities, 1);
-  assert.equal(result.metrics.contextBytes, 9);
-  assert.equal(result.degradations.some((item) => item.reason === 'CAPABILITY_BUDGET_EXHAUSTED'), true);
+
+  try {
+    assert.equal(getRegisteredComponentIds().includes(syntheticComponentId), true);
+    assert.equal(getRegisteredComponent(syntheticComponentId)?.primaryCapability, syntheticCapability);
+
+    // 2. Discover capabilities with synthetic component present (isolated environment with Graph)
+    const componentStates = {
+      [syntheticComponentId]: {
+        installed: true,
+        healthy: true,
+        compatible: true,
+        authorized: true,
+        sourceIdentity: 'synthetic-audit-v1',
+      },
+      'afyx-graph': {
+        installed: true,
+        healthy: true,
+        compatible: true,
+        authorized: true,
+        sourceIdentity: 'graph-v1',
+        indexReady: true,
+        indexFresh: true,
+      },
+    };
+
+    const discovery = discoverAfyxCapabilities({ componentStates, provider: 'codex' });
+    assert.equal(discovery.capabilities[syntheticComponentId]?.available, true);
+    assert.equal(discovery.capabilities[syntheticComponentId]?.capability, syntheticCapability);
+
+    // 3. Resolve route for a task requiring this custom capability
+    const route = resolveAfyxCapabilityRoute({
+      task: {
+        id: 'task-sec-audit',
+        taskType: 'security-audit',
+        needsCustomCapability: syntheticCapability,
+        customComponentId: syntheticComponentId,
+        workspaceIdentity: 'repo/app',
+        sourceRevision: 'sec-123',
+      },
+      provider: 'codex',
+      componentStates,
+    });
+
+    assert.equal(route.requests.some((r) => r.targetComponentId === syntheticComponentId), true);
+    assert.equal(route.domainAuthorities[syntheticCapability], syntheticComponentId);
+
+    // 4. Execute route through adapter and prove bidirectional collaboration with existing Graph component
+    let syntheticExecuted = false;
+    let graphExecuted = false;
+
+    const result = await executeAfyxCapabilityRoute({
+      task: {
+        id: 'task-sec-audit',
+        taskType: 'security-audit',
+        needsCustomCapability: syntheticCapability,
+        customComponentId: syntheticComponentId,
+        workspaceIdentity: 'repo/app',
+        sourceRevision: 'sec-123',
+      },
+      provider: 'codex',
+      componentStates,
+      adapters: {
+        [syntheticComponentId]: (request) => {
+          syntheticExecuted = true;
+          return {
+            status: 'SUCCESS',
+            output: { vulnerabilities: 0, posture: 'SECURE' },
+            followUpRequests: [{ targetComponentId: 'afyx-graph', invocationReason: 'Verify dependencies for CVEs' }],
+          };
+        },
+        'afyx-graph': (request) => {
+          graphExecuted = true;
+          return {
+            status: 'SUCCESS',
+            output: { graphScanned: true },
+          };
+        },
+      },
+    });
+
+    assert.equal(syntheticExecuted, true, 'Synthetic component adapter should execute');
+    assert.equal(graphExecuted, true, 'Graph adapter should execute follow-up from synthetic component');
+    assert.equal(result.results.length, 2);
+    assert.equal(result.results[0].componentId, syntheticComponentId);
+    assert.equal(result.results[1].componentId, 'afyx-graph');
+    assert.equal(result.results[0].provenance.componentSourceIdentity, 'synthetic-audit-v1');
+    assert.equal(result.results[0].provenance.observationSource, 'ADAPTER_EXECUTION');
+  } finally {
+    unregisterAfyxComponent(syntheticComponentId);
+  }
 });

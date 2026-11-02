@@ -1,12 +1,12 @@
 import { performance } from 'node:perf_hooks';
 
 import {
-  PRIMARY_COMPONENT_IDS,
+  SEVEN_REGISTERED_COMPONENT_IDS,
   resolveAfyxCapabilityRoute,
 } from './afyx-capability-orchestrator.mjs';
 
 const iterations = 10_000;
-const componentStates = Object.fromEntries(PRIMARY_COMPONENT_IDS.map((id) => [id, {
+const componentStates = Object.fromEntries(SEVEN_REGISTERED_COMPONENT_IDS.map((id) => [id, {
   installed: true,
   enabled: true,
   healthy: true,

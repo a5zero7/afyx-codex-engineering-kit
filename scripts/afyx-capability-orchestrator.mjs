@@ -1,9 +1,21 @@
 /**
- * Native selective capability orchestration for the six primary Afyx products.
+ * Native selective capability orchestration for all Afyx-owned components.
  *
  * The orchestrator is deliberately host-neutral. Hosts provide observed component
  * state and small in-process adapters; this module discovers, selects, and invokes
  * only the capabilities justified by the task. No component is mandatory.
+ *
+ * Conforms to AfyxUniversalInterop/v1:
+ * - Standalone by design: every component functions with all optional peers absent
+ * - Universal bidirectional interoperability: any installed, healthy, compatible,
+ *   and authorized component can participate in task-aware capability exchange
+ * - Default-enabled discovery: installed components are available for interoperability
+ *   by default without requiring manual pair configuration, while honoring explicit OFF
+ * - Dynamic extensibility: synthetic and future components are discovered and routed
+ *   without source-level hard-coded allowlist changes
+ * - Single domain authority: exactly one authoritative owner per domain
+ * - Strict gating: Forge Core remains assistive; autonomous execution is blocked until A8
+ * - Budget enforcement: bounded execution time, hops, tool calls, and context bytes
  */
 
 import { performance } from 'node:perf_hooks';
@@ -22,6 +34,7 @@ export const AFYX_UNIVERSAL_INTEROP_CONTRACT = 'AfyxUniversalInterop/v1';
 export const AFYX_CAPABILITY_REQUEST_CONTRACT = 'AfyxCapabilityRequest/v1';
 export const AFYX_CAPABILITY_RESULT_CONTRACT = 'AfyxCapabilityResult/v1';
 
+/** The six primary engineering components. */
 export const PRIMARY_COMPONENT_IDS = Object.freeze([
   'efficient-coding',
   'odoo-engineering',
@@ -29,6 +42,17 @@ export const PRIMARY_COMPONENT_IDS = Object.freeze([
   'afyx-graph',
   'afyx-context',
   'afyx-forge',
+]);
+
+/** The canonical seven registered components in the Engineering Kit. */
+export const SEVEN_REGISTERED_COMPONENT_IDS = Object.freeze([
+  'efficient-coding',
+  'odoo-engineering',
+  'afyx-engineering-expert',
+  'afyx-graph',
+  'afyx-context',
+  'afyx-forge',
+  'codex-usage-tracking',
 ]);
 
 export const DEFAULT_BUDGET_LIMITS = Object.freeze({
@@ -39,7 +63,6 @@ export const DEFAULT_BUDGET_LIMITS = Object.freeze({
   maxHops: 2,
 });
 
-const COMPONENT_ORDER = new Map(PRIMARY_COMPONENT_IDS.map((id, index) => [id, index]));
 const AUTONOMOUS_FORGE_INTENTS = new Set([
   'autonomous-forge',
   'forge-campaign',
@@ -47,8 +70,45 @@ const AUTONOMOUS_FORGE_INTENTS = new Set([
   'production-forge-execution',
 ]);
 
-function asBoolean(value, fallback = false) {
-  return typeof value === 'boolean' ? value : fallback;
+/** In-memory dynamic component registry for universal extensibility. */
+const DYNAMIC_COMPONENT_REGISTRY = new Map(Object.entries(PRODUCT_INVENTORY));
+
+/** Register a dynamic or synthetic future Afyx-owned component. */
+export function registerAfyxComponent(componentDef) {
+  if (!componentDef || typeof componentDef.id !== 'string') {
+    throw new Error('Component definition must include a valid id string');
+  }
+  const definition = Object.freeze({
+    id: componentDef.id,
+    canonicalName: componentDef.canonicalName ?? componentDef.id,
+    type: componentDef.type ?? 'runtime',
+    primaryCapability: componentDef.primaryCapability ?? `${componentDef.id}-capability`,
+    domainAuthority: componentDef.domainAuthority ?? `${componentDef.id} authoritative domain`,
+    ownershipClass: componentDef.ownershipClass ?? 'AFYX',
+    maturity: componentDef.maturity ?? 'SOURCE_READY',
+    productionReady: false,
+    activationMode: componentDef.activationMode ?? 'ON_DEMAND',
+    cooperatingComponents: Object.freeze(componentDef.cooperatingComponents ?? []),
+  });
+  DYNAMIC_COMPONENT_REGISTRY.set(componentDef.id, definition);
+  return definition;
+}
+
+/** Unregister a dynamically added component (primary 7 cannot be removed). */
+export function unregisterAfyxComponent(componentId) {
+  if (!SEVEN_REGISTERED_COMPONENT_IDS.includes(componentId)) {
+    DYNAMIC_COMPONENT_REGISTRY.delete(componentId);
+  }
+}
+
+/** Retrieve definition of any registered component. */
+export function getRegisteredComponent(componentId) {
+  return DYNAMIC_COMPONENT_REGISTRY.get(componentId);
+}
+
+/** Retrieve all registered component identifiers. */
+export function getRegisteredComponentIds() {
+  return [...DYNAMIC_COMPONENT_REGISTRY.keys()];
 }
 
 function boundedInteger(value, fallback, minimum = 0) {
@@ -75,28 +135,57 @@ function providerAllows(componentId, capability, provider, providerPermissions) 
   if (componentId === 'afyx-forge') {
     return providerPermissions?.[componentId] === true;
   }
-  return providerMeta.supportedCapabilities.includes(capability);
+  if (providerMeta.supportedCapabilities.includes(capability)) {
+    return true;
+  }
+  // Dynamic synthetic component allowed on known provider if not explicitly forbidden
+  if (!SEVEN_REGISTERED_COMPONENT_IDS.includes(componentId) && providerPermissions?.[componentId] !== false) {
+    return true;
+  }
+  return false;
 }
 
 /**
  * Normalize caller-observed component state into a deterministic availability set.
- * Missing positive evidence does not become availability: installed, healthy,
- * compatible, and authorized must all be explicitly true.
+ *
+ * Implements default-enabled interoperability: installed components are enabled
+ * by default for interop discovery unless explicitly disabled by user/environment.
+ * Health, compatibility, positive source identity, and authorization remain mandatory.
  */
 export function discoverAfyxCapabilities({
   componentStates = {},
   provider = null,
   providerPermissions = {},
   environment = process.env,
+  customComponents = [],
 } = {}) {
   const normalizedProvider = typeof provider === 'string' ? provider.toLowerCase() : null;
   const providerKnown = normalizedProvider === null || ACCEPTED_PROVIDERS.includes(normalizedProvider);
   const contextEnvironmentOff = String(environment?.AFYX_CONTEXT_OPT_IN ?? '').trim() === '0';
   const capabilities = {};
 
-  for (const componentId of PRIMARY_COMPONENT_IDS) {
+  if (Array.isArray(customComponents)) {
+    for (const comp of customComponents) {
+      if (comp?.id) registerAfyxComponent(comp);
+    }
+  }
+
+  // Universal discovery over all registered and caller-declared components
+  const allComponentIds = new Set([
+    ...DYNAMIC_COMPONENT_REGISTRY.keys(),
+    ...Object.keys(componentStates),
+  ]);
+
+  for (const componentId of allComponentIds) {
     const observed = componentStates[componentId] ?? {};
-    const metadata = PRODUCT_INVENTORY[componentId];
+    const metadata = DYNAMIC_COMPONENT_REGISTRY.get(componentId) ?? {
+      id: componentId,
+      canonicalName: observed.canonicalName ?? componentId,
+      type: observed.type ?? 'runtime',
+      primaryCapability: observed.capability ?? `${componentId}-capability`,
+      domainAuthority: observed.domainAuthority ?? `${componentId} authoritative domain`,
+      ownershipClass: observed.ownershipClass ?? 'AFYX',
+    };
     const capability = metadata.primaryCapability;
     const explicitOff = observed.enabled === false ||
       (componentId === 'afyx-context' && contextEnvironmentOff);
@@ -107,7 +196,8 @@ export function discoverAfyxCapabilities({
       providerPermissions,
     );
     const installed = observed.installed === true;
-    const enabled = observed.enabled === true && !contextEnvironmentOff;
+    // Default-enabled for interoperability if installed, unless explicitly set to false or context env off
+    const enabled = installed && observed.enabled !== false && !contextEnvironmentOff;
     const healthy = observed.healthy === true;
     const compatible = observed.compatible === true;
     const authorized = observed.authorized === true && providerAuthorized;
@@ -118,6 +208,7 @@ export function discoverAfyxCapabilities({
       (observed.indexReady === true && observed.indexFresh === true);
     const available = installed && enabled && healthy && compatible && authorized &&
       sourceIdentity !== null && graphIndexUsable;
+
     let reason = 'AVAILABLE';
     if (!providerKnown) reason = 'UNKNOWN_PROVIDER';
     else if (!installed) reason = 'NOT_INSTALLED';
@@ -169,6 +260,11 @@ export function classifyTaskIntent(task = {}) {
   const architecture = ['architecture', 'multi-disciplinary', 'system-design'].includes(taskType);
   const forgeAdvice = task.forgeAdvice === true || taskType === 'forge-advice';
   const forgeAutonomous = task.autonomousExecution === true || AUTONOMOUS_FORGE_INTENTS.has(taskType);
+  const telemetry = task.needsTelemetry === true || task.telemetry === true || task.trackUsage === true ||
+    taskType === 'usage-telemetry' || taskType === 'telemetry' ||
+    /\b(telemetry|usage tracking|usage report)\b/.test(intentText);
+  const customCapability = task.needsCustomCapability ?? task.customCapability ?? null;
+  const customComponentId = task.customComponentId ?? null;
 
   return Object.freeze({
     directSource,
@@ -178,6 +274,9 @@ export function classifyTaskIntent(task = {}) {
     architecture,
     forgeAdvice,
     forgeAutonomous,
+    telemetry,
+    customCapability,
+    customComponentId,
   });
 }
 
@@ -211,7 +310,7 @@ function makeRequest({ task, componentId, discovery, budgets, reason, hopCount =
   });
 }
 
-function selectionCandidates(task, classification, modularRuntimePlan) {
+function selectionCandidates(task, classification, modularRuntimePlan, discovery) {
   if (classification.directSource) return [];
   const selectedByPlanner = new Set(modularRuntimePlan.plannedComponents);
   if (classification.odoo) selectedByPlanner.add('odoo-engineering');
@@ -221,6 +320,19 @@ function selectionCandidates(task, classification, modularRuntimePlan) {
   if (classification.forgeAdvice && !classification.forgeAutonomous) {
     selectedByPlanner.add('afyx-forge');
   }
+  if (classification.telemetry) {
+    selectedByPlanner.add('codex-usage-tracking');
+  }
+  if (classification.customComponentId) {
+    selectedByPlanner.add(classification.customComponentId);
+  }
+  if (classification.customCapability && discovery?.capabilities) {
+    for (const [id, comp] of Object.entries(discovery.capabilities)) {
+      if (comp.capability === classification.customCapability) {
+        selectedByPlanner.add(id);
+      }
+    }
+  }
 
   const preferredOrder = [
     ...(classification.odoo ? ['odoo-engineering'] : []),
@@ -229,6 +341,8 @@ function selectionCandidates(task, classification, modularRuntimePlan) {
     'efficient-coding',
     ...(classification.contextOptimization ? ['afyx-context'] : []),
     ...(classification.forgeAdvice ? ['afyx-forge'] : []),
+    ...(classification.telemetry ? ['codex-usage-tracking'] : []),
+    ...(classification.customComponentId ? [classification.customComponentId] : []),
     ...modularRuntimePlan.plannedComponents,
   ];
   const reasons = {
@@ -238,10 +352,11 @@ function selectionCandidates(task, classification, modularRuntimePlan) {
     'efficient-coding': 'Focused implementation authority',
     'afyx-context': 'Bounded context optimization requested',
     'afyx-forge': 'Assistive advice requested; autonomous execution remains blocked',
+    'codex-usage-tracking': 'Passive usage telemetry observation',
   };
   return [...new Set(preferredOrder)]
     .filter((componentId) => selectedByPlanner.has(componentId))
-    .map((componentId) => [componentId, reasons[componentId] ?? 'Selected by modular runtime planner']);
+    .map((componentId) => [componentId, reasons[componentId] ?? `Selected for ${componentId} capability`]);
 }
 
 /** Resolve an executable, deterministic route without invoking a component. */
@@ -257,7 +372,7 @@ export function resolveAfyxCapabilityRoute(options = {}) {
     userPreferences: {
       ...(options.userPreferences ?? {}),
       forceDirectSource: classification.directSource || options.userPreferences?.forceDirectSource === true,
-      disableContext: discovery.capabilities['afyx-context'].enabled === false,
+      disableContext: discovery.capabilities['afyx-context']?.enabled === false,
     },
     hostAuthorizations: options.hostAuthorizations ?? {},
   });
@@ -285,11 +400,16 @@ export function resolveAfyxCapabilityRoute(options = {}) {
     }
   }
 
-  for (const [componentId, reason] of selectionCandidates(task, classification, modularRuntimePlan)) {
+  for (const [componentId, reason] of selectionCandidates(task, classification, modularRuntimePlan, discovery)) {
     if (seenCapabilities.has(componentId)) continue;
     seenCapabilities.add(componentId);
     const discovered = discovery.capabilities[componentId];
-    const authority = DOMAIN_AUTHORITY_MATRIX[discovered.capability];
+    if (!discovered) continue;
+
+    const authority = DOMAIN_AUTHORITY_MATRIX[discovered.capability] ?? {
+      primaryOwner: componentId,
+      description: `${componentId} authoritative domain`,
+    };
     if (authority?.primaryOwner !== componentId) {
       diagnostics.push({ code: 'AUTHORITY_MISMATCH', componentId, severity: 'ERROR' });
       continue;
@@ -338,8 +458,8 @@ export function resolveAfyxCapabilityRoute(options = {}) {
   });
 }
 
-function normalizedAdapterResult(request, raw, durationMs) {
-  const succeeded = raw?.status === 'SUCCESS';
+function normalizedAdapterResult(request, raw, durationMs, validTargetIds) {
+  const succeeded = raw?.status === 'SUCCESS' || raw?.status === 'EXECUTED';
   const output = raw?.output ?? null;
   let measuredOutputBytes = 0;
   try {
@@ -351,7 +471,7 @@ function normalizedAdapterResult(request, raw, durationMs) {
   }
   const followUpRequests = Array.isArray(raw?.followUpRequests)
     ? raw.followUpRequests
-      .filter((item) => item && PRIMARY_COMPONENT_IDS.includes(item.targetComponentId))
+      .filter((item) => item && (validTargetIds ? validTargetIds.has(item.targetComponentId) : true))
       .map((item) => Object.freeze({
         targetComponentId: item.targetComponentId,
         invocationReason: typeof item.invocationReason === 'string'
@@ -413,9 +533,10 @@ function failedExecutionResult(request, reason, durationMs) {
 
 /**
  * Execute a route through caller-provided, in-process component adapters.
- * An adapter is `(request) => result` and may be async. Optional follow-up
- * requests are accepted only for discovered, available capabilities and remain
- * subject to the original budgets, deduplication key, and hop limit.
+ *
+ * Implements universal bidirectional interoperability: any available component
+ * can request an authorized follow-up capability from any other available component,
+ * bounded by budgets, deduplication, cycle prevention, and Forge A8 restrictions.
  */
 export async function executeAfyxCapabilityRoute(options = {}) {
   const route = resolveAfyxCapabilityRoute(options);
@@ -425,6 +546,7 @@ export async function executeAfyxCapabilityRoute(options = {}) {
   const results = [];
   const seen = new Set();
   const scheduledComponents = new Set(route.requests.map((request) => request.targetComponentId));
+  const validTargetIds = new Set(Object.keys(route.discovery.capabilities));
   let contextBytes = 0;
   let duplicateInvocationsAvoided = 0;
   let toolCalls = 0;
@@ -435,7 +557,14 @@ export async function executeAfyxCapabilityRoute(options = {}) {
       ...route,
       executionStatus: route.status === 'BLOCKED' ? 'BLOCKED' : 'DIRECT_SOURCE',
       results: Object.freeze([]),
-      metrics: Object.freeze({ selectedCapabilities: route.requests.length, executedCapabilities: 0, toolCalls: 0, contextBytes: 0, duplicateInvocationsAvoided: 0, elapsedMs: performance.now() - startedAt }),
+      metrics: Object.freeze({
+        selectedCapabilities: route.requests.length,
+        executedCapabilities: 0,
+        toolCalls: 0,
+        contextBytes: 0,
+        duplicateInvocationsAvoided: 0,
+        elapsedMs: performance.now() - startedAt,
+      }),
     });
   }
 
@@ -489,6 +618,7 @@ export async function executeAfyxCapabilityRoute(options = {}) {
         request,
         await Promise.race([adapter(request, { signal: controller.signal }), timeoutPromise]),
         performance.now() - invocationStartedAt,
+        validTargetIds,
       );
     } catch (error) {
       result = failedExecutionResult(
@@ -506,13 +636,16 @@ export async function executeAfyxCapabilityRoute(options = {}) {
       break;
     }
 
+    // Process bidirectional follow-up capability requests
     for (const followUp of result.followUpRequests) {
       const target = followUp?.targetComponentId;
       const followUpCapability = route.discovery.capabilities[target];
-      const allowedCooperators = PRODUCT_INVENTORY[request.targetComponentId]?.cooperatingComponents ?? [];
       const forgeAllowed = target !== 'afyx-forge' ||
         (route.classification.forgeAdvice && !route.classification.forgeAutonomous);
-      if (!followUpCapability?.available || !allowedCooperators.includes(target) || !forgeAllowed) {
+      const isAvailable = followUpCapability?.available === true;
+      const notDirectSelfCycle = target !== request.targetComponentId;
+
+      if (!isAvailable || !forgeAllowed || !notDirectSelfCycle) {
         if (followUpCapability) {
           results.push(nonExecutedResult(
             makeRequest({
@@ -524,7 +657,7 @@ export async function executeAfyxCapabilityRoute(options = {}) {
               hopCount: request.hopCount + 1,
             }),
             'BLOCKED',
-            'FOLLOW_UP_NOT_AUTHORIZED',
+            !forgeAllowed ? 'FORGE_A8_REQUIRED' : (!notDirectSelfCycle ? 'DIRECT_SELF_CYCLE' : 'FOLLOW_UP_NOT_AUTHORIZED'),
           ));
         }
         continue;
