@@ -46,10 +46,10 @@ describe('afyx-graph context — registered CLI command (#1611)', () => {
     const cg = AfyxGraph.initSync(tempDir);
     await cg.indexAll();
     cg.close();
-  });
+  }, 30_000);
 
   afterEach(() => {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
   });
 
   it('--format json emits clean machine-parseable JSON on stdout', () => {
@@ -94,7 +94,7 @@ describe('afyx-graph context — registered CLI command (#1611)', () => {
       expect(err.status).toBe(1);
       expect(String(err.stderr)).toContain('not initialized');
     } finally {
-      fs.rmSync(empty, { recursive: true, force: true });
+      fs.rmSync(empty, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
     }
   });
 

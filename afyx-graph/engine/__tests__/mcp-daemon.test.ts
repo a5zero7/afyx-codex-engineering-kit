@@ -231,11 +231,12 @@ describe('Shared MCP daemon (issue #411)', () => {
     const daemonPid = readLockPid(realRoot);
     if (daemonPid && daemonPid !== process.pid && isAlive(daemonPid)) {
       try { process.kill(daemonPid, 'SIGKILL'); } catch { /* race */ }
+      await waitProcessExit(daemonPid, 3000);
     }
     await new Promise((r) => setTimeout(r, 50));
     servers.length = 0;
-    fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
-    if (isolatedHome) fs.rmSync(isolatedHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+    fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
+    if (isolatedHome) fs.rmSync(isolatedHome, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
     isolatedHome = '';
   });
 
