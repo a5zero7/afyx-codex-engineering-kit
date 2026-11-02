@@ -5,6 +5,13 @@
 **Status:** `CANONICAL ARCHITECTURE CONTRACT`  
 **Scope:** Afyx Code Engineering Kit across Codex, Antigravity, and Claude Code provider surfaces.  
 
+> **Owner amendment 2026-11-02 — dynamic registry-wide default-enabled interoperability**: After consented component installation and registration, every Afyx-owned component's safe interoperability capabilities are **enabled for discovery by default**, but execution is **lazy, task-relevant, permission-gated, and bounded**. The rule applies to Graph, Context, Forge Core, Expert, Odoo, Efficient Coding, Usage Tracking (passive/consent-only), and future registered products; no fixed six-name allow-list. Initial six-component routing masks = 63; current seven-component masks = 127; real meaningful pair handoff is capability-based, not compulsory runtime all-to-all calls. See [AfyxUniversalInterop/v1](AFYX_UNIVERSAL_COMPONENT_INTEROPERABILITY.md) §0. This prospective rule does not claim installed runtime implementation and does not bypass explicit OFF, privacy consent or Forge A8.
+
+> **Historical 2026-11-02 baseline — universal all-subset two-way integration**: [AfyxUniversalInterop/v1](AFYX_UNIVERSAL_COMPONENT_INTEROPERABILITY.md) is the forward-looking architecture contract for **any combination of the six primary Afyx components**. Any one component remains fully functional on its own; all relevant installed peers must be discoverable and eligible for **logical bidirectional** capability exchange. A low-overhead task-level mediator prevents overlapping authority, needless multi-tool calls and cycles. This is a **target contract**, not proof that universal runtime wiring has already shipped. Existing bounded pairs and source-only planners remain historical evidence; actual invocation requires installed-host acceptance. The seventh tool, Usage Tracking, stays optional/passive.
+
+> **Contract reconciliation:** In §4, the current fixed cooperating-component examples are **not an exhaustive allow-list**. In §5.5 and §8, legacy Context Engine *default-OFF selection* pertains to explicit skill/standalone policy; the newer verified Graph MCP bridge can be **default available and selectively invoked when healthy** while honoring authoritative `AFYX_CONTEXT_OPT_IN=0` and explicit user OFF. Neither policy authorizes implicit indexing, arbitrary context reduction or Forge production automation. Forge Core can be installed as assistive Alpha, but formal adaptive policy execution remains A8-gated.
+
+
 ---
 
 ## 1. Prinsip Utama: Standalone by Design, Integrated by Contract, Activated by Need

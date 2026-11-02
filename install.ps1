@@ -29,6 +29,12 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $packageRoot = $PSScriptRoot
+if ($CustomComponent.Count) {
+    $CustomComponent = @($CustomComponent | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+}
+if ($Provider.Count) {
+    $Provider = @($Provider | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+}
 $bundledEfficientCoding = Join-Path $packageRoot 'skills\efficient-coding'
 $bundledOdooEngineering = Join-Path $packageRoot 'skills\odoo-engineering'
 $bundledEngineeringExpert = Join-Path $packageRoot 'skills\afyx-engineering-expert'
@@ -82,8 +88,8 @@ $wizardMode = $terminal.Interactive -and -not $ValidateOnly -and -not $WhatIfPre
 if ($wizardMode) {
     try {
         Write-AfyxSection -Title 'Welcome & Environment' -Terminal $terminal
-        Write-AfyxStatus -Status INFO -Name 'Forge' -Detail 'optional Alpha guidance component; formal A8 remains evaluation gated' -Terminal $terminal
-        Write-AfyxStatus -Status INFO -Name 'Afyx Context' -Detail 'optional to install; enabled by default when healthy; optimized use remains task-driven' -Terminal $terminal
+        Write-AfyxStatus -Status INFO -Name 'Afyx Forge Core' -Detail 'optional Alpha guidance component; formal A8 remains evaluation gated' -Terminal $terminal
+        Write-AfyxStatus -Status INFO -Name 'Afyx Context' -Detail 'optional to install; enabled by default when healthy; used only when needed' -Terminal $terminal
         $presetOptions = @(
             [pscustomobject]@{ Id = 'recommended'; Label = 'Recommended'; Detail = 'Core skills + Engineering Expert'; Enabled = $true },
             [pscustomobject]@{ Id = 'minimal'; Label = 'Minimal'; Detail = 'Core engineering skills'; Enabled = $true },
@@ -95,7 +101,8 @@ if ($wizardMode) {
             $componentOptions = @()
             foreach ($component in @(Get-AfyxComponentContract)) {
                 $detail = "$($component.type); $($component.tier)"
-                if ([string]$component.id -eq 'afyx-context') { $detail += '; enabled when installed, used on demand' }
+                if ([string]$component.id -eq 'afyx-context') { $detail += '; optional to install, enabled unless explicitly OFF, used on demand' }
+                elseif ([string]$component.id -eq 'afyx-forge') { $detail += '; alpha; bounded engineering guidance' }
                 elseif ([string]$component.id -eq 'codex-usage-tracking') { $detail += '; Codex/Windows only' }
                 $componentOptions += [pscustomobject]@{ Id = [string]$component.id; Label = [string]$component.name; Detail = $detail; Enabled = $true }
             }
@@ -376,7 +383,14 @@ if ($controlPlan) {
 
 $codexCliDetected = [bool]$codexCommandDetected
 $graphMetadata = Get-Content -Raw -LiteralPath $graphMetadataPath | ConvertFrom-Json
-$graphReleaseChannel = (Get-Content -Raw -LiteralPath (Join-Path $packageRoot 'afyx-graph\engine\scripts\distribution-product.json') | ConvertFrom-Json).releaseChannel
+$distProductPath = Join-Path $packageRoot 'afyx-graph\engine\scripts\distribution-product.json'
+$graphReleaseChannel = if (Test-Path -LiteralPath $distProductPath -PathType Leaf) {
+    (Get-Content -Raw -LiteralPath $distProductPath | ConvertFrom-Json).releaseChannel
+} elseif ($graphMetadata.PSObject.Properties['release_channel']) {
+    [string]$graphMetadata.release_channel
+} else {
+    'technical-alpha'
+}
 $states = [ordered]@{
     'Efficient Coding' = $componentStates['efficient-coding'].State
     'Odoo Engineering' = $componentStates['odoo-engineering'].State
@@ -478,7 +492,10 @@ if (-not $ValidateOnly -and $providerMcpRequested -and $nodeCommand -and ('codex
     $preflightArguments = Get-AfyxProviderArguments $plannedProviderEntry
     $preflightJson = (& $nodeCommand.Source @preflightArguments 2>$null) -join ''
     try { $preflightResult = $preflightJson | ConvertFrom-Json -Depth 20 }
-    catch { throw 'Provider preflight did not return valid JSON.' }
+    catch { throw "Provider preflight did not return valid JSON: $preflightJson" }
+    if (-not $preflightResult -or -not $preflightResult.PSObject.Properties['providers']) {
+        throw "Provider preflight result missing 'providers': $preflightJson"
+    }
     $preflightBlocked = @($preflightResult.providers | Where-Object {
         $_.status -in @('BLOCKED', 'INCOMPATIBLE') -and
         -not ($_.reason -eq 'GRAPH_RUNTIME_UNAVAILABLE' -and $graphAction -ne 'skip')
@@ -768,6 +785,7 @@ foreach ($entry in $summary.GetEnumerator()) {
         'Afyx Engineering Expert' { 'afyx-engineering-expert' }
         'Afyx Graph' { 'afyx-graph' }
         'Afyx Context Engine' { 'afyx-context' }
+        'Afyx Forge Core' { 'afyx-forge' }
         'Usage Tracking' { 'codex-usage-tracking' }
         default { '' }
     }
