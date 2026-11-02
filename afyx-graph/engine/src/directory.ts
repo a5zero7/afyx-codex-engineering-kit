@@ -34,6 +34,27 @@ function isWithin(parent: string, child: string): boolean {
   return relative === '' || (!relative.startsWith('..' + path.sep) && relative !== '..' && !path.isAbsolute(relative));
 }
 
+function canonicalNativePath(value: string): string {
+  const resolved = path.resolve(value);
+  if (process.platform !== 'win32') return resolved;
+  let existing = resolved;
+  const tail: string[] = [];
+  while (!fs.existsSync(existing)) {
+    const parent = path.dirname(existing);
+    if (parent === existing) break;
+    tail.unshift(path.basename(existing));
+    existing = parent;
+  }
+  if (fs.existsSync(existing) && typeof fs.realpathSync.native === 'function') {
+    try {
+      existing = fs.realpathSync.native(existing);
+    } catch {
+      // fallback
+    }
+  }
+  return path.join(existing, ...tail);
+}
+
 function canonicalExistingPath(value: string, label: string): string {
   let resolved = path.resolve(value);
   let existing = resolved;
@@ -111,8 +132,8 @@ function validateExternalState(projectRoot: string, stateDir: string): string {
   if (comparablePath(canonicalState) !== comparablePath(stateDir)) {
     throw new Error(`${EXTERNAL_STATE_DIR_ENV} must not use a path alias or reparse-point ancestor`);
   }
-  const stateComparable = comparablePath(canonicalState);
-  const projectComparable = comparablePath(canonicalProject);
+  const stateComparable = comparablePath(canonicalNativePath(canonicalState));
+  const projectComparable = comparablePath(canonicalNativePath(canonicalProject));
   if (isWithin(projectComparable, stateComparable) || isWithin(stateComparable, projectComparable)) {
     throw new Error(`${EXTERNAL_STATE_DIR_ENV} must not overlap the project root`);
   }
@@ -125,7 +146,7 @@ function validateExternalState(projectRoot: string, stateDir: string): string {
     const owner = parseStateOwner(stateDir);
     if (owner) {
       const ownerRoot = canonicalProjectRoot(owner.project_root);
-      if (comparablePath(ownerRoot) !== projectComparable) {
+      if (comparablePath(canonicalNativePath(ownerRoot)) !== projectComparable) {
         throw new StateOwnerMismatchError('External Afyx Graph state belongs to a different project root');
       }
     } else if (fs.readdirSync(stateDir).length > 0) {
