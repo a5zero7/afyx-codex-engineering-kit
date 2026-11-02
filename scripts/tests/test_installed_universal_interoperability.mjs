@@ -338,3 +338,4 @@ test('real-host matrix 8: synthetic future component discovered and routed witho
     unregisterAfyxComponent(dynamicId);
   }
 });
+
