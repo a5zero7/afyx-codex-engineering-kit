@@ -24,6 +24,16 @@ const PLATFORM_ENV = new Set([
   'XDG_CONFIG_HOME',
 ]);
 
+// The optional Graph-to-ACE MCP boundary may read only these three ACE
+// lifecycle variables. The allowlist is deliberately bound to one source
+// file: no other Graph module may read another component's configuration.
+const ACE_BRIDGE_ENV = new Set([
+  'AFYX_CONTEXT_OPT_IN',
+  'AFYX_CONTEXT_RUNTIME_ROOT',
+  'AFYX_CONTEXT_STATE_ROOT',
+]);
+const ACE_BRIDGE_FILE = 'mcp/ace-runtime.ts';
+
 const originalEnv = { ...process.env };
 
 beforeEach(() => {
@@ -80,8 +90,10 @@ describe('Afyx Graph environment namespace', () => {
     for (const file of sourceFiles(srcRoot)) {
       for (const match of fs.readFileSync(file, 'utf8').matchAll(readPattern)) {
         const name = match[1] ?? match[2];
-        if (!name.startsWith(NAMESPACE) && !PLATFORM_ENV.has(name)) {
-          unexpected.add(`${name} (${path.relative(srcRoot, file)})`);
+        const relative = path.relative(srcRoot, file).split(path.sep).join('/');
+        const bridgeException = relative === ACE_BRIDGE_FILE && ACE_BRIDGE_ENV.has(name);
+        if (!name.startsWith(NAMESPACE) && !PLATFORM_ENV.has(name) && !bridgeException) {
+          unexpected.add(`${name} (${relative})`);
         }
       }
     }

@@ -63,7 +63,20 @@ function classificationFor(toolName) {
 }
 
 function pathKey(value) {
-  const resolved = path.resolve(value);
+  // Compare canonical paths even when the state directory is not created yet.
+  // macOS /var -> /private/var and Windows junction/reparse-point ancestors
+  // otherwise defeat a purely lexical project/state overlap check.
+  let existing = path.resolve(value);
+  const missing = [];
+  while (!fs.existsSync(existing)) {
+    const parent = path.dirname(existing);
+    if (parent === existing) break;
+    missing.unshift(path.basename(existing));
+    existing = parent;
+  }
+  let resolved;
+  try { resolved = path.join(fs.realpathSync.native(existing), ...missing); }
+  catch { resolved = path.resolve(value); }
   return process.platform === 'win32' || process.platform === 'darwin' ? resolved.toLowerCase() : resolved;
 }
 

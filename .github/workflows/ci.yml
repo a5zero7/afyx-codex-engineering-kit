@@ -52,6 +52,8 @@ jobs:
         run: |
           node --test afyx-forge/test/*.test.js
           node scripts/tests/test_forge_acceptance.mjs
+          node --test afyx-context/test/graph-integration.test.js
+          node --test afyx-context/test/graph-mcp-bridge.test.js
       - name: Validate installer assets
         run: ./install.sh --validate-only
       - name: Verify repository remains clean
@@ -118,6 +120,8 @@ jobs:
         run: |
           node --test (Get-ChildItem afyx-forge/test/*.test.js)
           node scripts/tests/test_forge_acceptance.mjs
+          node --test afyx-context/test/graph-integration.test.js
+          node --test afyx-context/test/graph-mcp-bridge.test.js
       - name: Codex native host and MCP lifecycle regressions
         run: python -m unittest scripts.tests.test_codex_host_resolution scripts.tests.test_mcp_integration -v
       - name: Component contract, project detector and doctor tests (PowerShell and Git Bash)
@@ -129,6 +133,9 @@ jobs:
             @('scripts/tests/test_skill_legacy_adoption.py'),
             @('scripts/tests/test_control_plane.py'),
             @('scripts/tests/test_provider_integration.py'),
+            @('-m', 'unittest', 'scripts.tests.test_unified_installer', '-v'),
+            @('scripts/tests/test_context_lifecycle.py'),
+            @('scripts/tests/test_context_companion_contract.py'),
             @('scripts/tests/test_engineering_assurance.py'),
             @('scripts/tests/test_artifact_identity.py'),
             @('scripts/tests/test_project_detect.py'),
@@ -178,6 +185,8 @@ jobs:
         run: |
           node --test afyx-forge/test/*.test.js
           node scripts/tests/test_forge_acceptance.mjs
+          node --test afyx-context/test/graph-integration.test.js
+          node --test afyx-context/test/graph-mcp-bridge.test.js
       - name: Component contract and project detector (system /bin/bash)
         run: |
           export PATH="/bin:$PATH"

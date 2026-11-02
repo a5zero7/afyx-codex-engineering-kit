@@ -255,6 +255,68 @@ function normalizeExtractionV28Additions(name, snapshot, verify) {
   };
 }
 
+/**
+ * Accepted v29 Odoo manifest semantics are genuinely additive to the frozen
+ * pre-independence baseline: two previously generic manifest-file nodes gain
+ * module identity, and two source-grounded edges become discoverable. Verify
+ * EXACT facts before projecting them to the old oracle's representation.
+ * Any additional semantic drift must still fail the original byte-pinned gate.
+ */
+function normalizeOdooManifestV29(name, snapshot, verify) {
+  if (name !== 'odoo' || !verify) return snapshot;
+
+  const modules = [
+    { kind: 'module', name: 'Base Mod', filePath: 'addons/base_mod/__manifest__.py', startLine: 1, endLine: 2 },
+    { kind: 'module', name: 'Dep Mod', filePath: 'addons/dep_mod/__manifest__.py', startLine: 1, endLine: 2 },
+  ];
+  const manifestEdges = [
+    {
+      kind: 'imports',
+      source: 'module:Dep Mod@addons/dep_mod/__manifest__.py:1',
+      target: 'module:Base Mod@addons/base_mod/__manifest__.py:1',
+    },
+    {
+      kind: 'references',
+      source: 'module:Base Mod@addons/base_mod/__manifest__.py:1',
+      target: 'file:partner_views.xml@addons/base_mod/views/partner_views.xml:1',
+    },
+  ];
+  const moduleNodes = snapshot.nodeList.filter((node) => node.kind === 'module');
+  const moduleEdges = snapshot.edgeList.filter((edge) =>
+    edge.source.startsWith('module:') || edge.target.startsWith('module:'));
+  assert.deepEqual(moduleNodes, modules,
+    'extraction-v29 must have exactly the two source-grounded Odoo manifest modules');
+  assert.deepEqual(moduleEdges, manifestEdges,
+    'extraction-v29 must have exactly the manifest dependency and view-reference edges');
+  assert.equal(snapshot.edges, 33, 'extraction-v29 edge count unexpectedly changed');
+  assert.equal(snapshot.relations.imports, 12, 'extraction-v29 import edge count unexpectedly changed');
+  assert.equal(snapshot.relations.references, 1, 'extraction-v29 view-reference count unexpectedly changed');
+  assert.deepEqual(snapshot.affectedTests.affectedTests, [
+    'addons/base_mod/tests/__init__.py',
+    'addons/base_mod/tests/test_partner.py',
+  ], 'extraction-v29 must preserve test discovery with the exact additional init module');
+
+  const relations = { ...snapshot.relations, imports: snapshot.relations.imports - 1 };
+  delete relations.references;
+  const legacyManifestFiles = modules.map((node) => ({
+    ...node, kind: 'file', name: '__manifest__.py',
+  }));
+  return {
+    ...snapshot,
+    edges: snapshot.edges - manifestEdges.length,
+    relations,
+    nodeList: [
+      ...snapshot.nodeList.filter((node) => node.kind !== 'module'),
+      ...legacyManifestFiles,
+    ].sort(byJson),
+    edgeList: snapshot.edgeList.filter((edge) => !moduleEdges.includes(edge)),
+    affectedTests: {
+      ...snapshot.affectedTests,
+      affectedTests: ['addons/base_mod/tests/test_partner.py'],
+    },
+  };
+}
+
 function verifyFrozenOracle() {
   const metadata = JSON.parse(fs.readFileSync(baselineMetaPath, 'utf8'));
   const digest = crypto.createHash('sha256').update(fs.readFileSync(canonicalExpectedPath)).digest('hex');
@@ -397,7 +459,7 @@ try {
       assert.deepEqual(
         normalizeSearchScores(normalizeAcceptedNativeCorrections(
           name,
-          normalizeExtractionV28Additions(name, result[name], true),
+          normalizeOdooManifestV29(name, normalizeExtractionV28Additions(name, result[name], true), true),
           true,
         )),
         normalizeSearchScores(expected[name]),
@@ -405,7 +467,7 @@ try {
       );
     }
     assert.deepEqual(Object.keys(result), Object.keys(expected), 'fixture set differs from the frozen baseline');
-    console.log('Afyx Graph extraction-v28 additive contract: PASS');
+    console.log('Afyx Graph extraction-v28 and Odoo-manifest-v29 exact additive contracts: PASS');
     console.log(`Afyx Graph semantic baseline: PASS (${Object.keys(fixtures).length} fixtures)`);
   }
 } finally {

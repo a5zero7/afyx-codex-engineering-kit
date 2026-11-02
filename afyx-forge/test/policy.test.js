@@ -14,7 +14,7 @@ describe('Afyx Forge Core — Adaptive Policy Engine', () => {
     const policy = deriveAdaptivePolicy(classification, { hasGraph: true, hasContext: true });
     assert.equal(policy.executionMode, EXECUTION_MODES.DIRECT_MINIMAL);
     assert.equal(policy.graphRouting, 'BYPASS');
-    assert.equal(policy.contextEngine, 'BYPASS_DEFAULT_OFF');
+    assert.equal(policy.contextEngine, 'ACTIVE');
   });
 
   it('selects STRUCTURAL_GRAPH_AWARE and recommends Graph for cross-module task when available', () => {
@@ -41,7 +41,7 @@ describe('Afyx Forge Core — Adaptive Policy Engine', () => {
     assert.ok(policy.graphRoutingReason.includes('falling back to direct-source reading'));
   });
 
-  it('activates Context Engine ONLY when explicit opt-in is enabled', () => {
+  it('enables healthy Context by default and respects explicit disable', () => {
     const classification = {
       primaryCategory: TASK_CATEGORIES.KNOWN_FILE_BUG,
       riskLevel: RISK_LEVELS.LOW,
@@ -49,8 +49,11 @@ describe('Afyx Forge Core — Adaptive Policy Engine', () => {
       referencedFiles: ['test.js'],
     };
 
-    const policyDefault = deriveAdaptivePolicy(classification, { hasContext: true, contextOptIn: false });
-    assert.equal(policyDefault.contextEngine, 'BYPASS_DEFAULT_OFF');
+    const policyDefault = deriveAdaptivePolicy(classification, { hasContext: true });
+    assert.equal(policyDefault.contextEngine, 'ACTIVE');
+
+    const policyDisabled = deriveAdaptivePolicy(classification, { hasContext: true, contextOptIn: false });
+    assert.equal(policyDisabled.contextEngine, 'BYPASS_USER_DISABLED');
 
     const policyOptIn = deriveAdaptivePolicy(classification, { hasContext: true, contextOptIn: true });
     assert.equal(policyOptIn.contextEngine, 'ACTIVE');

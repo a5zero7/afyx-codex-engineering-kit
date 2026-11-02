@@ -49,7 +49,7 @@ export function createForgePlan(options = {}) {
   const env = {
     hasGraph: doc.afyxComponents.afyxGraph === 'HEALTHY',
     hasContext: doc.afyxComponents.afyxContext.startsWith('HEALTHY'),
-    contextOptIn: Boolean(process.env.AFYX_CONTEXT_OPT_IN === '1'),
+    contextOptIn: process.env.AFYX_CONTEXT_OPT_IN !== '0',
     ...options.environment,
   };
 
@@ -77,7 +77,7 @@ export function createForgePlan(options = {}) {
         executionMode: 'SECURITY_DEFENSE_IN_DEPTH',
         graphRouting: 'BYPASS',
         graphRoutingReason: 'Task refused due to unsafe directive; no tooling invoked.',
-        contextEngine: 'BYPASS_DEFAULT_OFF',
+        contextEngine: 'BYPASS_TASK_REFUSED',
         expertEngagement: 'Refusal Enforced',
       },
       guidance: {
@@ -181,7 +181,7 @@ export function formatPlanAsMarkdown(plan) {
   md += `- **Execution Mode:** \`${plan.adaptivePolicy.executionMode}\`\n`;
   md += `- **Afyx Graph Routing:** \`${plan.adaptivePolicy.graphRouting}\`\n`;
   md += `  - *Reason:* ${plan.adaptivePolicy.graphRoutingReason}\n`;
-  md += `- **Context Engine:** \`${plan.adaptivePolicy.contextEngine}\` (Default OFF preserved)\n`;
+  md += `- **Context Engine:** \`${plan.adaptivePolicy.contextEngine}\` (available by default when installed; execution remains on demand)\n`;
   md += `- **Specialist Guidance:** ${plan.adaptivePolicy.expertEngagement}\n\n`;
 
   md += `## 3. Actionable Engineering Guidance\n\n`;
