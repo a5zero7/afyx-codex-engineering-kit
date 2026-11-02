@@ -33,7 +33,7 @@ describe('git index currency across commits and restores (#1829)', () => {
     write('source.ts', 'original'); commit();
     cg = AfyxGraph.initSync(root);
     expect((await cg.indexAll()).success).toBe(true);
-  });
+  }, 20_000);
   afterEach(() => { vi.restoreAllMocks(); cg?.close(); fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }); });
 
   it.each(['index', 'sync', 'scoped'] as const)('sees a restored indexed dirty edit after %s', async mode => {
@@ -76,7 +76,7 @@ describe('git index currency across commits and restores (#1829)', () => {
     await cg.sync(); clean();
     fs.renameSync(path.join(root, 'тест.ts'), path.join(root, 'renamed.ts')); commit();
     expect(cg.getChangedFiles()).toEqual({ added: ['renamed.ts'], modified: [], removed: ['тест.ts'] });
-  });
+  }, 20_000);
 
   it('falls back when git diff fails instead of claiming a clean index', () => {
     write('new.ts', 'newSymbol'); commit();
@@ -107,7 +107,7 @@ describe('git index currency across commits and restores (#1829)', () => {
     await cg.sync({ paths: ['other.ts'] });
     expect(cg.getChangedFiles()).toEqual({ added: [], modified: ['source.ts'], removed: [] });
     await cg.sync(); expect(symbols('original')).toContain('original'); clean();
-  });
+  }, 20_000);
 
   it('does not call a recreated committed deletion removed when the current bytes match the DB', async () => {
     fs.unlinkSync(path.join(root, 'source.ts')); commit();

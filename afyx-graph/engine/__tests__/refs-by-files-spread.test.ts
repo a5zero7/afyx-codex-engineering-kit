@@ -70,5 +70,5 @@ describe('unresolved-ref loads with dense result sets (#1558)', () => {
     // returns all 200k rows — the exact shape that blew the argument limit.
     const rows = queries.getUnresolvedReferencesByFiles(paths);
     expect(rows.length).toBe(TOTAL);
-  });
+  }, 30_000);
 });

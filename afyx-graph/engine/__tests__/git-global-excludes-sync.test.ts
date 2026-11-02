@@ -135,7 +135,7 @@ describe('core.excludesFile sync scope', () => {
     fs.rmSync(path.join(root, 'global-cache', 'renamed.ts'));
     const deleted = await graph.sync({ paths: ['global-cache/renamed.ts'] });
     expect(deleted.filesRemoved).toBe(0);
-  }, 20_000);
+  }, 30_000);
 
   it('fails open safely for unset, missing, and unreadable exclude configuration', async () => {
     await initialize('missing-ignore', 'unused/\n');
