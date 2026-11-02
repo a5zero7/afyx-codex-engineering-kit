@@ -5,6 +5,8 @@ canonical lifecycle inventory is [`scripts/components.json`](../scripts/componen
 Historical reports remain useful evidence, but they do not override that contract
 or the current implementation.
 
+**Target, not current executable guarantee:** the owner-approved [AfyxUniversalInterop/v1](AFYX_UNIVERSAL_COMPONENT_INTEROPERABILITY.md) defines optional two-way capability collaboration for any installed subset of the six primary Afyx components. The installed component must still work alone; simple source edits should invoke no unnecessary Afyx runtime. This guide continues to describe shipped executables, and a documented integration target must not be reported as already implemented.
+
 ## At a glance
 
 | Component | Form | Standalone | Kit preset / selection | Primary dependency |
