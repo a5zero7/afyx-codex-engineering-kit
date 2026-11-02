@@ -113,7 +113,7 @@ describe('CG-30 — an oversize cluster member is bounded, not unbounded', () =>
 
     it('is too long to ship whole, so both render through the cluster path', () => {
       for (const file of [GIANT, STARVED]) {
-        const lineCount = fs.readFileSync(path.join(testDir, file), 'utf-8').split('\n').length;
+        const lineCount = fs.readFileSync(path.join(testDir, file), 'utf-8').replace(/\r\n/g, '\n').split('\n').length;
         // Past WHOLE_FILE_MAX_LINES (220 for a non-central file), so the
         // whole-file paths — grace and buy — cannot claim it.
         expect(lineCount, file).toBeGreaterThan(220);
@@ -157,7 +157,7 @@ describe('CG-30 — an oversize cluster member is bounded, not unbounded', () =>
     });
 
     it('cuts on whole lines — a body is never sliced mid-line', () => {
-      const source = fs.readFileSync(path.join(testDir, GIANT), 'utf-8').split('\n');
+      const source = fs.readFileSync(path.join(testDir, GIANT), 'utf-8').replace(/\r\n/g, '\n').split('\n');
       const numbered = response
         .split('\n')
         .map((l) => /^(\d+)\t(.*)$/.exec(l))

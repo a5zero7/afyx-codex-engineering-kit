@@ -12,8 +12,11 @@ import { MCPEngine } from '../src/mcp/engine';
 import {
   decodeWriterLockInfo,
   getWriterPidPath,
+  releaseWriterLockClaim,
   releaseWriterLock,
+  tryAcquireFullReindexWriterLock,
   tryAcquireWriterLock,
+  withFullReindexWriterLock,
   writerLockHeldMessage,
 } from '../src/mcp/writer-lock';
 
@@ -114,5 +117,45 @@ describe('writer lock (#1740)', () => {
     );
 
     expect(() => new MCPEngine({ writerLockRoot: root })).toThrow(/writer lock held/i);
+  });
+
+  it('full reindex refuses live same-process and malformed ownership conservatively', () => {
+    const root = makeProject();
+    const pidPath = getWriterPidPath(root);
+    const liveRecord = JSON.stringify({ pid: process.pid, mode: 'daemon', startedAt: 123 }) + '\n';
+    fs.writeFileSync(pidPath, liveRecord);
+
+    expect(tryAcquireFullReindexWriterLock(root)).toMatchObject({ kind: 'taken' });
+    expect(fs.readFileSync(pidPath, 'utf8')).toBe(liveRecord);
+
+    fs.writeFileSync(pidPath, '{ambiguous-owner}\n');
+    expect(tryAcquireFullReindexWriterLock(root)).toMatchObject({ kind: 'taken', existing: null });
+    expect(fs.readFileSync(pidPath, 'utf8')).toBe('{ambiguous-owner}\n');
+  });
+
+  it('full reindex only recovers a valid demonstrably-dead owner', () => {
+    const root = makeProject();
+    fs.writeFileSync(
+      getWriterPidPath(root),
+      JSON.stringify({ pid: 2147483646, mode: 'daemon', startedAt: 123 }) + '\n',
+    );
+
+    const claim = tryAcquireFullReindexWriterLock(root);
+    expect(claim.kind).toBe('acquired');
+    if (claim.kind === 'acquired') releaseWriterLockClaim(root, claim.info);
+    expect(fs.existsSync(getWriterPidPath(root))).toBe(false);
+  });
+
+  it('full reindex releases its exact claim when the protected action throws', async () => {
+    const root = makeProject();
+
+    await expect(withFullReindexWriterLock(root, async () => {
+      throw new Error('fixture failure');
+    })).rejects.toThrow('fixture failure');
+
+    expect(fs.existsSync(getWriterPidPath(root))).toBe(false);
+    const next = tryAcquireFullReindexWriterLock(root);
+    expect(next.kind).toBe('acquired');
+    if (next.kind === 'acquired') releaseWriterLockClaim(root, next.info);
   });
 });

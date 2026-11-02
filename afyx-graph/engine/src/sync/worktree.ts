@@ -38,10 +38,18 @@ function runGit(cwd: string, args: string[]): string | null {
   }
 }
 
-/** Resolve symlinks where possible so tmp/realpath quirks don't break equality. */
+/** Resolve symlinks and Windows 8.3 aliases where possible so tmp/realpath quirks don't break equality. */
 function resolveRealPath(candidate: string): string {
   try {
-    return fs.realpathSync(path.resolve(candidate));
+    const resolved = path.resolve(candidate);
+    if (process.platform === 'win32' && typeof fs.realpathSync.native === 'function') {
+      try {
+        return fs.realpathSync.native(resolved);
+      } catch {
+        // best effort fallback
+      }
+    }
+    return fs.realpathSync(resolved);
   } catch {
     return path.resolve(candidate);
   }

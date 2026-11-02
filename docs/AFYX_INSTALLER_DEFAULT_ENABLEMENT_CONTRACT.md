@@ -1,7 +1,9 @@
 # Afyx Installer — Default Enablement and Provider Discovery Contract
 
-**Status:** Alpha refinement (partial implementation; not an acceptance or release claim)  
-**Baseline:** `dev` at `b273b7b27ba33838075c86870e0b8a58fdbaca95`  
+**Status:** Alpha refinement (partial implementation; not an acceptance or release claim)
+
+**Baseline:** `dev` at `b273b7b27ba33838075c86870e0b8a58fdbaca95`
+
 **Principle:** Install by Choice. Enable by Default. Integrate by Contract. Execute by Need.
 
 ## User-facing requirements

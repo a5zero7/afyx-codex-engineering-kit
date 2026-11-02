@@ -1,8 +1,15 @@
 # Afyx Universal Component Interoperability Contract
 
-**Contract:** `AfyxUniversalInterop/v1`  
-**Decision date:** 2026-11-02  
-**Status:** **OWNER-APPROVED TARGET CONTRACT / IMPLEMENTATION PENDING**, not a claim of shipped full-mesh runtime integration.  
+**Contract:** `AfyxUniversalInterop/v1`
+
+**AFYX-307 implementation boundary (2026-11-02):** the native source candidate
+implements deterministic capability discovery and selection, bounded lazy adapter
+execution, duplicate/cycle prevention, and the versioned
+`AfyxCapabilityRequest/v1` / `AfyxCapabilityResult/v1` envelopes. This is source
+and deterministic-test evidence only. Installed-host and provider acceptance remain
+AFYX-308/309 work; Forge autonomous execution remains blocked pending A8 GO.
+**Decision date:** 2026-11-02
+**Status:** **OWNER-APPROVED TARGET CONTRACT / IMPLEMENTATION PENDING**, not a claim of shipped full-mesh runtime integration.
 **Scope:** Afyx Graph (`afyx-graph`), Afyx Context Engine (`afyx-context`), Afyx Forge (`afyx-forge`), Afyx Engineering Expert (`afyx-engineering-expert`), Afyx Odoo Engineering (`odoo-engineering`), Afyx Efficient Coding (`efficient-coding`). Afyx Codex Usage Tracking (`codex-usage-tracking`) is a seventh **optional passive observability** tool, not a mandatory orchestrator or decision owner.
 
 This is an **additive** extension to [AfyxModularIntegration/v1](AFYX_MODULAR_INTEGRATION_CONTRACT.md), [AfyxToolFamilyRouting/v1](AFYX_TOOL_FAMILY_ROUTING.md), ProviderAdapter/v1 and the [canonical v1 roadmap](AFYX_V1_MASTER_ROADMAP.md). It supersedes only future-looking *fixed-pair-only* integration assumptions; preserves historical statuses, actual installed behavior, user settings, component identities, legal provenance and formal Forge A8 gating.

@@ -14,12 +14,17 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { execFileSync } from 'child_process';
+import { execFileSync, spawn, spawnSync } from 'child_process';
+import { createHash } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { AfyxGraph } from '../src';
 import { DatabaseConnection } from '../src/db';
+import {
+  releaseWriterLockClaim,
+  tryAcquireFullReindexWriterLock,
+} from '../src/mcp/writer-lock';
 
 const BIN = path.resolve(__dirname, '../dist/bin/afyx-graph.js');
 
@@ -37,6 +42,20 @@ function runAfyxGraph(args: string[], cwd: string): string {
     env: { ...process.env, AFYX_GRAPH_NO_DAEMON: '1' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
+}
+
+function runAfyxGraphResult(args: string[], cwd: string) {
+  const result = spawnSync(process.execPath, [BIN, ...args], {
+    cwd,
+    encoding: 'utf-8',
+    env: { ...process.env, AFYX_GRAPH_NO_DAEMON: '1', NO_COLOR: '1' },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  return { status: result.status, output: `${result.stdout ?? ''}${result.stderr ?? ''}` };
+}
+
+function digest(file: string): string {
+  return createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 }
 
 function graphCounts(dir: string): { nodes: number; edges: number } {
@@ -112,6 +131,55 @@ describe('afyx-graph index — full re-index keeps the graph populated (#874)', 
     expect(afterIndex.nodes).toBe(afterInit.nodes);
     expect(afterIndex.edges).toBe(afterInit.edges);
   });
+
+  it('refuses a live writer before mutating the database or sidecars, then succeeds after release', () => {
+    runAfyxGraph(['init'], tempDir);
+    const db = path.join(tempDir, '.afyx-graph', 'afyx-graph.db');
+    const wal = `${db}-wal`;
+    const shm = `${db}-shm`;
+    fs.writeFileSync(wal, 'wal-sentinel');
+    fs.writeFileSync(shm, 'shm-sentinel');
+    const before = new Map([db, wal, shm].map((file) => [file, digest(file)]));
+
+    const claim = tryAcquireFullReindexWriterLock(tempDir);
+    expect(claim.kind).toBe('acquired');
+    try {
+      const refused = runAfyxGraphResult(['index', '--quiet'], tempDir);
+      expect(refused.status).toBe(1);
+      expect(refused.output).toMatch(/writer lock held/i);
+      for (const [file, hash] of before) expect(digest(file)).toBe(hash);
+    } finally {
+      if (claim.kind === 'acquired') releaseWriterLockClaim(tempDir, claim.info);
+    }
+
+    expect(runAfyxGraphResult(['index', '--quiet'], tempDir).status).toBe(0);
+    expect(graphCounts(tempDir).nodes).toBeGreaterThan(0);
+  });
+
+  it('allows at most one of two simultaneous destructive rebuilds to enter', async () => {
+    for (let i = 0; i < 300; i++) {
+      fs.writeFileSync(path.join(tempDir, `race-${i}.ts`), `export function race${i}() { return ${i}; }\n`);
+    }
+    runAfyxGraph(['init'], tempDir);
+
+    const launch = () => new Promise<{ status: number | null; output: string }>((resolve, reject) => {
+      const child = spawn(process.execPath, [BIN, 'index', '--quiet'], {
+        cwd: tempDir,
+        env: { ...process.env, AFYX_GRAPH_NO_DAEMON: '1', NO_COLOR: '1' },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      let output = '';
+      child.stdout!.setEncoding('utf8').on('data', (chunk) => { output += chunk; });
+      child.stderr!.setEncoding('utf8').on('data', (chunk) => { output += chunk; });
+      child.once('error', reject);
+      child.once('exit', (status) => resolve({ status, output }));
+    });
+
+    const attempts = await Promise.all([launch(), launch()]);
+    expect(attempts.map((item) => item.status).sort()).toEqual([0, 1]);
+    expect(attempts.filter((item) => /writer lock held/i.test(item.output))).toHaveLength(1);
+    expect(graphCounts(tempDir).nodes).toBeGreaterThan(0);
+  }, 30_000);
 });
 
 /**

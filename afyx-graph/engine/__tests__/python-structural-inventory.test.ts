@@ -21,7 +21,7 @@ describe('Python structural class-assignment inventory', () => {
   afterEach(() => {
     try { graph?.destroy(); } catch { /* already closed */ }
     graph = null;
-    if (root) fs.rmSync(root, { recursive: true, force: true });
+    if (root) fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
     root = '';
   });
 
@@ -170,7 +170,7 @@ describe('Python structural class-assignment inventory', () => {
       declaration: '_inherit', value: 'sale.order', path: 'addons',
     })).content[0]!.text;
     expect(text).toMatch(/Matches:\*\* 9 declarations/);
-  });
+  }, 30_000);
 
   it('enumerates all 45 Odoo-20-like declarations and marks bounded pages incomplete', async () => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-282-odoo20-'));

@@ -37,12 +37,12 @@ describe('afyx_graph_files path normalization', () => {
     });
     await cg.indexAll();
     handler = new ToolHandler(cg);
-  });
+  }, 30_000);
 
   afterEach(() => {
     if (cg) cg.destroy();
     if (fs.existsSync(tempDir)) {
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
     }
   });
 

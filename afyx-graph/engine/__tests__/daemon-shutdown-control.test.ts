@@ -84,7 +84,7 @@ describe('native daemon shutdown control', () => {
 
   async function startDaemon(): Promise<{ child: ChildProcess; lock: DaemonLockInfo }> {
     const child = spawn(process.execPath, [BIN, 'serve', '--mcp', '--path', root], {
-      stdio: 'ignore',
+      stdio: ['ignore', 'ignore', 'pipe'],
       windowsHide: true,
       env: {
         ...process.env,
@@ -95,13 +95,22 @@ describe('native daemon shutdown control', () => {
       },
     });
     children.push(child);
-    const lock = await waitFor(() => readLock(root), 20_000);
-    const boundLock = await waitFor(async () => {
-      const current = readLock(root);
-      const lifecycleEndpointPublished = process.platform !== 'win32' || Boolean(current?.controlSocketPath);
-      return current && lifecycleEndpointPublished && await probeDaemonIdentity(current) ? current : null;
-    }, 20_000);
-    return { child, lock: boundLock };
+    let stderr = '';
+    child.stderr?.on('data', (chunk: Buffer) => { stderr += chunk.toString('utf8'); });
+    try {
+      await waitFor(() => readLock(root), 20_000);
+      const boundLock = await waitFor(async () => {
+        const current = readLock(root);
+        const lifecycleEndpointPublished = process.platform !== 'win32' || Boolean(current?.controlSocketPath);
+        return current && lifecycleEndpointPublished && await probeDaemonIdentity(current) ? current : null;
+      }, 20_000);
+      return { child, lock: boundLock };
+    } catch (err) {
+      throw new Error(
+        `${err instanceof Error ? err.message : String(err)}; childPid=${String(child.pid)}; ` +
+        `exitCode=${String(child.exitCode)}; lock=${JSON.stringify(readLock(root))}; stderr=${stderr}`,
+      );
+    }
   }
 
   it('gracefully stops with an active MCP client, verifies exit, and reopens cleanly', async () => {

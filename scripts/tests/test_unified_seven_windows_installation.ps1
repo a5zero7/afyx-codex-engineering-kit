@@ -24,8 +24,12 @@ $codexHome = Join-Path $disposableBase '.codex'
 $geminiHome = Join-Path $disposableBase '.gemini'
 $claudeHome = Join-Path $disposableBase '.claude'
 $fakeBin = Join-Path $disposableBase 'fake-bin'
+$backupRoot = Join-Path $disposableBase '.afyx\backups'
 
 $originalPath = $env:PATH
+$originalBackupRoot = $env:AFYX_BACKUP_ROOT
+$hadBackupRoot = Test-Path Env:AFYX_BACKUP_ROOT
+$env:AFYX_BACKUP_ROOT = $backupRoot
 try {
     # 0. Setup disposable environment & simulate foreign configurations
     New-Item -ItemType Directory -Path $skillsRoot -Force | Out-Null
@@ -154,11 +158,11 @@ my_custom_env = "production"
     Write-Host "-> Foreign configuration in config.toml preserved." -ForegroundColor Green
 
     Write-Host "[2/6] Verifying Guardrails and Standalone Behavior..." -ForegroundColor Yellow
-    
+
     # Check Forge Core CLI
     $forgeVersionOut = (& $forgeCmd --version 2>&1) -join ' '
     if ($forgeVersionOut -notmatch '0\.1\.0') { throw "Unexpected forge version: $forgeVersionOut" }
-    
+
     $forgeDoctorOut = (& $forgeCmd doctor 2>&1) -join ' '
     if ($forgeDoctorOut -notmatch 'EVALUATION_GATED') {
         throw "Forge Core A8 gate violated! Expected EVALUATION_GATED, got: $forgeDoctorOut"
@@ -216,7 +220,7 @@ my_custom_env = "production"
     # Make Forge Core INCOMPLETE by removing a required executable
     $forgeBinPath = Join-Path $forgeRoot 'current\bin\afyx-forge.cmd'
     Remove-Item -LiteralPath $forgeBinPath -Force
-    
+
     # Repair via install.ps1 with -ComponentAction
     $repairArgs = @{
         ComponentAction = @('afyx-forge=repair')
@@ -282,4 +286,6 @@ finally {
     }
     Remove-Item Env:AFYX_GRAPH_RUNTIME_ROOT -ErrorAction SilentlyContinue
     Remove-Item Env:CODEX_HOME -ErrorAction SilentlyContinue
+    if ($hadBackupRoot) { $env:AFYX_BACKUP_ROOT = $originalBackupRoot }
+    else { Remove-Item Env:AFYX_BACKUP_ROOT -ErrorAction SilentlyContinue }
 }

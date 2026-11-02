@@ -78,7 +78,7 @@ describe('external Afyx Graph state', () => {
     else process.env[EXTERNAL_STATE_DIR_ENV] = savedExternal;
     if (savedLegacy === undefined) delete process.env.AFYX_GRAPH_DIR;
     else process.env.AFYX_GRAPH_DIR = savedLegacy;
-    fs.rmSync(base, { recursive: true, force: true });
+    fs.rmSync(base, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
   });
 
   it('indexes and reopens with a byte-identical source tree and all state external', async () => {

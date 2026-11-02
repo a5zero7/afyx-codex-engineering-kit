@@ -29,9 +29,17 @@ function git(cwd: string, ...args: string[]): void {
   execFileSync('git', args, { cwd, stdio: ['ignore', 'ignore', 'ignore'] });
 }
 
-/** realpath so macOS /var → /private/var symlinking doesn't break equality. */
+/** realpath so macOS /var → /private/var symlinking and Windows 8.3 aliases don't break equality. */
 function real(p: string): string {
-  return fs.realpathSync(path.resolve(p));
+  const resolved = path.resolve(p);
+  if (process.platform === 'win32' && typeof fs.realpathSync.native === 'function') {
+    try {
+      return fs.realpathSync.native(resolved);
+    } catch {
+      // best effort fallback
+    }
+  }
+  return fs.realpathSync(resolved);
 }
 
 describe('detectWorktreeIndexMismatch (issue #155)', () => {

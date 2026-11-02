@@ -54,6 +54,7 @@ jobs:
           node scripts/tests/test_forge_acceptance.mjs
           node --test afyx-context/test/graph-integration.test.js
           node --test afyx-context/test/graph-mcp-bridge.test.js
+          node --test scripts/tests/test_capability_orchestrator.mjs
       - name: Validate installer assets
         run: ./install.sh --validate-only
       - name: Verify repository remains clean
@@ -122,6 +123,7 @@ jobs:
           node scripts/tests/test_forge_acceptance.mjs
           node --test afyx-context/test/graph-integration.test.js
           node --test afyx-context/test/graph-mcp-bridge.test.js
+          node --test scripts/tests/test_capability_orchestrator.mjs
       - name: Codex native host and MCP lifecycle regressions
         run: python -m unittest scripts.tests.test_codex_host_resolution scripts.tests.test_mcp_integration -v
       - name: Component contract, project detector and doctor tests (PowerShell and Git Bash)
@@ -137,6 +139,7 @@ jobs:
             @('scripts/tests/test_context_lifecycle.py'),
             @('scripts/tests/test_context_companion_contract.py'),
             @('scripts/tests/test_engineering_assurance.py'),
+            @('scripts/tests/test_alpha_acceptance_preflight.py'),
             @('scripts/tests/test_artifact_identity.py'),
             @('scripts/tests/test_project_detect.py'),
             @('scripts/tests/test_doctor.py'),
@@ -187,6 +190,7 @@ jobs:
           node scripts/tests/test_forge_acceptance.mjs
           node --test afyx-context/test/graph-integration.test.js
           node --test afyx-context/test/graph-mcp-bridge.test.js
+          node --test scripts/tests/test_capability_orchestrator.mjs
       - name: Component contract and project detector (system /bin/bash)
         run: |
           export PATH="/bin:$PATH"
@@ -201,6 +205,7 @@ jobs:
           python3 scripts/tests/test_control_plane.py
           python3 scripts/tests/test_provider_integration.py
           python3 scripts/tests/test_engineering_assurance.py
+          python3 scripts/tests/test_alpha_acceptance_preflight.py
           python3 scripts/tests/test_artifact_identity.py
           python3 scripts/tests/test_project_detect.py
           python3 scripts/tests/test_forge_lifecycle_regressions.py

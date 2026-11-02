@@ -77,7 +77,7 @@ describe('CG-27 — a factory-closure file delivers the closures inside it', () 
 
     // A line counts as delivered only when the response numbers it AND the text
     // matches that source line — a line number quoted in prose must not count.
-    sourceLines = fs.readFileSync(path.join(testDir, TARGET), 'utf-8').split('\n');
+    sourceLines = fs.readFileSync(path.join(testDir, TARGET), 'utf-8').replace(/\r\n/g, '\n').split('\n');
     delivered = new Set();
     for (const line of response.split('\n')) {
       const m = /^(\d+)\t(.*)$/.exec(line);

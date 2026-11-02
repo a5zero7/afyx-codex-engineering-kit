@@ -6,7 +6,7 @@
  * The wire parsing and the liveness decision are pure, so they're tested here;
  * the full handshake + sweep is exercised end-to-end in `mcp-daemon.test.ts`.
  */
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { Daemon, parseClientHelloLine, peerIsDead } from '../src/mcp/daemon';
 
 describe('parseClientHelloLine', () => {
@@ -19,6 +19,18 @@ describe('parseClientHelloLine', () => {
     expect(parseClientHelloLine('{"afyx_graph_client":1,"pid":1234,"hostPid":null}'))
       .toEqual({ pid: 1234, hostPid: null });
     expect(parseClientHelloLine('{"afyx_graph_client":1,"pid":1234}'))
+      .toEqual({ pid: 1234, hostPid: null });
+  });
+
+  it('preserves a bounded session identity used by the registration acknowledgement', () => {
+    expect(parseClientHelloLine('{"afyx_graph_client":1,"pid":1234,"hostPid":56,"sessionId":"session-123"}'))
+      .toEqual({ pid: 1234, hostPid: 56, sessionId: 'session-123' });
+  });
+
+  it('does not trust malformed session identity metadata', () => {
+    expect(parseClientHelloLine('{"afyx_graph_client":1,"pid":1234,"sessionId":"bad id with spaces"}'))
+      .toEqual({ pid: 1234, hostPid: null });
+    expect(parseClientHelloLine(`{"afyx_graph_client":1,"pid":1234,"sessionId":"${'x'.repeat(129)}"}`))
       .toEqual({ pid: 1234, hostPid: null });
   });
 
@@ -37,6 +49,31 @@ describe('parseClientHelloLine', () => {
     expect(parseClientHelloLine('')).toBeNull();
     expect(parseClientHelloLine('42')).toBeNull();
     expect(parseClientHelloLine('null')).toBeNull();
+  });
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+describe('Daemon registration and idle race guards', () => {
+  it('does not register a client whose socket closed before preface processing completed', () => {
+    const daemon = new Daemon('/tmp/afyx-graph-registration-unit-test', { idleTimeoutMs: 0 }) as any;
+    daemon.acceptSession({ destroyed: true }, { pid: 123, hostPid: 456, sessionId: 'closed-session' });
+    expect(daemon.getClientCount()).toBe(0);
+  });
+
+  it('ignores a stale idle callback once a client is present', () => {
+    vi.useFakeTimers();
+    const daemon = new Daemon('/tmp/afyx-graph-idle-race-unit-test', { idleTimeoutMs: 10, maxIdleMs: 0 }) as any;
+    daemon.armIdleTimer();
+    daemon.clients.add({});
+
+    vi.advanceTimersByTime(10);
+
+    expect(daemon.getClientCount()).toBe(1);
+    expect(daemon.stopping).toBe(false);
+    daemon.activityTimers.stopAll();
   });
 });
 

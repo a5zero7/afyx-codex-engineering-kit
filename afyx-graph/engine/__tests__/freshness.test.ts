@@ -41,7 +41,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  try { fs.rmSync(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }); } catch { /* Windows may hold handles briefly */ }
+  try { fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }); } catch { /* Windows may hold handles briefly */ }
 });
 
 describe('index freshness', () => {
@@ -85,7 +85,7 @@ describe('index freshness', () => {
       cg.close();
       expect(sidecar().git_head).toBe(git('rev-parse', 'HEAD'));
       expect(getFreshness(root).state).toBe('FRESH');
-    });
+    }, 30_000);
 
     it('is STALE when the index was built from uncommitted tracked edits', async () => {
       write('src/a.ts', 'export function a() { return 3; }\n');
@@ -96,7 +96,7 @@ describe('index freshness', () => {
       const cg = await AfyxGraph.open(root);
       cg.close();
       expect(getFreshness(root).state).toBe('STALE');
-    });
+    }, 30_000);
 
     it('is UNKNOWN when the sidecar has not been recorded, INVALID when it is unreadable', async () => {
       await indexProject();
