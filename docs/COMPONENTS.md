@@ -5,7 +5,7 @@ canonical lifecycle inventory is [`scripts/components.json`](../scripts/componen
 Historical reports remain useful evidence, but they do not override that contract
 or the current implementation.
 
-**Target, not current executable guarantee:** the owner-approved [AfyxUniversalInterop/v1](AFYX_UNIVERSAL_COMPONENT_INTEROPERABILITY.md) defines optional two-way capability collaboration for any installed subset of the six primary Afyx components. The installed component must still work alone; simple source edits should invoke no unnecessary Afyx runtime. This guide continues to describe shipped executables, and a documented integration target must not be reported as already implemented.
+**Contract and implementation boundary:** the owner-approved [AfyxUniversalInterop/v1](AFYX_UNIVERSAL_COMPONENT_INTEROPERABILITY.md) defines optional two-way capability collaboration for any installed subset of the six primary Afyx components. The AFYX-307 source candidate implements deterministic discovery, selection, bounded adapter execution, and request/result contracts in `scripts/afyx-capability-orchestrator.mjs`. The installed component must still work alone; simple source edits invoke no unnecessary Afyx runtime. Source implementation is not installed-host or universal provider acceptance; those remain separate AFYX-308/309 gates.
 
 ## At a glance
 

@@ -54,6 +54,7 @@ jobs:
           node scripts/tests/test_forge_acceptance.mjs
           node --test afyx-context/test/graph-integration.test.js
           node --test afyx-context/test/graph-mcp-bridge.test.js
+          node --test scripts/tests/test_capability_orchestrator.mjs
       - name: Validate installer assets
         run: ./install.sh --validate-only
       - name: Verify repository remains clean
@@ -122,6 +123,7 @@ jobs:
           node scripts/tests/test_forge_acceptance.mjs
           node --test afyx-context/test/graph-integration.test.js
           node --test afyx-context/test/graph-mcp-bridge.test.js
+          node --test scripts/tests/test_capability_orchestrator.mjs
       - name: Codex native host and MCP lifecycle regressions
         run: python -m unittest scripts.tests.test_codex_host_resolution scripts.tests.test_mcp_integration -v
       - name: Component contract, project detector and doctor tests (PowerShell and Git Bash)
@@ -188,6 +190,7 @@ jobs:
           node scripts/tests/test_forge_acceptance.mjs
           node --test afyx-context/test/graph-integration.test.js
           node --test afyx-context/test/graph-mcp-bridge.test.js
+          node --test scripts/tests/test_capability_orchestrator.mjs
       - name: Component contract and project detector (system /bin/bash)
         run: |
           export PATH="/bin:$PATH"
