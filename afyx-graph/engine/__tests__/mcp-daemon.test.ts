@@ -42,6 +42,7 @@ import { getDaemonSocketPath } from '../src/mcp/daemon-paths';
 import { AfyxGraphPackageVersion } from '../src/mcp/version';
 
 const BIN = path.resolve(__dirname, '../dist/bin/afyx-graph.js');
+let isolatedHome = '';
 
 interface SpawnedServer {
   child: ChildProcessWithoutNullStreams;
@@ -56,7 +57,13 @@ function spawnServer(cwd: string, env: NodeJS.ProcessEnv = {}): SpawnedServer {
     // #618: the daemon-attach log line is now off by default; opt the test
     // harness into it (AFYX_GRAPH_MCP_LOG_ATTACH=1) so the attach assertions
     // below can still observe a successful attach. A per-test env still wins.
-    env: { AFYX_GRAPH_MCP_LOG_ATTACH: '1', ...process.env, ...env },
+    env: {
+      ...process.env,
+      HOME: isolatedHome,
+      USERPROFILE: isolatedHome,
+      AFYX_GRAPH_MCP_LOG_ATTACH: '1',
+      ...env,
+    },
   }) as ChildProcessWithoutNullStreams;
   // Swallow spawn/EPIPE errors so killing a child mid-write can't surface as an
   // unhandled error that crashes the vitest worker.
@@ -153,13 +160,43 @@ function readLockPid(root: string): number | null {
   } catch { return null; }
 }
 
+function readLockIdentity(root: string): { pid: number; startedAt: number } | null {
+  try {
+    const raw = fs.readFileSync(path.join(root, '.afyx-graph', 'daemon.pid'), 'utf8');
+    const info = JSON.parse(raw);
+    return typeof info.pid === 'number' && typeof info.startedAt === 'number'
+      ? { pid: info.pid, startedAt: info.startedAt }
+      : null;
+  } catch { return null; }
+}
+
 function readDaemonLog(root: string): string {
   try { return fs.readFileSync(path.join(root, '.afyx-graph', 'daemon.log'), 'utf8'); }
   catch { return ''; }
 }
 
+function hasLifecycleEvent(root: string, event: string, expected: Record<string, unknown>): boolean {
+  return readDaemonLog(root).split('\n').some((line) => {
+    const marker = '[afyx-graph-lifecycle] ';
+    const markerAt = line.indexOf(marker);
+    if (markerAt === -1) return false;
+    try {
+      const record = JSON.parse(line.slice(markerAt + marker.length));
+      return record.event === event && Object.entries(expected).every(([key, value]) => record[key] === value);
+    } catch { return false; }
+  });
+}
+
 function countListeningLines(root: string): number {
   return readDaemonLog(root).split('\n').filter((l) => l.includes('[Afyx Graph daemon] Listening on')).length;
+}
+
+function attachedDaemonPid(server: SpawnedServer): number | null {
+  for (const line of server.stderr) {
+    const match = line.match(/Attached to shared daemon .+ \(pid (\d+), v/);
+    if (match) return Number(match[1]);
+  }
+  return null;
 }
 
 function killTree(...procs: ChildProcessWithoutNullStreams[]): void {
@@ -179,6 +216,7 @@ describe('Shared MCP daemon (issue #411)', () => {
 
   beforeEach(async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-graph-mcp-daemon-'));
+    isolatedHome = fs.mkdtempSync(path.join(os.tmpdir(), 'afyx-graph-mcp-home-'));
     const cg = await AfyxGraph.init(tempDir);
     cg.close();
     realRoot = fs.realpathSync(tempDir);
@@ -197,6 +235,8 @@ describe('Shared MCP daemon (issue #411)', () => {
     await new Promise((r) => setTimeout(r, 50));
     servers.length = 0;
     fs.rmSync(tempDir, { recursive: true, force: true });
+    if (isolatedHome) fs.rmSync(isolatedHome, { recursive: true, force: true });
+    isolatedHome = '';
   });
 
   it('two invocations share ONE detached daemon; both attach as proxies', async () => {
@@ -265,38 +305,74 @@ describe('Shared MCP daemon (issue #411)', () => {
   }, 45000);
 
   it('daemon survives the first client dying; a second client keeps working (must-fix 2 / #277)', async () => {
-    // Idle high so the daemon doesn't reap mid-test; poll fast so proxy 1
-    // notices its dead parent quickly.
-    const env = { AFYX_GRAPH_DAEMON_IDLE_TIMEOUT_MS: '30000', AFYX_GRAPH_PPID_POLL_MS: '200' };
+    const env = {
+      AFYX_GRAPH_DAEMON_IDLE_TIMEOUT_MS: '3000',
+      AFYX_GRAPH_DAEMON_CLIENT_SWEEP_MS: '100',
+      AFYX_GRAPH_PPID_POLL_MS: '200',
+      AFYX_GRAPH_LIFECYCLE_TRACE: '1',
+    };
 
     const first = spawnServer(tempDir, env);
     servers.push(first);
     sendInitialize(first.child, `file://${tempDir}`, 1);
     await waitFor(() => findResponse(first.stdout, 1), 10000);
-    await waitFor(() => (readLockPid(realRoot) ?? 0) > 0, 8000);
-    const daemonPid = readLockPid(realRoot)!;
-    expect(isAlive(daemonPid)).toBe(true);
+    await waitFor(() => first.stderr.some((l) => l.includes('Attached to shared daemon')), 8000, 25, 'client A registration acknowledgement');
+    const initialIdentity = await waitFor(() => readLockIdentity(realRoot), 8000, 25, 'daemon identity');
+    expect(attachedDaemonPid(first)).toBe(initialIdentity.pid);
+    expect(isAlive(initialIdentity.pid)).toBe(true);
 
     const second = spawnServer(tempDir, env);
     servers.push(second);
     sendInitialize(second.child, `file://${tempDir}`, 1);
     await waitFor(() => findResponse(second.stdout, 1), 10000);
-    await waitFor(() => second.stderr.some((l) => l.includes('Attached to shared daemon')), 8000);
+    await waitFor(() => second.stderr.some((l) => l.includes('Attached to shared daemon')), 8000, 25, 'client B registration acknowledgement');
+    expect(attachedDaemonPid(second)).toBe(initialIdentity.pid);
+    await waitFor(
+      () => hasLifecycleEvent(realRoot, 'client_registered', { activeClients: 2 }),
+      8000,
+      25,
+      'two server-side client registrations',
+    );
 
-    // Kill the launcher that spawned the daemon. With the old in-process design
-    // this would take the daemon (and thus the second client) down.
+    // This is forwarded to the daemon (unlike the locally answered tools/list).
+    sendMessage(second.child, {
+      jsonrpc: '2.0', id: 2, method: 'tools/call',
+      params: { name: 'afyx_graph_status', arguments: {} },
+    });
+    const beforeDetach = await waitFor(() => findResponse(second.stdout, 2), 30000, 25, 'real MCP request through client B');
+    expect(beforeDetach.error).toBeUndefined();
+
+    // Abruptly terminate A only after B is registered and serving requests.
     killTree(first.child);
+    await waitFor(() => !isAlive(first.child.pid!), 5000, 25, 'client A exit');
+    await waitFor(
+      () => hasLifecycleEvent(realRoot, 'client_dropped', {
+        proxyPid: first.child.pid,
+        activeClients: 1,
+      }),
+      5000,
+      25,
+      'daemon drops only client A',
+    );
 
-    // The daemon is detached — it must still be alive a beat later.
-    await new Promise((r) => setTimeout(r, 1500));
-    expect(isAlive(daemonPid)).toBe(true);
+    const afterDetachIdentity = readLockIdentity(realRoot);
+    expect(afterDetachIdentity, `daemon log:\n${readDaemonLog(realRoot)}`).toEqual(initialIdentity);
+    expect(isAlive(initialIdentity.pid)).toBe(true);
+    expect(isAlive(second.child.pid!)).toBe(true);
 
-    // And the second client can still drive a real tool call through it.
-    sendMessage(second.child, { jsonrpc: '2.0', id: 2, method: 'tools/list' });
-    const toolsResp = await waitFor(() => findResponse(second.stdout, 2), 10000);
-    expect(Array.isArray(toolsResp.result.tools)).toBe(true);
-    expect(toolsResp.result.tools.length).toBeGreaterThan(0);
-  }, 45000);
+    sendMessage(second.child, {
+      jsonrpc: '2.0', id: 3, method: 'tools/call',
+      params: { name: 'afyx_graph_status', arguments: {} },
+    });
+    const afterDetach = await waitFor(() => findResponse(second.stdout, 3), 30000, 25, 'client B request after A exits');
+    expect(afterDetach.error).toBeUndefined();
+
+    second.child.stdin.end();
+    await waitFor(() => !isAlive(second.child.pid!), 5000, 25, 'client B exit');
+    expect(await waitProcessExit(initialIdentity.pid, 8000)).toBe(true);
+    expect(readLockIdentity(realRoot)).toBeNull();
+    expect(readDaemonLog(realRoot)).toContain('Shutting down (idle timeout; clients=0)');
+  }, 70000);
 
   it('AFYX_GRAPH_NO_DAEMON=1 keeps each process independent (no socket/pidfile)', async () => {
     const env = { AFYX_GRAPH_NO_DAEMON: '1' };
@@ -529,9 +605,16 @@ describe('Shared MCP daemon (issue #411)', () => {
     servers.push(server);
     sendInitialize(server.child, `file://${tempDir}`, 1);
     await waitFor(() => findResponse(server.stdout, 1), 10000);
-    await waitFor(() => (readLockPid(realRoot) ?? 0) > 0, 8000);
-    const daemonPid = readLockPid(realRoot)!;
-    expect(isAlive(daemonPid)).toBe(true);
+    await waitFor(
+      () => server.stderr.some((l) => l.includes('Attached to shared daemon')),
+      8000,
+      25,
+      'live client server-side registration',
+    );
+    const identity = await waitFor(() => readLockIdentity(realRoot), 8000, 25, 'registered daemon identity');
+    const daemonPid = identity.pid;
+    expect(attachedDaemonPid(server)).toBe(daemonPid);
+    expect(isAlive(daemonPid), `daemon log:\n${readDaemonLog(realRoot)}`).toBe(true);
 
     // Stay silent well past several backstop windows. The live session's peer is
     // provably alive, so the daemon must keep running (and never log a backstop
@@ -539,7 +622,7 @@ describe('Shared MCP daemon (issue #411)', () => {
     await new Promise((r) => setTimeout(r, 4000)); // > 3× maxIdle
     expect(isAlive(daemonPid)).toBe(true);
     expect(readDaemonLog(realRoot)).not.toContain('inactivity backstop');
-    expect(readLockPid(realRoot)).toBe(daemonPid);
+    expect(readLockIdentity(realRoot)).toEqual(identity);
   }, 30000);
 
   it('daemon idle-times-out after the last client disconnects', async () => {
