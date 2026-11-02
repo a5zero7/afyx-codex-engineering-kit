@@ -76,6 +76,13 @@ function canonicalProjectRoot(projectRoot: string): string {
     throw new Error(`Project root does not exist or is inaccessible: ${resolved}`);
   }
   if (!stat.isDirectory()) throw new Error(`Project root is not a directory: ${resolved}`);
+  if (process.platform === 'win32' && typeof fs.realpathSync.native === 'function') {
+    try {
+      return fs.realpathSync.native(resolved);
+    } catch {
+      // fallback
+    }
+  }
   return fs.realpathSync(resolved);
 }
 
