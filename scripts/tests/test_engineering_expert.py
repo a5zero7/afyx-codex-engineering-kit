@@ -19,14 +19,24 @@ ROOT = Path(__file__).resolve().parents[2]
 EXPERT = ROOT / "skills" / "afyx-engineering-expert"
 WINDOWS = os.name == "nt"
 HISTORICAL_SOURCE_TREE_SHA256 = "9ebefe30bf9c7f73b101a53542b3cb09c993cfe9a4d565d15afc5834465569b7"
-CANDIDATE_SOURCE_TREE_SHA256 = "40cfa1f8b4fe3743a7eca81f8e4eb76c879d7adcd650c33b5611b0a2775ea138"
-REFERENCES = {
+CANDIDATE_SOURCE_TREE_SHA256 = "8be03f6375d293cd341a2aa1694ed94d61862504263a588d9216649928b02f59"
+CORE_REFERENCES = {
     "ai-ml-engineer.md", "business-analyst.md", "cybersecurity-devsecops.md",
     "database-administrator.md", "erp-technical-specialist.md", "product-manager.md",
     "qa-engineer.md", "site-reliability-engineer.md", "software-engineer.md",
     "solutions-architect.md", "subject-matter-expert.md", "system-analyst.md",
     "ui-ux-designer.md",
 }
+SPECIALIST_REFERENCES = {
+    "clean-code-engineer.md", "code-reviewer.md", "data-analyst-bi.md",
+    "data-engineer.md", "debugging-specialist.md", "embedded-iot-engineer.md",
+    "hardware-diagnostics-auditor.md", "hardware-electronics-engineer.md",
+    "integration-engineer.md", "legacy-modernization-engineer.md",
+    "llmops-prompt-engineer.md", "network-engineer.md",
+    "performance-benchmark-engineer.md", "platform-engineer.md",
+    "technical-project-manager.md", "technical-writer.md",
+}
+REFERENCES = CORE_REFERENCES | SPECIALIST_REFERENCES | {"specialists-index.md"}
 WORKFLOWS = {
     "ai-data-erp.md", "debugging.md", "discovery-design.md", "implementation.md",
     "incident-reliability.md", "review-audit.md",
@@ -71,7 +81,7 @@ class ExpertBundleTests(unittest.TestCase):
 
     def test_candidate_structure_metadata_and_content(self) -> None:
         files = {path.relative_to(EXPERT).as_posix() for path in EXPERT.rglob("*") if path.is_file()}
-        self.assertEqual(len(files), 22)
+        self.assertEqual(len(files), 39)
         self.assertEqual({Path(item).name for item in files if item.startswith("references/")}, REFERENCES)
         self.assertEqual({Path(item).name for item in files if item.startswith("workflows/")}, WORKFLOWS)
         self.assertIn("assets/result-template.md", files)
@@ -220,6 +230,54 @@ class ExpertLifecycleTests(unittest.TestCase):
         result = self.install("adopt", expected=1)
         self.assertIn("provenance", (result.stdout + result.stderr).lower())
         self.assertFalse((self.target / ".afyx-install.json").exists())
+
+
+class ExpertSpecialistRoutingTests(unittest.TestCase):
+    """AFYX-310: Selective expertise routing and specialist contract validation."""
+
+    def test_all_specialist_references_conform_to_contract(self) -> None:
+        for ref_name in SPECIALIST_REFERENCES:
+            ref_path = EXPERT / "references" / ref_name
+            self.assertTrue(ref_path.is_file(), f"Missing specialist reference: {ref_name}")
+            content = ref_path.read_text(encoding="utf-8")
+            self.assertTrue(content.startswith("# "), f"{ref_name} must start with an H1 title")
+            self.assertIn("## Owns", content, f"{ref_name} missing '## Owns' section")
+            self.assertIn("## Method", content, f"{ref_name} missing '## Method' section")
+            self.assertIn("## Output when primary", content, f"{ref_name} missing '## Output when primary' section")
+            self.assertIn("## Red flags", content, f"{ref_name} missing '## Red flags' section")
+
+    def test_specialists_index_routing_table_completeness(self) -> None:
+        index_path = EXPERT / "references" / "specialists-index.md"
+        self.assertTrue(index_path.is_file())
+        content = index_path.read_text(encoding="utf-8")
+        self.assertIn("# Supplemental Specialist Routing Index", content)
+        self.assertIn("## Specialist Routing Table", content)
+        for ref_name in SPECIALIST_REFERENCES:
+            self.assertIn(f"`references/{ref_name}`", content, f"{ref_name} not indexed in specialists-index.md")
+
+    def test_representative_routing_and_lazy_unloaded_discipline(self) -> None:
+        # Representative domains specified in AFYX-310
+        representative_scenarios = [
+            ("software engineering", "references/clean-code-engineer.md", {"software-engineer", "qa-engineer"}),
+            ("odoo/erp", "references/erp-technical-specialist.md", {"business-analyst", "software-engineer"}),
+            ("debugging", "references/debugging-specialist.md", {"software-engineer", "qa-engineer"}),
+            ("architecture", "references/solutions-architect.md", {"cybersecurity-devsecops", "sre"}),
+            ("data", "references/data-engineer.md", {"database-administrator", "ai-ml-engineer"}),
+            ("llmops", "references/llmops-prompt-engineer.md", {"ai-ml-engineer", "software-engineer"}),
+            ("hardware", "references/hardware-diagnostics-auditor.md", {"cybersecurity-devsecops", "system-analyst"}),
+            ("documentation", "references/technical-writer.md", {"software-engineer", "product-manager"}),
+        ]
+        all_specialist_files = {f"references/{r}" for r in SPECIALIST_REFERENCES}
+
+        for domain, primary_ref, supporting in representative_scenarios:
+            # Selected references must only contain primary + at most 2 supporting
+            loaded = {primary_ref} | {f"references/{s}.md" for s in supporting}
+            self.assertLessEqual(len(loaded), 3, f"Scenario {domain} loaded more than 3 references")
+            # Unloaded specialists must remain unloaded
+            unloaded = all_specialist_files - loaded
+            self.assertGreater(len(unloaded), 12, f"Scenario {domain} did not keep irrelevant specialists lazy/unloaded")
+            # Verify primary file exists on disk
+            self.assertTrue((EXPERT / primary_ref).is_file(), f"Primary ref {primary_ref} missing")
 
 
 if __name__ == "__main__":

@@ -7,10 +7,11 @@ This directory contains the deterministic Phase 3 benchmark foundation. Phase 3A
 `environment.json` preserves the historical Phase 3A fingerprint, and
 `environment-expert-v0.1.0.json` preserves the AFYX-283 Codex 0.156.1 evidence.
 `environment-expert-v0.1.0-codex-0.162.1.json` preserves the initial 0.162.1
-legacy-sandbox evidence. The active manifest points to
-`environment-expert-v0.1.0-codex-0.162.1-mxc.json`, which covers the same
-repository subject and skill hashes with the verified MXC permission-profile
-boundary. The runner
+legacy-sandbox evidence, and `environment-expert-v0.1.1-codex-0.162.1-mxc.json`
+preserves the prior AFYX-283D.4 candidate evidence. The active manifest points to
+`environment-expert-v0.1.1-specialists-codex-0.162.1-mxc.json`, which captures the
+AFYX-310 specialist expansion content hash while preserving the verified MXC
+permission-profile boundary. The runner
 uses the recorded `gpt-5.6-sol`, medium reasoning, and direct `openai` provider
 settings explicitly. It does not read or store authentication secrets.
 
@@ -96,10 +97,12 @@ Child-health and isolation evidence share a `control_run_id`; blocked health
 overwrites current isolation evidence with `NOT_EXECUTED`, preventing reuse of
 a stale result.
 
-`environment-expert-v0.1.1-codex-0.162.1-mxc.json` is the distinct AFYX-283D.4
-candidate fingerprint. The three v0.1.0 files remain immutable historical
-evidence; candidate results must use the v0.1.1 fingerprint and D.3
-`evaluation_run_id` correlation and must never be relabelled as v0.1.0.
+`environment-expert-v0.1.1-specialists-codex-0.162.1-mxc.json` is the distinct AFYX-310
+candidate fingerprint capturing the 16 selective specialist references for the
+engineering expert skill on subject commit `3737aee44920d7239c42f22813536d55b0bd2869`.
+Historical v0.1.0 and prior v0.1.1 files remain immutable historical evidence;
+candidate results must not be associated with older benchmark commits. Formal evaluation
+benchmarks for this candidate remain unexecuted.
 
 The C.8 host acceptance uses Codex's supported permission-profile path rather
 than universal command rejection. On Windows, the profile is enforced by MXC.

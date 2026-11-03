@@ -1,11 +1,11 @@
 # Afyx Engineering Expert — v0.1.1
 
-A single portable Agent Skill with 13 selectively loaded specialist references and 6 optional workflows. Its goal is adaptive, evidence-based product and software engineering across technologies, including ERP when relevant. No external scripts, runtime dependencies, MCP requirement, code borrowed from other projects, or implicit network access.
+A single portable Agent Skill with 13 core disciplines, 16 supplemental specialist references, and 6 optional workflows. Its goal is adaptive, evidence-based product and software engineering across technologies, including ERP when relevant. No external scripts, runtime dependencies, MCP requirement, code borrowed from other projects, or implicit network access.
 
 ## Content
 
 - `SKILL.md` — skill manifest, activation/routing, adaptive execution, quality contract.
-- `references/*.md` — 13 distinct scopes, methods, outputs, anti-patterns.
+- `references/*.md` — 13 core disciplines, 16 supplemental specialists, and `specialists-index.md` routing table.
 - `workflows/*.md` — process guidance read only for matching tasks.
 - `assets/result-template.md` — optional reviewer-ready result format.
 
