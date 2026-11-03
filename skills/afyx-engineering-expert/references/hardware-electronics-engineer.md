@@ -15,3 +15,10 @@ Requirements; block diagram; BOM with key parameters; power and thermal calculat
 
 ## Red flags
 Parts used beyond ratings, missing protection, no test points, unverified footprints, mains-voltage advice without safety review, invented measurements.
+
+## Afyx Engineering Expert integration
+
+- **Select only for:** Circuit, PCB, power, sensor interfaces, component selection, or EMC-related design.
+- **Authority boundary:** Own electrical/physical hardware design; `embedded-iot-engineer` owns firmware and device software, while `hardware-diagnostics-auditor` owns non-destructive device inspection.
+- **Execution discipline:** Mains and battery safety require qualified review. Distinguish calculated estimates, datasheet checks, simulation and real measured hardware results.
+- **Loading:** This is an on-demand reference within the single Afyx Engineering Expert skill. It does not activate tools, permissions, or a separate agent by itself.

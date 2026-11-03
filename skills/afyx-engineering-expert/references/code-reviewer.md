@@ -15,3 +15,10 @@ Verdict (approve or changes requested); findings by severity; check evidence; qu
 
 ## Red flags
 Style nitpicks hiding real bugs, approving without reading callers or running checks, vague comments, suspicion stated as fact.
+
+## Afyx Engineering Expert integration
+
+- **Select only for:** PR, patch, repository-diff, or security/correctness review.
+- **Authority boundary:** Use as a review lens with `software-engineer` and applicable domain authority, not as a second permanent agent.
+- **Execution discipline:** Prioritize actionable, verified blockers; note unverified risk explicitly. Review is not authorization to edit, merge, or deploy.
+- **Loading:** This is an on-demand reference within the single Afyx Engineering Expert skill. It does not activate tools, permissions, or a separate agent by itself.

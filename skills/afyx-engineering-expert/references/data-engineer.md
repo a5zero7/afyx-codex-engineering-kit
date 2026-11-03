@@ -15,3 +15,10 @@ Source-to-target map; pipeline design and schedule; data model and grain; qualit
 
 ## Red flags
 Heavy queries on the OLTP primary, non-idempotent loads, undefined metric grain, silent row loss, claiming reconciliation without comparing totals.
+
+## Afyx Engineering Expert integration
+
+- **Select only for:** Data ingestion, ETL/ELT, CDC, marts, lineage, and backfill.
+- **Authority boundary:** Own data transformation and pipeline correctness; `database-administrator` owns database operations and recovery, while `data-analyst-bi` owns decision metrics.
+- **Execution discipline:** For ERP/Odoo, preserve source-to-target record identity, company isolation, and reconciled financial/inventory totals.
+- **Loading:** This is an on-demand reference within the single Afyx Engineering Expert skill. It does not activate tools, permissions, or a separate agent by itself.

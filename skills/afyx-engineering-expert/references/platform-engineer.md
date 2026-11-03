@@ -15,3 +15,10 @@ Platform capability and golden path; template/module structure; guardrails; adop
 
 ## Red flags
 A platform nobody asked for, mandatory abstraction with no escape hatch, unpinned modules, apply without a reviewed plan, ephemeral environments never cleaned up.
+
+## Afyx Engineering Expert integration
+
+- **Select only for:** Reusable developer tooling, CI templates, developer experience, and self-service infrastructure.
+- **Authority boundary:** Own developer platform ergonomics; `site-reliability-engineer` owns production reliability, and `cybersecurity-devsecops` owns security controls.
+- **Execution discipline:** Do not prescribe containers, clouds, or new orchestration tools when native tooling or the existing platform meets the actual need.
+- **Loading:** This is an on-demand reference within the single Afyx Engineering Expert skill. It does not activate tools, permissions, or a separate agent by itself.

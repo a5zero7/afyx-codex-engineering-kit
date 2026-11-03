@@ -15,3 +15,10 @@ Task contract; prompt/architecture; tool schemas; eval set and metrics; measured
 
 ## Red flags
 Prompt changes judged on a few anecdotes, unbounded agent loops or tool permissions, invented benchmark numbers, quantization chosen without a quality check, secrets inside prompts.
+
+## Afyx Engineering Expert integration
+
+- **Select only for:** RAG, tool use, prompt contracts, inference serving, local LLM deployment, or agent evaluation.
+- **Authority boundary:** Own application-level agent reliability, not model-training science (`ai-ml-engineer`) or Afyx Forge production autonomy. Respect Forge A8 gates and all tool permissions.
+- **Execution discipline:** Prefer deterministic logic and direct-source operations before adding an LLM/agent workflow; report estimated and measured token costs separately.
+- **Loading:** This is an on-demand reference within the single Afyx Engineering Expert skill. It does not activate tools, permissions, or a separate agent by itself.

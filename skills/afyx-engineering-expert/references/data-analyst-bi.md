@@ -15,3 +15,10 @@ Question and definitions; data checks; result as table or chart; interpretation 
 
 ## Red flags
 Undefined metrics, double counting from joins, cherry-picked ranges, averages hiding distribution, dashboards without owner or refresh time, heavy queries on production.
+
+## Afyx Engineering Expert integration
+
+- **Select only for:** Decision-support metrics, BI dashboards, source reconciliation, or analysis QA.
+- **Authority boundary:** Do not replace ERP domain definitions, DBA operations, or Data Engineer pipeline ownership; seek actual records before making numeric claims.
+- **Execution discipline:** When designing an Odoo/ERP dashboard, coordinate with `erp-technical-specialist` for business semantics and `database-administrator` for query safety.
+- **Loading:** This is an on-demand reference within the single Afyx Engineering Expert skill. It does not activate tools, permissions, or a separate agent by itself.

@@ -15,3 +15,10 @@ Integration map; data mapping; contract; failure handling; security controls; te
 
 ## Red flags
 No idempotency, infinite retries, unverified webhook payloads, two systems owning the same field, undocumented vendor API assumptions, secrets in logs.
+
+## Afyx Engineering Expert integration
+
+- **Select only for:** Cross-system API, webhook, queue, ETL interface, or synchronization failure.
+- **Authority boundary:** Own the integration contract and reliability patterns; the source system owns its data and Afyx Odoo Engineering owns version-specific ORM details.
+- **Execution discipline:** Avoid creating a generic integration platform or adding message brokers for a narrow request; prefer existing supported interfaces.
+- **Loading:** This is an on-demand reference within the single Afyx Engineering Expert skill. It does not activate tools, permissions, or a separate agent by itself.

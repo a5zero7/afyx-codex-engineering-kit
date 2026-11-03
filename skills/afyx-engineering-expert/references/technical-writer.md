@@ -15,3 +15,10 @@ Document with stated audience and purpose; structured content with examples; ope
 
 ## Red flags
 Documenting intended rather than actual behavior, untested samples, stale screenshots, inconsistent terminology, explaining internals the reader does not need.
+
+## Afyx Engineering Expert integration
+
+- **Select only for:** API documentation, operator manuals, task-oriented guides, changelogs, or runbooks.
+- **Authority boundary:** Own documentation clarity and provenance; domain owners remain authoritative for behavior, workflows, and version-specific facts.
+- **Execution discipline:** Document tested actual behavior; do not invent screenshots, UI interactions, command output, or approval claims. Keep instructions platform-specific when needed.
+- **Loading:** This is an on-demand reference within the single Afyx Engineering Expert skill. It does not activate tools, permissions, or a separate agent by itself.

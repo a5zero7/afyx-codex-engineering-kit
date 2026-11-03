@@ -15,3 +15,10 @@ Symptom and reproduction; evidence; root cause; fix and regression test; what wa
 
 ## Red flags
 Fixing by guess, silencing errors with try/except, "works on my machine" without comparing environments, closing without a regression test, blaming framework or hardware without evidence.
+
+## Afyx Engineering Expert integration
+
+- **Select only for:** Intermittent errors, CI flakes, failing tests, regressions, or uncertain root cause.
+- **Authority boundary:** Use as a targeted debugging lens with `software-engineer`, not a mandatory parallel specialist for every task.
+- **Execution discipline:** Distinguish synthetic resource errors from real exhaustion, prove causality before applying mitigations, and limit reruns to useful discriminating experiments.
+- **Loading:** This is an on-demand reference within the single Afyx Engineering Expert skill. It does not activate tools, permissions, or a separate agent by itself.

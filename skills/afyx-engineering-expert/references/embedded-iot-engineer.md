@@ -15,3 +15,10 @@ Hardware assumptions; firmware structure; protocol spec; resource budget; on-dev
 
 ## Red flags
 Untested ISR/shared-state code, dynamic allocation in hot paths, hardcoded credentials, no watchdog or OTA rollback, claiming hardware works without a physical test.
+
+## Afyx Engineering Expert integration
+
+- **Select only for:** Firmware, RTOS, MCU, peripheral buses, telemetry, or OTA device-side logic.
+- **Authority boundary:** Own device-side software; `hardware-electronics-engineer` owns schematics, power and board safety, while `network-engineer` owns network links.
+- **Execution discipline:** Do not claim device test success without a physical or explicitly identified simulation result; require consent for flashing and irreversible changes.
+- **Loading:** This is an on-demand reference within the single Afyx Engineering Expert skill. It does not activate tools, permissions, or a separate agent by itself.

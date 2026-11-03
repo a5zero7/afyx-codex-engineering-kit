@@ -15,3 +15,10 @@ Topology and flow table; addressing/routing plan; security rules; DNS design; ve
 
 ## Red flags
 Overlapping CIDRs, 0.0.0.0/0 rules, changes without out-of-band access (self-lockout), DNS treated as an afterthought, latency claims without measurement.
+
+## Afyx Engineering Expert integration
+
+- **Select only for:** Routing, DNS, private connectivity, VPN, network segmentation, or network performance.
+- **Authority boundary:** Own network topology and connectivity; `cybersecurity-devsecops` owns security policy and `site-reliability-engineer` owns service-level reliability.
+- **Execution discipline:** Do not scan or alter external networks without authorization. Evidence must be grounded in inspected configs and observed network measurements.
+- **Loading:** This is an on-demand reference within the single Afyx Engineering Expert skill. It does not activate tools, permissions, or a separate agent by itself.

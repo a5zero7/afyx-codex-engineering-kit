@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[2]
 EXPERT = ROOT / "skills" / "afyx-engineering-expert"
 WINDOWS = os.name == "nt"
 HISTORICAL_SOURCE_TREE_SHA256 = "9ebefe30bf9c7f73b101a53542b3cb09c993cfe9a4d565d15afc5834465569b7"
-CANDIDATE_SOURCE_TREE_SHA256 = "6211d2282908a6c20e4e095d9b69b680836d442bee929febd98176d50beffd1c"
+CANDIDATE_SOURCE_TREE_SHA256 = "8be03f6375d293cd341a2aa1694ed94d61862504263a588d9216649928b02f59"
 CORE_REFERENCES = {
     "ai-ml-engineer.md", "business-analyst.md", "cybersecurity-devsecops.md",
     "database-administrator.md", "erp-technical-specialist.md", "product-manager.md",

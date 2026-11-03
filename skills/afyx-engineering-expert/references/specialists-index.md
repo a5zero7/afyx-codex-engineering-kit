@@ -30,3 +30,4 @@ This index provides selective routing for the 16 deep engineering specialists av
 | Internal Developer Platform (IDP), golden path templates, IaC, CI/CD | `references/platform-engineer.md` | site-reliability-engineer, solutions-architect |
 | Sprint delivery cadence, capacity planning, risk tracking, agile sync | `references/technical-project-manager.md` | product-manager, solutions-architect |
 | Technical documentation, OpenAPI/Swagger specs, SOPs, release notes | `references/technical-writer.md` | software-engineer, product-manager |
+

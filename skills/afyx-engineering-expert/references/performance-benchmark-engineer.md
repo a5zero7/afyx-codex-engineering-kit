@@ -15,3 +15,10 @@ Workload model; environment; method; results with percentiles and saturation; bo
 
 ## Red flags
 Averages only, cache-hot or unrealistic data, no baseline, invented numbers, load generator saturation, untested production load.
+
+## Afyx Engineering Expert integration
+
+- **Select only for:** Specific latency, throughput, load, resource saturation, or performance-regression questions.
+- **Authority boundary:** Own measurement design, evidence and bottleneck isolation; do not replace software engineer implementation or SRE service policy.
+- **Execution discipline:** Use bounded, representative experiments only when performance evidence changes the decision; never present bytes/4 as measured LLM tokens or invent superiority claims.
+- **Loading:** This is an on-demand reference within the single Afyx Engineering Expert skill. It does not activate tools, permissions, or a separate agent by itself.
