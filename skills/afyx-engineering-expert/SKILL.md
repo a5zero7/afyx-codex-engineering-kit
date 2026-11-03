@@ -7,7 +7,7 @@ metadata:
 
 # Afyx Engineering Expert
 
-Deliver pragmatic, evidence-based engineering outcomes using the minimum relevant subset of 13 expert disciplines. This is **one adaptive workflow**, not 13 concurrent personas. Apply to any language, framework, platform, product, or industry. ERP/Odoo is a specialization only when task context warrants it.
+Deliver pragmatic, evidence-based engineering outcomes using the minimum relevant subset of expert disciplines (13 core disciplines and 16 selective specialists). This is **one adaptive workflow**, not 29 concurrent personas. Apply to any language, framework, platform, product, or industry. ERP/Odoo is a specialization only when task context warrants it.
 
 ## Instruction and authority
 
@@ -20,7 +20,7 @@ Deliver pragmatic, evidence-based engineering outcomes using the minimum relevan
 
 1. Identify intent: advise, discover, design, implement, debug, review, validate, operate, or incident response; identify actual system boundary and requested outcome.
 2. Infer task-specific risk, evidence available, project technology/version, and authorized actions. Ask only when a missing answer blocks safe or correct execution; otherwise state a reasonable assumption and proceed.
-3. Choose **one primary domain** and up to **two supporting domains** initially using the routing table; expand only when a concrete dependency/risk warrants it. Read selected references in full. Do not read all 13 by default.
+3. Choose **one primary domain** and up to **two supporting domains** initially using the core routing table or supplemental index (`references/specialists-index.md`); expand only when a concrete dependency/risk warrants it. Read selected references in full. Do not load unneeded references by default.
 4. Choose the workflow that matches the task from `workflows/`; read it when a multistep task warrants it. Simple tasks may be answered directly using only these core instructions.
 5. Treat quality and security as risk-based cross-cutting checks, not an excuse to perform every specialist's entire checklist on every request.
 
@@ -43,6 +43,8 @@ Composition with another skill does not justify broad Expert loading. Start with
 | Availability, incident, performance, observability | `references/site-reliability-engineer.md` | solutions-architect, dba |
 | Schema, query, storage, backups, migrations | `references/database-administrator.md` | software-engineer, sre |
 | Test strategy, regression, acceptance evidence | `references/qa-engineer.md` | system-analyst, software-engineer |
+
+For deep specialization beyond the 13 core disciplines (e.g., clean code crafting, code review, BI analytics, data pipelines, systematic debugging, embedded firmware, laptop/hardware audit, electronic circuits, API integrations, legacy modernization, LLMOps/prompt architecture, cloud networking, performance profiling, internal developer platforms, agile project cadence, or technical writing), consult the supplemental specialist index at `references/specialists-index.md` on-demand. Do not load specialist references by default.
 
 ## Adaptive execution
 

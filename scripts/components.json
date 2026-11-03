@@ -55,14 +55,54 @@
     }
   ],
   "prerequisites": [
-    { "key": "platform-shell", "class": "REQUIRED", "reason": "Runs the documented lifecycle entrypoint for the host OS." },
-    { "key": "git", "class": "REQUIRED", "reason": "Validates and safely fast-forwards the kit source." },
-    { "key": "codex-or-vscode", "class": "REQUIRED", "reason": "Provides the supported Codex host." },
-    { "key": "node", "class": "COMPONENT_REQUIRED", "component": "afyx-graph", "minimum_version": "22.5.0", "reason": "Runs Afyx Graph." },
-    { "key": "node", "class": "COMPONENT_REQUIRED", "component": "afyx-context", "minimum_version": "22.5.0", "reason": "Runs Afyx Context Engine." },
-    { "key": "node", "class": "COMPONENT_REQUIRED", "component": "afyx-forge", "minimum_version": "22.5.0", "reason": "Runs Afyx Forge Core." },
-    { "key": "npm", "class": "BUILD_ONLY", "component": "afyx-graph", "reason": "Used only when a verified release artifact is unavailable." },
-    { "key": "archive-checksum", "class": "COMPONENT_REQUIRED", "component": "afyx-graph", "reason": "Extracts and verifies the selected Afyx Graph artifact." }
+    {
+      "key": "platform-shell",
+      "class": "REQUIRED",
+      "reason": "Runs the documented lifecycle entrypoint for the host OS."
+    },
+    {
+      "key": "git",
+      "class": "REQUIRED",
+      "reason": "Validates and safely fast-forwards the kit source."
+    },
+    {
+      "key": "codex-or-vscode",
+      "class": "REQUIRED",
+      "reason": "Provides the supported Codex host."
+    },
+    {
+      "key": "node",
+      "class": "COMPONENT_REQUIRED",
+      "component": "afyx-graph",
+      "minimum_version": "22.5.0",
+      "reason": "Runs Afyx Graph."
+    },
+    {
+      "key": "node",
+      "class": "COMPONENT_REQUIRED",
+      "component": "afyx-context",
+      "minimum_version": "22.5.0",
+      "reason": "Runs Afyx Context Engine."
+    },
+    {
+      "key": "node",
+      "class": "COMPONENT_REQUIRED",
+      "component": "afyx-forge",
+      "minimum_version": "22.5.0",
+      "reason": "Runs Afyx Forge Core."
+    },
+    {
+      "key": "npm",
+      "class": "BUILD_ONLY",
+      "component": "afyx-graph",
+      "reason": "Used only when a verified release artifact is unavailable."
+    },
+    {
+      "key": "archive-checksum",
+      "class": "COMPONENT_REQUIRED",
+      "component": "afyx-graph",
+      "reason": "Extracts and verifies the selected Afyx Graph artifact."
+    }
   ],
   "components": [
     {
@@ -122,7 +162,7 @@
       "install_path": "afyx-engineering-expert",
       "version_source": "SKILL.md#metadata.version",
       "version_required": "true",
-      "required_files": "SKILL.md;README.md;assets/result-template.md;references/ai-ml-engineer.md;references/business-analyst.md;references/cybersecurity-devsecops.md;references/database-administrator.md;references/erp-technical-specialist.md;references/product-manager.md;references/qa-engineer.md;references/site-reliability-engineer.md;references/software-engineer.md;references/solutions-architect.md;references/subject-matter-expert.md;references/system-analyst.md;references/ui-ux-designer.md;workflows/ai-data-erp.md;workflows/debugging.md;workflows/discovery-design.md;workflows/implementation.md;workflows/incident-reliability.md;workflows/review-audit.md"
+      "required_files": "README.md;SKILL.md;assets/result-template.md;references/ai-ml-engineer.md;references/business-analyst.md;references/clean-code-engineer.md;references/code-reviewer.md;references/cybersecurity-devsecops.md;references/data-analyst-bi.md;references/data-engineer.md;references/database-administrator.md;references/debugging-specialist.md;references/embedded-iot-engineer.md;references/erp-technical-specialist.md;references/hardware-diagnostics-auditor.md;references/hardware-electronics-engineer.md;references/integration-engineer.md;references/legacy-modernization-engineer.md;references/llmops-prompt-engineer.md;references/network-engineer.md;references/performance-benchmark-engineer.md;references/platform-engineer.md;references/product-manager.md;references/qa-engineer.md;references/site-reliability-engineer.md;references/software-engineer.md;references/solutions-architect.md;references/specialists-index.md;references/subject-matter-expert.md;references/system-analyst.md;references/technical-project-manager.md;references/technical-writer.md;references/ui-ux-designer.md;workflows/ai-data-erp.md;workflows/debugging.md;workflows/discovery-design.md;workflows/implementation.md;workflows/incident-reliability.md;workflows/review-audit.md"
     },
     {
       "id": "afyx-graph",
