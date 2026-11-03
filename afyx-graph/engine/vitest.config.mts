@@ -1,7 +1,9 @@
 import { defineConfig } from 'vitest/config';
 
-const capWindowsNode26Workers =
-  process.platform === 'win32' && Number.parseInt(process.versions.node, 10) >= 26;
+// Fresh Windows runners on Node 24+ are more reliable with a bounded fork pool.
+// Linux and macOS retain Vitest's default worker policy.
+const capWindowsNodeWorkers =
+  process.platform === 'win32' && Number.parseInt(process.versions.node, 10) >= 24;
 
 /**
  * The SHARED base. `vitest.workspace.mts` extends it twice — once for the
@@ -18,7 +20,7 @@ export default defineConfig({
     // at Vitest's CPU-derived default. The resulting timeouts and stale daemon
     // observations disappear with bounded concurrency; product behavior and
     // per-test assertions remain unchanged.
-    ...(capWindowsNode26Workers ? { maxWorkers: 4 } : {}),
+    ...(capWindowsNodeWorkers ? { maxWorkers: 4 } : {}),
     include: ['__tests__/**/*.test.ts'],
     /**
      * Several MCP integration tests (mcp-daemon, mcp-initialize, mcp-ppid-watchdog,
