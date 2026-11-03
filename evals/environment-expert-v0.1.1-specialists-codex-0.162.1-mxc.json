@@ -1,9 +1,9 @@
 {
   "schema_version": 3,
   "frozen_at": "2026-11-03T00:00:00+07:00",
-  "purpose": "AFYX-310 Engineering Expert v0.1.1 specialist expansion candidate fingerprint for Codex CLI 0.162.1 with isolated permission profile",
+  "purpose": "AFYX-310 Engineering Expert v0.1.1 specialist expansion candidate fingerprint for Codex CLI 0.162.1 with isolated permission profile (preflight candidate; benchmark unexecuted)",
   "repository": {
-    "benchmark_subject_commit": "8df29c3f9e31aa4661cc1e7d6f80328096e3f1ce",
+    "benchmark_subject_commit": "3737aee44920d7239c42f22813536d55b0bd2869",
     "branch": "afyx/afyx-310-engineering-expert-specialists"
   },
   "skills": {
@@ -63,12 +63,21 @@
     "network_requested": false,
     "filesystem_policy": "root deny; minimal runtime read; evaluated workspace write; OS temp outside workspace deny",
     "writable_scope": "external disposable evaluated workspace",
-    "available_tools_observable": ["command_execution", "file_change"],
+    "available_tools_observable": [
+      "command_execution",
+      "file_change"
+    ],
     "tool_inventory_limit": "Codex JSONL exposes used tool events, not a complete pre-run tool catalog"
   },
   "optional": {
-    "afyx_graph": {"available_to_evaluator": false, "evaluated": false},
-    "headroom": {"available_to_evaluator": false, "evaluated": false}
+    "afyx_graph": {
+      "available_to_evaluator": false,
+      "evaluated": false
+    },
+    "headroom": {
+      "available_to_evaluator": false,
+      "evaluated": false
+    }
   },
   "secrets_recorded": false
 }
