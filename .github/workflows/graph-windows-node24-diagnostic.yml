@@ -1,0 +1,188 @@
+name: Graph Windows Node 24 Diagnostic
+
+on:
+  pull_request:
+    branches:
+      - dev
+    paths:
+      - .github/workflows/graph-windows-node24-diagnostic.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-node24:
+    name: Windows Node 24 (${{ matrix.mode }})
+    runs-on: windows-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        mode:
+          - default
+          - bounded-4
+
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: afyx-graph/engine
+
+    steps:
+      - name: Check out exact Graph source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+        with:
+          ref: d866dc1d09036db4dbabd2c8cf9733f7c1e281de
+          persist-credentials: false
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: afyx-graph/engine/package-lock.json
+
+      - name: Verify source and runner identity
+        run: |
+          $actualSha = (git rev-parse HEAD).Trim()
+          $expectedSha = 'd866dc1d09036db4dbabd2c8cf9733f7c1e281de'
+          if ($actualSha -ne $expectedSha) {
+            throw "Unexpected source SHA: $actualSha"
+          }
+
+          $runtime = node -e "const os=require('os'); console.log(JSON.stringify({node:process.version,availableParallelism:os.availableParallelism(),cpuCount:os.cpus().length,platform:process.platform,arch:process.arch}))"
+          $runtime
+          "RUNNER_OS=$env:RUNNER_OS"
+          "RUNNER_ARCH=$env:RUNNER_ARCH"
+          "ImageOS=$env:ImageOS"
+          "ImageVersion=$env:ImageVersion"
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Clean build
+        run: npm run build
+
+      - name: Run full suite with lightweight process telemetry
+        id: test
+        env:
+          TEST_MODE: ${{ matrix.mode }}
+          EXPECTED_SHA: d866dc1d09036db4dbabd2c8cf9733f7c1e281de
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $evidence = Join-Path $PWD "diagnostic-evidence-$env:TEST_MODE"
+          New-Item -ItemType Directory -Path $evidence -Force | Out-Null
+          $stdoutPath = Join-Path $evidence 'test.stdout.log'
+          $stderrPath = Join-Path $evidence 'test.stderr.log'
+          $metricsPath = Join-Path $evidence 'metrics.json'
+
+          $nodeVersion = (node --version).Trim()
+          $vitestVersion = (npx vitest --version).Trim()
+          $runtime = node -e "const os=require('os'); console.log(JSON.stringify({availableParallelism:os.availableParallelism(),cpuCount:os.cpus().length,totalMemoryBytes:os.totalmem()}))" | ConvertFrom-Json
+          $actualSha = (git rev-parse HEAD).Trim()
+
+          $beforeNodes = @(Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue)
+          $beforeIds = @($beforeNodes | ForEach-Object { [int]$_.ProcessId })
+
+          $arguments = @('test')
+          $displayCommand = 'npm test'
+          if ($env:TEST_MODE -eq 'bounded-4') {
+            $arguments += @('--', '--maxWorkers=4')
+            $displayCommand = 'npm test -- --maxWorkers=4'
+          }
+
+          $startedAt = [DateTime]::UtcNow
+          $timer = [Diagnostics.Stopwatch]::StartNew()
+          $testProcess = Start-Process -FilePath 'npm.cmd' -ArgumentList $arguments -WorkingDirectory $PWD -NoNewWindow -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+
+          $peakNodeProcesses = 0
+          $peakVitestProcesses = 0
+          $peakHandles = 0
+          $peakWorkingSetBytes = [int64]0
+          $peakCpuSeconds = 0.0
+
+          while (-not $testProcess.HasExited) {
+            $newNodes = @(Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue | Where-Object {
+              $beforeIds -notcontains [int]$_.ProcessId
+            })
+            $live = @($newNodes | ForEach-Object {
+              Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue
+            } | Where-Object { $_ })
+            $vitestProcesses = @($newNodes | Where-Object {
+              $_.CommandLine -match '(?i)vitest|tinypool'
+            })
+
+            $handleTotal = [int64](($live | Measure-Object -Property HandleCount -Sum).Sum)
+            $workingSetTotal = [int64](($live | Measure-Object -Property WorkingSet64 -Sum).Sum)
+            $cpuTotal = [double](($live | Measure-Object -Property CPU -Sum).Sum)
+
+            $peakNodeProcesses = [Math]::Max($peakNodeProcesses, $newNodes.Count)
+            $peakVitestProcesses = [Math]::Max($peakVitestProcesses, $vitestProcesses.Count)
+            $peakHandles = [Math]::Max($peakHandles, $handleTotal)
+            $peakWorkingSetBytes = [Math]::Max($peakWorkingSetBytes, $workingSetTotal)
+            $peakCpuSeconds = [Math]::Max($peakCpuSeconds, $cpuTotal)
+            Start-Sleep -Seconds 1
+          }
+
+          $testProcess.WaitForExit()
+          $exitCode = $testProcess.ExitCode
+          $timer.Stop()
+          Start-Sleep -Seconds 2
+
+          $afterNodes = @(Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue)
+          $remainingNodes = @($afterNodes | Where-Object {
+            $beforeIds -notcontains [int]$_.ProcessId
+          })
+          $completedAt = [DateTime]::UtcNow
+
+          $metrics = [ordered]@{
+            schema = 'AfyxGraphWindowsNode24Diagnostic/v1'
+            mode = $env:TEST_MODE
+            command = $displayCommand
+            sourceSha = $actualSha
+            expectedSourceSha = $env:EXPECTED_SHA
+            runner = [ordered]@{
+              os = $env:RUNNER_OS
+              arch = $env:RUNNER_ARCH
+              imageOS = $env:ImageOS
+              imageVersion = $env:ImageVersion
+            }
+            runtime = [ordered]@{
+              node = $nodeVersion
+              vitest = $vitestVersion
+              availableParallelism = [int]$runtime.availableParallelism
+              cpuCount = [int]$runtime.cpuCount
+              totalMemoryBytes = [int64]$runtime.totalMemoryBytes
+            }
+            execution = [ordered]@{
+              startedAtUtc = $startedAt.ToString('o')
+              completedAtUtc = $completedAt.ToString('o')
+              durationMilliseconds = [int64]$timer.ElapsedMilliseconds
+              exitCode = $exitCode
+            }
+            processes = [ordered]@{
+              nodeBefore = $beforeNodes.Count
+              peakNewNodeProcesses = $peakNodeProcesses
+              peakVitestRelatedProcesses = $peakVitestProcesses
+              peakHandleCount = $peakHandles
+              peakWorkingSetBytes = $peakWorkingSetBytes
+              peakCpuSeconds = [Math]::Round($peakCpuSeconds, 3)
+              remainingNewNodeProcesses = $remainingNodes.Count
+              remainingNewNodePids = @($remainingNodes | ForEach-Object { [int]$_.ProcessId })
+            }
+          }
+          $metrics | ConvertTo-Json -Depth 6 | Set-Content -Path $metricsPath -Encoding utf8
+
+          Get-Content $stdoutPath
+          Get-Content $stderrPath
+          Get-Content $metricsPath
+          exit $exitCode
+
+      - name: Upload diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: graph-windows-node24-${{ matrix.mode }}
+          path: afyx-graph/engine/diagnostic-evidence-${{ matrix.mode }}
+          if-no-files-found: error
+          retention-days: 14
